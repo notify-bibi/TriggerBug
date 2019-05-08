@@ -204,7 +204,7 @@ IRExpr* guest_ppc32_spechelper ( const HChar* function_name,
                                  IRStmt** precedingStmts,
                                  Int      n_precedingStmts )
 {
-   return NULL;
+   return (IRExpr*)NULL;
 }
 
 IRExpr* guest_ppc64_spechelper ( const HChar* function_name,
@@ -212,7 +212,7 @@ IRExpr* guest_ppc64_spechelper ( const HChar* function_name,
                                  IRStmt** precedingStmts,
                                  Int      n_precedingStmts )
 {
-   return NULL;
+   return (IRExpr*)NULL;
 }
 
 
@@ -1135,26 +1135,25 @@ VexGuestLayout
    ppc32Guest_layout 
       = { 
           /* Total size of the guest state, in bytes. */
-          .total_sizeB = sizeof(VexGuestPPC32State),
+		  ppc32Guest_layout.total_sizeB = sizeof(VexGuestPPC32State),
 
           /* Describe the stack pointer. */
-          .offset_SP = offsetof(VexGuestPPC32State,guest_GPR1),
-          .sizeof_SP = 4,
+		  ppc32Guest_layout.offset_SP = offsetof(VexGuestPPC32State,guest_GPR1),
+		  ppc32Guest_layout.sizeof_SP = 4,
 
           /* Describe the frame pointer. */
-          .offset_FP = offsetof(VexGuestPPC32State,guest_GPR1),
-          .sizeof_FP = 4,
+		  ppc32Guest_layout.offset_FP = offsetof(VexGuestPPC32State,guest_GPR1),
+		  ppc32Guest_layout.sizeof_FP = 4,
 
           /* Describe the instruction pointer. */
-          .offset_IP = offsetof(VexGuestPPC32State,guest_CIA),
-          .sizeof_IP = 4,
+		  ppc32Guest_layout.offset_IP = offsetof(VexGuestPPC32State,guest_CIA),
+		  ppc32Guest_layout.sizeof_IP = 4,
 
           /* Describe any sections to be regarded by Memcheck as
              'always-defined'. */
-          .n_alwaysDefd = 12,
+		  ppc32Guest_layout.n_alwaysDefd = 12,
 
-          .alwaysDefd 
-	  = { /*  0 */ ALWAYSDEFD32(guest_CIA),
+           { /*  0 */ ALWAYSDEFD32(guest_CIA),
 	      /*  1 */ ALWAYSDEFD32(guest_EMNOTE),
 	      /*  2 */ ALWAYSDEFD32(guest_CMSTART),
 	      /*  3 */ ALWAYSDEFD32(guest_CMLEN),
@@ -1177,26 +1176,25 @@ VexGuestLayout
    ppc64Guest_layout 
       = { 
           /* Total size of the guest state, in bytes. */
-          .total_sizeB = sizeof(VexGuestPPC64State),
+		  ppc64Guest_layout.total_sizeB = sizeof(VexGuestPPC64State),
 
           /* Describe the stack pointer. */
-          .offset_SP = offsetof(VexGuestPPC64State,guest_GPR1),
-          .sizeof_SP = 8,
+		  ppc64Guest_layout.offset_SP = offsetof(VexGuestPPC64State,guest_GPR1),
+		  ppc64Guest_layout.sizeof_SP = 8,
 
           /* Describe the frame pointer. */
-          .offset_FP = offsetof(VexGuestPPC64State,guest_GPR1),
-          .sizeof_FP = 8,
+		  ppc64Guest_layout.offset_FP = offsetof(VexGuestPPC64State,guest_GPR1),
+		  ppc64Guest_layout.sizeof_FP = 8,
 
           /* Describe the instruction pointer. */
-          .offset_IP = offsetof(VexGuestPPC64State,guest_CIA),
-          .sizeof_IP = 8,
+		  ppc64Guest_layout.offset_IP = offsetof(VexGuestPPC64State,guest_CIA),
+		  ppc64Guest_layout.sizeof_IP = 8,
 
           /* Describe any sections to be regarded by Memcheck as
              'always-defined'. */
-          .n_alwaysDefd = 12,
+		  ppc64Guest_layout.n_alwaysDefd = 12,
 
-          .alwaysDefd 
-	  = { /*  0 */ ALWAYSDEFD64(guest_CIA),
+        { /*  0 */ ALWAYSDEFD64(guest_CIA),
 	      /*  1 */ ALWAYSDEFD64(guest_EMNOTE),
 	      /*  2 */ ALWAYSDEFD64(guest_CMSTART),
 	      /*  3 */ ALWAYSDEFD64(guest_CMLEN),

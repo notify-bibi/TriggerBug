@@ -10,7 +10,7 @@
 //#undef _DEBUG
 //#define z3ss
 #define DLL_EXPORTS
-#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug.xml"
+#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\TriggerBug-asong.xml"
 
 #include "engine.hpp"
 #include "../../tinyxml2/tinyxml2.h"
@@ -361,8 +361,9 @@ int main() {
 	auto gggg = test.bv_val(  6, 64);
 
 
-
-
+	
+	auto P = s.mem.getMemPage(0x00007FFFF7FE9268);
+	SET1((P->unit->m_bytes + (0x00007FFFF7FE9268+1 & 0xfff)), 0xAE);
 
 	auto sd = &s;
 	s.regs.Ist_Put(176, Variable(00ull, s, 64));
@@ -408,7 +409,7 @@ int main() {
 	//	}
 	//}
 	//
-
+	memset
 	printf("OVER");
 	getchar();
 	return 0;

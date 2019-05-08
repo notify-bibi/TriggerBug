@@ -21,8 +21,8 @@
 <TriggerBug>
 	<VexArch>0x402</VexArch>
 	<VexArchSystem>linux</VexArchSystem>
-	<MaxThreadsNum>6</MaxThreadsNum>
-	<MemoryDumpName>C:\\Users\\bibi\\Desktop\\MemoryDump</MemoryDumpName>
+	<MaxThreadsNum>16</MaxThreadsNum>
+	<MemoryDumpPath>C:\Users\bibi\Desktop\TriggerBug\PythonFrontEnd\examples\xctf-asong\TriggerBug Engine/asong.dump</MemoryDumpPath>
 	<!-- <GuestStartAddress>0x444444</GuestStartAddress> -->
 	<RegsIpOffset>184</RegsIpOffset>
 	<VexControl>
@@ -32,7 +32,7 @@
 	</VexControl>
 	
 	<DEBUG>
-		<TraceIrAddrress>0x00007ffff7e34cd3</TraceIrAddrress>
+		<TraceIrAddrress>0x0007FFFF7FE9260</TraceIrAddrress>
 		<TraceState>1</TraceState>
 		<TraceJmp>0</TraceJmp>
 	</DEBUG>

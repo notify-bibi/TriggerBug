@@ -4,7 +4,7 @@ import os
 from .TriggerBugTypes import *
 import pkg_resources
 _lib_src = r"TriggerBug.dll"
-_p = pkg_resources.resource_filename('TriggerBug','TriggerBug/lib')
+_p = pkg_resources.resource_filename('TriggerBug','libs')
 _retval = os.getcwd()
 EngineLib = None
 os.chdir(_p)

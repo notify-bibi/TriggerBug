@@ -1276,7 +1276,7 @@ IRExpr* guest_x86_spechelper ( const HChar* function_name,
             );
       }
 
-      return NULL;
+      return (IRExpr *)NULL;
    }
 
    /* --------- specialising "x86g_calculate_eflags_c" --------- */
@@ -1350,7 +1350,7 @@ IRExpr* guest_x86_spechelper ( const HChar* function_name,
       }
 #     endif
 
-      return NULL;
+      return (IRExpr *)NULL;
    }
 
    /* --------- specialising "x86g_calculate_eflags_all" --------- */
@@ -1374,7 +1374,7 @@ IRExpr* guest_x86_spechelper ( const HChar* function_name,
                      | X86G_CC_MASK_A | X86G_CC_MASK_C | X86G_CC_MASK_P)
             );
       }
-      return NULL;
+      return (IRExpr *)NULL;
    }
 
 #  undef unop
@@ -1382,7 +1382,7 @@ IRExpr* guest_x86_spechelper ( const HChar* function_name,
 #  undef mkU32
 #  undef mkU8
 
-   return NULL;
+   return (IRExpr *)NULL;
 }
 
 
@@ -2963,29 +2963,28 @@ VexGuestLayout
    x86guest_layout 
       = { 
           /* Total size of the guest state, in bytes. */
-          .total_sizeB = sizeof(VexGuestX86State),
+		  x86guest_layout.total_sizeB = sizeof(VexGuestX86State),
 
           /* Describe the stack pointer. */
-          .offset_SP = offsetof(VexGuestX86State,guest_ESP),
-          .sizeof_SP = 4,
+		  x86guest_layout.offset_SP = offsetof(VexGuestX86State,guest_ESP),
+		  x86guest_layout.sizeof_SP = 4,
 
           /* Describe the frame pointer. */
-          .offset_FP = offsetof(VexGuestX86State,guest_EBP),
-          .sizeof_FP = 4,
+		  x86guest_layout.offset_FP = offsetof(VexGuestX86State,guest_EBP),
+		  x86guest_layout.sizeof_FP = 4,
 
           /* Describe the instruction pointer. */
-          .offset_IP = offsetof(VexGuestX86State,guest_EIP),
-          .sizeof_IP = 4,
+		  x86guest_layout.offset_IP = offsetof(VexGuestX86State,guest_EIP),
+		  x86guest_layout.sizeof_IP = 4,
 
           /* Describe any sections to be regarded by Memcheck as
              'always-defined'. */
-          .n_alwaysDefd = 24,
+		  x86guest_layout.n_alwaysDefd = 24,
 
           /* flags thunk: OP and NDEP are always defd, whereas DEP1
              and DEP2 have to be tracked.  See detailed comment in
              gdefs.h on meaning of thunk fields. */
-          .alwaysDefd 
-             = { /*  0 */ ALWAYSDEFD(guest_CC_OP),
+               { /*  0 */ ALWAYSDEFD(guest_CC_OP),
                  /*  1 */ ALWAYSDEFD(guest_CC_NDEP),
                  /*  2 */ ALWAYSDEFD(guest_DFLAG),
                  /*  3 */ ALWAYSDEFD(guest_IDFLAG),

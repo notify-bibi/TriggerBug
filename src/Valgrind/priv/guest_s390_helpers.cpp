@@ -43,6 +43,8 @@
 #include "guest_s390_defs.h"
 #include "s390_defs.h"               /* S390_BFP_ROUND_xyzzy */
 
+extern void memset(void *,int ,size_t);
+
 void
 LibVEX_GuestS390X_initialise(VexGuestS390XState *state)
 {
@@ -227,28 +229,28 @@ guest_s390x_state_requires_precise_mem_exns (
 VexGuestLayout s390xGuest_layout = {
 
    /* Total size of the guest state, in bytes. */
-   .total_sizeB = sizeof(VexGuestS390XState),
+   s390xGuest_layout.total_sizeB = sizeof(VexGuestS390XState),
 
    /* Describe the stack pointer. */
-   .offset_SP = S390X_GUEST_OFFSET(guest_SP),
-   .sizeof_SP = 8,
+   s390xGuest_layout.offset_SP = S390X_GUEST_OFFSET(guest_SP),
+   s390xGuest_layout.sizeof_SP = 8,
 
    /* Describe the frame pointer. */
-   .offset_FP = S390X_GUEST_OFFSET(guest_FP),
-   .sizeof_FP = 8,
+   s390xGuest_layout.offset_FP = S390X_GUEST_OFFSET(guest_FP),
+   s390xGuest_layout.sizeof_FP = 8,
 
    /* Describe the instruction pointer. */
-   .offset_IP = S390X_GUEST_OFFSET(guest_IA),
-   .sizeof_IP = 8,
+   s390xGuest_layout.offset_IP = S390X_GUEST_OFFSET(guest_IA),
+   s390xGuest_layout.sizeof_IP = 8,
 
    /* Describe any sections to be regarded by Memcheck as
       'always-defined'. */
-   .n_alwaysDefd = 9,
+   s390xGuest_layout.n_alwaysDefd = 9,
 
    /* Flags thunk: OP and NDEP are always defined, whereas DEP1
       and DEP2 have to be tracked.  See detailed comment in
       gdefs.h on meaning of thunk fields. */
-   .alwaysDefd = {
+    {
       /*  0 */ ALWAYSDEFD(guest_CC_OP),     /* generic */
       /*  1 */ ALWAYSDEFD(guest_CC_NDEP),   /* generic */
       /*  2 */ ALWAYSDEFD(guest_EMNOTE),    /* generic */
@@ -1887,8 +1889,8 @@ guest_s390x_spechelper(const HChar *function_name, IRExpr **args,
 
       /* The necessary requirement for all optimizations here is that the
          condition and the cc_op are constant. So check that upfront. */
-      if (! isC64(cond_expr))  return NULL;
-      if (! isC64(cc_op_expr)) return NULL;
+      if (! isC64(cond_expr))  return (IRExpr *)NULL;
+      if (! isC64(cc_op_expr)) return (IRExpr *)NULL;
 
       cond    = cond_expr->Iex.Const.con->Ico.U64;
       cc_op   = cc_op_expr->Iex.Const.con->Ico.U64;
@@ -2447,7 +2449,7 @@ guest_s390x_spechelper(const HChar *function_name, IRExpr **args,
 
       /* The necessary requirement for all optimizations here is that
          cc_op is constant. So check that upfront. */
-      if (! isC64(cc_op_expr)) return NULL;
+      if (! isC64(cc_op_expr)) return (IRExpr *)NULL;
 
       cc_op   = cc_op_expr->Iex.Const.con->Ico.U64;
       cc_dep1 = args[1];
@@ -2465,7 +2467,7 @@ guest_s390x_spechelper(const HChar *function_name, IRExpr **args,
    }
 
 missed:
-   return NULL;
+   return (IRExpr *)NULL;
 }
 
 /*------------------------------------------------------------*/

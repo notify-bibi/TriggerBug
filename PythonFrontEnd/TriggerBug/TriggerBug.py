@@ -365,9 +365,12 @@ class State(object):
             if (res >= n_code):
                 for i in range(res):
                     insns.append(capstone.CsInsn(cs, all_insn[i]))
-                return insns
+                return (insns,buff[:count*8-8 + insns[-1].size])
             count += 1
 
+    def asm(self, codestr):
+        ks = self.arch.keystone
+        return ks.asm(codestr)
 
 Ijk_Server_cb = None
 

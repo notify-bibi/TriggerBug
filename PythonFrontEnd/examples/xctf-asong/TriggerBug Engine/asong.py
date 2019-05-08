@@ -1,13 +1,5 @@
-# u need patch the ./Engine/TriggerBugCore.py
-# p=r"C:\Users\bibi\Desktop\TriggerBug\build\src\Engine\Release"
-# to
-# your dll(libz3.dll and TriggerBug.dll) path 
-
-from TriggerBug import *
-import TriggerBug.z3
-
-
-
+import TriggerBug
+import TriggerBug.z3 as z3
 
 def decode2():
     de=[]
@@ -15,9 +7,9 @@ def decode2():
     args = ['rdi','rsi','rdx','rcx','r8']
     def chk2(_state):
         gh=_state.dh
-        re=eval_all(_state, gh)
+        re=TriggerBug.eval_all(_state, gh)
         print("success    ",  re )
-        return Running
+        return TriggerBug.Running
 
     def evalvalue(_state):
         addr=_state.rdi
@@ -27,7 +19,7 @@ def decode2():
             if(type(val)==int):
                 print(val)
                 if(val!=v):
-                    return Death
+                    return TriggerBug.Death
             else:
                 _state.solver.add(val==v)
         if (_state.solver.check()==z3.sat):
@@ -35,17 +27,23 @@ def decode2():
             print("success    ")
 
             for a in args:
-                k = z3.BitVec(a, 64, state.ctx)
+                k = z3.BitVec(a, 64, top_state.ctx)
                 de.append(m.eval(k).as_long())
             _state.solver.pop()
-            return Death
+            return TriggerBug.Death
         else:
             print("faild    ")
             _state.solver.pop()
-            return Death
+            return TriggerBug.Death
 
 
-    state=TopState(file_name=r'C:\Users\bibi\Desktop\\TriggerBug.xml',need_record=True,oep=0x0004015B8)
+    top_state=TriggerBug.TopState(
+        file_name=r'./TriggerBug-asong.xml',
+        need_record=True,#在需要合并(compress)state时，必须要保证被compress 的state对象的need_record=True，否则会报错，因为need_record=False的state是不会记录子state生命周期中所产生的修改,继而无法合并
+        oep=0,
+        Ijk_unsupport_call=None,#if set,Ir jump kind call what I not support will call this func
+        Ijk_hook_call=None#if set, all the Ir jump kind call will call this func
+    )
 
     # state.mem_write(0x7ffff7dec7b8,0x90909090,4)
     # state.mem_write(0x7ffff7dec7b8+4,0x90,1)
@@ -67,8 +65,8 @@ def decode2():
     #         addr=state.rbp-0x140+(index+i)*8
     #         state.mem_w(addr,k,8)
 
-    state.go()
-    print(state)
+    top_state.go()
+    print(top_state)
 
     return  de
 dec2=None

@@ -1904,7 +1904,7 @@ IRExpr* guest_amd64_spechelper ( const HChar* function_name,
             );
       }
 
-      return NULL;
+      return (IRExpr*)NULL;
    }
 
    /* --------- specialising "amd64g_calculate_rflags_c" --------- */
@@ -1972,7 +1972,7 @@ IRExpr* guest_amd64_spechelper ( const HChar* function_name,
       }
 #     endif
 
-      return NULL;
+      return (IRExpr*)NULL;
    }
 
 #  undef unop
@@ -1981,7 +1981,7 @@ IRExpr* guest_amd64_spechelper ( const HChar* function_name,
 #  undef mkU32
 #  undef mkU8
 
-   return NULL;
+   return (IRExpr*)NULL;
 }
 
 
@@ -4635,58 +4635,59 @@ Bool guest_amd64_state_requires_precise_mem_exns (
       (sizeof ((VexGuestAMD64State*)0)->field) }
 
 VexGuestLayout
-   amd64guest_layout
-      = {
-          /* Total size of the guest state, in bytes. */
-          .total_sizeB = sizeof(VexGuestAMD64State),
+	amd64guest_layout
+		= {
+			/* Total size of the guest state, in bytes. */
+			amd64guest_layout.total_sizeB = sizeof(VexGuestAMD64State),
 
-          /* Describe the stack pointer. */
-          .offset_SP = offsetof(VexGuestAMD64State,guest_RSP),
-          .sizeof_SP = 8,
+			/* Describe the stack pointer. */
+			amd64guest_layout.offset_SP = offsetof(VexGuestAMD64State,guest_RSP),
+			amd64guest_layout.sizeof_SP = 8,
 
-          /* Describe the frame pointer. */
-          .offset_FP = offsetof(VexGuestAMD64State,guest_RBP),
-          .sizeof_FP = 8,
+			/* Describe the frame pointer. */
+			amd64guest_layout.offset_FP = offsetof(VexGuestAMD64State,guest_RBP),
+			amd64guest_layout.sizeof_FP = 8,
 
-          /* Describe the instruction pointer. */
-          .offset_IP = offsetof(VexGuestAMD64State,guest_RIP),
-          .sizeof_IP = 8,
+			/* Describe the instruction pointer. */
+			amd64guest_layout.offset_IP = offsetof(VexGuestAMD64State,guest_RIP),
+			amd64guest_layout.sizeof_IP = 8,
 
-          /* Describe any sections to be regarded by Memcheck as
+			/* Describe any sections to be regarded by Memcheck as
              'always-defined'. */
-          .n_alwaysDefd = 16,
+			amd64guest_layout.n_alwaysDefd = 16,
 
-          /* flags thunk: OP and NDEP are always defd, whereas DEP1
+			/* flags thunk: OP and NDEP are always defd, whereas DEP1
              and DEP2 have to be tracked.  See detailed comment in
              gdefs.h on meaning of thunk fields. */
-          .alwaysDefd
-             = { /*  0 */ ALWAYSDEFD(guest_CC_OP),
-                 /*  1 */ ALWAYSDEFD(guest_CC_NDEP),
-		 /*  2 */ ALWAYSDEFD(guest_DFLAG),
-                 /*  3 */ ALWAYSDEFD(guest_IDFLAG),
-                 /*  4 */ ALWAYSDEFD(guest_RIP),
-                 /*  5 */ ALWAYSDEFD(guest_FS_CONST),
-                 /*  6 */ ALWAYSDEFD(guest_FTOP),
-                 /*  7 */ ALWAYSDEFD(guest_FPTAG),
-                 /*  8 */ ALWAYSDEFD(guest_FPROUND),
-                 /*  9 */ ALWAYSDEFD(guest_FC3210),
-                 // /* */ ALWAYSDEFD(guest_CS),
-                 // /* */ ALWAYSDEFD(guest_DS),
-                 // /* */ ALWAYSDEFD(guest_ES),
-                 // /* */ ALWAYSDEFD(guest_FS),
-                 // /* */ ALWAYSDEFD(guest_GS),
-                 // /* */ ALWAYSDEFD(guest_SS),
-                 // /* */ ALWAYSDEFD(guest_LDT),
-                 // /* */ ALWAYSDEFD(guest_GDT),
-                 /* 10 */ ALWAYSDEFD(guest_EMNOTE),
-                 /* 11 */ ALWAYSDEFD(guest_SSEROUND),
-                 /* 12 */ ALWAYSDEFD(guest_CMSTART),
-                 /* 13 */ ALWAYSDEFD(guest_CMLEN),
-                 /* 14 */ ALWAYSDEFD(guest_SC_CLASS),
-                 /* 15 */ ALWAYSDEFD(guest_IP_AT_SYSCALL)
-               }
-        };
 
+		   
+		{
+			/*  0 */ ALWAYSDEFD(guest_CC_OP),
+			/*  1 */ ALWAYSDEFD(guest_CC_NDEP),
+			/*  2 */ ALWAYSDEFD(guest_DFLAG),
+			/*  3 */ ALWAYSDEFD(guest_IDFLAG),
+			/*  4 */ ALWAYSDEFD(guest_RIP),
+			/*  5 */ ALWAYSDEFD(guest_FS_CONST),
+			/*  6 */ ALWAYSDEFD(guest_FTOP),
+			/*  7 */ ALWAYSDEFD(guest_FPTAG),
+			/*  8 */ ALWAYSDEFD(guest_FPROUND),
+			/*  9 */ ALWAYSDEFD(guest_FC3210),
+			// /* */ ALWAYSDEFD(guest_CS),
+			// /* */ ALWAYSDEFD(guest_DS),
+			// /* */ ALWAYSDEFD(guest_ES),
+			// /* */ ALWAYSDEFD(guest_FS),
+			// /* */ ALWAYSDEFD(guest_GS),
+			// /* */ ALWAYSDEFD(guest_SS),
+			// /* */ ALWAYSDEFD(guest_LDT),
+			// /* */ ALWAYSDEFD(guest_GDT),
+			/* 10 */ ALWAYSDEFD(guest_EMNOTE),
+			/* 11 */ ALWAYSDEFD(guest_SSEROUND),
+			/* 12 */ ALWAYSDEFD(guest_CMSTART),
+			/* 13 */ ALWAYSDEFD(guest_CMLEN),
+			/* 14 */ ALWAYSDEFD(guest_SC_CLASS),
+			/* 15 */ ALWAYSDEFD(guest_IP_AT_SYSCALL)
+		}
+	};
 
 /*---------------------------------------------------------------*/
 /*--- end                               guest_amd64_helpers.c ---*/

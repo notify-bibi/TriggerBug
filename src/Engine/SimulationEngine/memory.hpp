@@ -115,7 +115,7 @@ ULong MEM::map(ULong address, ULong length) {
 			memset(*page, 0, sizeof(PAGE));
 			(*pt)->used += 1;
 			(*page)->used_point += 1;
-			(*page)->user = user;
+			(*page)->user = -1ull;
 			(*page)->unit = NULL;
 			//³õÊ¼»¯Over
 
@@ -566,6 +566,13 @@ inline void MEM::Ist_Store_R(Addr64 address, Variable &data) {
 inline void MEM::CheckSelf(PAGE *&P, Variable &address)
 {
 	if (user != P->user) {//WNC
+		if (P->user == -1ull) {
+			vassert(P->unit == NULL);
+			P->unit = new Register<0x1000>(m_ctx, need_record);
+			P->user = user;
+			mem_change_map[ALIGN((Addr64)address, 0x1000)] = P->unit;
+			return;
+		}
 		Addr64 e_address = address;
 		PT *pt = GETPT(e_address);
 		auto ptindex = (e_address >> 12 & 0x1ff);
@@ -580,8 +587,6 @@ inline void MEM::CheckSelf(PAGE *&P, Variable &address)
 		P->used_point = 1;
 		mem_change_map[ALIGN((Addr64)address, 0x1000)]= (*page)->unit;
 	}
-	if(P->unit==NULL)
-		P->unit=new Register<0x1000>(m_ctx, need_record);
 }
 
 inline void MEM::write_bytes(ULong address, ULong length, unsigned char *data) {
@@ -589,6 +594,7 @@ inline void MEM::write_bytes(ULong address, ULong length, unsigned char *data) {
 	PAGE *p_page = GETPAGE(address);
 	if (!p_page->unit) {
 		p_page->unit = new Register<0x1000>(m_ctx,need_record);
+		p_page->user = user;
 	}
 	UInt count = 0;
 	while (address < max) {
@@ -596,6 +602,7 @@ inline void MEM::write_bytes(ULong address, ULong length, unsigned char *data) {
 			p_page = GETPAGE(address);
 			if (!p_page->unit) {
 				p_page->unit = new Register<0x1000>(m_ctx, need_record);
+				p_page->user = user;
 			}
 		}
 		p_page->unit->m_bytes[address & 0xfff] = data[count];

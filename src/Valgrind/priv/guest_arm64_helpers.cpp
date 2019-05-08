@@ -1750,7 +1750,7 @@ IRExpr* guest_arm64_spechelper ( const HChar* function_name,
 #  undef mkU64
 #  undef mkU8
 
-   return NULL;
+   return (IRExpr *)NULL;
 }
 
 
@@ -1993,25 +1993,25 @@ VexGuestLayout
    arm64Guest_layout 
       = { 
           /* Total size of the guest state, in bytes. */
-          .total_sizeB = sizeof(VexGuestARM64State),
+		  arm64Guest_layout.total_sizeB = sizeof(VexGuestARM64State),
 
           /* Describe the stack pointer. */
-          .offset_SP = offsetof(VexGuestARM64State,guest_XSP),
-          .sizeof_SP = 8,
-
+		  arm64Guest_layout.offset_SP = offsetof(VexGuestARM64State,guest_XSP),
+		  arm64Guest_layout.sizeof_SP = 8,
+		  0,0,
           /* Describe the instruction pointer. */
-          .offset_IP = offsetof(VexGuestARM64State,guest_PC),
-          .sizeof_IP = 8,
+		  arm64Guest_layout.offset_IP = offsetof(VexGuestARM64State,guest_PC),
+		  arm64Guest_layout.sizeof_IP = 8,
 
           /* Describe any sections to be regarded by Memcheck as
              'always-defined'. */
-          .n_alwaysDefd = 9,
+		  arm64Guest_layout.n_alwaysDefd = 9,
 
           /* flags thunk: OP is always defd, whereas DEP1 and DEP2
              have to be tracked.  See detailed comment in gdefs.h on
              meaning of thunk fields. */
-          .alwaysDefd
-             = { /* 0 */ ALWAYSDEFD(guest_PC),
+          
+               { /* 0 */ ALWAYSDEFD(guest_PC),
                  /* 1 */ ALWAYSDEFD(guest_CC_OP),
                  /* 2 */ ALWAYSDEFD(guest_CC_NDEP),
                  /* 3 */ ALWAYSDEFD(guest_EMNOTE),
