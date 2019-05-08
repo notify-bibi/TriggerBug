@@ -360,7 +360,7 @@ inline Variable State::tIRExpr(IRExpr* e)
 			((VexGuestAMD64State*)VexGuestARCHState)->guest_RAX = regs.Iex_Get(16, Ity_I64);
 			((VexGuestAMD64State*)VexGuestARCHState)->guest_RCX = regs.Iex_Get(24, Ity_I64);
 			((VexGuestAMD64State*)VexGuestARCHState)->guest_SSEROUND = regs.Iex_Get(216, Ity_I64);
-			((VexGuestAMD64State*)VexGuestARCHState)->state = this;
+			
 			break;
 		default:
 			vpanic("not support");

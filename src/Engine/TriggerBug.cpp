@@ -409,7 +409,7 @@ int main() {
 	//	}
 	//}
 	//
-	memset
+	
 	printf("OVER");
 	getchar();
 	return 0;

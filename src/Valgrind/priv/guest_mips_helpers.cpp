@@ -27,6 +27,7 @@
 
    The GNU General Public License is contained in the file COPYING.
 */
+extern "C" {
 
 #include "libvex_basictypes.h"
 #include "libvex_emnote.h"
@@ -40,6 +41,7 @@
 #include "guest_generic_bb_to_IR.h"
 #include "guest_mips_defs.h"
 
+}
 #if defined (__GNUC__)
 #define GCC_VERSION (__GNUC__ * 100 + __GNUC_MINOR__)
 #else

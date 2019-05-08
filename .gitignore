@@ -1,4 +1,5 @@
 build
+*.dir
 *.zip
 *.bz2
 *.id2

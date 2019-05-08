@@ -29,6 +29,7 @@
 */
 
 /* Contributed by Florian Krohm */
+extern "C" {
 
 #include "libvex_basictypes.h"
 #include "libvex_emnote.h"
@@ -43,7 +44,11 @@
 #include "guest_s390_defs.h"
 #include "s390_defs.h"               /* S390_BFP_ROUND_xyzzy */
 
-extern void memset(void *,int ,size_t);
+}
+
+#include <string.h>
+
+
 
 void
 LibVEX_GuestS390X_initialise(VexGuestS390XState *state)
