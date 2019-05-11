@@ -104,7 +104,6 @@ using namespace z3;
 		}; 
 		return m_ast;
 	}
-	inline Variable::operator Z3_context() const { return m_ctx; }
 	inline Variable::operator void *() const { return (void *)m_bytes; }
 
 	template<typename T, UChar offset>

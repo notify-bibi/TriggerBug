@@ -13,6 +13,7 @@
 #define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\TriggerBug-asong.xml"
 
 #include "engine.hpp"
+#define vpanic(...) printf("%s line %d",__FILE__,__LINE__); vpanic(__VA_ARGS__);
 #include "../../tinyxml2/tinyxml2.h"
 #include "libvex_init.hpp"
 #include "Thread_Pool/ThreadPool.hpp"
@@ -26,7 +27,9 @@ std::hash_map<Addr64, Hook_struct> CallBackDict;
 State_Tag (*Ijk_call_back)(State *, IRJumpKind );
 tinyxml2::XMLDocument doc;
 VexArch guest;
-
+State *states[ MAX_THREADS ];
+std::mutex global_user_mutex;
+UInt global_user = 0;
 
 
 #define pyAndC_Def(type)															\
@@ -44,7 +47,7 @@ template<class T, class Ty>															\
 inline void list2cvector_##type(T vector, PyObject* obj)							\
 {																					\
 	if (PyList_Check(obj)) {														\
-		for (Py_ssize_t i = 0; i < PyList_Size(obj); i++) {						\
+		for (Py_ssize_t i = 0; i < PyList_Size(obj); i++) {							\
 			PyObject *value = PyList_GetItem(obj, i);								\
 			vector.emplace_back((Ty)PyLong_As##type(value));						\
 		}																			\
@@ -347,13 +350,12 @@ int comp1(State *s) {
 
 
 int main() {
-	//call_back_syscall = (CallBack)nasj;
-
+	
+	
 
 	State s(INIFILENAME, NULL, True);
 	
 	context test;
-
 
 
 
@@ -363,13 +365,13 @@ int main() {
 
 	
 	auto P = s.mem.getMemPage(0x00007FFFF7FE9268);
-	SET1((P->unit->m_bytes + (0x00007FFFF7FE9268+1 & 0xfff)), 0xAE);
+	SET1((P->unit->m_bytes + (0x00007FFFF7FE9269 & 0xfff)), 0xAE);
 
 	auto sd = &s;
 	s.regs.Ist_Put(176, Variable(00ull, s, 64));
 	auto f = (Variable)s.m_ctx.bv_const("jjj", 64);
 	s.add_assert(f <60, 1);
-	s.regs.Ist_Put(32, f);
+	//s.regs.Ist_Put(32, f);
 	hook_add(&s, 0x7FFFF7E34CD6, (CallBack)comp1);
 	/*hook_add(&s, 0x0004081DF, (CallBack)eee);
 	hook_add(&s, 0x00406A75, (CallBack)comp1);

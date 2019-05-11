@@ -29,7 +29,7 @@
 #include <functional>
 #include <stdexcept>
 
-#include "../../z3/src/api/c++/z3++.h"
+#include "c++/z3++.h"
 #include <iomanip>
 
 
@@ -42,10 +42,10 @@
 //#define Py_LIMITED_API
 #include <python\Python.h>
 
-#include "header.hpp"
-#include "../functions/functions.hpp"
-#include "Thread_Pool/ThreadPool_CD.hpp"
-#include "SimulationEngine/Variable_CD.hpp"
-#include "SimulationEngine/Register_CD.hpp"
-#include "SimulationEngine/memory_CD.hpp"
-#include "StateClass/State_class_CD.hpp"
+#include "Engine/header.hpp"
+#include "Engine/functions/functions.hpp"
+#include "Engine/Thread_Pool/ThreadPool_CD.hpp"
+#include "Engine/SimulationEngine/Variable_CD.hpp"
+#include "Engine/SimulationEngine/Register_CD.hpp"
+#include "Engine/SimulationEngine/memory_CD.hpp"
+#include "Engine/StateClass/State_class_CD.hpp"

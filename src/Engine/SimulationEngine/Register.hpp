@@ -2,6 +2,60 @@
 #ifndef REGISTER_HL
 #define REGISTER_HL
 #define REGISTER_LEN 1000
+
+
+extern __m256i m32_fast[33];
+extern __m256i m32_mask_reverse[33];
+
+
+#define SETFAST(fast_ptr,__nbytes)												\
+if((__nbytes)<8){																\
+__asm__(																		\
+	"mov %[nbytes],%%cl;\n\t"													\
+	"shl $3,%%rcx;\n\t"															\
+	"mov %[fast],%%rax;\n\t"													\
+	"shr %%cl,%%rax;\n\t"														\
+	"shl %%cl,%%rax;\n\t"														\
+	"mov $0x0807060504030201,%%rbx;\n\t"										\
+	"sub $65,%%cl;\n\t"															\
+	"not %%cl;\n\t"																\
+	"shl %%cl,%%rbx;\n\t"														\
+	"shr %%cl,%%rbx;\n\t"														\
+	"or %%rbx,%%rax;\n\t"														\
+	"mov %%rax,%[out];\n\t"														\
+	: [out]"=r"(GET8((fast_ptr)))												\
+	: [fast] "r"(GET8((fast_ptr))), [nbytes] "r"((UChar)(__nbytes))				\
+	: "rax", "rbx", "rcx"														\
+);}																				\
+else if((__nbytes)<=16){														\
+	_mm_store_si128(															\
+		(__m128i*)(fast_ptr),													\
+		_mm_or_si128(															\
+			_mm_and_si128(														\
+				GET16((fast_ptr)),												\
+				GET16(&m32_mask_reverse[__nbytes])								\
+			),																	\
+			GET16(&m32_fast[__nbytes])											\
+		)																		\
+	);																			\
+}else{																			\
+	_mm256_store_si256(															\
+		(__m256i*)(fast_ptr),													\
+		_mm256_or_si256(														\
+			_mm256_and_si256(													\
+				GET32((fast_ptr)),												\
+				m32_mask_reverse[__nbytes]										\
+			),																	\
+			m32_fast[__nbytes]													\
+		)																		\
+	);																			\
+}
+
+
+
+
+
+
 //Symbolic
 	template<int maxlength>
 	inline Symbolic<maxlength>::Symbolic(Z3_context ctx) : m_ctx(ctx) {
@@ -11,7 +65,7 @@
 	inline Symbolic<maxlength>::Symbolic(Z3_context ctx, Symbolic<maxlength> *father) : m_ctx(ctx) {
 		memcpy(m_fastindex, father->m_fastindex, maxlength);
 		m_fastindex[maxlength] = 0;
-		int _pcur = maxlength-1;
+		Int _pcur = maxlength-1;
 		DWORD N;
 		for (; _pcur > 0; ) {
 			if (_BitScanReverse64(&N, ((DWORD64*)(m_fastindex))[_pcur >> 3] & fastMaskBI1[_pcur % 8])) {
@@ -337,9 +391,15 @@ inline Register<REGISTER_LEN>::Register(Z3_context ctx, Bool _need_record) :
 			}
 		};
 	}
-	Register<REGISTER_LEN>::Register(const Register<REGISTER_LEN> &father_regs) { vassert(0); };
+	Register<REGISTER_LEN>::Register(const Register<REGISTER_LEN> &father_regs) { 
+		vassert(0);
+		vpanic("Register<REGISTER_LEN>::Register(const Register<REGISTER_LEN> &father_regs)")
+	};
    
-	inline void Register<REGISTER_LEN>::operator = (Register<REGISTER_LEN> &a) { vassert(0); };
+	inline void Register<REGISTER_LEN>::operator = (Register<REGISTER_LEN> &a) { 
+		vassert(0);
+		vpanic("inline void Register<REGISTER_LEN>::operator = (Register<REGISTER_LEN> &a)")
+	};
     
 	Register<REGISTER_LEN>::~Register() {
 		int _pcur = REGISTER_LEN - 1;
@@ -516,8 +576,8 @@ inline Register<REGISTER_LEN>::Register(Z3_context ctx, Bool _need_record) :
 	case nbit:													\
 		if (GET##nbytes(m_fastindex + offset))					\
 		{														\
-			clear(offset, nbytes);								\
-			if (ir.symbolic()) {						\
+			clear<nbytes>(offset);								\
+			if (ir.symbolic()) {								\
 				fastindex_method;								\
 				m_ast[offset]=ir;								\
 				Z3_inc_ref(m_ctx, m_ast[offset]);				\
@@ -527,7 +587,7 @@ inline Register<REGISTER_LEN>::Register(Z3_context ctx, Bool _need_record) :
 				SET##nbytes(m_bytes + offset, ir);				\
 			}													\
 		}else{												    \
-			if (ir.symbolic()) {						\
+			if (ir.symbolic()) {								\
 				fastindex_method;								\
 				m_ast[offset]=ir;								\
 				Z3_inc_ref(m_ctx, m_ast[offset]);				\
@@ -547,7 +607,7 @@ inline Register<REGISTER_LEN>::Register(Z3_context ctx, Bool _need_record) :
 #undef lazydef
 		case 128:
 			if ((GET8(m_fastindex + offset)) || (GET8(m_fastindex + offset + 8))) {
-				clear(offset, 8); clear(offset + 8, 8); 
+				clear<16>(offset);
 				if (ir.symbolic()) {
 					m_ast[offset] = ir;
 					Z3_inc_ref(m_ctx, m_ast[offset]);
@@ -572,7 +632,7 @@ inline Register<REGISTER_LEN>::Register(Z3_context ctx, Bool _need_record) :
 			return;
 		case 256:
 			if ((GET8(m_fastindex + offset)) || (GET8(m_fastindex + offset + 8)) || (GET8(m_fastindex + offset + 16)) || (GET8(m_fastindex + offset + 24))) {
-				clear(offset, 8); clear(offset + 8, 8); clear(offset + 16, 8); clear(offset + 24, 8);
+				clear<32>(offset);
 				if (ir.symbolic()) {
 					m_ast[offset] = ir;
 					Z3_inc_ref(m_ctx, m_ast[offset]);
@@ -612,7 +672,7 @@ inline Register<REGISTER_LEN>::Register(Z3_context ctx, Bool _need_record) :
 	case nbit:													\
 		if (GET##nbytes(m_fastindex + offset))					\
 		{														\
-			clear(offset, nbytes);								\
+			clear<nbytes>(offset);								\
 			if (Tag == e_symbolic) {							\
 				fastindex_method;								\
 				m_ast[offset]=ir;								\
@@ -643,7 +703,7 @@ inline Register<REGISTER_LEN>::Register(Z3_context ctx, Bool _need_record) :
 #undef lazydef
 		case 128:
 			if ((GET8(m_fastindex + offset)) || (GET8(m_fastindex + offset + 8))) { 
-				clear(offset, 8); clear(offset + 8, 8);
+				clear<16>(offset);
 				if (Tag == e_symbolic) {
 					m_ast[offset] = ir;
 					Z3_inc_ref(m_ctx, m_ast[offset]);
@@ -668,7 +728,7 @@ inline Register<REGISTER_LEN>::Register(Z3_context ctx, Bool _need_record) :
 			return;
 		case 256:
 			if ((GET8(m_fastindex + offset)) || (GET8(m_fastindex + offset + 8)) || (GET8(m_fastindex + offset + 16)) || (GET8(m_fastindex + offset + 24))) {
-				clear(offset, 8); clear(offset + 8, 8); clear(offset + 16, 8); clear(offset + 24, 8);
+				clear<32>(offset); 
 				if (Tag == e_symbolic) {
 					m_ast[offset] = ir;
 					Z3_inc_ref(m_ctx, m_ast[offset]);
@@ -695,8 +755,12 @@ inline Register<REGISTER_LEN>::Register(Z3_context ctx, Bool _need_record) :
 		}
 	}
     
-	inline void Register<REGISTER_LEN>::clear(UInt org_offset, Char length)//length=nbytes
+
+	
+	template<Int LEN>
+	inline void Register<REGISTER_LEN>::clear<LEN>(UInt org_offset)//length=nbytes
 	{
+		Char length = LEN;
 		auto fastR = m_fastindex[org_offset + length] - 1;
 		if (fastR > 0) {
 			auto index = org_offset + length - fastR;
@@ -731,18 +795,42 @@ inline Register<REGISTER_LEN>::Register(Z3_context ctx, Bool _need_record) :
 			org_offset += (sort_size - fastL);
 			length -= (sort_size - fastL);
 		}
+
 		DWORD index;
-		ULong fast_index = GET8(m_fastindex + org_offset);
-		while (length > 0) {
-			if (_BitScanReverse64(&index, fast_index & fastMaskB[length])) {
-				index >>= 3;
-				auto fast = m_fastindex[org_offset + index] - 1;
-				length = index - fast;
-				Z3_dec_ref(m_ctx, m_ast[org_offset + length]);
+		if (LEN <= 8) {
+			ULong fast_index = GET8(m_fastindex + org_offset);
+			while (length > 0) {
+				if (_BitScanReverse64(&index, fast_index & fastMaskB[length])) {
+					index >>= 3;
+					auto fast = m_fastindex[org_offset + index] - 1;
+					length = index - fast;
+					Z3_dec_ref(m_ctx, m_ast[org_offset + length]);
+				}
+				else {
+					return;
+				}
 			}
-			else {
+		}
+		else {
+			UInt _pcur = org_offset + length - 1;
+			if (_pcur < org_offset)
 				return;
-			}
+			for (; ; ) {
+				if (_BitScanReverse64(&index, ((DWORD64*)(m_fastindex))[_pcur >> 3] & fastMaskBI1[_pcur % 8])) {
+					_pcur = ALIGN(_pcur, 8) + (index >> 3);
+					_pcur = _pcur - m_fastindex[_pcur] + 1;
+					if (_pcur >= org_offset)
+						Z3_dec_ref(m_ctx, m_ast[_pcur]);
+					else
+						return;
+					_pcur--;
+				}
+				else {
+					_pcur = ALIGN(_pcur - 8, 8) + 7;
+					if (_pcur < org_offset)
+						return;
+				}
+			};
 		}
 	}
 
@@ -933,7 +1021,7 @@ inline void Register<maxlength>::Ist_Put(UInt offset, Variable &ir) {
 		if(symbolic){													\
 			if (GET##nbytes(m_fastindex + offset))						\
 			{															\
-				clear(offset, nbytes);									\
+				clear<nbytes>(offset);									\
 				if (Tag == e_symbolic) {								\
 					fastindex_method;									\
 					m_ast[offset] = ir;									\
@@ -979,7 +1067,7 @@ inline void Register<maxlength>::Ist_Put(UInt offset, Variable &ir) {
 	case 128:
 		if (symbolic) {
 			if ((GET8(m_fastindex + offset)) || (GET8(m_fastindex + offset + 8))) {
-				clear(offset, 8); clear(offset + 8, 8);
+				clear<16>(offset);
 				if (Tag == e_symbolic) {
 					m_ast[offset] = ir;
 					Z3_inc_ref(m_ctx, m_ast[offset]);
@@ -1017,7 +1105,7 @@ inline void Register<maxlength>::Ist_Put(UInt offset, Variable &ir) {
 	case 256:
 		if (symbolic) {
 			if ((GET8(m_fastindex + offset)) || (GET8(m_fastindex + offset + 8)) || (GET8(m_fastindex + offset + 16)) || (GET8(m_fastindex + offset + 24))) {
-				clear(offset, 8); clear(offset + 8, 8); clear(offset + 16, 8); clear(offset + 24, 8);
+				clear<32>(offset);
 				if (Tag == e_symbolic) {
 					m_ast[offset] = ir;
 					Z3_inc_ref(m_ctx, m_ast[offset]);
@@ -1056,8 +1144,11 @@ inline void Register<maxlength>::Ist_Put(UInt offset, Variable &ir) {
 	}
 }
 
+
 template<int maxlength>
-inline void Register<maxlength>::clear(UInt org_offset, Char length) {
+template<int LEN>
+inline void Register<maxlength>::clear<LEN>(UInt org_offset) {
+	Char length = LEN;
 	auto fastR = m_fastindex[org_offset + length] - 1;
 	if (fastR > 0) {
 		auto index = org_offset + length - fastR;
@@ -1093,19 +1184,46 @@ inline void Register<maxlength>::clear(UInt org_offset, Char length) {
 		length -= (sort_size - fastL);
 	}
 	DWORD index;
-	ULong fast_index = GET8(m_fastindex + org_offset);
-	while (length > 0) {
-		if (_BitScanReverse64(&index, fast_index & fastMaskB[length])) {
-			index >>= 3;
-			auto fast = m_fastindex[org_offset + index] - 1;
-			length = index - fast;
-			Z3_dec_ref(m_ctx, m_ast[org_offset + length]);
-		}
-		else {
-			return;
+	if (LEN <= 8) {
+		ULong fast_index = GET8(m_fastindex + org_offset);
+		while (length > 0) {
+			if (_BitScanReverse64(&index, fast_index & fastMaskB[length])) {
+				index >>= 3;
+				auto fast = m_fastindex[org_offset + index] - 1;
+				length = index - fast;
+				Z3_dec_ref(m_ctx, m_ast[org_offset + length]);
+			}
+			else {
+				return;
+			}
 		}
 	}
+	else {
+		// It's fast for CPU to reads data from aligned addresses .
+		UInt _pcur = org_offset + length - 1;
+		if (_pcur < org_offset)
+			return;
+		for (; ; ) {
+			if (_BitScanReverse64(&index, ((DWORD64*)(m_fastindex))[_pcur >> 3] & fastMaskBI1[_pcur % 8])) {
+				_pcur = ALIGN(_pcur, 8) + (index >> 3);
+				_pcur = _pcur - m_fastindex[_pcur] + 1;
+				if(_pcur >= org_offset)
+					Z3_dec_ref(m_ctx, m_ast[_pcur]);
+				else
+					return;
+				_pcur--;
+			}
+			else {
+				_pcur = ALIGN(_pcur - 8, 8) + 7;
+				if (_pcur < org_offset)
+					return;
+			}
+		};
+	}
 }
+
+
+
 
 
 #undef m_fastindex
@@ -1114,9 +1232,13 @@ inline void Register<maxlength>::clear(UInt org_offset, Char length) {
 #undef GETASTSIZE
 
 template<int maxlength>
-inline void Register<maxlength>::write_regs(int offset,void* addr,  int length){memcpy(m_bytes + offset, addr, length);}
+inline void Register<maxlength>::write_regs(int offset,void* addr,  int length){
+	memcpy(m_bytes + offset, addr, length);
+}
 template<int maxlength>
-inline void Register<maxlength>::read_regs(int offset, void* addr, int length){memcpy(addr, m_bytes + offset, length);}
+inline void Register<maxlength>::read_regs(int offset, void* addr, int length){
+	memcpy(addr, m_bytes + offset, length);
+}
 
 
 

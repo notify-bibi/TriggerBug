@@ -74,20 +74,6 @@ inline Z3_ast bool2bv(Z3_context ctx,Z3_ast ast) {
 	return result;
 }
 
-inline __m128i _mm_not_si128(__m128i a) {
-	__m128i r;
-	r.m128i_u64[0] = ~a.m128i_u64[0];
-	r.m128i_u64[1] = ~a.m128i_u64[1];
-	return  r;
-}
-inline __m256i _mm256_not_si256(__m256i a) {
-	__m256i r;
-	r.m256i_u64[0] = ~a.m256i_u64[0];
-	r.m256i_u64[1] = ~a.m256i_u64[1];
-	r.m256i_u64[2] = ~a.m256i_u64[2];
-	r.m256i_u64[3] = ~a.m256i_u64[3];
-	return r;
-}
 
 template<typename T1, typename T2>
 inline Variable Iop_to(Variable &a) { vassert(a.bitn == (sizeof(T1) * 8)); return Variable((T2)(((T1)a)),a); }
@@ -161,8 +147,18 @@ inline Variable State::T_Unop(IROp op, IRExpr* arg1) {
 	case Iop_GetMSBs8x16: return Variable((UShort)_mm_movemask_epi8(a), a);//OK pmovmskb
 	case Iop_Clz32:vassert(a.bitn == 32); return Variable((UInt)CountLeadingZeros32(a), a);
 	case Iop_Clz64:vassert(a.bitn == 64); return Variable((ULong)CountLeadingZeros64(a), a);
-	case Iop_Ctz32: {vassert(a.bitn == 32); unsigned long result = 0; _BitScanForward(&result, (UInt)a); return Variable((UInt)result, a); };//ok
-	case Iop_Ctz64: {vassert(a.bitn == 64); unsigned long result = 0; _BitScanForward64(&result, (ULong)a); return Variable((ULong)result, a); };//ok
+	case Iop_Ctz32: {
+		vassert(a.bitn == 32);
+		unsigned long result = 0;
+		_BitScanForward(&result, (UInt)a);
+		return Variable((UInt)result, a);
+	};//ok
+	case Iop_Ctz64: {
+		vassert(a.bitn == 64);
+		unsigned long result = 0;
+		_BitScanForward64(&result, (ULong)a);
+		return Variable((ULong)result, a); 
+	};//ok
 	case Iop_Abs64Fx2:
 	case Iop_Neg64Fx2:
 	case Iop_RSqrtEst64Fx2:

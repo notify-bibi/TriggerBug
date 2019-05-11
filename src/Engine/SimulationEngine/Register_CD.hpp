@@ -8,7 +8,8 @@ class Symbolic
 	template <int maxlength>
 	friend class Register;
 public:
-	__declspec(align(32)) UChar m_fastindex[maxlength+1];
+	/* SETFAST macro Setfast overstepping the bounds is not thread-safe(heap), so +32 solves the hidden bug !*/
+	__declspec(align(32)) UChar m_fastindex[maxlength + 32];
 	__declspec(align(8)) Z3_ast m_ast[maxlength];
 	Z3_context m_ctx;
 	inline Symbolic<maxlength>(Z3_context ctx) ;
@@ -67,7 +68,8 @@ public:
 	template<memTAG Tag>
 	inline void Ist_Put(UInt, Variable&);
 
-	inline void clear(UInt, Char);
+	template<int LEN>
+	inline void clear(UInt);
 
 	inline void write_regs(int offset, void*, int length);
 	inline void read_regs(int offset, void*, int length);
@@ -86,7 +88,8 @@ public:
 	Z3_context m_ctx;
 	Bool Need_Record;
 	Z3_ast m_ast[REGISTER_LEN];
-	__declspec(align(32)) UChar m_fastindex[REGISTER_LEN+1];
+	/* SETFAST macro Setfast overstepping the bounds is not thread-safe(heap), so +32 solves the hidden bug !*/
+	__declspec(align(32)) UChar m_fastindex[REGISTER_LEN + 32];
 	__declspec(align(32)) UChar m_bytes[REGISTER_LEN];
 
 	Record<REGISTER_LEN> record;
@@ -106,7 +109,8 @@ public:
 
 	inline void Ist_Put(UInt offset, Variable &ir);
 
-	inline void clear(UInt org_offset, Char length);
+	template<Int LEN>
+	inline void clear(UInt org_offset);
 
 	inline void write_regs(int offset, void*, int length);
 	inline void read_regs(int offset, void*, int length);

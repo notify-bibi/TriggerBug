@@ -204,7 +204,7 @@ static inline Variable opname(T a, Variable const &b) {					\
 #define VariableOperator_bool(op, z3op)									\
 static inline Variable operator##op##(Variable const &a, Variable const &b) {\
 	if(a.real()&&b.real()){												\
-		return Variable((((UChar)a)  op   ((UChar)b)), a, 1);				\
+		return Variable((((UChar)a)  op   ((UChar)b)), a, 1);			\
 	}																	\
 	else {																\
 		Z3_ast args[2] = { a.toBool(), b.toBool() };					\
@@ -278,10 +278,14 @@ static inline Variable ashr(T a, Variable  &b) {
 	return  ashr(Variable((ULong)a, b, b.bitn), b);
 }																	
 
+inline Variable::operator Z3_context() const { return m_ctx; }
 
 
-#undef VariableOperator 
-#undef VariableOperator2
-#undef VariableOperatorDEF 
+#undef VariableOperator_unsigned 
+#undef VariableOperator_signed_with_opname 
+#undef VariableOperator_bool
+#undef VariableOperator_signed 
+#undef VariableOperatorDEF
+
 
 #endif // !ASDREFGSER

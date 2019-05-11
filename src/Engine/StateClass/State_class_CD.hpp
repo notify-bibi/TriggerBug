@@ -1,6 +1,3 @@
-#ifndef State_class_defs
-#define State_class_defs
-
 #include <iostream>
 #include <sstream>
 #include <tuple>
@@ -10,11 +7,14 @@
 #define _SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS
 #include <hash_map>;
 
+#ifndef State_class_defs
+#define State_class_defs
 
 
-extern "C"{
-	#include "../../Valgrind/priv/guest_amd64_defs.h"
-}
+typedef struct ChangeView {
+	State *elders;
+	ChangeView *front;
+}ChangeView;
 
 typedef ULong(*Function6)(ULong, ULong, ULong, ULong, ULong, ULong);
 typedef ULong(*Function5)(ULong, ULong, ULong, ULong, ULong);
@@ -31,6 +31,9 @@ typedef Variable (*Z3_Function2)(Variable &, Variable &);
 typedef Variable (*Z3_Function1)(Variable &);
 
 
+static std::mutex global_state_mutex;
+static Bool TriggerBug_is_init = False;
+
 class State {
 private:
 	Addr64 guest_start_ep;
@@ -41,6 +44,7 @@ public:
 	z3::solver solv;
 	std::queue< std::function<void()> > check_stack;
 	Long delta;
+	std::mutex unit_lock;
 
 protected:
 	Bool need_record;
@@ -99,6 +103,7 @@ public:
 	inline Variable T_Binop(IROp, IRExpr*, IRExpr*);
 	inline Variable T_Triop(IROp, IRExpr*, IRExpr*, IRExpr*);
 	inline Variable T_Qop(IROp, IRExpr*, IRExpr*, IRExpr*, IRExpr*);
+	inline Variable ILGop(IRLoadG *lg);
 
 	inline operator context&();
 	inline operator Z3_context();

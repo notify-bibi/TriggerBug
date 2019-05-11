@@ -19,7 +19,7 @@ The engine was developed to solve some of angr's more intractable problems.
 |compress state mthod|semi-automatic|manual|
 |guest arch|Common arch|only AMD64(Subsequent support for other architectures)|
 |host arch/system|Common arch/system|AMD64/win64(Subsequent support for other architectures)|
-|binary from|python module:cle(Incomplete loading)slowly|(python)memdump from ida(1:1 Fully symbolic loading)fast|
+|binary load|python module:cle(Incomplete loading)slowly|(python)memdump from ida(1:1 Fully symbolic loading)fast|
 |speed| |like qemu|
 
 ..
@@ -75,6 +75,6 @@ Warmly welcome to join us in the development. Study together.
    [Plvgrd]: <http://valgrind.org/>
    [Plz3]: <https://github.com/Z3Prover/z3>
    [Plangr]: <https://github.com/angr>
-   [Pltest]: <https://github.com/notify-bibi/Fast-Symbolic-Emulation-CPU/tree/master/PythonFrontEnd/examples>
-   [Plre]: <https://github.com/notify-bibi/Fast-Symbolic-Emulation-CPU/releases>
-   [Plxml]: <https://github.com/notify-bibi/Fast-Symbolic-Emulation-CPU/blob/master/PythonFrontEnd/examples/binaryVexConfig.xml>
+   [Pltest]: <https://github.com/notify-bibi/TriggerBug/tree/master/PythonFrontEnd/examples>
+   [Plre]: <https://github.com/notify-bibi/TriggerBug/releases>
+   [Plxml]: <https://github.com/notify-bibi/TriggerBug/blob/master/PythonFrontEnd/examples/binaryVexConfig.xml>

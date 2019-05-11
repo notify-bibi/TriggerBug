@@ -1,9 +1,6 @@
 import re
 import os
 
-from collections import OrderedDict
-
-
 code="""sat(define-fun flag20 () (_ BitVec 8)
   #x3a)
 (define-fun flag30 () (_ BitVec 8)

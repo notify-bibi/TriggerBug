@@ -25,6 +25,7 @@
 	<MemoryDumpName>  ${path of [xxx.dump]}   </MemoryDumpName>
 	<!-- <GuestStartAddress>0x444444</GuestStartAddress> -->
 	<RegsIpOffset>184</RegsIpOffset>
+	<PassSigSEGV>1</PassSigSEGV>
 	<VexControl><!-- Default best Settings.You can learn from Valgrind. -->
 		<iropt_register_updates_default>0x701</iropt_register_updates_default>
 		<pxControl>0x701</pxControl>

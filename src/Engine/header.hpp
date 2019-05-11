@@ -18,7 +18,6 @@
 
 
 
-#define TransLate(toctx,ctx,_ast) to_expr(toctx, Z3_translate(ctx, _ast, toctx))
 #define ALIGN(Value,size) ((Value) & ~((size) - 1))
 
 extern "C" 
@@ -35,24 +34,19 @@ extern "C" void vex_assert_fail(const HChar* expr,const HChar* file, Int line, c
 extern "C" unsigned int vex_printf(const HChar* format, ...);
 extern "C" void vpanic(const HChar* str);
 
-static unsigned char fastalignD1[257 ];
-static unsigned char fastalign[257];
-static ULong fastMask[65];
-static ULong fastMaskI1[65];
-static ULong fastMaskB[9];
-static ULong fastMaskBI1[9];
-
-static ULong fastMaskReverse[65];
-static ULong fastMaskReverseI1[65];
+extern unsigned char fastalignD1[257 ];
+extern unsigned char fastalign[257];
+extern ULong fastMask[65];
+extern ULong fastMaskI1[65];
+extern ULong fastMaskB[9];
+extern ULong fastMaskBI1[9];
+extern ULong fastMaskReverse[65];
+extern ULong fastMaskReverseI1[65];
 
 
 class State;
 class Variable;
 
-typedef struct ChangeView {
-	State *elders;
-	ChangeView *front;
-}ChangeView;
 
 typedef enum :unsigned int {
 	NewState = 0,
@@ -63,18 +57,12 @@ typedef enum :unsigned int {
 
 
 
-class State;
 typedef State_Tag(*CallBack)(State *);
 typedef struct _Hook {
 	CallBack cb;
 	UChar original;
 }Hook_struct;
 
-
-
-
-
-#define SetRecord(record,offset,length) {((record))[((offset)>>5)]=True;if((length)!=1) {((record))[((offset)+(length)-1)>>5]=True;}}
 
 
 
@@ -88,9 +76,6 @@ typedef struct _Hook {
 #else
 #define vassert(...) 
 #endif // _DEBUG
-
-
-
 
 
 
@@ -140,74 +125,34 @@ typedef enum:unsigned char {
 	e_real
 }memTAG;
 
-#define SETFAST(fast_ptr,__nbytes) \
-if((__nbytes)<8){\
-__asm__(\
-	"mov %[nbytes],%%cl;\n\t"\
-	"shl $3,%%rcx;\n\t"\
-	"mov %[fast],%%rax;\n\t"\
-	"shr %%cl,%%rax;\n\t"\
-	"shl %%cl,%%rax;\n\t"\
-	"mov $0x0807060504030201,%%rbx;\n\t"\
-	"sub $65,%%cl;\n\t"\
-	"not %%cl;\n\t"\
-	"shl %%cl,%%rbx;\n\t"\
-	"shr %%cl,%%rbx;\n\t"\
-	"or %%rbx,%%rax;\n\t"\
-	"mov %%rax,%[out];\n\t"\
-	: [out]"=r"(GET8((fast_ptr)))\
-	: [fast] "r"(GET8((fast_ptr))), [nbytes] "r"((UChar)(__nbytes))\
-	: "rax", "rbx", "rcx"\
-);}										\
-else if((__nbytes)==8){					\
-	SET8((fast_ptr),0x0807060504030201);\
-}else{									\
-	for(UChar _i=0;_i<(__nbytes);_i++){	\
-		(fast_ptr)[_i]=_i+1;			\
-	}									\
-}										
 
 
-
-#define Z3SETBYTES(bytes_ptr,__nbit,z3_re_u64) \
-if((__nbit)==64){ SET8((bytes_ptr),z3_re_u64);}\
-else{\
-__asm__(\
-	"mov %[nb],%%cl;\n\t"\
-	"mov %[fast],%%rax;\n\t"\
-	"shr %%cl,%%rax;\n\t"\
-	"shl %%cl,%%rax;\n\t"\
-	"mov %[int64],%%rbx;\n\t"\
-	"sub $65,%%cl;\n\t"\
-	"not %%cl;\n\t"\
-	"shl %%cl,%%rbx;\n\t"\
-	"shr %%cl,%%rbx;\n\t"\
-	"or %%rbx,%%rax;\n\t"\
-	"mov %%rax,%[out];\n\t"\
-	: [out]"=r"(GET8((bytes_ptr)))\
-	: [fast] "r"(GET8((bytes_ptr))), [nb] "r"((UChar)(__nbit)),[int64] "r"((z3_re_u64)) \
-	: "rax", "rbx", "rcx"\
-);}
-
-
-#define vpanic(...) printf("%s line %d",__FILE__,__LINE__); vpanic(__VA_ARGS__);
-
-static std::mutex global_user_mutex;
-static UInt global_user = 0;
-static UInt newDifUser()
-{
-	{
-		std::unique_lock<std::mutex> lock(global_user_mutex);
-		return global_user++;
-	}
+inline __m128i _mm_not_si128(__m128i a) {
+	__m128i r;
+	r.m128i_u64[0] = ~a.m128i_u64[0];
+	r.m128i_u64[1] = ~a.m128i_u64[1];
+	return  r;
+}
+inline __m256i _mm256_not_si256(__m256i a) {
+	__m256i r;
+	r.m256i_u64[0] = ~a.m256i_u64[0];
+	r.m256i_u64[1] = ~a.m256i_u64[1];
+	r.m256i_u64[2] = ~a.m256i_u64[2];
+	r.m256i_u64[3] = ~a.m256i_u64[3];
+	return r;
 }
 
+extern std::mutex global_user_mutex;
 extern std::string replace(const char *pszSrc, const char *pszOld, const char *pszNew);
 extern unsigned int eval_all(std::vector<Z3_ast> &result, z3::solver &solv, Z3_ast nia);
 extern LARGE_INTEGER   freq_global;
 extern LARGE_INTEGER   beginPerformanceCount_global;
 extern LARGE_INTEGER   closePerformanceCount_global;
 extern VexArch guest;
+extern State *states[MAX_THREADS];
+
+
+
 
 #endif // HEADER_H
 

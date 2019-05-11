@@ -4,7 +4,11 @@
 using namespace z3;
 #include "memory_CD.hpp"
 
-
+static UInt newDifUser()
+{
+	std::unique_lock<std::mutex> lock(global_user_mutex);
+	return global_user++;
+}
 
 
 MEM::MEM(solver *so, context * ctx, Bool _need_record) : m_solv(so), m_ctx(*ctx), need_record(_need_record) {

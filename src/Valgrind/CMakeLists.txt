@@ -10,6 +10,10 @@ project(Valgrind CXX)
 
 INCLUDE_DIRECTORIES("priv/")
 INCLUDE_DIRECTORIES("pub/")
+INCLUDE_DIRECTORIES("${CMAKE_SOURCE_DIR}/src")
+INCLUDE_DIRECTORIES("${CMAKE_SOURCE_DIR}/include")
+INCLUDE_DIRECTORIES("${CMAKE_SOURCE_DIR}/src/z3/src/api")
+INCLUDE_DIRECTORIES("${CMAKE_SOURCE_DIR}/src/z3/src/api/c++")
 
 
 add_library(Valgrind    "priv/main_main.c"

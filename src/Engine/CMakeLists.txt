@@ -14,6 +14,7 @@ INCLUDE_DIRECTORIES("StateClass/")
 INCLUDE_DIRECTORIES("Syscall/")
 INCLUDE_DIRECTORIES("../Valgrind/priv/")
 INCLUDE_DIRECTORIES("../Valgrind/pub/")
+INCLUDE_DIRECTORIES("${CMAKE_SOURCE_DIR}/src")
 message("TriggerBug ${CMAKE_BINARY_DIR}")
 message("TriggerBug ${CMAKE_SOURCE_DIR}")
 
