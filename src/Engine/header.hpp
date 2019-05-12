@@ -17,6 +17,9 @@
 }
 
 
+#define mem_w(addr_in, value) state->mem.Ist_Store_R((Addr64)(&(addr_in)), value);
+#define reg_r(offset, Ity) state->regs.Iex_Get(offset, Ity)
+
 
 #define ALIGN(Value,size) ((Value) & ~((size) - 1))
 
@@ -33,6 +36,7 @@ extern "C" void init_threads_id();
 extern "C" void vex_assert_fail(const HChar* expr,const HChar* file, Int line, const HChar* fn);
 extern "C" unsigned int vex_printf(const HChar* format, ...);
 extern "C" void vpanic(const HChar* str);
+
 
 extern unsigned char fastalignD1[257 ];
 extern unsigned char fastalign[257];

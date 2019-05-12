@@ -243,7 +243,8 @@ IRSB* bb_to_IR (
       disassembled instruction is verbose.  In that case we will lower the limit
       so as to ensure that the JIT doesn't run out of space.  See bug 375839 for
       the motivating example. */
-   Int guest_max_insns_really = vex_control.guest_max_insns;
+   Int guest_max_insns_really = pap->guest_max_insns;
+
 
    /* Start a new, empty extent. */
    vge->n_used  = 1;
@@ -292,22 +293,22 @@ IRSB* bb_to_IR (
 
    /* Process instructions. */
    while (True) {
-	   if (pap->start_swap == 1) {
-		   unsigned char offset = ((delta + guest_code) - pap->swap);
-		   if (offset >= 16) {
-			   pap->start_swap = 2;
-			   vassert((offset <= 32));
-			   guest_code = pap->n_page_mem - delta + (offset - 16);
-		   }
-	   }
-	   else if (pap->start_swap == 0) {
+	   if (pap->start_swap == 0) {
 		   if (pap->Surplus - delta <= 16) {
 			   pap->start_swap = 1;
 			   unsigned char *align_address = pap->t_page_addr + pap->Surplus - 0x10;
 			   unsigned char *now_address = pap->t_page_addr + delta;
 			   *(__m128i*)(pap->swap) = *(__m128i*)(align_address);
-			   *(__m128i*)(pap->swap+16) = *(__m128i*)(pap->n_page_mem);
+			   *(__m128i*)(pap->swap + 16) = *(__m128i*)(pap->n_page_mem);
 			   guest_code = (unsigned char *)(pap->swap + (now_address - align_address)) - delta;
+		   }
+	   }
+	   else if (pap->start_swap == 1) {
+		   unsigned char offset = ((delta + guest_code) - pap->swap);
+		   if (offset >= 16) {
+			   pap->start_swap = 2;
+			   vassert((offset <= 32));
+			   guest_code = pap->n_page_mem - delta + (offset - 16);
 		   }
 	   }
 

@@ -49,6 +49,7 @@ typedef struct {
 	unsigned char *t_page_addr;
 	unsigned char *n_page_mem;
 	char start_swap;
+	unsigned int guest_max_insns;
 } Pap;
 
 #define MAX_THREADS 16

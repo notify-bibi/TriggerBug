@@ -72,6 +72,8 @@ public:
 	inline Variable fp2integer_bv(z3::sort &rm, sort &fpa_sort);
 	inline Variable uinteger2fp_bv(z3::sort &rm, sort &fpa_sort);
 	inline Variable fp2uinteger_bv(z3::sort &rm, sort &fpa_sort);
+	inline Variable fp2fp_bv(z3::sort &rm, sort &fpa_sortsort, sort &to_fpa_sort, UInt to_size);
+	
 	inline Variable simplify();
 	inline Variable Split(UChar size, UInt low);
 	inline int real();
@@ -279,6 +281,9 @@ static inline Variable ashr(T a, Variable  &b) {
 }																	
 
 inline Variable::operator Z3_context() const { return m_ctx; }
+inline Variable Variable::fp2fp_bv(z3::sort &rm, sort &fpa_sort, sort &to_fpa_sort, UInt to_size) {
+	return Variable(m_ctx, Z3_mk_fpa_to_fp_float(m_ctx, rm, bv2fpa(fpa_sort), to_fpa_sort), to_size).fpa2bv().simplify();
+};
 
 
 #undef VariableOperator_unsigned 
@@ -286,6 +291,8 @@ inline Variable::operator Z3_context() const { return m_ctx; }
 #undef VariableOperator_bool
 #undef VariableOperator_signed 
 #undef VariableOperatorDEF
+
+#include "../SimulationEngine/Variable.hpp"
 
 
 #endif // !ASDREFGSER

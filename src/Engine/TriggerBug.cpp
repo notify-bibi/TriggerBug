@@ -10,7 +10,7 @@
 //#undef _DEBUG
 //#define z3ss
 #define DLL_EXPORTS
-#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\TriggerBug-asong.xml"
+#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\TriggerBug-asong.xml"
 
 #include "engine.hpp"
 #define vpanic(...) printf("%s line %d",__FILE__,__LINE__); vpanic(__VA_ARGS__);
@@ -364,15 +364,15 @@ int main() {
 
 
 	
-	auto P = s.mem.getMemPage(0x00007FFFF7FE9268);
-	SET1((P->unit->m_bytes + (0x00007FFFF7FE9269 & 0xfff)), 0xAE);
+	auto P = s.mem.getMemPage(0x7FFFF7DEC7B8);
+	SET1((P->unit->m_bytes + (0x7FFFF7DEC7B9 & 0xfff)), 0xAE);
 
 	auto sd = &s;
 	s.regs.Ist_Put(176, Variable(00ull, s, 64));
 	auto f = (Variable)s.m_ctx.bv_const("jjj", 64);
 	s.add_assert(f <60, 1);
 	//s.regs.Ist_Put(32, f);
-	hook_add(&s, 0x7FFFF7E34CD6, (CallBack)comp1);
+	hook_add(&s, 0x7FFFF7DEC7B8, (CallBack)comp1);
 	/*hook_add(&s, 0x0004081DF, (CallBack)eee);
 	hook_add(&s, 0x00406A75, (CallBack)comp1);
 	*/

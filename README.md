@@ -5,6 +5,8 @@ The C++ Dynamic symbolic executor like angr.
 
 The engine was developed to solve some of angr's more intractable problems.
 
+examples的exp还没写。
+目前还不建议深入了解该工具，接口还没写完整
 
 ### Advantages：The present does not represent the future
 
@@ -16,7 +18,7 @@ The engine was developed to solve some of angr's more intractable problems.
 |translator| -----qemu ----\|  \| -valgrind(Single)-|  valgrind(Multi) |
 |solve thread|Single thread|Multi-threaded|
 |thread of emu process|Single thread|Multi-threaded|
-|compress state mthod|semi-automatic|manual|
+|compress state method|semi-automatic|manual|
 |guest arch|Common arch|only AMD64(Subsequent support for other architectures)|
 |host arch/system|Common arch/system|AMD64/win64(Subsequent support for other architectures)|
 |binary load|python module:cle(Incomplete loading)slowly|(python)memdump from ida(1:1 Fully symbolic loading)fast|

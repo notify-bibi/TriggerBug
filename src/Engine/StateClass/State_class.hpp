@@ -47,7 +47,7 @@ std::string replace(const char *pszSrc, const char *pszOld, const char *pszNew)
 		}
 		strContent.replace(nPos, strContent.length(), pszNew);
 		strContent.append(strTemp);
-		nPos += strlen(pszNew) - strlen(pszOld) + 1; //·ÀÖ¹ÖØ¸´Ìæ»» ±ÜÃâËÀÑ­»·
+		nPos += strlen(pszNew) - strlen(pszOld) + 1;
 	}
 	return strContent;
 }
@@ -452,7 +452,8 @@ void State::IR_init() {
 	doc_VexControl->FirstChildElement("iropt_level")->QueryIntText((Int*)(&vc.iropt_level));
 	vc.iropt_unroll_thresh = 0;
 	vc.guest_max_insns = 100;    // max instruction
-	vc.guest_chase_thresh = 0;
+	pap.guest_max_insns = 100;
+	vc.guest_chase_thresh = 0;   //²»Ðí×·¸Ï
 
 	sscanf(doc_VexControl->FirstChildElement("iropt_register_updates_default")->GetText(), "%x", &vc.iropt_register_updates_default);
 	sscanf(doc_VexControl->FirstChildElement("pxControl")->GetText(), "%x", &pxControl);
@@ -551,6 +552,7 @@ void State::read_mem_dump(const char  *filename)
 		fread(data, buf.length, 1, infile);
 		name = &name_buff[buf.nameoffset - name_start_offset];
 		if (GET8(name)== 0x7265747369676572) {
+			printf("name:%18s address:%016llx data offset:%010llx length:%010llx\n", name, buf.address, buf.dataoffset, buf.length);
 			memcpy((regs.m_bytes + buf.address), data, buf.length);
 			memset((regs.m_fastindex + buf.address), 0, buf.length);
 		}else {
@@ -607,7 +609,9 @@ For_Begin:
 For_Begin_NO_Trans:
 				for (UShort i = 0; i < irsb->stmts_used; i++) {
 					IRStmt *s = irsb->stmts[i];
-					if (guest_start == traceIrAddrress) { NEED_CHECK = True; }
+					if (guest_start == traceIrAddrress) { 
+						NEED_CHECK = True; 
+					}
 					if(NEED_CHECK) ppIRStmt(s);
 					switch (s->tag) {
 					case Ist_Put: {regs.Ist_Put(s->Ist.Put.offset, tIRExpr(s->Ist.Put.data)); break; }
@@ -828,12 +832,11 @@ bkp_pass:
 								vta.guest_bytes_addr = (Addr64)(guest_start);
 								vta.traceflags = NULL;
 								//vta.traceflags = VEX_TRACE_FE;
-								vta.pap = &pap;
+								vta.pap = &pap; 
+								auto max_insns = pap.guest_max_insns;
+								pap.guest_max_insns = 1;
 								irsb = LibVEX_FrontEnd(&vta, &res, &pxControl);
-								int _n = 1;
-								for (; (irsb->stmts_used > _n)&&(irsb->stmts[_n]->tag != Ist_WrTmp); _n++) {
-								}
-								irsb->stmts_used = _n;
+								pap.guest_max_insns = max_insns;
 								hook_bkp = guest_start + irsb->stmts[0]->Ist.IMark.len;
 								irsb->jumpkind = Ijk_SigTRAP;
 								goto For_Begin_NO_Trans;

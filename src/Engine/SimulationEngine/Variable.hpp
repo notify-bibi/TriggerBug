@@ -116,9 +116,11 @@ using namespace z3;
 	inline Variable Variable::integer2fp_bv(z3::sort &rm, sort &fpa_sort) { return Variable(m_ctx, Z3_mk_fpa_to_fp_signed(m_ctx, rm, *this, fpa_sort), bitn).fpa2bv(); };
 	inline Variable Variable::uinteger2fp_bv(z3::sort &rm, sort &fpa_sort) { return Variable(m_ctx, Z3_mk_fpa_to_fp_unsigned(m_ctx, rm, *this, fpa_sort), bitn).fpa2bv(); };
 
+
 	inline Variable Variable::fp2integer_bv(z3::sort &rm, sort &fpa_sort) { return Variable(m_ctx, Z3_mk_fpa_to_sbv(m_ctx, rm, bv2fpa(fpa_sort), bitn)); };
 	inline Variable Variable::fp2uinteger_bv(z3::sort &rm, sort &fpa_sort) { return Variable(m_ctx, Z3_mk_fpa_to_ubv(m_ctx, rm, bv2fpa(fpa_sort), bitn)); };
 
+	
 	inline Z3_sort_kind Variable::sort_kind() const { return Z3_get_sort_kind(m_ctx, Z3_get_sort(m_ctx, m_ast)); }
 
 	inline Z3_ast_kind Variable::ast_kind()const { return Z3_get_ast_kind(m_ctx, m_ast); }
@@ -135,8 +137,8 @@ using namespace z3;
 					return Variable(TMP, m_ctx, bitn);
 				}
 				else {
-					__m128i buff;
-					intString2bytes((unsigned char*)Z3_get_numeral_string(m_ctx, m_ast), 32, (char*)&buff);
+					__m256i buff;
+					intString2bytes((unsigned char*)&buff, 32, (char*)Z3_get_numeral_string(m_ctx, simp));
 					return Variable(buff, m_ctx, bitn);
 				}
 			}
