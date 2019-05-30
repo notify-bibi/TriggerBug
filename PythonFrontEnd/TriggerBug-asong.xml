@@ -33,7 +33,7 @@
 	</VexControl>
 	
 	<DEBUG>
-		<TraceIrAddrress>0x7FFFF7A7ABBB3</TraceIrAddrress>
+		<TraceIrAddrress>0x400846</TraceIrAddrress>
 		<TraceState>1</TraceState>
 		<TraceJmp>0</TraceJmp>
 	</DEBUG>

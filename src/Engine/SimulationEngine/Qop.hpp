@@ -1,8 +1,8 @@
-inline Variable State::T_Qop(IROp op, IRExpr* arg1, IRExpr* arg2, IRExpr* arg3, IRExpr* arg4){
-	Variable a = tIRExpr(arg1);
-	Variable b = tIRExpr(arg2);
-	Variable c = tIRExpr(arg3);
-	Variable d = tIRExpr(arg4);
+inline Vns State::T_Qop(IROp op, IRExpr* arg1, IRExpr* arg2, IRExpr* arg3, IRExpr* arg4){
+	Vns a = tIRExpr(arg1);
+	Vns b = tIRExpr(arg2);
+	Vns c = tIRExpr(arg3);
+	Vns d = tIRExpr(arg4);
 	if (a.symbolic() || b.symbolic() || c.symbolic()|| d.symbolic()) goto dosymbol;
 	switch (op) {
 	case Iop_MAddF64:
@@ -19,7 +19,9 @@ inline Variable State::T_Qop(IROp op, IRExpr* arg1, IRExpr* arg2, IRExpr* arg3, 
 
 		/* V256-bit data-steering */
 	case Iop_64x4toV256: {
-		vassert(a.bitn == 64); vassert(b.bitn == 64); vassert(c.bitn == 64); vassert(d.bitn == 64); return Variable(_mm256_setr_epi64x(a, b, c, d), a);
+		vassert(a.bitn == 64); vassert(b.bitn == 64);
+		vassert(c.bitn == 64); vassert(d.bitn == 64); 
+		return Vns(m_ctx, _mm256_setr_epi64x(a, b, c, d));
 	}
 		//return assignNew('V', mce, Ity_V256,IRExpr_Qop(op, vatom1, vatom2, vatom3, vatom4));
 		

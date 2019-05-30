@@ -109,28 +109,26 @@ else if((__nbytes)<=16){														\
 	template<int maxlength>
 	template<int length>
 	inline void Record<maxlength>::write(int offset) {
-		*(UShort*)(m_flag + (offset >> 6)) |=
-			(UShort)
-			(
-			(offset + length) < ALIGN(offset, 8) + 8
-				?
-				(maxlength <= 8) ? 0x01ull :
-				(maxlength == 16) ? 0b11ull :
-				0b1111ull
-				:
-				(maxlength <= 8) ? 0x11ull :
-				(maxlength == 16) ? 0b111ull :
-				0b11111ull
-			) << ((offset >> 3) % 8);
+		if (length == 1) {
+			m_flag[offset >> 6] |= 1 << ((offset >> 3) % 8);
+		}
+		else {
+			
+			*(UShort*)(m_flag + (offset >> 6)) |=
+				(UShort)
+				(
+				(offset + length) < ALIGN(offset, 8) + 8
+					?
+					(maxlength <= 8) ? 0x01ull :
+					(maxlength == 16) ? 0b11ull :
+					0b1111ull
+					:
+					(maxlength <= 8) ? 0x11ull :
+					(maxlength == 16) ? 0b111ull :
+					0b11111ull
+				) << ((offset >> 3) % 8);
+		}
 	}
-
-	template<>
-	template<>
-	inline void Record<1000>::write<1>(int offset) { m_flag[offset >> 6] |= 1 << ((offset >> 3) % 8); }
-	template<>
-	template<>
-	inline void Record<0x1000>::write<1>(int offset) { m_flag[offset >> 6] |= 1 << ((offset >> 3) % 8); }
-
 
 	template<int maxlength>
 	inline Record<maxlength>::iterator Record<maxlength>::begin() { return iterator(m_flag); }
@@ -193,15 +191,7 @@ else if((__nbytes)<=16){														\
 
 
 
-
-
-
-
-
-
 //Register<maxlength>
-
-
 
 
     template<int maxlength>
@@ -352,515 +342,9 @@ inline Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar *m_fastindex,Z3_ast* m_
 
 }
 
-
-//Register<REGISTER_LEN>
-
-
-
-inline Register<REGISTER_LEN>::Register(Z3_context ctx, Bool _need_record) :
-	m_ctx(ctx),
-	record(),
-	Need_Record(_need_record)
-	{
-		memset(m_bytes, 0, sizeof(m_bytes));
-		memset(m_fastindex, 0, sizeof(m_fastindex));
-		m_fastindex[REGISTER_LEN] = 0;
-	}
-	inline Register<REGISTER_LEN>::Register(Register<REGISTER_LEN>& father, Z3_context ctx, Bool _need_record) :
-		m_ctx(ctx),
-		record(),
-		Need_Record(_need_record)
-	{
-		memcpy(m_bytes, father.m_bytes, REGISTER_LEN);
-		memcpy(m_fastindex, father.m_fastindex, sizeof(m_fastindex));
-		m_fastindex[REGISTER_LEN] = 0;
-
-		int _pcur = REGISTER_LEN - 1;
-		DWORD N;
-		for (; _pcur > 0; ) {
-			if (_BitScanReverse64(&N, ((DWORD64*)(m_fastindex))[_pcur >> 3] & fastMaskBI1[_pcur % 8])) {
-				_pcur = ALIGN(_pcur, 8) + (N >> 3);
-				_pcur = _pcur - m_fastindex[_pcur] + 1;
-				m_ast[_pcur] = Z3_translate(father.m_ctx, father.m_ast[_pcur], m_ctx);
-				vassert(m_ast[_pcur] != NULL);
-				Z3_inc_ref(m_ctx, m_ast[_pcur]);
-				_pcur--;
-			}
-			else {
-				_pcur = ALIGN(_pcur - 8, 8) + 7;
-			}
-		};
-	}
-	Register<REGISTER_LEN>::Register(const Register<REGISTER_LEN> &father_regs) { 
-		vassert(0);
-		vpanic("Register<REGISTER_LEN>::Register(const Register<REGISTER_LEN> &father_regs)")
-	};
-   
-	inline void Register<REGISTER_LEN>::operator = (Register<REGISTER_LEN> &a) { 
-		vassert(0);
-		vpanic("inline void Register<REGISTER_LEN>::operator = (Register<REGISTER_LEN> &a)")
-	};
-    
-	Register<REGISTER_LEN>::~Register() {
-		int _pcur = REGISTER_LEN - 1;
-		DWORD N;
-		for (; _pcur > 0; ) {
-			if (_BitScanReverse64(&N, ((DWORD64*)(m_fastindex))[_pcur >> 3] & fastMaskBI1[_pcur % 8])) {
-				_pcur = ALIGN(_pcur, 8) + (N >> 3);
-				_pcur = _pcur - m_fastindex[_pcur] + 1;
-				Z3_dec_ref(m_ctx, m_ast[_pcur]);
-				_pcur--;
-			}
-			else {
-				_pcur = ALIGN(_pcur - 8, 8) + 7;
-			}
-		};
-	};
-
-	
-    
-	inline Variable Register<REGISTER_LEN>::Iex_Get(UInt offset, IRType ty)
-	{
-#if defined(OPSTR)
-		tAMD64REGS(offset, ty2length(ty));
-		
-#endif // DEBUG
-
-		switch (ty) {
-#define lazydef(vectype,nbit,nbytes,compare)								\
-	case Ity_##vectype##nbit:														\
-		if (compare) {                        		                                \
-			return Variable(m_ctx,Reg2Ast(nbytes,m_bytes+offset,m_fastindex+offset,m_ast+offset, m_ctx),nbit);\
-		}else{																		\
-			return 	Variable(GET##nbytes##(m_bytes + offset), m_ctx);				\
-		}			
-
-					  
-			lazydef(I,  8, 1, GET1(m_fastindex + offset));
-			lazydef(I, 16, 2, GET2(m_fastindex + offset));
-		case Ity_F32:		  
-			lazydef(I, 32, 4, GET4(m_fastindex + offset));
-		case Ity_F64:		  
-			lazydef(I, 64, 8, GET8(m_fastindex + offset));
-#undef lazydef
-		case Ity_I128:
-		case Ity_V128: {
-			if ((GET8(m_fastindex + offset)) || (GET8(m_fastindex + offset + 8))) {
-				auto ast_vector = Reg2Ast(8, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx);
-				Z3_inc_ref(m_ctx, ast_vector);
-				
-				auto n_ast = Reg2Ast(8, m_bytes + offset + 8, m_fastindex + offset + 8, m_ast + offset + 8, m_ctx);
-				Z3_inc_ref(m_ctx, n_ast);
-				auto new_vector = Z3_mk_concat(m_ctx, n_ast, ast_vector);
-				Z3_inc_ref(m_ctx, new_vector);
-				Z3_dec_ref(m_ctx, n_ast);
-				Z3_dec_ref(m_ctx, ast_vector);
-				return Variable(m_ctx, False, new_vector, 128);
-			}
-			else {
-				return 	Variable(GET16(m_bytes + offset), m_ctx);
-			}	
-		}
-		case Ity_V256: {
-			if ((GET8(m_fastindex + offset)) || (GET8(m_fastindex + offset + 8)) || (GET8(m_fastindex + offset + 16)) || (GET8(m_fastindex + offset + 24))) {
-				auto bytes_p = m_bytes + offset;
-				auto fast_p = m_fastindex + offset;
-				auto ast_p = m_ast + offset;
-				auto ast_vector = Reg2Ast(8, bytes_p, fast_p, ast_p, m_ctx);
-				Z3_inc_ref(m_ctx, ast_vector);
-				for (int count = 8; count <32 ; count +=8) {
-					auto n_ast = Reg2Ast(8, bytes_p + count, fast_p + count, ast_p + count, m_ctx);
-					Z3_inc_ref(m_ctx, n_ast);
-					auto new_vector = Z3_mk_concat(m_ctx, n_ast, ast_vector);
-					Z3_inc_ref(m_ctx, new_vector);
-					Z3_dec_ref(m_ctx, ast_vector);
-					Z3_dec_ref(m_ctx, n_ast);
-					ast_vector = new_vector;
-				}
-				return Variable(m_ctx, False, ast_vector, 256);
-			}
-			else {
-				return 	Variable(GET32(m_bytes + offset), m_ctx);
-			}
-		}
-			
-			
-			
-
-		default: vex_printf("ty = 0x%x\n", (UInt)ty); vpanic("tIRType");
-		}
-	}
-
-    
-	inline Variable Register<REGISTER_LEN>::Iex_Get_Translate(UInt offset, IRType ty, Z3_context toctx)
-	{
-
-#if defined(OPSTR)
-		tAMD64REGS(offset, ty2length(ty));
-		
-#endif // DEBUG
-	
-		switch (ty) {
-#define lazydef(vectype,nbit,nbytes,compare)										\
-	case Ity_##vectype##nbit:														\
-		if (compare) {                        		                                \
-			Z3_ast re = Reg2Ast(nbytes,m_bytes+offset,m_fastindex+offset, m_ast+offset, m_ctx);\
-			Z3_inc_ref(m_ctx,re);\
-			return Variable(toctx,Z3_translate(m_ctx,re,toctx),m_ctx,re,nbit);			    \
-		}else{																		\
-			return 	Variable(GET##nbytes##(m_bytes + offset),toctx);				\
-		}																			
-
-			lazydef(I,  8, 1, GET1(m_fastindex + offset));
-			lazydef(I, 16, 2, GET2(m_fastindex + offset));
-		case Ity_F32:
-			lazydef(I, 32, 4, GET4(m_fastindex + offset));
-		case Ity_F64:
-			lazydef(I, 64, 8, GET8(m_fastindex + offset));
-#undef lazydef
-		case Ity_I128:
-		case Ity_V128: {
-			if ((GET8(m_fastindex + offset)) || (GET8(m_fastindex + offset + 8))) {
-				auto ast_vector = Reg2Ast(8, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx);
-				Z3_inc_ref(m_ctx, ast_vector);
-
-				auto n_ast = Reg2Ast(8, m_bytes + offset + 8, m_fastindex + offset + 8, m_ast + offset + 8, m_ctx);
-				Z3_inc_ref(m_ctx, n_ast);
-				auto new_vector = Z3_mk_concat(m_ctx, n_ast, ast_vector);
-				Z3_inc_ref(m_ctx, new_vector);
-				Z3_dec_ref(m_ctx, n_ast);
-				Z3_dec_ref(m_ctx, ast_vector);
-				return Variable(m_ctx, Z3_translate(m_ctx, new_vector, toctx), m_ctx, new_vector, 128);
-			}
-			else {
-				return 	Variable(GET16(m_bytes + offset), m_ctx);
-			}
-		}
-		case Ity_V256: {
-			if ((GET8(m_fastindex + offset)) || (GET8(m_fastindex + offset + 8)) || (GET8(m_fastindex + offset + 16)) || (GET8(m_fastindex + offset + 24))) {
-				auto bytes_p = m_bytes + offset;
-				auto fast_p = m_fastindex + offset;
-				auto ast_p = m_ast + offset;
-				auto ast_vector = Reg2Ast(8, bytes_p, fast_p, ast_p, m_ctx);
-				Z3_inc_ref(m_ctx, ast_vector);
-				for (int count = 8; count < 32; count += 8) {
-					auto n_ast = Reg2Ast(8, bytes_p + count, fast_p + count, ast_p + count, m_ctx);
-					Z3_inc_ref(m_ctx, n_ast);
-					auto new_vector = Z3_mk_concat(m_ctx, n_ast, ast_vector);
-					Z3_inc_ref(m_ctx, new_vector);
-					Z3_dec_ref(m_ctx, ast_vector);
-					Z3_dec_ref(m_ctx, n_ast);
-					ast_vector = new_vector;
-				}
-				return Variable(m_ctx, Z3_translate(m_ctx, ast_vector, toctx), m_ctx, ast_vector, 256);
-			}
-			else {
-				return 	Variable(GET32(m_bytes + offset), m_ctx);
-			}
-		}
-		default: vex_printf("ty = 0x%x\n", (UInt)ty); vpanic("tIRType");
-		}
-	}
-	
-	inline void Register<REGISTER_LEN>::Ist_Put(UInt offset, Variable &ir)
-	{
-#if defined(OPSTR)
-		tAMD64REGS(offset, ir.bitn >> 3);
-		
-#endif // DEBUG
-
-
-
-		switch (ir.bitn) {
-#define lazydef(nbit,nbytes,fastindex_method) 					\
-	case nbit:													\
-		if (GET##nbytes(m_fastindex + offset))					\
-		{														\
-			clear<nbytes>(offset);								\
-			if (ir.symbolic()) {								\
-				fastindex_method;								\
-				m_ast[offset]=ir;								\
-				Z3_inc_ref(m_ctx, m_ast[offset]);				\
-			}													\
-			else {												\
-				SET##nbytes(m_fastindex + offset, 0);		    \
-				SET##nbytes(m_bytes + offset, ir);				\
-			}													\
-		}else{												    \
-			if (ir.symbolic()) {								\
-				fastindex_method;								\
-				m_ast[offset]=ir;								\
-				Z3_inc_ref(m_ctx, m_ast[offset]);				\
-			}													\
-			else {												\
-				SET##nbytes(m_bytes + offset, ir);				\
-			}													\
-		}														\
-		if (Need_Record)  record.write<nbytes>( offset);		\
-		return;
-
-			lazydef( 8, 1, SET1(m_fastindex + offset, 0x01));
-			lazydef(16, 2, SET2(m_fastindex + offset, 0x0201));
-			lazydef(32, 4, SET4(m_fastindex + offset, 0x04030201));
-			lazydef(64, 8, SET8(m_fastindex + offset, 0x0807060504030201));
-
-#undef lazydef
-		case 128:
-			if ((GET8(m_fastindex + offset)) || (GET8(m_fastindex + offset + 8))) {
-				clear<16>(offset);
-				if (ir.symbolic()) {
-					m_ast[offset] = ir;
-					Z3_inc_ref(m_ctx, m_ast[offset]);
-					SET16(m_fastindex + offset, _mm_setr_epi64x(0x0807060504030201, 0x100f0e0d0c0b0a09));
-				}
-				else {
-					SET16(m_fastindex + offset, _mm_set1_epi64x(0));
-					SET16(m_bytes + offset, ir);
-				}
-			}
-			else {
-				if (ir.symbolic()) {
-					m_ast[offset] = ir;
-					Z3_inc_ref(m_ctx, m_ast[offset]);
-					SET16(m_fastindex + offset, _mm_setr_epi64x(0x0807060504030201, 0x100f0e0d0c0b0a09));
-				}
-				else {
-					SET16(m_bytes + offset, ir);
-				}
-			}
-			if (Need_Record)  record.write<16>(offset);
-			return;
-		case 256:
-			if ((GET8(m_fastindex + offset)) || (GET8(m_fastindex + offset + 8)) || (GET8(m_fastindex + offset + 16)) || (GET8(m_fastindex + offset + 24))) {
-				clear<32>(offset);
-				if (ir.symbolic()) {
-					m_ast[offset] = ir;
-					Z3_inc_ref(m_ctx, m_ast[offset]);
-					SET32(m_fastindex + offset, _mm256_setr_epi64x(0x0807060504030201, 0x100f0e0d0c0b0a09, 0x1817161514131211, 0x201f1e1d1c1b1a19));
-				}
-				else {
-					SET32(m_fastindex + offset, _mm256_set1_epi64x(0));
-					SET32(m_bytes + offset, ir);
-				}
-			}
-			else {
-				if (ir.symbolic()) {
-					m_ast[offset] = ir;
-					Z3_inc_ref(m_ctx, m_ast[offset]);
-					SET32(m_fastindex + offset, _mm256_setr_epi64x(0x0807060504030201, 0x100f0e0d0c0b0a09, 0x1817161514131211, 0x201f1e1d1c1b1a19));
-				}
-				else {
-					SET32(m_bytes + offset, ir);
-				}
-			}
-			if (Need_Record) record.write<32>(offset);
-			return;
-		default:  vpanic("??wtfk??");
-		}
-	}
-	template<memTAG Tag>
-	inline void Register<REGISTER_LEN>::Ist_Put(UInt offset, Variable &ir)
-	{
-#if defined(OPSTR)
-		tAMD64REGS(offset, ir.bitn >> 3);
-		
-#endif // DEBUG
-
-
-		switch (ir.bitn) {										
-#define lazydef(nbit,nbytes,fastindex_method) 					\
-	case nbit:													\
-		if (GET##nbytes(m_fastindex + offset))					\
-		{														\
-			clear<nbytes>(offset);								\
-			if (Tag == e_symbolic) {							\
-				fastindex_method;								\
-				m_ast[offset]=ir;								\
-				Z3_inc_ref(m_ctx, m_ast[offset]);				\
-			}													\
-			else {												\
-				SET##nbytes(m_fastindex + offset, 0);		    \
-				SET##nbytes(m_bytes + offset, ir);				\
-			}													\
-		}else{												    \
-			if (Tag == e_symbolic) {							\
-				fastindex_method;								\
-				m_ast[offset]=ir;								\
-				Z3_inc_ref(m_ctx, m_ast[offset]);				\
-			}													\
-			else {												\
-				SET##nbytes(m_bytes + offset, ir);				\
-			}													\
-		}														\
-		if (Need_Record)  record.write<nbytes>( offset);		\
-		return;
-
-			lazydef(8, 1, SET1(m_fastindex + offset, 0x01));
-			lazydef(16, 2, SET2(m_fastindex + offset, 0x0201));
-			lazydef(32, 4, SET4(m_fastindex + offset, 0x04030201));
-			lazydef(64, 8, SET8(m_fastindex + offset, 0x0807060504030201));
-
-#undef lazydef
-		case 128:
-			if ((GET8(m_fastindex + offset)) || (GET8(m_fastindex + offset + 8))) { 
-				clear<16>(offset);
-				if (Tag == e_symbolic) {
-					m_ast[offset] = ir;
-					Z3_inc_ref(m_ctx, m_ast[offset]);
-					SET16(m_fastindex + offset, _mm_setr_epi64x(0x0807060504030201, 0x100f0e0d0c0b0a09));
-				}
-				else {
-					SET16(m_fastindex + offset, _mm_set1_epi64x(0));
-					SET16(m_bytes + offset, ir);
-				}
-			}
-			else {
-				if (Tag == e_symbolic) {
-					m_ast[offset] = ir;
-					Z3_inc_ref(m_ctx, m_ast[offset]);
-					SET16(m_fastindex + offset, _mm_setr_epi64x(0x0807060504030201, 0x100f0e0d0c0b0a09));
-				}
-				else {
-					SET16(m_bytes + offset, ir);
-				}
-			}
-			if (Need_Record)  record.write<16>(offset);
-			return;
-		case 256:
-			if ((GET8(m_fastindex + offset)) || (GET8(m_fastindex + offset + 8)) || (GET8(m_fastindex + offset + 16)) || (GET8(m_fastindex + offset + 24))) {
-				clear<32>(offset); 
-				if (Tag == e_symbolic) {
-					m_ast[offset] = ir;
-					Z3_inc_ref(m_ctx, m_ast[offset]);
-					SET32(m_fastindex + offset, _mm256_setr_epi64x(0x0807060504030201, 0x100f0e0d0c0b0a09, 0x1817161514131211, 0x201f1e1d1c1b1a19));
-				}
-				else {
-					SET32(m_fastindex + offset, _mm256_set1_epi64x(0));
-					SET32(m_bytes + offset, ir);
-				}
-			}
-			else {
-				if (Tag == e_symbolic) {
-					m_ast[offset] = ir;
-					Z3_inc_ref(m_ctx, m_ast[offset]);
-					SET32(m_fastindex + offset, _mm256_setr_epi64x(0x0807060504030201, 0x100f0e0d0c0b0a09, 0x1817161514131211, 0x201f1e1d1c1b1a19));
-				}
-				else {
-					SET32(m_bytes + offset, ir);
-				}
-			}
-			if (Need_Record) record.write<32>(offset);
-			return;
-		default:  vpanic("??wtfk??");
-		}
-	}
-    
-
-	
-	template<Int LEN>
-	inline void Register<REGISTER_LEN>::clear<LEN>(UInt org_offset)//length=nbytes
-	{
-		Char length = LEN;
-		auto fastR = m_fastindex[org_offset + length] - 1;
-		if (fastR > 0) {
-			auto index = org_offset + length - fastR;
-			auto sort_size = Z3_get_bv_sort_size(m_ctx, Z3_get_sort(m_ctx, m_ast[index]));
-
-			register auto AstR = Z3_mk_extract(m_ctx, sort_size - 1, (fastR << 3), m_ast[index]);
-			Z3_inc_ref(m_ctx, AstR);
-			m_ast[org_offset + length] = AstR;
-			SETFAST(m_fastindex + org_offset + length, (sort_size >> 3) - fastR);
-			if (fastR > length) {
-				register auto AstL = Z3_mk_extract(m_ctx, ((fastR - length) << 3) - 1, 0, m_ast[index]);
-				Z3_inc_ref(m_ctx, AstL);
-				Z3_dec_ref(m_ctx, m_ast[index]);
-				m_ast[index] = AstL;
-				return;
-			}
-			else if (fastR == length) {
-				Z3_dec_ref(m_ctx, m_ast[index]);
-				return;
-			}
-			length -= fastR;
-			Z3_dec_ref(m_ctx, m_ast[index]);
-		}
-		auto fastL = m_fastindex[org_offset] - 1;
-		if (fastL > 0) {
-			auto index = org_offset - fastL;
-			auto sort_size = Z3_get_bv_sort_size(m_ctx, Z3_get_sort(m_ctx, m_ast[index])) >> 3;
-			register auto newAst = Z3_mk_extract(m_ctx, ((fastL) << 3) - 1, 0, m_ast[index]);
-			Z3_inc_ref(m_ctx, newAst);
-			Z3_dec_ref(m_ctx, m_ast[index]);
-			m_ast[index] = newAst;
-			org_offset += (sort_size - fastL);
-			length -= (sort_size - fastL);
-		}
-
-		DWORD index;
-		if (LEN <= 8) {
-			ULong fast_index = GET8(m_fastindex + org_offset);
-			while (length > 0) {
-				if (_BitScanReverse64(&index, fast_index & fastMaskB[length])) {
-					index >>= 3;
-					auto fast = m_fastindex[org_offset + index] - 1;
-					length = index - fast;
-					Z3_dec_ref(m_ctx, m_ast[org_offset + length]);
-				}
-				else {
-					return;
-				}
-			}
-		}
-		else {
-			UInt _pcur = org_offset + length - 1;
-			if (_pcur < org_offset)
-				return;
-			for (; ; ) {
-				if (_BitScanReverse64(&index, ((DWORD64*)(m_fastindex))[_pcur >> 3] & fastMaskBI1[_pcur % 8])) {
-					_pcur = ALIGN(_pcur, 8) + (index >> 3);
-					_pcur = _pcur - m_fastindex[_pcur] + 1;
-					if (_pcur >= org_offset)
-						Z3_dec_ref(m_ctx, m_ast[_pcur]);
-					else
-						return;
-					_pcur--;
-				}
-				else {
-					_pcur = ALIGN(_pcur - 8, 8) + 7;
-					if (_pcur < org_offset)
-						return;
-				}
-			};
-		}
-	}
-
-	inline void Register<REGISTER_LEN>::ShowRegs() {
-		printf("\nrax%16llx\n", GET8(m_bytes + 16));
-		printf("rbx%16llx\n", GET8(m_bytes + 40));
-		printf("rcx%16llx\n", GET8(m_bytes + 24));
-		printf("rdx%16llx\n", GET8(m_bytes + 32));
-
-		printf("rsi%16llx\n", GET8(m_bytes + 64));
-		printf("rdi%16llx\n", GET8(m_bytes + 72));
-		printf("rbp%16llx\n", GET8(m_bytes + 56));
-		printf("rsp%16llx\n", GET8(m_bytes + 48));
-		printf("rip%16llx\n", GET8(m_bytes + 184));
-
-		printf("r8 %16llx\n", GET8(m_bytes + 80));
-		printf("r9 %16llx\n", GET8(m_bytes + 88));
-		printf("r10%16llx\n", GET8(m_bytes + 96));
-		printf("r11%16llx\n", GET8(m_bytes + 104));
-		printf("r12%16llx\n", GET8(m_bytes + 112));
-		printf("r13%16llx\n", GET8(m_bytes + 120));
-		printf("r14%16llx\n", GET8(m_bytes + 128));
-		printf("r15%16llx\n", GET8(m_bytes + 136));
-	}
-
-
-
-
-
-
+inline Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar *m_fastindex, Z3_ast* m_ast, Z3_context ctx, Z3_context toctx) {
+	return  Z3_translate(ctx, Reg2Ast(nbytes, m_bytes, m_fastindex, m_ast, ctx), toctx);
+}
 
 //Register<maxlength>
 
@@ -870,21 +354,18 @@ inline Register<REGISTER_LEN>::Register(Z3_context ctx, Bool _need_record) :
 #define m_ast symbolic->m_ast
 
 
-
-template<int maxlength>
-inline Variable Register<maxlength>::Iex_Get(UInt offset, IRType ty){
-//#if defined(_DEBUG)&&defined(OPSTR)
-//	tAMD64REGS(offset, ty2length(ty));
-//#endif // DEBUG
-//
+	template<int maxlength>
+	template<IRType ty>
+inline Vns Register<maxlength>::Iex_Get(UInt offset) {
 	switch (ty) {
-#define lazydef(vectype,nbit,nbytes,compare)								\
+#define lazydef(vectype,nbit,nbytes,compare)										\
+	case nbit:																		\
 	case Ity_##vectype##nbit:														\
 		if (symbolic&&compare) {                        		                    \
-			return Variable(m_ctx,Reg2Ast(nbytes,m_bytes+offset,m_fastindex+offset, m_ast+offset, m_ctx),nbit);\
+			return Vns(m_ctx, Reg2Ast(nbytes,m_bytes+offset,m_fastindex+offset, m_ast+offset, m_ctx),nbit);\
 		}else{																		\
-			return 	Variable(GET##nbytes##(m_bytes + offset), m_ctx);				\
-		}																			
+			return Vns(m_ctx, GET##nbytes##(m_bytes + offset));						\
+		}
 
 		lazydef(I,  8, 1, GET1(m_fastindex + offset));
 		lazydef(I, 16, 2, GET2(m_fastindex + offset));
@@ -902,13 +383,12 @@ inline Variable Register<maxlength>::Iex_Get(UInt offset, IRType ty){
 			auto n_ast = Reg2Ast(8, m_bytes + offset + 8, m_fastindex + offset + 8, m_ast + offset + 8, m_ctx);
 			Z3_inc_ref(m_ctx, n_ast);
 			auto new_vector = Z3_mk_concat(m_ctx, n_ast, ast_vector);
-			Z3_inc_ref(m_ctx, new_vector);
 			Z3_dec_ref(m_ctx, n_ast);
 			Z3_dec_ref(m_ctx, ast_vector);
-			return Variable(m_ctx, False, new_vector, 128);
+			return Vns(m_ctx, new_vector, 128);
 		}
 		else {
-			return 	Variable(GET16(m_bytes + offset), m_ctx);
+			return Vns(m_ctx, GET16(m_bytes + offset));
 		}
 	}
 	case Ity_V256: {
@@ -927,56 +407,77 @@ inline Variable Register<maxlength>::Iex_Get(UInt offset, IRType ty){
 				Z3_dec_ref(m_ctx, n_ast);
 				ast_vector = new_vector;
 			}
-			return Variable(m_ctx, False, ast_vector, 256);
+			Z3_dec_ref(m_ctx, ast_vector);
+			return Vns(m_ctx, ast_vector, 256);
 		}
 		else {
-			return 	Variable(GET32(m_bytes + offset), m_ctx);
+			return Vns(m_ctx, GET32(m_bytes + offset));
 		}
 	}
 	default: vex_printf("ty = 0x%x\n", (UInt)ty); vpanic("tIRType");
 	}
 }
 
+
 template<int maxlength>
-inline Variable Register<maxlength>::Iex_Get_Translate(UInt offset, IRType ty, Z3_context toctx) { 
-//#if defined(_DEBUG)&&defined(OPSTR)
-//	tAMD64REGS(offset, ty2length(ty));
-//#endif // DEBUG
-	
+inline Vns Register<maxlength>::Iex_Get(UInt offset, IRType ty){
+	switch (ty) {
+#define lazydef(vectype,nbit)								\
+	case nbit:												\
+	case Ity_##vectype##nbit:								\
+		return 	Iex_Get<Ity_##vectype##nbit>(offset);									
+		lazydef(I,  8);
+		lazydef(I, 16);
+	case Ity_F32:
+		lazydef(I, 32);
+	case Ity_F64:
+		lazydef(I, 64);
+	case Ity_V128:
+		lazydef(I, 128);
+		lazydef(V, 256);
+#undef lazydef
+	default: vex_printf("ty = 0x%x\n", (UInt)ty); vpanic("tIRType");
+	}
+}
+
+
+
+
+template<int maxlength>
+template<IRType ty>
+inline Vns Register<maxlength>::Iex_Get(UInt offset, Z3_context ctx) {
 	switch (ty) {
 #define lazydef(vectype,nbit,nbytes,compare)										\
+	case nbit:																		\
 	case Ity_##vectype##nbit:														\
 		if (symbolic&&compare) {                        		                    \
-			Z3_ast re = Reg2Ast(nbytes,m_bytes+offset,m_fastindex+offset, m_ast+offset, m_ctx);\
-			Z3_inc_ref(m_ctx,re);\
-			return Variable(toctx,Z3_translate(m_ctx,re,toctx),m_ctx,re,nbit);			    \
+			return Vns(m_ctx, Reg2Ast(nbytes, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx, ctx),nbit);\
 		}else{																		\
-			return 	Variable(GET##nbytes##(m_bytes + offset),toctx);				\
+			return Vns(m_ctx, GET##nbytes##(m_bytes + offset));								\
 		}																			
 
-		lazydef(I,  8, 1, GET1(m_fastindex + offset));
+		lazydef(I, 8, 1, GET1(m_fastindex + offset));
 		lazydef(I, 16, 2, GET2(m_fastindex + offset));
 	case Ity_F32:
 		lazydef(I, 32, 4, GET4(m_fastindex + offset));
-	case Ity_F64:	
+	case Ity_F64:
 		lazydef(I, 64, 8, GET8(m_fastindex + offset));
 #undef lazydef
 	case Ity_I128:
 	case Ity_V128: {
 		if (symbolic && ((GET8(m_fastindex + offset)) || (GET8(m_fastindex + offset + 8)))) {
-			auto ast_vector = Reg2Ast(8, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx);
+			auto ast_vector = Reg2Ast(8, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx, ctx);
 			Z3_inc_ref(m_ctx, ast_vector);
 
-			auto n_ast = Reg2Ast(8, m_bytes + offset + 8, m_fastindex + offset + 8, m_ast + offset + 8, m_ctx);
+			auto n_ast = Reg2Ast(8, m_bytes + offset + 8, m_fastindex + offset + 8, m_ast + offset + 8, m_ctx, ctx);
 			Z3_inc_ref(m_ctx, n_ast);
 			auto new_vector = Z3_mk_concat(m_ctx, n_ast, ast_vector);
-			Z3_inc_ref(m_ctx, new_vector);
 			Z3_dec_ref(m_ctx, n_ast);
 			Z3_dec_ref(m_ctx, ast_vector);
-			return Variable(m_ctx, Z3_translate(m_ctx, new_vector, toctx), m_ctx, new_vector, 128);
+			return Vns(m_ctx, new_vector, 128);
 		}
 		else {
-			return 	Variable(GET16(m_bytes + offset), m_ctx);
+			return 	Vns(m_ctx, GET16(m_bytes + offset));
 		}
 	}
 	case Ity_V256: {
@@ -984,10 +485,10 @@ inline Variable Register<maxlength>::Iex_Get_Translate(UInt offset, IRType ty, Z
 			auto bytes_p = m_bytes + offset;
 			auto fast_p = m_fastindex + offset;
 			auto ast_p = m_ast + offset;
-			auto ast_vector = Reg2Ast(8, bytes_p, fast_p, ast_p, m_ctx);
+			auto ast_vector = Reg2Ast(8, bytes_p, fast_p, ast_p, m_ctx, ctx);
 			Z3_inc_ref(m_ctx, ast_vector);
 			for (int count = 8; count < 32; count += 8) {
-				auto n_ast = Reg2Ast(8, bytes_p + count, fast_p + count, ast_p + count, m_ctx);
+				auto n_ast = Reg2Ast(8, bytes_p + count, fast_p + count, ast_p + count, m_ctx, ctx);
 				Z3_inc_ref(m_ctx, n_ast);
 				auto new_vector = Z3_mk_concat(m_ctx, n_ast, ast_vector);
 				Z3_inc_ref(m_ctx, new_vector);
@@ -995,155 +496,170 @@ inline Variable Register<maxlength>::Iex_Get_Translate(UInt offset, IRType ty, Z
 				Z3_dec_ref(m_ctx, n_ast);
 				ast_vector = new_vector;
 			}
-			return Variable(m_ctx, Z3_translate(m_ctx, ast_vector, toctx), m_ctx, ast_vector, 256);
+			Z3_dec_ref(m_ctx, ast_vector);
+			return Vns(m_ctx, ast_vector, 256);
 		}
 		else {
-			return 	Variable(GET32(m_bytes + offset), m_ctx);
+			return Vns(m_ctx, GET32(m_bytes + offset));
 		}
 	}
 	default: vex_printf("ty = 0x%x\n", (UInt)ty); vpanic("tIRType");
 	}
+}
 
+template<int maxlength>
+inline Vns Register<maxlength>::Iex_Get(UInt offset, IRType ty, Z3_context ctx) {
+	switch (ty) {
+#define lazydef(vectype,nbit)								\
+	case nbit:												\
+	case Ity_##vectype##nbit:								\
+		return 	Iex_Get<Ity_##vectype##nbit>(offset, ctx);
+		lazydef(I, 8);
+		lazydef(I, 16);
+	case Ity_F32:
+		lazydef(I, 32);
+	case Ity_F64:
+		lazydef(I, 64);
+	case Ity_V128:
+		lazydef(I, 128);
+		lazydef(V, 256);
+#undef lazydef
+	default: vex_printf("ty = 0x%x\n", (UInt)ty); vpanic("tIRType");
+	}
+}
+
+
+
+#define GET_from_nbytes(nbytes, ... )	\
+(nbytes==1)? \
+	GET1(__VA_ARGS__): \
+	(nbytes==2)? \
+		GET2(__VA_ARGS__):\
+		(nbytes==4)? \
+			GET4(__VA_ARGS__):\
+			(nbytes==8)? \
+				GET8(__VA_ARGS__):\
+				GET1(23333)//imPOSSIBLE
+#define SET_from_nbytes(nbytes, arg1, arg2 )	\
+(nbytes==1)? \
+	SET1( arg1, arg2): \
+	(nbytes==2)? \
+		SET2( arg1, arg2):\
+		(nbytes==4)? \
+			SET4( arg1, arg2):\
+			(nbytes==8)? \
+				SET8( arg1, arg2):\
+				SET1(23333,0)//imPOSSIBLE
+
+
+template<int maxlength>
+template<typename DataTy>
+inline void Register<maxlength>::Ist_Put(UInt offset, DataTy data) {												
+	if(symbolic){												
+		if (GET_from_nbytes(sizeof(DataTy), m_fastindex + offset))
+		{	
+			clear<sizeof(DataTy)>(offset);										
+			SET_from_nbytes(sizeof(DataTy), m_fastindex + offset, 0);
+		}												
+	}
+	*(DataTy*)(m_bytes + offset) = data;
+	if (record)  record->write<sizeof(DataTy)>(offset);
+}
+#define B16_Ist_Put(DataTy)														\
+template<int maxlength>															\
+inline void Register<maxlength>::Ist_Put(UInt offset, DataTy  data) {			\
+	if (symbolic) {																\
+		auto fastindex = m_fastindex + offset;									\
+		if ((GET8(fastindex )) || (GET8(fastindex + 8)))						\
+		{																		\
+			clear<16>(offset);													\
+			*(__m128i*)(fastindex) = _mm_setzero_si128();						\
+		}																		\
+	}																			\
+	*(DataTy*)(m_bytes + offset) = data;										\
+	if (record)  record->write<sizeof(DataTy)>(offset);							\
+}
+#define B32_Ist_Put(DataTy)														\
+template<int maxlength>															\
+inline void Register<maxlength>::Ist_Put(UInt offset, DataTy  data) {			\
+	if (symbolic) {																\
+		auto fastindex = m_fastindex + offset;									\
+		if ((GET8(fastindex)) || (GET8(fastindex + 8)) || (GET8(fastindex + 16)) || (GET8(fastindex + 24)))	\
+		{																		\
+			clear<32>(offset);													\
+			*(__m256i*)(fastindex) = _mm256_setzero_si256();					\
+		}																		\
+	}																			\
+	*(DataTy*)(m_bytes + offset) = data;										\
+	if (record)  record->write<sizeof(DataTy)>(offset);							\
+}
+B16_Ist_Put(__m128i);
+B16_Ist_Put(__m128 );
+B16_Ist_Put(__m128d);
+B32_Ist_Put(__m256i);
+B32_Ist_Put(__m256 );
+B32_Ist_Put(__m256d);
+
+
+
+
+// n_bit
+template<int maxlength>
+template<unsigned int bitn>
+inline void Register<maxlength>::Ist_Put(UInt offset, Z3_ast _ast) {										
+		if(!symbolic)
+			symbolic = new Symbolic<maxlength>(m_ctx);
+		if (GET_from_nbytes((bitn>>3), m_fastindex + offset))
+			clear< (bitn >> 3) >(offset);
+		if (bitn == 8)
+			SET1(m_fastindex + offset, 0x01);
+		else if (bitn == 16)
+			SET2(m_fastindex + offset, 0x0201);
+		else if (bitn == 32)
+			SET4(m_fastindex + offset, 0x04030201);
+		else if (bitn == 64)
+			SET8(m_fastindex + offset, 0x0807060504030201);
+		else if (bitn == 128)
+			SET16(m_fastindex + offset, _mm_setr_epi64x(0x0807060504030201, 0x100f0e0d0c0b0a09));
+		else if (bitn == 256)
+			SET32(m_fastindex + offset, _mm256_setr_epi64x(0x0807060504030201, 0x100f0e0d0c0b0a09, 0x1817161514131211, 0x201f1e1d1c1b1a19));
+		else {
+			vpanic("error len");
+		}
+
+		m_ast[offset] = _ast;
+		Z3_inc_ref(m_ctx, _ast);
+		if (record)  
+			record->write< (bitn >> 3) >(offset);
 }
 
 
 template<int maxlength>
-template<memTAG Tag>
-inline void Register<maxlength>::Ist_Put(UInt offset, Variable &ir) { 
-//#if defined(_DEBUG)&&defined(OPSTR)
-//	tAMD64REGS(offset, ir.bitn >> 3);
-//	ir.tostr();
-//#endif // DEBUG
-//	
-	switch (ir.bitn) {
-#define lazydef(nbit,nbytes,fastindex_method) 							\
-	case nbit:															\
-		if(symbolic){													\
-			if (GET##nbytes(m_fastindex + offset))						\
-			{															\
-				clear<nbytes>(offset);									\
-				if (Tag == e_symbolic) {								\
-					fastindex_method;									\
-					m_ast[offset] = ir;									\
-					Z3_inc_ref(m_ctx, m_ast[offset]);					\
-				}														\
-				else {													\
-					SET##nbytes(m_fastindex + offset, 0);				\
-					SET##nbytes(m_bytes + offset, ir);					\
-				}														\
-			}															\
-			else {														\
-				if (Tag == e_symbolic) {								\
-					fastindex_method;									\
-					m_ast[offset] = ir;									\
-					Z3_inc_ref(m_ctx, m_ast[offset]);					\
-				}														\
-				else {													\
-					SET##nbytes(m_bytes + offset, ir);					\
-				}														\
-			}															\
-																		\
-		}else{															\
-			if (Tag == e_symbolic) {									\
-				symbolic = new Symbolic<maxlength>(m_ctx);				\
-				fastindex_method;										\
-				m_ast[offset] = ir;										\
-				Z3_inc_ref(m_ctx, m_ast[offset]);						\
-			}															\
-			else {														\
-				SET##nbytes(m_bytes + offset, ir);						\
-			}															\
-		}																\
-		if (record)  record->write<nbytes>( offset);					\
-		return;														
-		
-
-		lazydef( 8, 1, SET1(m_fastindex + offset, 0x01));
-		lazydef(16, 2, SET2(m_fastindex + offset, 0x0201));
-		lazydef(32, 4, SET4(m_fastindex + offset, 0x04030201));
-		lazydef(64, 8, SET8(m_fastindex + offset, 0x0807060504030201));
-
-#undef lazydef
-	case 128:
-		if (symbolic) {
-			if ((GET8(m_fastindex + offset)) || (GET8(m_fastindex + offset + 8))) {
-				clear<16>(offset);
-				if (Tag == e_symbolic) {
-					m_ast[offset] = ir;
-					Z3_inc_ref(m_ctx, m_ast[offset]);
-					SET16(m_fastindex + offset, _mm_setr_epi64x(0x0807060504030201, 0x100f0e0d0c0b0a09));
-				}
-				else {
-					SET16(m_fastindex + offset, _mm_set1_epi64x(0));
-					SET16(m_bytes + offset, ir);
-				}
-			}
-			else {
-				if (Tag == e_symbolic) {
-					m_ast[offset] = ir;
-					Z3_inc_ref(m_ctx, m_ast[offset]);
-					SET16(m_fastindex + offset, _mm_setr_epi64x(0x0807060504030201, 0x100f0e0d0c0b0a09));
-				}
-				else {
-					SET16(m_bytes + offset, ir);
-				}
-			}
+inline void Register<maxlength>::Ist_Put(UInt offset, Vns const &ir) {
+	if (ir.symbolic()) {
+		switch (ir.bitn) {
+		case 8: Ist_Put<8>(offset, (Z3_ast)ir); break;
+		case 16:Ist_Put<16>(offset, (Z3_ast)ir); break;
+		case 32:Ist_Put<32>(offset, (Z3_ast)ir); break;
+		case 64:Ist_Put<64>(offset, (Z3_ast)ir); break;
+		case 128:Ist_Put<128>(offset, (Z3_ast)ir); break;
+		case 256:Ist_Put<256>(offset, (Z3_ast)ir); break;
+		default:
+			vpanic("error");
 		}
-		else {
-			if (Tag == e_symbolic) {
-				symbolic = new Symbolic<maxlength>(m_ctx);	
-				m_ast[offset] = ir;
-				Z3_inc_ref(m_ctx, m_ast[offset]);
-				SET16(m_fastindex + offset, _mm_setr_epi64x(0x0807060504030201, 0x100f0e0d0c0b0a09));
-			}
-			else {
-				SET16(m_bytes + offset, ir);
-			}
+	}else {
+		switch (ir.bitn) {
+		case 8: Ist_Put(offset, (UChar)ir); break;
+		case 16:Ist_Put(offset, (UShort)ir); break;
+		case 32:Ist_Put(offset, (UInt)ir); break;
+		case 64:Ist_Put(offset, (ULong)ir); break;
+		case 128:Ist_Put(offset, (__m128i)ir); break;
+		case 256:Ist_Put(offset, (__m256i)ir); break;
+		default:
+			vpanic("error");
 		}
-		if (record)  record->write<16>(offset);				
-		return;
-	case 256:
-		if (symbolic) {
-			if ((GET8(m_fastindex + offset)) || (GET8(m_fastindex + offset + 8)) || (GET8(m_fastindex + offset + 16)) || (GET8(m_fastindex + offset + 24))) {
-				clear<32>(offset);
-				if (Tag == e_symbolic) {
-					m_ast[offset] = ir;
-					Z3_inc_ref(m_ctx, m_ast[offset]);
-					SET32(m_fastindex + offset, _mm256_setr_epi64x(0x0807060504030201, 0x100f0e0d0c0b0a09, 0x1817161514131211, 0x201f1e1d1c1b1a19));
-				}
-				else {
-					SET32(m_fastindex + offset, _mm256_set1_epi64x(0));
-					SET32(m_bytes + offset, ir);
-				}
-			}
-			else {
-				if (Tag == e_symbolic) {
-					m_ast[offset] = ir;
-					Z3_inc_ref(m_ctx, m_ast[offset]);
-					SET32(m_fastindex + offset, _mm256_setr_epi64x(0x0807060504030201, 0x100f0e0d0c0b0a09, 0x1817161514131211, 0x201f1e1d1c1b1a19));
-				}
-				else {
-					SET32(m_bytes + offset, ir);
-				}
-			}
-		}
-		else {
-			if (Tag == e_symbolic) {
-				symbolic = new Symbolic<maxlength>(m_ctx);
-				m_ast[offset] = ir;
-				Z3_inc_ref(m_ctx, m_ast[offset]);
-				SET32(m_fastindex + offset, _mm256_setr_epi64x(0x0807060504030201, 0x100f0e0d0c0b0a09, 0x1817161514131211, 0x201f1e1d1c1b1a19));
-			}
-			else {
-				SET32(m_bytes + offset, ir);
-			}
-		}
-		if (record)  record->write<32>(offset);
-		return;
-	default:  vpanic("??wtfk??");
 	}
 }
-
 
 template<int maxlength>
 template<int LEN>

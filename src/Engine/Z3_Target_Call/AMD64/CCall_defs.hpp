@@ -8,8 +8,8 @@
 
 
 
-auto parity_table = [](Variable &d) {
-	Variable all = d.extract(0, 0);
+auto parity_table = [](Vns &d) {
+	Vns all = d.extract(0, 0);
 	for (UChar i = 1; i <= 7; i++) {
 		all = all + d.extract(i, i);
 	}
@@ -25,7 +25,7 @@ auto parity_table = [](Variable &d) {
 #define ULong_extract(value) (value)
 #define lshift(exp,bitn)   (((exp).extract(-(bitn), -(bitn)) )==1)
 
-static inline Variable lshift_o(Variable &x, Int n)
+static inline Vns lshift_o(Vns &x, Int n)
 {
 	if (n >= 0)
 		return x << n;
@@ -118,12 +118,12 @@ static inline Variable lshift_o(Variable &x, Int n)
 {																\
    PREAMBLE(DATA_BITS);											\
    { 															\
-     MASKcf(return Variable(CC_DEP1,Z3_mk_false(CC_DEP1),1);											)\
+     MASKcf(return Vns((CC_DEP1), Z3_mk_false((CC_DEP1)), 1);											)\
      MASKpf(return parity_table(CC_DEP1);				)\
-     MASKaf(return Variable(CC_DEP1,Z3_mk_false(CC_DEP1),1);											)\
+     MASKaf(return Vns((CC_DEP1), Z3_mk_false((CC_DEP1)), 1);											)\
      MASKzf(return (DATA_UTYPE(CC_DEP1) == 0) ;				)\
      MASKsf(return lshift(CC_DEP1, 8 - DATA_BITS - AMD64G_CC_SHIFT_S);		)\
-     MASKof(return Variable(CC_DEP1,Z3_mk_false(CC_DEP1),1);											)\
+     MASKof(return Vns((CC_DEP1), Z3_mk_false((CC_DEP1)), 1);											)\
    }															\
 }
 
@@ -168,7 +168,7 @@ static inline Variable lshift_o(Variable &x, Int n)
    { 																	\
      MASKcf(return (CC_DEP2 >> (DATA_BITS - 1)).extract(AMD64G_CC_SHIFT_C,AMD64G_CC_SHIFT_C) == 1;		)\
      MASKpf(return parity_table(CC_DEP1);						)\
-     MASKaf(return Variable(CC_DEP1,Z3_mk_false(CC_DEP1),1); /* undefined */									)\
+     MASKaf(return Vns((CC_DEP1), Z3_mk_false((CC_DEP1)), 1); /* undefined */									)\
      MASKzf(return (DATA_UTYPE(CC_DEP1) == 0) ;						)\
      MASKsf(return lshift(CC_DEP1, 8 - DATA_BITS - AMD64G_CC_SHIFT_S);				)\
      /* of is defined if shift count == 1 */							\
@@ -184,7 +184,7 @@ static inline Variable lshift_o(Variable &x, Int n)
    { 																	\
      MASKcf(return (CC_DEP2).extract(0,0) == 1;											)\
      MASKpf(return parity_table(CC_DEP1);						)\
-     MASKaf(return Variable(CC_DEP1,Z3_mk_false(CC_DEP1),1); /* undefined */									)\
+     MASKaf(return Vns((CC_DEP1), Z3_mk_false((CC_DEP1)), 1); /* undefined */									)\
      MASKzf(return (DATA_UTYPE(CC_DEP1) == 0) ;						)\
      MASKsf(return lshift(CC_DEP1, 8 - DATA_BITS - AMD64G_CC_SHIFT_S);				)\
      /* of is defined if shift count == 1 */							\
@@ -243,12 +243,12 @@ static inline Variable lshift_o(Variable &x, Int n)
 {																\
    PREAMBLE(DATA_BITS);											\
    { 															\
-     MASKcf(return Variable(CC_DEP1,Z3_mk_false(CC_DEP1),1);											)\
-     MASKpf(return Variable(CC_DEP1,Z3_mk_false(CC_DEP1),1);											)\
-     MASKaf(return Variable(CC_DEP1,Z3_mk_false(CC_DEP1),1);											)\
+     MASKcf(return Vns((CC_DEP1), Z3_mk_false((CC_DEP1)), 1);											)\
+     MASKpf(return Vns((CC_DEP1), Z3_mk_false((CC_DEP1)), 1);											)\
+     MASKaf(return Vns((CC_DEP1), Z3_mk_false((CC_DEP1)), 1);											)\
      MASKzf(return (DATA_UTYPE(CC_DEP1) == 0) ;				)\
      MASKsf(return lshift(CC_DEP1, 8 - DATA_BITS - AMD64G_CC_SHIFT_S);		)\
-     MASKof(return Variable(CC_DEP1,Z3_mk_false(CC_DEP1),1);											)\
+     MASKof(return Vns((CC_DEP1), Z3_mk_false((CC_DEP1)), 1);											)\
      															\
    }															\
 }
@@ -260,11 +260,11 @@ static inline Variable lshift_o(Variable &x, Int n)
    PREAMBLE(DATA_BITS);											\
    { 															\
      MASKcf(return (DATA_UTYPE(CC_DEP2) != 0);					)\
-     MASKpf(return Variable(CC_DEP1,Z3_mk_false(CC_DEP1),1);											)\
-     MASKaf(return Variable(CC_DEP1,Z3_mk_false(CC_DEP1),1);											)\
+     MASKpf(return Vns((CC_DEP1), Z3_mk_false((CC_DEP1)), 1);											)\
+     MASKaf(return Vns((CC_DEP1), Z3_mk_false((CC_DEP1)), 1);											)\
      MASKzf(return (DATA_UTYPE(CC_DEP1) == 0) ;				)\
      MASKsf(return lshift(CC_DEP1, 8 - DATA_BITS - AMD64G_CC_SHIFT_S);		)\
-     MASKof(return Variable(CC_DEP1,Z3_mk_false(CC_DEP1),1);											)\
+     MASKof(return Vns((CC_DEP1), Z3_mk_false((CC_DEP1)), 1);											)\
      															\
    }															\
 }
@@ -276,11 +276,11 @@ static inline Variable lshift_o(Variable &x, Int n)
    PREAMBLE(DATA_BITS);											\
    {                            								\
      MASKcf(return (DATA_UTYPE(CC_DEP2) == 0);					)\
-     MASKpf(return Variable(CC_DEP1,Z3_mk_false(CC_DEP1),1);											)\
-     MASKaf(return Variable(CC_DEP1,Z3_mk_false(CC_DEP1),1);											)\
-     MASKzf(return Variable(CC_DEP1,Z3_mk_false(CC_DEP1),1);											)\
+     MASKpf(return Vns((CC_DEP1), Z3_mk_false((CC_DEP1)), 1);											)\
+     MASKaf(return Vns((CC_DEP1), Z3_mk_false((CC_DEP1)), 1);											)\
+     MASKzf(return Vns((CC_DEP1), Z3_mk_false((CC_DEP1)), 1);											)\
      MASKsf(return lshift(CC_DEP1, 8 - DATA_BITS - AMD64G_CC_SHIFT_S);		)\
-     MASKof(return Variable(CC_DEP1,Z3_mk_false(CC_DEP1),1);											)\
+     MASKof(return Vns((CC_DEP1), Z3_mk_false((CC_DEP1)), 1);											)\
    }															\
 }
 
@@ -291,11 +291,11 @@ static inline Variable lshift_o(Variable &x, Int n)
    PREAMBLE(DATA_BITS);											\
    { 															\
      MASKcf(return (DATA_UTYPE(CC_DEP2) == 0);					)\
-     MASKpf(return Variable(CC_DEP1,Z3_mk_false(CC_DEP1),1);											)\
-     MASKaf(return Variable(CC_DEP1,Z3_mk_false(CC_DEP1),1);											)\
+     MASKpf(return Vns((CC_DEP1), Z3_mk_false((CC_DEP1)), 1);											)\
+     MASKaf(return Vns((CC_DEP1), Z3_mk_false((CC_DEP1)), 1);											)\
      MASKzf(return (DATA_UTYPE(CC_DEP1) == 0) ;				)\
      MASKsf(return lshift(CC_DEP1, 8 - DATA_BITS - AMD64G_CC_SHIFT_S);		)\
-     MASKof(return Variable(CC_DEP1,Z3_mk_false(CC_DEP1),1);											)\
+     MASKof(return Vns((CC_DEP1), Z3_mk_false((CC_DEP1)), 1);											)\
    }															\
 }
 

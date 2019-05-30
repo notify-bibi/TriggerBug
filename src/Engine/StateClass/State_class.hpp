@@ -1,5 +1,4 @@
 #include "State_class_CD.hpp"
-
 #include "../Z3_Target_Call/Z3_Target_Call.hpp"
 #include "libvex_guest_x86.h"
 #include "libvex_guest_amd64.h"
@@ -23,7 +22,7 @@ ULong fastMaskReverseI1[65];
 __m256i m32_fast[33];
 __m256i m32_mask_reverse[33];
 
-extern Variable ir_temp[MAX_THREADS][400];
+extern Vns ir_temp[MAX_THREADS][400];
 extern std::hash_map<Addr64, Hook_struct> CallBackDict;
 extern State_Tag(*Ijk_call_back)(State *, IRJumpKind);
 extern ThreadPool *pool;
@@ -31,6 +30,7 @@ extern void* funcDict(void*);
 extern tinyxml2::XMLDocument doc;
 extern __m256i m32_fast[33];
 extern __m256i m32_mask_reverse[33];
+extern Super py_base_init;
 
 std::string replace(const char *pszSrc, const char *pszOld, const char *pszNew)
 {
@@ -122,7 +122,8 @@ State::State(char *filename, Addr64 gse, Bool _need_record) :
 	solv(m_ctx), need_record(_need_record),
 	status(NewState),
 	VexGuestARCHState(NULL),
-	delta(0)
+	delta(0),
+	base(NULL)
 {
 	if (!TriggerBug_is_init) 
 		Func_Map_Init();
@@ -141,8 +142,33 @@ State::State(char *filename, Addr64 gse, Bool _need_record) :
 	init_threads_id(); 
 	tempmeminit(); 
 	IR_init();
-	if (!TriggerBug_is_init)
-		init_tebles();
+	if (!TriggerBug_is_init) {
+		vassert(!vex_initdone);
+		QueryPerformanceFrequency(&freq_global);
+		QueryPerformanceCounter(&beginPerformanceCount_global);
+		register_tid(GetCurrentThreadId());
+		LibVEX_Init(&failure_exit, &vex_log_bytes, 0/*debuglevel*/, &vc);
+		unregister_tid(GetCurrentThreadId());
+
+		for (int i = 0; i < 257; i++) fastalignD1[i] = (((((i)-1)&-8) + 8) >> 3) - 1;
+		for (int i = 0; i < 257; i++) fastalign[i] = (((((i)-1)&-8) + 8) >> 3);
+		for (int i = 0; i <= 64; i++) fastMask[i] = (1ull << i) - 1; fastMask[64] = -1ULL;
+		for (int i = 0; i <= 64; i++) fastMaskI1[i] = (1ull << (i + 1)) - 1; fastMaskI1[63] = -1ULL; fastMaskI1[64] = -1ULL;
+		for (int i = 0; i <= 7; i++) fastMaskB[i] = (1ull << (i << 3)) - 1; fastMaskB[8] = -1ULL;
+		for (int i = 0; i <= 7; i++) fastMaskBI1[i] = (1ull << ((i + 1) << 3)) - 1; fastMaskBI1[7] = -1ULL;
+		for (int i = 0; i <= 64; i++) fastMaskReverse[i] = ~fastMask[i];
+		for (int i = 0; i <= 64; i++) fastMaskReverseI1[i] = ~fastMaskI1[i];
+
+		__m256i m32 = _mm256_setr_epi64x(0x0807060504030201, 0x100f0e0d0c0b0a09, 0x1817161514131211, 0x201f1e1d1c1b1a19);
+		for (int i = 0; i <= 32; i++) {
+			m32_fast[i] = m32;
+			for (int j = i; j <= 32; j++) {
+				m32_fast[i].m256i_i8[j] = 0;
+			}
+			m32_mask_reverse[i] = _mm256_setzero_si256();
+			memset(&m32_mask_reverse[i].m256i_i8[i], -1ul, 32 - i);
+		}
+	}
 	read_mem_dump(doc_TriggerBug->FirstChildElement("MemoryDumpPath")->GetText());
 	if (gse)
 		guest_start_ep = gse;
@@ -174,15 +200,21 @@ State::State(State *father_state, Addr64 gse) :
 	need_record(father_state->need_record),
 	status(NewState),
 	VexGuestARCHState(NULL),
-	delta(0)
+	delta(0),
+	base(NULL)
 {
 	IR_init();
+	if (father_state->base) {
+		base = py_base_init(father_state->base);
+	}
 };
 
 State::~State() { 
 	unregister_tid(GetCurrentThreadId());
 	if (VexGuestARCHState) delete VexGuestARCHState;
 	for (auto s : branch) delete s;
+	if(base)
+		Py_DecRef(base);
 }
 	
 PAGE* State::getMemPage(Addr64 addr) { return mem.getMemPage(addr); };
@@ -244,7 +276,7 @@ inline State::operator std::string(){
     return str;
 }
 
-inline expr State::getassert(z3::context &ctx) {
+inline Vns State::getassert(z3::context &ctx) {
 	if (asserts.empty()) {
 		vpanic("impossible assertions num is zero");
 	}
@@ -295,7 +327,7 @@ inline IRSB* State::BB2IR() {
 
 
 
-inline void State::add_assert(Variable & assert,Bool ToF)
+inline void State::add_assert(Vns & assert,Bool ToF)
 {
 	assert = assert.simplify();
 	if(assert.is_bool()){
@@ -316,11 +348,10 @@ inline void State::add_assert(Variable & assert,Bool ToF)
 	}
 }
 
-inline void State::add_assert_eq(Variable & eqA, Variable & eqB)
+inline void State::add_assert_eq(Vns & eqA, Vns & eqB)
 {
-	Variable ass = (eqA == eqB).simplify();
+	Vns ass = (eqA == eqB).simplify();
 	Z3_solver_assert(m_ctx, solv, ass);
-	solv.add(ass);
 	asserts.push_back(ass);
 }
 
@@ -328,83 +359,34 @@ inline void State::write_regs(int offset, void* addr, int length) { regs.write_r
 inline void State::read_regs(int offset, void* addr, int length) { regs.read_regs(offset, addr, length); }
 
 
-inline Variable State::CCall(IRCallee *cee, IRExpr **exp_args, IRType ty)
+inline Vns State::CCall(IRCallee *cee, IRExpr **exp_args, IRType ty)
 {
 	Int regparms = cee->regparms;
 	UInt mcx_mask = cee->mcx_mask;
 	Bool z3_mode = False;
 
-	Variable arg0 = tIRExpr(exp_args[0]);
+	Vns arg0 = tIRExpr(exp_args[0]);
 	if (arg0.symbolic()) z3_mode = True;
-	if (!exp_args[1]) return (z3_mode) ? ((Z3_Function1)(funcDict(cee->addr)))(arg0) : Variable(((Function1)(cee->addr))(arg0), m_ctx);
-	Variable arg1 = tIRExpr(exp_args[1]);
+	if (!exp_args[1]) return (z3_mode) ? ((Z3_Function1)(funcDict(cee->addr)))(arg0) : Vns(m_ctx, ((Function1)(cee->addr))(arg0));
+	Vns arg1 = tIRExpr(exp_args[1]);
 	if (arg1.symbolic()) z3_mode = True;
-	if (!exp_args[2]) return (z3_mode) ? ((Z3_Function2)(funcDict(cee->addr)))(arg0, arg1) : Variable(((Function2)(cee->addr))(arg0, arg1), m_ctx);
-	Variable arg2 = tIRExpr(exp_args[2]);
+	if (!exp_args[2]) return (z3_mode) ? ((Z3_Function2)(funcDict(cee->addr)))(arg0, arg1) : Vns(m_ctx, ((Function2)(cee->addr))(arg0, arg1));
+	Vns arg2 = tIRExpr(exp_args[2]);
 	if (arg2.symbolic()) z3_mode = True;
-	if (!exp_args[3]) return (z3_mode) ? ((Z3_Function3)(funcDict(cee->addr)))(arg0, arg1, arg2) : Variable(((Function3)(cee->addr))(arg0, arg1, arg2), m_ctx);
-	Variable arg3 = tIRExpr(exp_args[3]);
+	if (!exp_args[3]) return (z3_mode) ? ((Z3_Function3)(funcDict(cee->addr)))(arg0, arg1, arg2) : Vns(m_ctx, ((Function3)(cee->addr))(arg0, arg1, arg2));
+	Vns arg3 = tIRExpr(exp_args[3]);
 	if (arg3.symbolic()) z3_mode = True;
-	if (!exp_args[4]) return (z3_mode) ? ((Z3_Function4)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3) : Variable(((Function4)(cee->addr))(arg0, arg1, arg2, arg3), m_ctx);
-	Variable arg4 = tIRExpr(exp_args[4]);
+	if (!exp_args[4]) return (z3_mode) ? ((Z3_Function4)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3) : Vns(m_ctx, ((Function4)(cee->addr))(arg0, arg1, arg2, arg3));
+	Vns arg4 = tIRExpr(exp_args[4]);
 	if (arg4.symbolic()) z3_mode = True;
-	if (!exp_args[5]) return (z3_mode) ? ((Z3_Function5)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3, arg4) : Variable(((Function5)(cee->addr))(arg0, arg1, arg2, arg3, arg4), m_ctx);
-	Variable arg5 = tIRExpr(exp_args[5]);
+	if (!exp_args[5]) return (z3_mode) ? ((Z3_Function5)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3, arg4) : Vns(m_ctx, ((Function5)(cee->addr))(arg0, arg1, arg2, arg3, arg4));
+	Vns arg5 = tIRExpr(exp_args[5]);
 	if (arg5.symbolic()) z3_mode = True;
-	if (!exp_args[6]) return (z3_mode) ? ((Z3_Function6)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3, arg4, arg5) : Variable(((Function6)(cee->addr))(arg0, arg1, arg2, arg3, arg4, arg5), m_ctx);
+	if (!exp_args[6]) return (z3_mode) ? ((Z3_Function6)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3, arg4, arg5) : Vns(m_ctx, ((Function6)(cee->addr))(arg0, arg1, arg2, arg3, arg4, arg5));
 
 }
 
 
-
-inline Variable State::tIRExpr(IRExpr* e)
-{
-	switch (e->tag) {
-	case Iex_Get  : { return regs.Iex_Get(e->Iex.Get.offset, e->Iex.Get.ty); }
-	case Iex_RdTmp: { return ir_temp[t_index][e->Iex.RdTmp.tmp]; }
-	case Iex_Unop : { return T_Unop (e->Iex.Unop.op          , e->Iex.Unop.arg           ); }
-	case Iex_Binop: { return T_Binop(e->Iex.Binop.op         , e->Iex.Binop.arg1         , e->Iex.Binop.arg2        ); }
-	case Iex_Triop: { return T_Triop(e->Iex.Triop.details->op, e->Iex.Triop.details->arg1, e->Iex.Triop.details->arg2, e->Iex.Triop.details->arg3); }
-	case Iex_Qop  : { return T_Qop  (e->Iex.Qop.details->op  , e->Iex.Qop.details->arg1  , e->Iex.Qop.details->arg2  , e->Iex.Qop.details->arg3  , e->Iex.Qop.details->arg4); }
-	case Iex_Load : { return mem.Iex_Load(tIRExpr(e->Iex.Load.addr), e->Iex.Get.ty); }
-	case Iex_Const: { return Variable(m_ctx,e->Iex.Const.con); }
-	case Iex_ITE  : { 
-		Variable cond = tIRExpr(e->Iex.ITE.cond);
-		return (cond.real()) ? 
-			((UChar)cond & 0b1) ? tIRExpr(e->Iex.ITE.iftrue) : tIRExpr(e->Iex.ITE.iffalse) 
-			:
-			Variable(m_ctx, Z3_mk_ite(m_ctx, cond.toBool(), tIRExpr(e->Iex.ITE.iftrue), tIRExpr(e->Iex.ITE.iffalse))); 
-	}
-	case Iex_CCall: { return CCall(e->Iex.CCall.cee, e->Iex.CCall.args, e->Iex.CCall.retty); }
-	case Iex_GetI : { 
-		auto ix = tIRExpr(e->Iex.GetI.ix); 
-		assert(ix.real()); 
-		return regs.Iex_Get(e->Iex.GetI.descr->base + (((UInt)(e->Iex.GetI.bias + (int)(ix))) % e->Iex.GetI.descr->nElems)*ty2length(e->Iex.GetI.descr->elemTy), e->Iex.GetI.descr->elemTy); 
-	};
-	case Iex_GSPTR: {
-		if (!VexGuestARCHState) {
-			switch (guest) {
-			case VexArchX86: VexGuestARCHState = new VexGuestX86State; break;
-			case VexArchAMD64: VexGuestARCHState = new VexGuestAMD64State;break;
-			case VexArchARM: VexGuestARCHState = new VexGuestARMState; break;
-			case VexArchARM64: VexGuestARCHState = new VexGuestARM64State; break;
-			case VexArchMIPS32: VexGuestARCHState = new VexGuestMIPS32State; break;
-			case VexArchMIPS64: VexGuestARCHState = new VexGuestMIPS64State; break;
-			case VexArchPPC32: VexGuestARCHState = new VexGuestPPC32State; break;
-			case VexArchPPC64: VexGuestARCHState = new VexGuestPPC64State; break;
-			case VexArchS390X: VexGuestARCHState = new VexGuestS390XState; break;
-			default:vpanic("not support");
-			}
-		}
-		return Variable(VexGuestARCHState, m_ctx, arch_bitn);
-	};
-	case Iex_VECRET:
-	case Iex_Binder:
-	default: 
-		vex_printf("tIRExpr error:  %d", e->tag);
-		vpanic("not support");
-	}
-}
 Bool chase_into_ok(void *value,Addr addr) {
 	std::cout << value << addr << std::endl;
 	return True;
@@ -419,9 +401,10 @@ inline void State::thread_register()
 		std::cout << "\n+++++++++++++++ Thread ID: " << GetCurrentThreadId() << "  address: " << std::hex << guest_start << "  Started +++++++++++++++\n" << std::endl;
 
 	auto i = temp_index();
-	states[i] = this;
+	_states[i] = this;
+	_Z3_contexts[i] = this->m_ctx;
 	for (int j = 0; j < 400; j++) {
-		ir_temp[i][j].m_ast = NULL;
+		ir_temp[i][j].m_kind = REAL;
 	}
 }
 inline void State::thread_unregister()
@@ -431,7 +414,7 @@ inline void State::thread_unregister()
 	
 	auto i = temp_index();
 	for (int j = 0; j < 400; j++) {
-		ir_temp[i][j].~Variable();
+		ir_temp[i][j].~Vns();
 	}
 	{
 		std::unique_lock<std::mutex> lock(global_state_mutex);
@@ -487,37 +470,6 @@ void State::IR_init() {
 }
 
 
-inline void State::init_tebles()
-{
-	for (int i = 0; i < 257; i++) fastalignD1[i] = (((((i)-1)&-8) + 8) >> 3) - 1;
-	for (int i = 0; i < 257; i++) fastalign[i] = (((((i)-1)&-8) + 8) >> 3);
-	for (int i = 0; i <= 64; i++) fastMask[i] = (1ull << i) - 1; fastMask[64] = -1ULL;
-	for (int i = 0; i <= 64; i++) fastMaskI1[i] = (1ull << (i+1)) - 1; fastMaskI1[63] = -1ULL; fastMaskI1[64] = -1ULL;
-	for (int i = 0; i <= 7; i++) fastMaskB[i] = (1ull << (i << 3)) - 1; fastMaskB[8] = -1ULL;
-	for (int i = 0; i <= 7; i++) fastMaskBI1[i] = (1ull << ((i+1) << 3)) - 1; fastMaskBI1[7] = -1ULL;
-	
-	
-	for (int i = 0; i <= 64; i++) fastMaskReverse[i] = ~fastMask[i];
-	for (int i = 0; i <= 64; i++) fastMaskReverseI1[i] = ~fastMaskI1[i];
-
-	__m256i m32 = _mm256_setr_epi64x(0x0807060504030201, 0x100f0e0d0c0b0a09, 0x1817161514131211, 0x201f1e1d1c1b1a19);
-	for (int i = 0; i <= 32; i++) {
-		m32_fast[i] = m32;
-		for (int j = i; j <= 32; j++) {
-			m32_fast[i].m256i_i8[j] = 0;
-		}
-		m32_mask_reverse[i] = _mm256_setzero_si256();
-		memset(&m32_mask_reverse[i].m256i_i8[i], -1ul, 32 - i);
-	}
-
-	QueryPerformanceFrequency(&freq_global);
-	QueryPerformanceCounter(&beginPerformanceCount_global);
-	if (vex_initdone) return;
-	register_tid(GetCurrentThreadId());
-	LibVEX_Init(&failure_exit, &vex_log_bytes, 0/*debuglevel*/, &vc);
-	unregister_tid(GetCurrentThreadId());
-
-}
 void State::read_mem_dump(const char  *filename)
 {
 	struct memdump {
@@ -554,7 +506,6 @@ void State::read_mem_dump(const char  *filename)
 		if (GET8(name)== 0x7265747369676572) {
 			printf("name:%18s address:%016llx data offset:%010llx length:%010llx\n", name, buf.address, buf.dataoffset, buf.length);
 			memcpy((regs.m_bytes + buf.address), data, buf.length);
-			memset((regs.m_fastindex + buf.address), 0, buf.length);
 		}else {
 			printf("name:%18s address:%016llx data offset:%010llx length:%010llx\n", name, buf.address, buf.dataoffset, buf.length);
 			if (err = mem.map(buf.address, buf.length))
@@ -568,7 +519,7 @@ void State::read_mem_dump(const char  *filename)
 	fclose(infile);
 }
 
-inline Variable State::ILGop(IRLoadG *lg) {
+inline Vns State::ILGop(IRLoadG *lg) {
 	switch (lg->cvt) {
 	case ILGop_IdentV128:{ return mem.Iex_Load(tIRExpr(lg->addr), Ity_V128);			}
 	case ILGop_Ident64:  { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I64 );			}
@@ -579,6 +530,56 @@ inline Variable State::ILGop(IRLoadG *lg) {
 	case ILGop_8Sto32:   { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I8  ).sext(8);	}
 	case ILGop_INVALID:
 	default: vpanic("ppIRLoadGOp");
+	}
+}
+
+
+inline Vns State::tIRExpr(IRExpr* e)
+{
+	switch (e->tag) {
+	case Iex_Get: { return regs.Iex_Get(e->Iex.Get.offset, e->Iex.Get.ty); }
+	case Iex_RdTmp: { return ir_temp[t_index][e->Iex.RdTmp.tmp]; }
+	case Iex_Unop: { return T_Unop(e->Iex.Unop.op, e->Iex.Unop.arg); }
+	case Iex_Binop: { return T_Binop(e->Iex.Binop.op, e->Iex.Binop.arg1, e->Iex.Binop.arg2); }
+	case Iex_Triop: { return T_Triop(e->Iex.Triop.details->op, e->Iex.Triop.details->arg1, e->Iex.Triop.details->arg2, e->Iex.Triop.details->arg3); }
+	case Iex_Qop: { return T_Qop(e->Iex.Qop.details->op, e->Iex.Qop.details->arg1, e->Iex.Qop.details->arg2, e->Iex.Qop.details->arg3, e->Iex.Qop.details->arg4); }
+	case Iex_Load: { return mem.Iex_Load(tIRExpr(e->Iex.Load.addr), e->Iex.Get.ty); }
+	case Iex_Const: { return Vns(m_ctx, e->Iex.Const.con); }
+	case Iex_ITE: {
+		Vns cond = tIRExpr(e->Iex.ITE.cond);
+		return (cond.real()) ?
+			((UChar)cond & 0b1) ? tIRExpr(e->Iex.ITE.iftrue) : tIRExpr(e->Iex.ITE.iffalse)
+			:
+			Vns(m_ctx, Z3_mk_ite(m_ctx, cond.toZ3Bool(), tIRExpr(e->Iex.ITE.iftrue), tIRExpr(e->Iex.ITE.iffalse)));
+	}
+	case Iex_CCall: { return CCall(e->Iex.CCall.cee, e->Iex.CCall.args, e->Iex.CCall.retty); }
+	case Iex_GetI: {
+		auto ix = tIRExpr(e->Iex.GetI.ix);
+		assert(ix.real());
+		return regs.Iex_Get(e->Iex.GetI.descr->base + (((UInt)(e->Iex.GetI.bias + (int)(ix))) % e->Iex.GetI.descr->nElems)*ty2length(e->Iex.GetI.descr->elemTy), e->Iex.GetI.descr->elemTy);
+	};
+	case Iex_GSPTR: {
+		if (!VexGuestARCHState) {
+			switch (guest) {
+			case VexArchX86: VexGuestARCHState = new VexGuestX86State; break;
+			case VexArchAMD64: VexGuestARCHState = new VexGuestAMD64State; break;
+			case VexArchARM: VexGuestARCHState = new VexGuestARMState; break;
+			case VexArchARM64: VexGuestARCHState = new VexGuestARM64State; break;
+			case VexArchMIPS32: VexGuestARCHState = new VexGuestMIPS32State; break;
+			case VexArchMIPS64: VexGuestARCHState = new VexGuestMIPS64State; break;
+			case VexArchPPC32: VexGuestARCHState = new VexGuestPPC32State; break;
+			case VexArchPPC64: VexGuestARCHState = new VexGuestPPC64State; break;
+			case VexArchS390X: VexGuestARCHState = new VexGuestS390XState; break;
+			default:vpanic("not support");
+			}
+		}
+		return Vns(m_ctx, (ULong)VexGuestARCHState, arch_bitn);
+	};
+	case Iex_VECRET:
+	case Iex_Binder:
+	default:
+		vex_printf("tIRExpr error:  %d", e->tag);
+		vpanic("not support");
 	}
 }
 
@@ -596,7 +597,7 @@ void State::start(Bool first_bkp_pass) {
 	try {
 		try {
 			if(first_bkp_pass)
-				if ((UChar)mem.Iex_Load(Variable(guest_start, m_ctx), Ity_I8) == 0xCC) {
+				if ((UChar)mem.Iex_Load<Ity_I8>(guest_start) == 0xCC) {
 					is_first_bkp_pass = True;
 					goto bkp_pass;
 				}
@@ -623,14 +624,13 @@ For_Begin_NO_Trans:
 					case Ist_CAS /*比较和交换*/: {//xchg    rax, [r10]
 						{
 							std::unique_lock<std::mutex> lock(unit_lock);
-
 							IRCAS cas = *(s->Ist.CAS.details);
-							Variable addr = tIRExpr(cas.addr);//r10.value
-							Variable expdLo = tIRExpr(cas.expdLo);
-							Variable dataLo = tIRExpr(cas.dataLo);
+							Vns addr = tIRExpr(cas.addr);//r10.value
+							Vns expdLo = tIRExpr(cas.expdLo);
+							Vns dataLo = tIRExpr(cas.dataLo);
 							if ((cas.oldHi != IRTemp_INVALID) && (cas.expdHi)) {//double
-								Variable expdHi = tIRExpr(cas.expdHi);
-								Variable dataHi = tIRExpr(cas.dataHi);
+								Vns expdHi = tIRExpr(cas.expdHi);
+								Vns dataHi = tIRExpr(cas.dataHi);
 								ir_temp[t_index][cas.oldHi] = mem.Iex_Load(addr, length2ty(expdLo.bitn));
 								ir_temp[t_index][cas.oldLo] = mem.Iex_Load(addr, length2ty(expdLo.bitn));
 								mem.Ist_Store(addr, dataLo);
@@ -644,7 +644,7 @@ For_Begin_NO_Trans:
 						break;
 					}
 					case Ist_Exit: {
-						Variable guard = tIRExpr(s->Ist.Exit.guard);
+						Vns guard = tIRExpr(s->Ist.Exit.guard);
 						if (guard.real()) {
 							if ((UChar)guard) {
 Exit_guard_true:
@@ -696,7 +696,7 @@ Exit_guard_true:
 								if (traceState)
 									std::cout << "\n+++++++++++++++ push : " << std::hex << state_J->guest_start << " +++++++++++++++\n" << std::endl;
 
-								Variable _next(tIRExpr(irsb->next));
+								Vns _next(tIRExpr(irsb->next));
 								if (_next.real()) {
 									State *state = new State(this, _next);
 									branch.emplace_back(state);
@@ -715,7 +715,7 @@ Exit_guard_true:
 										State *state = new State(this, rgurd);
 										branch.emplace_back(state);
 										state->add_assert(guard.translate(*state), False);
-										state->add_assert_eq(Variable(m_ctx, Z3_translate(m_ctx, re, *state)), Variable(m_ctx, Z3_translate(m_ctx, _next, *state)));
+										state->add_assert_eq(Vns(m_ctx, Z3_translate(m_ctx, re, *state)), Vns(m_ctx, Z3_translate(m_ctx, _next, *state)));
 										if (traceState)
 											std::cout << "\n+++++++++++++++ push : " << std::hex << state->guest_start << " +++++++++++++++\n" << std::endl;
 										Z3_dec_ref(m_ctx, re);
@@ -810,7 +810,7 @@ bkp_pass:
 							goto For_Begin;
 						}
 						else {
-							__m256i m32 = mem.Iex_Load(Variable(guest_start, m_ctx), Ity_V256);
+							__m256i m32 = mem.Iex_Load<Ity_V256>(guest_start);
 							m32.m256i_i8[0] = _where->second.original;
 							if (!is_first_bkp_pass) {
 								status = (_where->second.cb)(this);//State::delta maybe changed by callback
@@ -836,6 +836,7 @@ bkp_pass:
 								auto max_insns = pap.guest_max_insns;
 								pap.guest_max_insns = 1;
 								irsb = LibVEX_FrontEnd(&vta, &res, &pxControl);
+								ppIRSB(irsb);
 								pap.guest_max_insns = max_insns;
 								hook_bkp = guest_start + irsb->stmts[0]->Ist.IMark.len;
 								irsb->jumpkind = Ijk_SigTRAP;
@@ -878,7 +879,7 @@ bkp_pass:
 						goto For_Begin;
 					}
 				}
-				Variable next = tIRExpr(irsb->next);
+				Vns next = tIRExpr(irsb->next);
 				if (next.real()) {
 					guest_start = next;
 				}
@@ -886,7 +887,7 @@ bkp_pass:
 					std::vector<Z3_ast> result;
 					
 					switch (eval_all(result, solv, next)) {
-					case 0: next.~Variable(); goto EXIT;
+					case 0: next.~Vns(); goto EXIT;
 					case 1:
 						Z3_get_numeral_uint64(m_ctx, result[0], &guest_start);
 						Z3_dec_ref(m_ctx, result[0]);
@@ -899,13 +900,13 @@ bkp_pass:
 							State *state = new State(this, rgurd);
 							branch.emplace_back(state);
 
-							state->add_assert_eq(Variable(m_ctx, Z3_translate(m_ctx, re, *state)), next.translate(*state));
+							state->add_assert_eq(Vns(m_ctx, Z3_translate(m_ctx, re, *state)), next.translate(*state));
 							if (traceState)
 								std::cout << "\n+++++++++++++++ push : " << std::hex << state->guest_start << " +++++++++++++++\n" << std::endl;
 							Z3_dec_ref(m_ctx, re);
 						}
 						status = Fork;
-						next.~Variable();
+						next.~Vns();
 						goto EXIT;
 					}
 				}

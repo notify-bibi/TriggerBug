@@ -52,8 +52,8 @@ template<int maxlength>
 class Register {
 public:
 	Z3_context m_ctx;
-	Symbolic<maxlength> *symbolic;
 	__declspec(align(32)) UChar m_bytes[maxlength];
+	Symbolic<maxlength> *symbolic;
 	Record<maxlength> *record;
 	inline Register<maxlength>(Z3_context ctx, Bool _need_record);
 
@@ -62,66 +62,36 @@ public:
 	inline void operator = (Register<maxlength> &a) ;
 	~Register<maxlength>() ;
 
-	inline Variable Iex_Get_Translate(UInt, IRType,Z3_context toctx);
-	inline Variable Iex_Get(UInt, IRType);
 
-	template<memTAG Tag>
-	inline void Ist_Put(UInt, Variable&);
+	template<IRType ty>
+	inline Vns Iex_Get(UInt);
+	inline Vns Iex_Get(UInt, IRType);
+	template<IRType ty>
+	inline Vns Iex_Get(UInt, Z3_context);
+	inline Vns Iex_Get(UInt, IRType, Z3_context);
+
+	template<typename DataTy>
+	inline void Ist_Put(UInt, DataTy);
+	inline void Ist_Put(UInt offset, __m128i data);
+	inline void Ist_Put(UInt offset, __m128  data);
+	inline void Ist_Put(UInt offset, __m128d data);
+	inline void Ist_Put(UInt offset, __m256i data);
+	inline void Ist_Put(UInt offset, __m256  data);
+	inline void Ist_Put(UInt offset, __m256d data);
+
+	template<unsigned int bitn>
+	inline void Ist_Put(UInt, Z3_ast);
+	inline void Ist_Put(UInt, Vns const &);
 
 	template<int LEN>
 	inline void clear(UInt);
 
 	inline void write_regs(int offset, void*, int length);
 	inline void read_regs(int offset, void*, int length);
+private:
+	inline void Ist_Put(UInt, Z3_ast) = delete;
+	inline void Ist_Put(UInt, Z3_ast&) = delete;
 };
-
-
-
-
-
-
-
-
-template<>
-class Register<REGISTER_LEN> {
-public:
-	Z3_context m_ctx;
-	Bool Need_Record;
-	Z3_ast m_ast[REGISTER_LEN];
-	/* SETFAST macro Setfast overstepping the bounds is not thread-safe(heap), so +32 solves the hidden bug !*/
-	__declspec(align(32)) UChar m_fastindex[REGISTER_LEN + 32];
-	__declspec(align(32)) UChar m_bytes[REGISTER_LEN];
-
-	Record<REGISTER_LEN> record;
-	inline Register(Z3_context ctx, Bool _need_record) ;
-	inline Register(Register<REGISTER_LEN>& father_regs, Z3_context ctx, Bool _need_record) ;
-	Register(const Register<REGISTER_LEN> &father_regs) ;
-	inline void operator = (Register<REGISTER_LEN> &a) ;
-	~Register() ;
-
-	
-	inline Variable Iex_Get(UInt offset, IRType ty);
-
-	inline Variable Iex_Get_Translate(UInt offset, IRType ty, Z3_context toctx);
-	
-	template<memTAG Tag>
-	inline void Ist_Put(UInt offset, Variable &ir);
-
-	inline void Ist_Put(UInt offset, Variable &ir);
-
-	template<Int LEN>
-	inline void clear(UInt org_offset);
-
-	inline void write_regs(int offset, void*, int length);
-	inline void read_regs(int offset, void*, int length);
-	inline void ShowRegs();
-};
-
-
-
-
-
-
 
 
 #endif //REGISTER_HL

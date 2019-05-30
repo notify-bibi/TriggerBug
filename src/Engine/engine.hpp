@@ -1,3 +1,7 @@
+#ifndef _TR_head
+#define _TR_head
+#define _SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS
+#include <hash_map>
 
 #include <windows.h>
 #include <mmintrin.h>  //MMX
@@ -17,9 +21,6 @@
 #include <exception>
 #include <string>
 #include <vector>
-#define _SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS
-#include <hash_map>;
-#include <vector>
 #include <queue>
 #include <memory>
 #include <thread>
@@ -28,9 +29,8 @@
 #include <future>
 #include <functional>
 #include <stdexcept>
-
-#include "c++/z3++.h"
 #include <iomanip>
+#include "c++/z3++.h"
 
 
 #ifdef DLL_EXPORTS
@@ -49,3 +49,7 @@
 #include "Engine/SimulationEngine/Register_CD.hpp"
 #include "Engine/SimulationEngine/memory_CD.hpp"
 #include "Engine/StateClass/State_class_CD.hpp"
+
+
+
+#endif _TR_head

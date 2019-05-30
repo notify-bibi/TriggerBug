@@ -1,17 +1,19 @@
 
 
 
-inline Bool State::treeCompress(z3::context &ctx, Addr64 Target_Addr, State_Tag Target_Tag, std::vector<State_Tag> &avoid, ChangeView& change_view, std::hash_map<ULong, Variable> &change_map, std::hash_map<UShort, Variable> &regs_change_map) {
+inline Bool State::treeCompress(z3::context &ctx, Addr64 Target_Addr, State_Tag Target_Tag, std::vector<State_Tag> &avoid, ChangeView& change_view, std::hash_map<ULong, Vns> &change_map, std::hash_map<UShort, Vns> &regs_change_map) {
 	ChangeView _change_view = { this, &change_view };
 	if (branch.empty()) {
 		if (guest_start == Target_Addr && status == Target_Tag) {
 			ChangeView *_cv = &_change_view;
 			do {
 				auto state = _cv->elders;
-				for (auto offset : state->regs.record) {
-					auto _Where = regs_change_map.lower_bound(offset);
-					if (_Where == regs_change_map.end()) {
-						regs_change_map[offset] = state->regs.Iex_Get_Translate(offset, Ity_I64, ctx);
+				if (state->regs.record) {
+					for (auto offset : *state->regs.record) {
+						auto _Where = regs_change_map.lower_bound(offset);
+						if (_Where == regs_change_map.end()) {
+							regs_change_map[offset] = state->regs.Iex_Get(offset, Ity_I64, ctx);
+						}
 					}
 				}
 				for (auto mcm : state->mem.mem_change_map) {
@@ -22,7 +24,7 @@ inline Bool State::treeCompress(z3::context &ctx, Addr64 Target_Addr, State_Tag 
 							auto Address = mcm.first + offset;
 							auto p = state->mem.getMemPage(Address);
 							vassert(p->user == state->mem.user);
-							change_map[Address] = p->unit->Iex_Get_Translate(offset, Ity_I64, ctx);
+							change_map[Address] = p->unit->Iex_Get(offset, Ity_I64, ctx);
 						}
 					}
 				}
@@ -40,9 +42,9 @@ inline Bool State::treeCompress(z3::context &ctx, Addr64 Target_Addr, State_Tag 
 	Bool has_branch = False;
 	std::vector<State*> ::iterator it = branch.begin();
 	while (it != branch.end()) {
-		std::hash_map<ULong, Variable> _change_map;
+		std::hash_map<ULong, Vns> _change_map;
 		_change_map.reserve(20);
-		std::hash_map<UShort, Variable> _regs_change_map;
+		std::hash_map<UShort, Vns> _regs_change_map;
 		_change_map.reserve(20);
 		Bool _has_branch = (*it)->treeCompress(ctx, Target_Addr, Target_Tag, avoid, _change_view, _change_map, _regs_change_map);
 		if (!has_branch) {
@@ -58,7 +60,7 @@ inline Bool State::treeCompress(z3::context &ctx, Addr64 Target_Addr, State_Tag 
 
 				}
 				else {
-					_Where->second = Variable(ctx, Z3_mk_ite(ctx, (*it)->getassert(ctx), map_it.second, _Where->second), 64);
+					_Where->second = Vns(ctx, Z3_mk_ite(ctx, (*it)->getassert(ctx), map_it.second, _Where->second), 64);
 				}
 			}
 		}
@@ -72,7 +74,7 @@ inline Bool State::treeCompress(z3::context &ctx, Addr64 Target_Addr, State_Tag 
 
 				}
 				else {
-					_Where->second = Variable(ctx, Z3_mk_ite(ctx, (*it)->getassert(ctx), map_it.second, _Where->second), 64);
+					_Where->second = Vns(ctx, Z3_mk_ite(ctx, (*it)->getassert(ctx), map_it.second, _Where->second), 64);
 				}
 			}
 		}
@@ -101,9 +103,9 @@ inline Bool State::treeCompress(z3::context &ctx, Addr64 Target_Addr, State_Tag 
  void State::compress(Addr64 Target_Addr, State_Tag Target_Tag, std::vector<State_Tag> &avoid)
 {
 	ChangeView change_view= { NULL, NULL };
-	std::hash_map<ULong, Variable> change_map;
+	std::hash_map<ULong, Vns> change_map;
 	change_map.reserve(20);
-	std::hash_map<UShort, Variable> regs_change_map;
+	std::hash_map<UShort, Vns> regs_change_map;
 	regs_change_map.reserve(30);
 	auto flag = treeCompress(m_ctx, Target_Addr, Target_Tag, avoid, change_view, change_map, regs_change_map);
 	if (flag != True) {
@@ -111,7 +113,7 @@ inline Bool State::treeCompress(z3::context &ctx, Addr64 Target_Addr, State_Tag 
 #ifndef  _DEBUG
 			std::cout << std::hex << map_it.first << map_it.second << std::endl;
 #endif //  _DEBUG
-			mem.Ist_Store_R(map_it.first, map_it.second);
+			mem.Ist_Store(map_it.first, map_it.second);
 		};
 		for (auto map_it : regs_change_map) {
 #ifndef  _DEBUG
@@ -128,7 +130,7 @@ inline Bool State::treeCompress(z3::context &ctx, Addr64 Target_Addr, State_Tag 
 #ifndef  _DEBUG
 			std::cout << std::hex << map_it.first << map_it.second << std::endl;
 #endif //  _DEBUG
-			one_state->mem.Ist_Store_R(map_it.first, map_it.second.translate(*one_state));
+			one_state->mem.Ist_Store(map_it.first, map_it.second.translate(*one_state));
 		};
 
 		for (auto map_it : regs_change_map) {

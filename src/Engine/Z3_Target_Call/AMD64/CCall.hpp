@@ -8,12 +8,13 @@ extern "C" {
 
 
 
+
 #define z3_amd64g_calculate_rflags_(FLAG)													\
-inline static Variable z3_amd64g_calculate_rflags_##FLAG(									\
+inline static Vns z3_amd64g_calculate_rflags_##FLAG(										\
 	ULong cc_op,																			\
-	Variable &cc_dep1_formal,																\
-	Variable &cc_dep2_formal,																\
-	Variable &cc_ndep_formal) 																\
+	Vns &cc_dep1_formal,																	\
+	Vns &cc_dep2_formal,																	\
+	Vns &cc_ndep_formal) 																	\
 {																							\
 	switch (cc_op) {																		\
 	case AMD64G_CC_OP_COPY:																	\
@@ -146,11 +147,11 @@ z3_amd64g_calculate_rflags_(of);
 /* CALLED FROM GENERATED CODE: CLEAN HELPER */
 /* returns 1 or 0 */
 
-static inline Variable _z3_amd64g_calculate_condition(ULong/*AMD64Condcode*/ cond,
+static inline Vns _z3_amd64g_calculate_condition(ULong/*AMD64Condcode*/ cond,
 	ULong cc_op,
-	Variable &cc_dep1,
-	Variable &cc_dep2,
-	Variable &cc_ndep)
+	Vns &cc_dep1,
+	Vns &cc_dep2,
+	Vns &cc_ndep)
 {
 	switch (cond) {
 	case AMD64CondNO:
@@ -181,7 +182,7 @@ static inline Variable _z3_amd64g_calculate_condition(ULong/*AMD64Condcode*/ con
 
 	case AMD64CondNL:
 	case AMD64CondL: /* (SF xor OF) == 1 */
-		return z3_amd64g_calculate_rflags_sf(cc_op, cc_dep1, cc_dep2, cc_ndep) ^ z3_amd64g_calculate_rflags_of(cc_op, cc_dep1, cc_dep2, cc_ndep);
+		return z3_amd64g_calculate_rflags_sf(cc_op, cc_dep1, cc_dep2, cc_ndep).boolXor(z3_amd64g_calculate_rflags_of(cc_op, cc_dep1, cc_dep2, cc_ndep));
 				
 
 
@@ -195,7 +196,7 @@ static inline Variable _z3_amd64g_calculate_condition(ULong/*AMD64Condcode*/ con
 		std::cout << of.simplify() << std::endl;
 		std::cout << zf.simplify() << std::endl;*/
 
-		return   (sf ^ of) || zf;
+		return   (sf.boolXor(of)) || zf;
 	}
 	default:
 		/* shouldn't really make these calls from generated code */
@@ -207,18 +208,18 @@ static inline Variable _z3_amd64g_calculate_condition(ULong/*AMD64Condcode*/ con
 }
 
 
-Variable z3_amd64g_calculate_condition(Variable/*AMD64Condcode*/ &cond,
-	Variable &cc_op,
-	Variable &cc_dep1,
-	Variable &cc_dep2,
-	Variable &cc_ndep)
+Vns z3_amd64g_calculate_condition(Vns/*AMD64Condcode*/ &cond,
+	Vns &cc_op,
+	Vns &cc_dep1,
+	Vns &cc_dep2,
+	Vns &cc_ndep)
 {
-	return Variable(cond,
+	return Vns(cond,
 		Z3_mk_ite(
 			cond,
 			((ULong)cond & 1) ? Z3_mk_not(cond, _z3_amd64g_calculate_condition(cond, cc_op, cc_dep1, cc_dep2, cc_ndep)):_z3_amd64g_calculate_condition(cond, cc_op, cc_dep1, cc_dep2, cc_ndep),
-			Variable(1ull, cond, 64),
-			Variable(0ull, cond, 64)
+			Vns(cond, 1ull, 64),
+			Vns(cond, 0ull, 64)
 		), 64
 	);
 }

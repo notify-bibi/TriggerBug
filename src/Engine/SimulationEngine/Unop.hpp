@@ -75,89 +75,85 @@ inline Z3_ast bool2bv(Z3_context ctx,Z3_ast ast) {
 }
 
 
-template<typename T1, typename T2>
-inline Variable Iop_to(Variable &a) { vassert(a.bitn == (sizeof(T1) * 8)); return Variable((T2)(((T1)a)),a); }
-template<int T1, int T2>
-inline Variable Iop_ZEXT(Variable &a) { vassert(a.bitn == T1); return Variable(a, Z3_mk_zero_ext(a, T2 - T1, a), T2); }
+#define Iop_to(T1, T2)  Vns(a, (T2)(((T1)a)))
 
-template<int T1, int T2>
-inline Variable Iop_SEXT(Variable &a) { vassert(a.bitn == T1); return Variable(a, Z3_mk_sign_ext(a, T2 - T1, a), T2); }
+#define Iop_ZEXT(T1, T2) Vns(a, Z3_mk_zero_ext(m_ctx, T2 - T1, a), T2)
+#define Iop_SEXT(T1, T2) Vns(a, Z3_mk_sign_ext(m_ctx, T2 - T1, a), T2)
 
-inline Variable State::T_Unop(IROp op, IRExpr* arg1) {
-	Variable a = tIRExpr(arg1);
 
+inline Vns State::T_Unop(IROp op, IRExpr* arg1) {
+	Vns a = tIRExpr(arg1);
 	//a.tostr();
-
 	if (a.symbolic()) goto dosymbol;
 	switch (op) {
-	case Iop_1Uto8:vassert(a.bitn == 1); return Variable((UChar)((UChar)a & 0b1 ? 1 : 0), a);
-	case Iop_1Uto32:vassert(a.bitn == 1); return Variable((UShort)((UChar)a & 0b1 ? 1 : 0), a);
-	case Iop_1Uto64:vassert(a.bitn == 1); return Variable((ULong)((UChar)a & 0b1 ? 1 : 0), a);
-	case Iop_1Sto8:vassert(a.bitn == 1); return Variable((Char)((UChar)a & 0b1 ? -1 : 0), a);
-	case Iop_1Sto16:vassert(a.bitn == 1); return Variable((Short)((UChar)a & 0b1 ? -1 : 0), a);
-	case Iop_1Sto32:vassert(a.bitn == 1); return Variable((Int)((UChar)a & 0b1 ? -1 : 0), a);
-	case Iop_1Sto64:vassert(a.bitn == 1); return Variable((Long)((UChar)a & 0b1 ? -1 : 0), a);
+	case Iop_1Uto8:vassert(a.bitn == 1); return Vns(a, (UChar)((UChar)a ? 1 : 0));
+	case Iop_1Uto32:vassert(a.bitn == 1); return Vns(a, (UShort)((UChar)a ? 1 : 0));
+	case Iop_1Uto64:vassert(a.bitn == 1); return Vns(a, (ULong)((UChar)a ? 1 : 0));
+	case Iop_1Sto8:vassert(a.bitn == 1); return Vns(a, (Char)((UChar)a ? -1 : 0));
+	case Iop_1Sto16:vassert(a.bitn == 1); return Vns(a, (Short)((UChar)a ? -1 : 0));
+	case Iop_1Sto32:vassert(a.bitn == 1); return Vns(a, (Int)((UChar)a ? -1 : 0));
+	case Iop_1Sto64:vassert(a.bitn == 1); return Vns(a, (Long)((UChar)a ? -1 : 0));
 
 
-	case Iop_32to1:vassert(a.bitn == 32); return Variable(((UChar)a & 0b1 ? 1 : 0), a, 1);
-	case Iop_64to1:vassert(a.bitn == 64); return Variable(((UChar)a & 0b1 ? 1 : 0), a, 1);
+	case Iop_32to1:vassert(a.bitn == 32); return Vns(a, ((UChar)a ? 1 : 0), 1);
+	case Iop_64to1:vassert(a.bitn == 64); return Vns(a, ((UChar)a ? 1 : 0), 1);
 
-	case Iop_Not1:return Variable(((UChar)a & 0b1 ? 0 : 1), a, 1);
-	case Iop_Not8:return Variable((UChar)(~(UChar)a), a);
-	case Iop_Not16:return Variable((UShort)(~(UShort)a), a);
-	case Iop_Not32:return Variable((UInt)(~(UInt)a), a);
-	case Iop_Not64:return Variable((ULong)(~(ULong)a), a);
-	case Iop_NotV256:return Variable(_mm256_not_si256(a), a);
-	case Iop_NotV128:return Variable(_mm_not_si128(a), a);
+	case Iop_Not1:return Vns(a, ((UChar)a & 0b1 ? 0 : 1), 1);
+	case Iop_Not8:return Vns(a, (UChar)(~(UChar)a));
+	case Iop_Not16:return Vns(a, (UShort)(~(UShort)a));
+	case Iop_Not32:return Vns(a, (UInt)(~(UInt)a));
+	case Iop_Not64:return Vns(a, (ULong)(~(ULong)a));
+	case Iop_NotV256:return Vns(a, _mm256_not_si256(a));
+	case Iop_NotV128:return Vns(a, _mm_not_si128(a));
 
-	case Iop_8Sto16:return Iop_to<Char, Short>(a);
-	case Iop_8Sto32:return Iop_to<Char, Int>(a);
-	case Iop_8Sto64:return Iop_to<Char, Long>(a);
-	case Iop_8Uto16:return Iop_to<UChar, UShort>(a);
-	case Iop_8Uto32:return Iop_to<UChar, UInt>(a);
-	case Iop_8Uto64:return Iop_to<UChar, ULong>(a);
+	case Iop_8Sto16:return Iop_to(Char, Short);
+	case Iop_8Sto32:return Iop_to(Char, Int);
+	case Iop_8Sto64:return Iop_to(Char, Long);
+	case Iop_8Uto16:return Iop_to(UChar, UShort);
+	case Iop_8Uto32:return Iop_to(UChar, UInt);
+	case Iop_8Uto64:return Iop_to(UChar, ULong);
 
-	case Iop_16Sto32:return Iop_to<Short, Int>(a);
-	case Iop_16Sto64:return Iop_to<Short, Long>(a);
-	case Iop_16Uto32:return Iop_to<UShort, UInt>(a);
-	case Iop_16Uto64:return Iop_to<UShort, ULong>(a);
+	case Iop_16Sto32:return Iop_to(Short, Int);
+	case Iop_16Sto64:return Iop_to(Short, Long);
+	case Iop_16Uto32:return Iop_to(UShort, UInt);
+	case Iop_16Uto64:return Iop_to(UShort, ULong);
 
-	case Iop_32Sto64:return Iop_to<Int, Long>(a);
-	case Iop_32Uto64:return Iop_to<UInt, ULong>(a);
-	case Iop_32UtoV128:return Variable(_mm_set_epi32(0, 0, 0, a), a);
-	case Iop_64UtoV128:return Variable(_mm_set_epi64x(0, a), a);
+	case Iop_32Sto64:return Iop_to(Int, Long);
+	case Iop_32Uto64:return Iop_to(UInt, ULong);
+	case Iop_32UtoV128:return Vns(a, _mm_set_epi32(0, 0, 0, a), a);
+	case Iop_64UtoV128:return Vns(a, _mm_set_epi64x(0, a), a);
 
-	case Iop_64to32:return Iop_to<ULong, UInt>(a);
-	case Iop_64to16:return Iop_to<ULong, UShort>(a);
-	case Iop_64to8:return Iop_to<ULong, UChar>(a);
-	case Iop_64HIto32:return Variable(a.get<Int, 4>(), a);
-	case Iop_32to16:return Iop_to<UInt, UShort>(a);
-	case Iop_32to8:return Iop_to<UInt, UChar>(a);
-	case Iop_32HIto16:return Variable(a.get<UShort, 2>(), a);
+	case Iop_64to32:return Iop_to(ULong, UInt);
+	case Iop_64to16:return Iop_to(ULong, UShort);
+	case Iop_64to8 :return Iop_to(ULong, UChar);
+	case Iop_64HIto32:return Vns(a, a.get<Int, 4>(), a);
+	case Iop_32to16:return Iop_to(UInt, UShort);
+	case Iop_32to8:return Iop_to(UInt, UChar);
+	case Iop_32HIto16:return Vns(a, a.get<UShort, 2>(), a);
 
 
-	case Iop_V128to32:return Variable(((__m128i)a).m128i_u32[0], a);//OK
-	case Iop_V128to64:return Variable(((__m128i)a).m128i_u64[0], a);//OK
-	case Iop_128to64:return Variable(((__m128i)a).m128i_u64[0], a);//OK
-	case Iop_V128HIto64:return Variable(((__m128i)a).m128i_u64[1], a);//OK
-	case Iop_V256toV128_0:return Variable( GET16(((__m256i)a).m256i_u64), a);
-	case Iop_V256toV128_1:return Variable( GET16(((__m256i)a).m256i_u64+2), a);
-	case Iop_128HIto64:return Variable(((__m128i)a).m128i_u64[1], a);//OK
-	case Iop_16HIto8:return Variable(a.get<UChar,1>(), a);//OK
-	case Iop_GetMSBs8x16: return Variable((UShort)_mm_movemask_epi8(a), a);//OK pmovmskb
-	case Iop_Clz32:vassert(a.bitn == 32); return Variable((UInt)CountLeadingZeros32(a), a);
-	case Iop_Clz64:vassert(a.bitn == 64); return Variable((ULong)CountLeadingZeros64(a), a);
+	case Iop_V128to32:return Vns(a, ((__m128i)a).m128i_u32[0]);//OK
+	case Iop_V128to64:return Vns(a, ((__m128i)a).m128i_u64[0]);//OK
+	case Iop_128to64:return Vns(a, ((__m128i)a).m128i_u64[0]);//OK
+	case Iop_V128HIto64:return Vns(a, ((__m128i)a).m128i_u64[1]);//OK
+	case Iop_V256toV128_0:return Vns(a, GET16(((__m256i)a).m256i_u64));
+	case Iop_V256toV128_1:return Vns(a, GET16(((__m256i)a).m256i_u64+2));
+	case Iop_128HIto64:return Vns(a, ((__m128i)a).m128i_u64[1]);//OK
+	case Iop_16HIto8:return Vns(a, a.get<UChar,1>());//OK
+	case Iop_GetMSBs8x16: return Vns(a, (UShort)_mm_movemask_epi8(a));//OK pmovmskb
+	case Iop_Clz32:vassert(a.bitn == 32); return Vns(a, (UInt)CountLeadingZeros32(a));
+	case Iop_Clz64:vassert(a.bitn == 64); return Vns(a, (ULong)CountLeadingZeros64(a));
 	case Iop_Ctz32: {
 		vassert(a.bitn == 32);
 		unsigned long result = 0;
 		_BitScanForward(&result, (UInt)a);
-		return Variable((UInt)result, a);
+		return Vns(a, (UInt)result);
 	};//ok
 	case Iop_Ctz64: {
 		vassert(a.bitn == 64);
 		unsigned long result = 0;
 		_BitScanForward64(&result, (ULong)a);
-		return Variable((ULong)result, a); 
+		return Vns(a, (ULong)result);
 	};//ok
 	case Iop_Abs64Fx2:
 	case Iop_Neg64Fx2:
@@ -228,9 +224,9 @@ inline Variable State::T_Unop(IROp op, IRExpr* arg1) {
 	case Iop_I64UtoD128: /* unsigned I64 -> D128 */
 
 	case Iop_F16toF64:goto FAILD;
-	case Iop_F32toF64:return Variable((double)((float)a), a);
-	case Iop_I32StoF64:return Variable((double)((Int)a), a);
-	case Iop_I32UtoF64:return Variable((double)((UInt)a), a);
+	case Iop_F32toF64:return Vns(a, (double)((float)a));
+	case Iop_I32StoF64:return Vns(a, (double)((Int)a));
+	case Iop_I32UtoF64:return Vns(a, (double)((UInt)a));
 	case Iop_NegF64:
 	case Iop_AbsF64:
 	case Iop_RSqrtEst5GoodF64:
@@ -366,53 +362,53 @@ inline Variable State::T_Unop(IROp op, IRExpr* arg1) {
 
 dosymbol:
 	switch (op) {
-	case Iop_1Uto8: return Iop_ZEXT<1, 8>(a);
-	case Iop_1Uto32:return Iop_ZEXT<1, 32>(a);
-	case Iop_1Uto64:return Iop_ZEXT<1, 64>(a);
-	case Iop_1Sto8: return Iop_SEXT<1, 8>(a);
-	case Iop_1Sto16:return Iop_SEXT<1, 16>(a);
-	case Iop_1Sto32:return Iop_SEXT<1, 32>(a);
-	case Iop_1Sto64:return Iop_SEXT<1, 64>(a);
+	case Iop_1Uto8: return Iop_ZEXT(1, 8);
+	case Iop_1Uto32:return Iop_ZEXT(1, 32);
+	case Iop_1Uto64:return Iop_ZEXT(1, 64);
+	case Iop_1Sto8: return Iop_SEXT(1, 8);
+	case Iop_1Sto16:return Iop_SEXT(1, 16);
+	case Iop_1Sto32:return Iop_SEXT(1, 32);
+	case Iop_1Sto64:return Iop_SEXT(1, 64);
 
-	case Iop_32to1:vassert(a.bitn == 32); return Variable(a, Z3_mk_extract(a, 0, 0, a), 1);
-	case Iop_64to1:vassert(a.bitn == 64); return Variable(a, Z3_mk_extract(a, 0, 0, a), 1);
+	case Iop_32to1:vassert(a.bitn == 32); return Vns(m_ctx, Z3_mk_extract(m_ctx, 0, 0, a), 1);
+	case Iop_64to1:vassert(a.bitn == 64); return Vns(m_ctx, Z3_mk_extract(m_ctx, 0, 0, a), 1);
 
-	case Iop_Not1: return Variable(a, Z3_mk_bvnot(a, a), 1);
-	case Iop_Not8: return Variable(a, Z3_mk_bvnot(a, a), 8);
-	case Iop_Not16:return Variable(a, Z3_mk_bvnot(a, a), 16);
-	case Iop_Not32:return Variable(a, Z3_mk_bvnot(a, a), 32);
-	case Iop_Not64:return Variable(a, Z3_mk_bvnot(a, a), 64);
+	case Iop_Not1: return Vns(m_ctx, Z3_mk_bvnot(m_ctx, a), 1);
+	case Iop_Not8: return Vns(m_ctx, Z3_mk_bvnot(m_ctx, a), 8);
+	case Iop_Not16:return Vns(m_ctx, Z3_mk_bvnot(m_ctx, a), 16);
+	case Iop_Not32:return Vns(m_ctx, Z3_mk_bvnot(m_ctx, a), 32);
+	case Iop_Not64:return Vns(m_ctx, Z3_mk_bvnot(m_ctx, a), 64);
 
-	case Iop_8Sto16:return Iop_SEXT<8, 16>(a);
-	case Iop_8Sto32:return Iop_SEXT<8, 32>(a);
-	case Iop_8Sto64:return Iop_SEXT<8, 64>(a);
-	case Iop_8Uto16:return Iop_ZEXT<8, 16>(a);
-	case Iop_8Uto32:return Iop_ZEXT<8, 32>(a);
-	case Iop_8Uto64:return Iop_ZEXT<8, 64>(a);
+	case Iop_8Sto16:return Iop_SEXT(8, 16);
+	case Iop_8Sto32:return Iop_SEXT(8, 32);
+	case Iop_8Sto64:return Iop_SEXT(8, 64);
+	case Iop_8Uto16:return Iop_ZEXT(8, 16);
+	case Iop_8Uto32:return Iop_ZEXT(8, 32);
+	case Iop_8Uto64:return Iop_ZEXT(8, 64);
 
-	case Iop_16Sto32:return Iop_SEXT<16, 32>(a);
-	case Iop_16Sto64:return Iop_SEXT<16, 64>(a);
-	case Iop_16Uto32:return Iop_ZEXT<16, 32>(a);
-	case Iop_16Uto64:return Iop_ZEXT<16, 64>(a);
+	case Iop_16Sto32:return Iop_SEXT(16, 32);
+	case Iop_16Sto64:return Iop_SEXT(16, 64);
+	case Iop_16Uto32:return Iop_ZEXT(16, 32);
+	case Iop_16Uto64:return Iop_ZEXT(16, 64);
+										   
+	case Iop_32Sto64:return Iop_SEXT(32, 64);
+	case Iop_32Uto64:return Iop_ZEXT(32, 64);
+	/*case Iop_32UtoV128:return Vns(ast2z3_vec32x4(zext((expr)a, 128)), 128);
+	case Iop_64UtoV128:return Vns(ast2z3_vec64x2(zext((expr)a, 128)), 128);*/
 
-	case Iop_32Sto64:return Iop_SEXT<32, 64>(a);
-	case Iop_32Uto64:return Iop_ZEXT<32, 64>(a);
-	/*case Iop_32UtoV128:return Variable(ast2z3_vec32x4(zext((expr)a, 128)), 128);
-	case Iop_64UtoV128:return Variable(ast2z3_vec64x2(zext((expr)a, 128)), 128);*/
-
-	case Iop_32to8:return Variable(a, Z3_mk_extract(a, 7, 0, a), 8);
-	case Iop_64to8:return Variable(a, Z3_mk_extract(a, 7, 0, a), 8);
-	case Iop_64to16:return Variable(a, Z3_mk_extract(a, 15, 0, a), 16);
-	case Iop_32to16:return Variable(a, Z3_mk_extract(a, 15, 0, a), 16);
-	case Iop_64to32:return Variable(a, Z3_mk_extract(a, 31, 0, a), 32);
-	case Iop_V128to32:return Variable(a, Z3_mk_extract(a, 31, 0, a), 32);
-	case Iop_V128to64:return Variable(a, Z3_mk_extract(a, 63, 0, a), 64);
-	case Iop_128to64:return Variable(a, Z3_mk_extract(a, 63, 0, a), 64);
-	case Iop_16HIto8:return Variable(a, Z3_mk_extract(a, 15, 8, a), 8);
-	case Iop_32HIto16:return Variable(a, Z3_mk_extract(a, 31, 16, a), 16);
-	case Iop_64HIto32:return Variable(a, Z3_mk_extract(a, 63, 32, a), 32);
-	case Iop_V128HIto64:return Variable(a, Z3_mk_extract(a, 127, 64, a), 64);
-	case Iop_128HIto64:return Variable(a, Z3_mk_extract(a, 127, 64, a), 64);
+	case Iop_32to8:return Vns(m_ctx, Z3_mk_extract(m_ctx, 7, 0, a), 8);
+	case Iop_64to8:return Vns(m_ctx, Z3_mk_extract(m_ctx, 7, 0, a), 8);
+	case Iop_64to16:return Vns(m_ctx, Z3_mk_extract(m_ctx, 15, 0, a), 16);
+	case Iop_32to16:return Vns(m_ctx, Z3_mk_extract(m_ctx, 15, 0, a), 16);
+	case Iop_64to32:return Vns(m_ctx, Z3_mk_extract(m_ctx, 31, 0, a), 32);
+	case Iop_V128to32:return Vns(m_ctx, Z3_mk_extract(m_ctx, 31, 0, a), 32);
+	case Iop_V128to64:return Vns(m_ctx, Z3_mk_extract(m_ctx, 63, 0, a), 64);
+	case Iop_128to64:return Vns(m_ctx, Z3_mk_extract(m_ctx, 63, 0, a), 64);
+	case Iop_16HIto8:return Vns(m_ctx, Z3_mk_extract(m_ctx, 15, 8, a), 8);
+	case Iop_32HIto16:return Vns(m_ctx, Z3_mk_extract(m_ctx, 31, 16, a), 16);
+	case Iop_64HIto32:return Vns(m_ctx, Z3_mk_extract(m_ctx, 63, 32, a), 32);
+	case Iop_V128HIto64:return Vns(m_ctx, Z3_mk_extract(m_ctx, 127, 64, a), 64);
+	case Iop_128HIto64:return Vns(m_ctx, Z3_mk_extract(m_ctx, 127, 64, a), 64);
 	}
 
 
