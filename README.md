@@ -28,7 +28,7 @@ examples的exp还没写。
 It is possible that I have misunderstood angr, so I apologize again
 
 ## Make
-Now only support win64 host machine. Use camke and Virual Studio 2017 with Intel compiler.
+Now only support win64 host machine. Use camke and Visual Studio 2017 with Intel compiler.
 
 # Release
 [Dlls & python module][Plre]
