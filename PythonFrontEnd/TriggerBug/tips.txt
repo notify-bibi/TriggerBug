@@ -1,0 +1,49 @@
+PYCHARM PYTHONUNBUFFERED=1;PYDEVD_USE_FRAME_EVAL=NO;PYDEVD_USE_CPYTHON=YES
+
+
+同步api接口
+由于z3 context 是c层创建的，为了使用python层z3接口，故不允许在python进程空间有2份 libz3.dll模块
+下载z3_win 包
+z3 python接口文件夹放在此地
+.z3.printer :
+import sys, io, z3
+改为：
+import sys, io
+from . import z3
+
+
+
+
+.z3.core :
+
+if sys.version < '3':
+  import __builtin__
+  _lib = __builtin__.z3lib                      #add it
+  if hasattr(__builtin__, "Z3_LIB_DIRS"):
+    _all_dirs = __builtin__.Z3_LIB_DIRS
+else:
+  import builtins
+  _lib = builtins.z3lib                         #add it
+  if hasattr(builtins, "Z3_LIB_DIRS"):
+    _all_dirs = builtins.Z3_LIB_DIRS
+    
+    
+    
+    
+    
+    
+    
+all_dirs.extend(_default_dirs)
+
+_failures = []
+for d in all_dirs:                              # all_dirs改为 []
+  try:
+    d = os.path.realpath(d)
+    if os.path.isdir(d):
+      d = os.path.join(d, 'libz3.%s' % _ext)
+      if os.path.isfile(d):
+        _lib = ctypes.CDLL(d)
+        break
+  except Exception as e:
+    _failures += [e]
+    pass

@@ -1,0 +1,4 @@
+archinfo>=8.19.0.0
+setuptools>=16.0
+capstone>=4.0.0
+keystone
