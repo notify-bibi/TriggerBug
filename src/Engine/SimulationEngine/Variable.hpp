@@ -4,16 +4,12 @@
 using namespace z3;
 
 
+
 typedef enum :UChar {
     REAL = 0b00,
     REAL_BCKAST = 0b01,
     SYMB = 0b11,
 }V_Kind;
-
-static inline void intString2bytes(unsigned char *bytesbuff, size_t n, const char * int_str) {
-    PyObject *value = PyLong_FromString(int_str, 0, 10);
-    _PyLong_AsByteArray((PyLongObject*)value, bytesbuff, n, 1, 0);
-}
 
 struct no_inc {};
 
@@ -300,7 +296,7 @@ public:
             Z3_inc_ref(m_ctx, reinterpret_cast<Z3_ast>(zsort));
             r_ast = Z3_mk_unsigned_int64(m_ctx, *this, zsort);
             Z3_inc_ref(m_ctx, r_ast);
-            //Z3_dec_ref(m_ctx, reinterpret_cast<Z3_ast>(zsort));
+            Z3_dec_ref(m_ctx, reinterpret_cast<Z3_ast>(zsort));
             if (bitn > 64) {
                 for (int con = 1; con <= ((bitn-1) >> 6); con++) {
                     auto n = (bitn - (con << 6));
@@ -389,7 +385,7 @@ public:
             }
             else {
                 __m256i buff;
-                intString2bytes((unsigned char*)&buff, 32, (char*)Z3_get_numeral_string(m_ctx, simp));
+                vassert(Z3_get_numeral_bytes(m_ctx, simp, (ULong*)&buff));
                 Z3_dec_ref(m_ctx, simp);
                 return Vns(m_ctx, buff, bitn);
             }

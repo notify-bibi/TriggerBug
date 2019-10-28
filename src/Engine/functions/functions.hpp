@@ -93,7 +93,7 @@ inline int ty2bit(IRType ty) {
     return 0;
 }
 
-
+NORETURN
 static z3::sort translateRM(z3::context&m_ctx, IRRoundingMode md) {
 	switch (md)
 	{

@@ -8,6 +8,8 @@ cmake_minimum_required (VERSION 3.9)
 aux_source_directory(. DIR_Z3_Target_Call_SRCS)
 project(Z3_Target_Call CXX)
 add_library(Z3_Target_Call "Z3_Target_Call.cpp")
+INCLUDE_DIRECTORIES("${CMAKE_SOURCE_DIR}/src")
+INCLUDE_DIRECTORIES("${CMAKE_SOURCE_DIR}/src/z3/src")
 INCLUDE_DIRECTORIES("${CMAKE_SOURCE_DIR}/src/z3/src/api")
 INCLUDE_DIRECTORIES("${CMAKE_SOURCE_DIR}/src/z3/src/api/c++")
 

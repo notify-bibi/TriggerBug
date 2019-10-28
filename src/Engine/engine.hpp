@@ -29,7 +29,7 @@
 #include <functional>
 #include <stdexcept>
 #include <iomanip>
-#include "c++/z3++.h"
+#include "api/c++/z3++.h"
 
 
 #ifdef DLL_EXPORTS
@@ -38,8 +38,14 @@
 #define DLLDEMO_API __declspec(dllimport)
 #endif
 
-#undef Py_LIMITED_API
+#define Py_LIMITED_API
+#ifdef _DEBUG
+#undef _DEBUG
 #include <python\Python.h>
+#define _DEBUG 1
+#else
+#include <python\Python.h>
+#endif
 
 
 #include "Engine/header.hpp"

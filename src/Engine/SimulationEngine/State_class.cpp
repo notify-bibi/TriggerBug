@@ -673,6 +673,9 @@ void State::read_mem_dump(const char  *filename)
 	fread(name_buff, 1, name_end_offset - name_start_offset, infile);
 	fseek(infile, 0, SEEK_SET);
 	char *name;
+    printf("+--------------------+--------------------+--------------------+------------+\n");
+    printf("|         SN         |         VA         |         FOA        |     LEN    |\n");
+    printf("+--------------------+--------------------+--------------------+------------+\n");
 	for (unsigned int segnum = 0; segnum < length; segnum++) {
 		fread(&buf, 32, 1, infile);
 		unsigned char *data = (unsigned char *)malloc(buf.length);
@@ -681,12 +684,12 @@ void State::read_mem_dump(const char  *filename)
 		fread(data, buf.length, 1, infile);
 		name = &name_buff[buf.nameoffset - name_start_offset];
 		if (GET8(name)== 0x7265747369676572) {
-#if defined(_DEBUG)
-			printf("name:%18s address:%016llx data offset:%010llx length:%010llx\n", name, buf.address, buf.dataoffset, buf.length);
+#if 0
+            printf("name:%18s address:%016llx data offset:%010llx length:%010llx\n", name, buf.address, buf.dataoffset, buf.length);
 #endif
 			memcpy((regs.m_bytes + buf.address), data, buf.length);
 		}else {
-            printf("name:%18s address:%016llx data offset:%010llx length:%010llx\n", name, buf.address, buf.dataoffset, buf.length);
+            printf("| %-18s |  %16llx  |  %16llx  | %10llx |\n", name, buf.address, buf.dataoffset, buf.length);
 			if (err = mem.map(buf.address, buf.length))
 				printf("warning %s had maped before length: %llx\n", name, err);
 			mem.write_bytes(buf.address, buf.length, data);
@@ -694,6 +697,7 @@ void State::read_mem_dump(const char  *filename)
 		fseek(infile, fp, SEEK_SET);
 		free(data);
 	}
+    printf("+---------------------------------------------------------------------------+\n");
 	free(name_buff);
 	fclose(infile);
 }

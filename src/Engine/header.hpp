@@ -62,7 +62,11 @@ extern __m256i  m32_mask_reverse[33];
 template <int maxlength> class Register;
 class State;
 
-
+#ifdef _MSC_VER
+#define NORETURN __declspec(noreturn)
+#else
+#define NORETURN __attribute__ ((noreturn))
+#endif
 typedef enum :unsigned int {
     NewState = 0,
     Running,

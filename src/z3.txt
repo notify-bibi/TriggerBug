@@ -15,3 +15,27 @@ set_target_properties(TriggerBug PROPERTIES COMPILE_FLAGS "/Qopenmp" )#yes
 
 lp 项目注意设置cplus 11 & enable openmp
 ;
+
+
+
+
+
+C:\Users\bibi\Desktop\TriggerBug\src\z3\src\api\api_numeral.cpp
+    bool Z3_API Z3_get_numeral_bytes(Z3_context c, Z3_ast a, unsigned long long *b) {
+        Z3_TRY;
+        // This function invokes Z3_get_numeral_rational, but it is still ok to add LOG command here because it does not return a Z3 object.
+        RESET_ERROR_CODE();
+        rational r;
+        bool ok = Z3_get_numeral_rational(c, a, r);
+        if (ok) {
+           const mpz &m = r.to_mpq().numerator();
+           if (!m.m_ptr) return false;
+           b[0] = ((unsigned long long*)m.m_ptr->m_digits)[0];
+           b[1] = ((unsigned long long*)m.m_ptr->m_digits)[1];
+           b[2] = ((unsigned long long*)m.m_ptr->m_digits)[2];
+           b[3] = ((unsigned long long*)m.m_ptr->m_digits)[3];
+           return true;
+        }
+        return false;
+        Z3_CATCH_RETURN(false);
+    }

@@ -22,7 +22,6 @@ std::mutex      global_user_mutex;
 
 using namespace z3;
 
-
 // 自实现的(不确定是否正确) 
 // 解析ast表达式: ast(symbolic address) = numreal(base) + symbolic(offset) 用于cpu符号内存寻址
 expr addressingMode::_ast2base(expr& base,
@@ -229,98 +228,115 @@ goFaild:
 }
 
 
-addressingMode::sbit_struct addressingMode::check_is_extract(expr const& e, UInt idx) {
-    sort so = e.get_sort();
-    context& c = e.ctx();
-    UInt size = so.bv_size();
-
-    if (e.kind() == Z3_APP_AST) {
-        func_decl f = e.decl();
-        switch (f.decl_kind())
-        {
-        case Z3_OP_SIGN_EXT: {
-            uint64_t extn = Z3_get_decl_int_parameter(c, f, 0);
-            if (idx >= (size - extn)) {
-                return check_is_extract(e.arg(0), (size - extn) - 1);
+addressingMode::sbit_struct addressingMode::check_is_extract(expr const& _e, UInt _idx) {
+    context& c = _e.ctx();
+    UInt idx = _idx;
+    expr e = _e;
+    while (True) {
+        sort so = e.get_sort();
+        UInt size = so.bv_size();
+        if (e.kind() == Z3_APP_AST) {
+            func_decl f = e.decl();
+            switch (f.decl_kind())
+            {
+            case Z3_OP_SIGN_EXT: {
+                uint64_t extn = Z3_get_decl_int_parameter(c, f, 0);
+                e = e.arg(0);
+                if (idx >= (size - extn)) {
+                    idx = (size - extn) - 1;
+                }
+                break;
             }
-            else {
-                return check_is_extract(e.arg(0), idx);
-            }
-        }
 
-        case Z3_OP_ZERO_EXT: {
-            uint64_t extn = Z3_get_decl_int_parameter(c, f, 0);
-            if (idx >= (size - extn)) {
-                return sbit_struct{ NULL, false, 0 };
-            }
-            else {
-                return check_is_extract(e.arg(0), idx);
-            }
-        }
-
-        case Z3_OP_EXTRACT: {
-            UInt lo = e.lo();
-            UInt hi = e.hi();
-            return check_is_extract(e.arg(0), idx + lo);
-        }
-
-        case Z3_OP_BSHL: {
-            ULong shift;
-            if (e.arg(1).is_numeral_u64(shift)) {
-                if (idx < shift) {
+            case Z3_OP_ZERO_EXT: {
+                uint64_t extn = Z3_get_decl_int_parameter(c, f, 0);
+                if (idx >= (size - extn)) {
                     return sbit_struct{ NULL, false, 0 };
                 }
                 else {
-                    return check_is_extract(e.arg(0), idx - shift);
+                    e = e.arg(0);
                 }
+                break;
             }
-        }
-        case Z3_OP_BLSHR: {
-            ULong shift;
-            if (e.arg(1).is_numeral_u64(shift)) {
-                if ((size - idx) <= shift) {
-                    return sbit_struct{ NULL, false, 0 };
-                }
-                else {
-                    return check_is_extract(e.arg(0), idx + shift);
-                }
-            }
-        }
-        case Z3_OP_BASHR: {
-            ULong shift;
-            if (e.arg(1).is_numeral_u64(shift)) {
-                if ((size - idx) <= shift) {
-                    return check_is_extract(e.arg(0), size - 1);
-                }
-                else {
-                    return check_is_extract(e.arg(0), idx + shift);
-                }
-            }
-        }
-        case Z3_OP_CONCAT: {
-            auto max = e.num_args();
-            UInt shift = 0;
 
-            for (Int i = max - 1; i >= 0; i--) {
-                z3::expr arg = e.arg(i);
-                z3::sort arg_s = arg.get_sort();
-                UInt arg_s_l = arg_s.bv_size();
-                if (idx >= shift && idx < (arg_s_l + shift)) {
-                    return check_is_extract(arg, idx - shift);
-                }
-                shift += arg_s_l;
+            case Z3_OP_EXTRACT: {
+                UInt lo = e.lo();
+                UInt hi = e.hi();
+                e = e.arg(0);
+                idx = idx + lo;
+                break;
             }
+
+            case Z3_OP_BSHL: {
+                ULong shift;
+                if (e.arg(1).is_numeral_u64(shift)) {
+                    if (idx < shift) {
+                        return sbit_struct{ NULL, false, 0 };
+                    }
+                    else {
+                        e = e.arg(0);
+                        idx = idx - shift;
+                    }
+                }
+                break;
+            }
+            case Z3_OP_BLSHR: {
+                ULong shift;
+                if (e.arg(1).is_numeral_u64(shift)) {
+                    if ((size - idx) <= shift) {
+                        return sbit_struct{ NULL, false, 0 };
+                    }
+                    else {
+                        e = e.arg(0);
+                        idx = idx + shift;
+                    }
+                }
+                break;
+            }
+            case Z3_OP_BASHR: {
+                ULong shift;
+                if (e.arg(1).is_numeral_u64(shift)) {
+                    e = e.arg(0);
+                    if ((size - idx) <= shift) {
+                        idx = size - 1;
+                    }
+                    else {
+                        idx = idx + shift;
+                    }
+                }
+                break;
+            }
+            case Z3_OP_CONCAT: {
+                auto max = e.num_args();
+                UInt shift = 0;
+
+                for (Int i = max - 1; i >= 0; i--) {
+                    z3::expr arg = e.arg(i);
+                    z3::sort arg_s = arg.get_sort();
+                    UInt arg_s_l = arg_s.bv_size();
+                    if (idx >= shift && idx < (arg_s_l + shift)) {
+                        e = arg;
+                        idx = idx - shift;
+                        break;
+                    }
+                    shift += arg_s_l;
+                }
+                break;
+            }
+            default:
+                goto ret;
+            };
         }
-        default:
+        else if (e.kind() == Z3_NUMERAL_AST) {
+            ULong real;
+            e.is_numeral_u64(real);
+            return sbit_struct{ NULL, (bool)(real >> idx), 0 };
+        }
+        else {
             break;
-        };
+        }
     }
-    else if (e.kind() == Z3_NUMERAL_AST) {
-        ULong real;
-        e.is_numeral_u64(real);
-        return sbit_struct{ NULL, (bool)(real >> idx), 0 };
-    }
-
+ret:
     return sbit_struct{ e, false, idx };
 }
 
@@ -597,26 +613,100 @@ _returnaddr:
         return 0;
     };
 
-    void MEM::write_bytes(ULong address, ULong length, unsigned char* data) {
-        ULong max = address + length;
-        PAGE* p_page = GETPAGE(address);
-        if (!p_page->unit) {
-            p_page->unit = new Register<0x1000>(m_ctx, need_record);
-            p_page->user = user;
-        }
-        UInt count = 0;
-        while (address < max) {
-            if (!(address % 0x1000)) {
-                p_page = GETPAGE(address);
+    //very fast
+    void MEM::write_bytes(ULong address, ULong length, UChar* data) {
+        if (length < 8) {
+            {
+                ULong max = address + length;
+                PAGE* p_page = GETPAGE(address);
                 if (!p_page->unit) {
                     p_page->unit = new Register<0x1000>(m_ctx, need_record);
                     p_page->user = user;
                 }
+                UInt count = 0;
+                while (address < max) {
+                    if (!(address % 0x1000)) {
+                        p_page = GETPAGE(address);
+                        if (!p_page->unit) {
+                            p_page->unit = new Register<0x1000>(m_ctx, need_record);
+                            p_page->user = user;
+                        }
+                    }
+                    p_page->unit->m_bytes[address & 0xfff] = data[count];
+                    address += 1;
+                    count += 1;
+                };
+                return;
             }
-            p_page->unit->m_bytes[address & 0xfff] = data[count];
-            address += 1;
-            count += 1;
+        }
+        bool first_flag = false;
+        UInt align_l = 8 - (address - ALIGN(address, 8));
+        UInt align_r = (address + length - ALIGN(address + length, 8));
+        if (align_l == 8) {
+        }
+        else {
+            PAGE* p_page = GETPAGE(address);
+            if ((((ULong*)data)[0] & (~(-1ull << (align_l << 3)))) || p_page->unit){
+                if (!p_page->unit) {
+                    p_page->unit = new Register<0x1000>(m_ctx, need_record);
+                    p_page->user = user;
+                }
+                first_flag = true;
+                memcpy(&p_page->unit->m_bytes[address & 0xfff], data, align_l);
+            }
+            data += align_l;
+            address += align_l;
+            length -= align_l;
+        }
+        UInt count = 0;
+        ULong max = (ALIGN(address + length, 8) - address);
+        PAGE* p_page = nullptr;
+
+        bool need_mem = false;
+        bool need_check = true;
+        while (count < max) {
+            if ((!((address + count) & 0xfff)) || (need_check)) {
+                p_page = GETPAGE(address + count);
+                ULong smax = (count + 0x1000 <= max) ? 0x1000 : max - count;
+                need_mem = false;
+                if (!p_page->unit) {
+                    for (ADDR idx = 0; idx < smax; idx += 8) {
+                        if (*(ULong*)(&data[count + idx])) {
+                            need_mem = true;
+                            break;
+                        }
+                    }
+                    if (need_check) {
+                        need_check = false;
+                        if (first_flag) {
+                            need_mem = true;
+                        }
+                    }
+                    if (!need_mem) {
+                        count = ALIGN(address + count + 0x1000, 0x1000) - address;
+                        continue;
+                    }
+                    else {
+                        p_page->unit = new Register<0x1000>(m_ctx, need_record);
+                        p_page->user = user;
+                    }
+                }
+            }
+            *(ULong*)(&p_page->unit->m_bytes[(address + count) & 0xfff]) = *(ULong*)(data + count);
+            count += 8;
         };
+        if (align_r) {
+            if ((!((address + count) & 0xfff))) {
+                p_page = GETPAGE(address + count);
+            }
+            if (((*(ULong*)(data + count)) & ((1ull << (align_r << 3)) - 1)) || need_mem || p_page->unit) {
+                if (!p_page->unit) {
+                    p_page->unit = new Register<0x1000>(m_ctx, need_record);
+                    p_page->user = user;
+                }
+                memcpy(&p_page->unit->m_bytes[(address + count) & 0xfff], &data[count], align_r);
+            }
+        }
     }
 
     Vns MEM::Iex_Load(ADDR address, IRType ty)
@@ -665,6 +755,11 @@ _returnaddr:
 
     void MEM::CheckSelf(PAGE*& P, ADDR address)
     {
+        if (P->user == -1ull) {
+            P->unit = new Register<0x1000>(m_ctx, need_record);
+            P->user = user;
+            memset(P->unit->m_bytes, 0, 0x1000);
+        }
         if (user != P->user) {//WNC
             if (P->user == -1ull) {
                 vassert(P->unit == NULL);

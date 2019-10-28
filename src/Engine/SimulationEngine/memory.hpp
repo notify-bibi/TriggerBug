@@ -8,7 +8,7 @@ Abstract:
     Fork technology;
     符号地址存取;
 Author:
-    WXC 2019-05-31.
+    WXC 2019-10-28
 Revision History:
 --*/
 #ifndef MEMORY_DEFS_H
@@ -22,13 +22,13 @@ using namespace z3;
 extern UInt global_user;
 extern std::mutex global_user_mutex;
 
-
-#define BIT_BLAST_MAX_BIT 16
-
 #ifdef _DEBUG
 #define NEED_VERIFY 
 #endif
 #define TRACE_AM
+
+#define BIT_BLAST_MAX_BIT 14
+
 
 class addressingMode
 {
@@ -186,8 +186,8 @@ private:
         m_offset = _ast2base(base, m_symbolic, 0, 6);
         //std::cout << idx << std::endl;
         if (base.simplify().is_numeral_u64(m_base)) {
-            if (m_base > 100) {
 #if defined(NEED_VERIFY)
+            if (m_base > 100) {
                 Int is_right;
                 expr eval = base + m_offset == m_symbolic;
                 if (ite(eval, m_ctx.bv_val(1, 8), m_ctx.bv_val(0, 8)).simplify().is_numeral_i(is_right)) {
@@ -208,10 +208,10 @@ private:
                 }
                 std::cout << "unsat model:\n" << s.get_model() << std::endl;
                 goto faild;
+            }
 #else
                 return true;
 #endif
-            }
         }
         return false;
 faild:
@@ -253,8 +253,6 @@ faild:
             else {
                 m_or_mask = m_or_mask | ((ADDR)s.rbit << idx);
             }
-
-
         }
 
         
@@ -270,7 +268,7 @@ faild:
             }
             m++;
         }
-        return (m_sym_mask_n >= BIT_BLAST_MAX_BIT) ? false : true;
+        return ((m_sym_mask_n + m_sign_mask.size()) >= BIT_BLAST_MAX_BIT) ? false : true;
     }
 
 public:
@@ -590,7 +588,7 @@ public:
     void copy(MEM& mem);
     ULong unmap(ULong address, ULong length);
 
-    void write_bytes(ULong address, ULong length, unsigned char* data);
+    void write_bytes(ULong address, ULong length, UChar* data);
 
     inline void set_double_page(ADDR address, Pap &addrlst) {
         addrlst.guest_addr = address;
@@ -608,6 +606,41 @@ public:
 
     Itaddress addr_begin(solver& s, Z3_ast addr) { return Itaddress(s, addr); }
 
+    private:
+        Vns _Iex_Load_a(PAGE* P, ADDR address, UShort size) {
+            PAGE* nP = getMemPage(address + 0x1000);
+            UInt plength = 0x1000 - ((UShort)address & 0xfff);
+            return nP->unit->Iex_Get(0, size - plength).translate(m_ctx).Concat(P->unit->Iex_Get(((UShort)address & 0xfff), plength));
+        }
+
+        Vns _Iex_Load_b(PAGE* P, ADDR address, UShort size) {
+            PAGE* nP = getMemPage(address + 0x1000);
+            UInt plength = 0x1000 - ((UShort)address & 0xfff);
+            return nP->unit->Iex_Get(0, size - plength).translate(m_ctx).Concat(P->unit->Iex_Get(((UShort)address & 0xfff), plength, m_ctx));
+        }
+    template<IRType ty>
+    Vns ReZero() {
+        switch (ty) {
+        case 8:
+        case Ity_I8:  return Vns(m_ctx, (UChar)0);
+        case 16:
+        case Ity_I16: {return Vns(m_ctx, (UShort)0);}
+        case 32:
+        case Ity_F32:
+        case Ity_I32: {return Vns(m_ctx, (UInt)0); }
+        case 64:
+        case Ity_F64:
+        case Ity_I64: {return Vns(m_ctx, (ULong)0); }
+        case 128:
+        case Ity_I128:
+        case Ity_V128: {return Vns(m_ctx,  _mm_setzero_si128()); }
+        case 256:
+        case Ity_V256: {return Vns(m_ctx, _mm256_setzero_si256()); }
+        default:vpanic("error IRType");
+        }
+    }
+
+    public:
     // ty  IRType || n_bits
     template<IRType ty>
     inline Vns Iex_Load(ADDR address)
@@ -615,85 +648,69 @@ public:
         PAGE *P = getMemPage(address);
         UShort offset = (UShort)address & 0xfff;
         UShort size;
+        if (P->user == -1ull) {
+            return ReZero<ty>();
+        }
         if (user == P->user) {//WNC
             switch (ty) {
             case 8:
             case Ity_I8:  return P->unit->Iex_Get<Ity_I8>(offset);
             case 16:
-            case Ity_I16: {
-                if (offset >= 0xfff) {
-                    size = 2; goto linear_err1;
-                };
-                return P->unit->Iex_Get<Ity_I16 >(offset);
+            case Ity_I16: { 
+                if (offset >= 0xfff) { return _Iex_Load_a(P, address, 2); }return P->unit->Iex_Get<Ity_I16>(offset);
             }
             case 32:
             case Ity_F32:
-            case Ity_I32: {
-                if (offset >= 0xffd) {
-                    size = 4;
-                    goto linear_err1;
-                };
-                return P->unit->Iex_Get<Ity_I32>(offset);
+            case Ity_I32: { 
+                if (offset >= 0xffd) { return _Iex_Load_a(P, address, 4); }return P->unit->Iex_Get<Ity_I32>(offset);
             }
             case 64:
             case Ity_F64:
-            case Ity_I64: {
-                if (offset >= 0xff9) {
-                    size = 8; goto linear_err1;
-                };
-                return P->unit->Iex_Get<Ity_I64>(offset);
+            case Ity_I64: { 
+                if (offset >= 0xff9) { return _Iex_Load_a(P, address, 8); }return P->unit->Iex_Get<Ity_I64>(offset);
             }
             case 128:
             case Ity_I128:
-            case Ity_V128: {
-                if (offset >= 0xff1) {
-                    size = 16;
-                    goto linear_err1;
-                };
-                return P->unit->Iex_Get<Ity_V128>(offset);
+            case Ity_V128: { 
+                if (offset >= 0xff1) { return _Iex_Load_a(P, address, 16); }return P->unit->Iex_Get<Ity_V128>(offset);
             }
             case 256:
-            case Ity_V256: {
-                if (offset >= 0xfe1) {
-                    size = 32;
-                    goto linear_err1;
-                };
-                return P->unit->Iex_Get<Ity_V256>(offset);
+            case Ity_V256: { 
+                if (offset >= 0xfe1) { return _Iex_Load_a(P, address, 32); }return P->unit->Iex_Get<Ity_V256>(offset);
             }
             default:vpanic("error IRType");
-            }
-        linear_err1:
-            {
-                PAGE *nP = getMemPage(address + 0x1000);
-                UInt plength = 0x1000 - offset;
-                return nP->unit->Iex_Get(0, size - plength).translate(m_ctx).Concat(P->unit->Iex_Get(offset, plength));
             }
         }
         else {
             switch (ty) {
             case 8:
-            case Ity_I8:return P->unit->Iex_Get<Ity_I8 >(offset, m_ctx);
+            case Ity_I8: {
+                return P->unit->Iex_Get<Ity_I8 >(offset, m_ctx);
+            }
             case 16:													
-            case Ity_I16: if (offset >= 0xfff) { size = 2; goto linear_err2; }; return P->unit->Iex_Get<Ity_I16>(offset, m_ctx);
+            case Ity_I16: {
+                if (offset >= 0xfff) { return _Iex_Load_b(P, address, 2); }; return P->unit->Iex_Get<Ity_I16>(offset, m_ctx);
+            }
             case 32:
             case Ity_F32:
-            case Ity_I32: if (offset >= 0xffd) { size = 4; goto linear_err2; }; return P->unit->Iex_Get<Ity_I32>(offset, m_ctx);
+            case Ity_I32: {
+                if (offset >= 0xffd) { return _Iex_Load_b(P, address, 4); }; return P->unit->Iex_Get<Ity_I32>(offset, m_ctx); 
+            }
             case 64:
             case Ity_F64:
-            case Ity_I64: if (offset >= 0xff9) { size = 8; goto linear_err2; }; return P->unit->Iex_Get<Ity_I64>(offset, m_ctx);
+            case Ity_I64: {
+                if (offset >= 0xff9) { return _Iex_Load_b(P, address, 8); }; return P->unit->Iex_Get<Ity_I64>(offset, m_ctx);
+            }
             case 128:
             case Ity_I128:
-            case Ity_V128:if (offset >= 0xff1) { size = 16; goto linear_err2; }; return P->unit->Iex_Get<Ity_V128>(offset, m_ctx);
-            case 256:
-            case Ity_V256:if (offset >= 0xfe1) { size = 32; goto linear_err2; }; return P->unit->Iex_Get<Ity_V256>(offset, m_ctx);
-            default:vpanic("error IRType");
+            case Ity_V128: {
+                if (offset >= 0xff1) { return _Iex_Load_b(P, address, 16); }; return P->unit->Iex_Get<Ity_V128>(offset, m_ctx);
             }
-
-        linear_err2:
-            {
-                PAGE *nP = getMemPage(address + 0x1000);
-                UInt plength = 0x1000 - offset;
-                return nP->unit->Iex_Get(0, size - plength).translate(m_ctx).Concat(P->unit->Iex_Get(offset, plength, m_ctx));
+            case 256:
+            case Ity_V256: {
+                if (offset >= 0xfe1) { return _Iex_Load_b(P, address, 32); }; return P->unit->Iex_Get<Ity_V256>(offset, m_ctx); 
+            }
+            default:vpanic("error IRType");
             }
         }
     }

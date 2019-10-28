@@ -863,8 +863,18 @@ int main() {
 
     flag_max_count = 84;
     flag_count = 0;
+
+
+
     DebugState state(INIFILENAME, (Addr64)NULL, True);
     context& c = state;
+
+
+    expr re =concat(c.bv_val(0x666, 128), c.bv_val(0x2333, 128));
+
+
+    Vns(re).simplify();
+
     auto sd = &state;
     State::pool->enqueue([sd] {
         sd->start(True);
@@ -872,7 +882,7 @@ int main() {
     TESTCODE(
         State::pool->wait();
     )
-    
+
     
     std::cout << *sd << std::endl;
 

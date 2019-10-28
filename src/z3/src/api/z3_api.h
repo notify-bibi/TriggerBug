@@ -6690,6 +6690,8 @@ extern "C" {
 
     /*@}*/
 
+    bool Z3_API Z3_get_numeral_bytes(Z3_context c, Z3_ast a, unsigned long long* b);
+
 #ifdef __cplusplus
 }
 #endif // __cplusplus
