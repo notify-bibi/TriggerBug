@@ -358,7 +358,6 @@ public:
 	inline Vns ILGop(IRLoadG *lg);
 
     Vns get_int_const(UShort nbit);
-    void cpu_exception();
 
     //backpoint add
     void hook_add(ADDR addr, TRtype::Hook_CB func);
@@ -384,11 +383,82 @@ public:
 
     //interface :
 
-    virtual State_Tag Ijk_call(IRJumpKind) { return Death; };
-    virtual State* newForkState(ADDR ges) { return new State(this, ges); };
-    virtual State* tb_index2v(ADDR ges) { return new State(this, ges); };
+    virtual inline void   traceStart() { return; };
+    virtual inline void   traceFinish() { return; };
+    virtual inline void   traceIRSB(IRSB*) { return; };
+    virtual inline void   traceIRStmt(IRStmt*) { return; };
 
+    virtual inline State_Tag Ijk_call(IRJumpKind) { return Death; };
+    virtual inline void   cpu_exception() { status = Death; }
+    virtual inline State* ForkState(ADDR ges) { return nullptr; }
+}; 
+
+
+
+template <class TC>
+class StatePrinter : public TC {
+    bool m_NEED_CHECK = false;
+public:
+    StatePrinter(const char* filename, Addr64 gse, Bool _need_record) :
+        TC(filename, gse, _need_record)
+    {
+        m_NEED_CHECK = ppStmts;
+    };
+
+    StatePrinter(StatePrinter* father_state, Addr64 gse) :
+        TC(father_state, gse)
+    {
+        m_NEED_CHECK = ppStmts;
+    };
+
+
+    void spIRExpr(const IRExpr* e);
+
+    void spIRTemp(IRTemp tmp)
+    {
+        if (tmp == IRTemp_INVALID)
+            vex_printf("IRTemp_INVALID");
+        else
+        {
+            vex_printf("t%u: ", tmp);
+            std::cout << ir_temp[t_index][tmp];
+        }
+    }
+
+    void spIRPutI(const IRPutI* puti);
+    void spIRStmt(const IRStmt* s);
+
+    void   traceStart() {
+        if (traceState)
+            std::cout << "\n+++++++++++++++ Thread ID: " << GetCurrentThreadId() << "  address: " << std::hex << guest_start << "  Started +++++++++++++++\n" << std::endl;
+    };
+
+    void   traceFinish() {
+        if (traceState)
+            std::cout << "\n+++++++++++++++ Thread ID: " << GetCurrentThreadId() << "  address: " << std::hex << guest_start << "  OVER +++++++++++++++\n" << std::endl;
+
+    }
+    
+    void   traceIRStmt(IRStmt* s) {
+        if (guest_start == traceIrAddrress) {
+            m_NEED_CHECK = True;
+        }
+        if (m_NEED_CHECK) {
+            ppIRStmt(s);
+        }
+    };
+    void   traceIRSB(IRSB*) {
+        if (traceJmp) {
+            vex_printf("Jmp: %llx \n", guest_start);
+        }
+    };
 };
+
+
+
+
+
+
 
 
 #endif

@@ -93,15 +93,14 @@ inline int ty2bit(IRType ty) {
     return 0;
 }
 
-NORETURN
 static z3::sort translateRM(z3::context&m_ctx, IRRoundingMode md) {
-	switch (md)
-	{
-	case Irrm_NEAREST: return z3::sort(m_ctx, Z3_mk_fpa_rne(m_ctx));
-	case Irrm_NegINF: return z3::sort(m_ctx, Z3_mk_fpa_rtn(m_ctx));
-	case Irrm_PosINF: return z3::sort(m_ctx, Z3_mk_fpa_rtp(m_ctx));
-	case Irrm_ZERO: return z3::sort(m_ctx, Z3_mk_fpa_rtz(m_ctx));
-	case Irrm_NEAREST_TIE_AWAY_0: return z3::sort(m_ctx, Z3_mk_fpa_rna(m_ctx));
+    switch (md)
+    {
+    case Irrm_NEAREST: {return z3::sort(m_ctx, Z3_mk_fpa_rne(m_ctx)); }
+    case Irrm_NegINF: {return z3::sort(m_ctx, Z3_mk_fpa_rtn(m_ctx)); }
+    case Irrm_PosINF: {return z3::sort(m_ctx, Z3_mk_fpa_rtp(m_ctx)); }
+    case Irrm_ZERO: {return z3::sort(m_ctx, Z3_mk_fpa_rtz(m_ctx)); }
+    case Irrm_NEAREST_TIE_AWAY_0: {return z3::sort(m_ctx, Z3_mk_fpa_rna(m_ctx)); }
 	default:
 		vpanic("translateRM ???");
 	}

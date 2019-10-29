@@ -647,54 +647,50 @@ public:
     {
         PAGE *P = getMemPage(address);
         UShort offset = (UShort)address & 0xfff;
-        UShort size;
-        if (P->user == -1ull) {
-            return ReZero<ty>();
-        }
         if (user == P->user) {//WNC
             switch (ty) {
             case 8:
             case Ity_I8:  return P->unit->Iex_Get<Ity_I8>(offset);
             case 16:
-            case Ity_I16: { 
+            case Ity_I16: {
                 if (offset >= 0xfff) { return _Iex_Load_a(P, address, 2); }return P->unit->Iex_Get<Ity_I16>(offset);
             }
             case 32:
             case Ity_F32:
-            case Ity_I32: { 
+            case Ity_I32: {
                 if (offset >= 0xffd) { return _Iex_Load_a(P, address, 4); }return P->unit->Iex_Get<Ity_I32>(offset);
             }
             case 64:
             case Ity_F64:
-            case Ity_I64: { 
+            case Ity_I64: {
                 if (offset >= 0xff9) { return _Iex_Load_a(P, address, 8); }return P->unit->Iex_Get<Ity_I64>(offset);
             }
             case 128:
             case Ity_I128:
-            case Ity_V128: { 
+            case Ity_V128: {
                 if (offset >= 0xff1) { return _Iex_Load_a(P, address, 16); }return P->unit->Iex_Get<Ity_V128>(offset);
             }
             case 256:
-            case Ity_V256: { 
+            case Ity_V256: {
                 if (offset >= 0xfe1) { return _Iex_Load_a(P, address, 32); }return P->unit->Iex_Get<Ity_V256>(offset);
             }
             default:vpanic("error IRType");
             }
         }
-        else {
+        else if (P->user != -1ull) {
             switch (ty) {
             case 8:
             case Ity_I8: {
                 return P->unit->Iex_Get<Ity_I8 >(offset, m_ctx);
             }
-            case 16:													
+            case 16:
             case Ity_I16: {
                 if (offset >= 0xfff) { return _Iex_Load_b(P, address, 2); }; return P->unit->Iex_Get<Ity_I16>(offset, m_ctx);
             }
             case 32:
             case Ity_F32:
             case Ity_I32: {
-                if (offset >= 0xffd) { return _Iex_Load_b(P, address, 4); }; return P->unit->Iex_Get<Ity_I32>(offset, m_ctx); 
+                if (offset >= 0xffd) { return _Iex_Load_b(P, address, 4); }; return P->unit->Iex_Get<Ity_I32>(offset, m_ctx);
             }
             case 64:
             case Ity_F64:
@@ -708,11 +704,14 @@ public:
             }
             case 256:
             case Ity_V256: {
-                if (offset >= 0xfe1) { return _Iex_Load_b(P, address, 32); }; return P->unit->Iex_Get<Ity_V256>(offset, m_ctx); 
+                if (offset >= 0xfe1) { return _Iex_Load_b(P, address, 32); }; return P->unit->Iex_Get<Ity_V256>(offset, m_ctx);
             }
             default:vpanic("error IRType");
             }
         }
+        else {
+            return ReZero<ty>();
+        };
     }
 
     Vns Iex_Load(ADDR address, IRType ty);

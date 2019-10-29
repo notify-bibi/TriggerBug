@@ -46,8 +46,8 @@
 	</VexControl>
 	
 	<DEBUG>
-		<NEED_CHECK>0</NEED_CHECK>
-		<TraceIrAddrress>0x496D</TraceIrAddrress>
+		<NEED_CHECK>0x45EF03</NEED_CHECK>
+		<TraceIrAddrress>0x45EF03</TraceIrAddrress>
 		<TraceState>1</TraceState>
 		<TraceJmp>1</TraceJmp>
         <TraceSymbolic>0</TraceSymbolic>

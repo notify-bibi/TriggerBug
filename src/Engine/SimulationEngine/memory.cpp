@@ -755,16 +755,12 @@ _returnaddr:
 
     void MEM::CheckSelf(PAGE*& P, ADDR address)
     {
-        if (P->user == -1ull) {
-            P->unit = new Register<0x1000>(m_ctx, need_record);
-            P->user = user;
-            memset(P->unit->m_bytes, 0, 0x1000);
-        }
         if (user != P->user) {//WNC
             if (P->user == -1ull) {
                 vassert(P->unit == NULL);
                 P->unit = new Register<0x1000>(m_ctx, need_record);
                 P->user = user;
+                memset(P->unit->m_bytes, 0, 0x1000);
                 mem_change_map[ALIGN(address, 0x1000)] = P->unit;
                 return;
             }

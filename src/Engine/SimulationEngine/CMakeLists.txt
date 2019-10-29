@@ -21,7 +21,7 @@ SET(TriggerBug_INCLUDE ${CMAKE_SOURCE_DIR}/include/)
 INCLUDE_DIRECTORIES("${TriggerBug_INCLUDE}")
 
 add_subdirectory ("./Z3_Target_Call")
-add_library(SimulationEngine "State_class.cpp" "memory.cpp" "Register.cpp")
+add_library(SimulationEngine "State_analyzer.cpp" "State_class.cpp" "memory.cpp" "Register.cpp")
 
 
 TARGET_LINK_LIBRARIES(SimulationEngine Z3_Target_Call)
