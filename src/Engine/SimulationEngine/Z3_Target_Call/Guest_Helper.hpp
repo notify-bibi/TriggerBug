@@ -1,6 +1,21 @@
 #pragma once
 
 
+#include "../State_class.hpp"
+#include "Z3_Target_Call.hpp"
+
+
+static inline ULong resultsr(Vns& const retv) {
+    Z3_inc_ref(retv, retv);
+    register ULong ret = (ULong)(Z3_ast)retv;
+    if (ret & (~((1ull << 48) - 1))) {
+        vex_printf("system error");
+    }
+    return (ret & ((1ull << 48) - 1)) | (0xfa1dull << 48);;
+}
+#define TRRET(retv) (retv.real()? (ULong)(retv):resultsr(retv))
+
+
 namespace helper {
 
 	template<class _object, typename _PointerType = UChar, int offset = -1>
@@ -392,6 +407,7 @@ C_Vns operator op(Vns const &a, T const& b) {   \
 	using _V256 = inPointer<MEM, V256>;
 	using _V128 = inPointer<MEM, V128>;
 
+
 }
 
 //register_names = { 
@@ -402,484 +418,433 @@ C_Vns operator op(Vns const &a, T const& b) {   \
 //768 : 'ftop', 776 : 'mm0',784 : "mm1",792 : "mm2",800 : "mm3",808 : "mm4",816 : "mm5",824 : "mm6",832 : "mm7", 840 : 'fptag', 848 : 'fpround', 856 : 'fc3210', 864 : 'emnote',872 : 'cmstart', 
 //880 : 'cmlen', 888 : 'nraddr', 904 : 'gs', 912 : 'ip_at_syscall' }
 
-namespace _AMD64State {
-	using host_EvC_FAILADDR = helper::inPointer<Register<1000>, ULong, 0>;
-	using host_EvC_COUNTER	= helper::inPointer<Register<1000>, UInt, 8>;
-	using pad0				= helper::inPointer<Register<1000>, UInt, 12>;
-	using guest_RAX			= helper::inPointer<Register<1000>, ULong, 16>;
-	using guest_RCX			= helper::inPointer<Register<1000>, ULong, 24>;
-	using guest_RDX			= helper::inPointer<Register<1000>, ULong, 32>;
-	using guest_RBX			= helper::inPointer<Register<1000>, ULong, 40>;
-	using guest_RSP			= helper::inPointer<Register<1000>, ULong, 48>;
-	using guest_RBP			= helper::inPointer<Register<1000>, ULong, 56>;
-	using guest_RSI			= helper::inPointer<Register<1000>, ULong, 64>;
-	using guest_RDI			= helper::inPointer<Register<1000>, ULong, 72>;
-	using guest_R8			= helper::inPointer<Register<1000>, ULong, 80>;
-	using guest_R9			= helper::inPointer<Register<1000>, ULong, 88>;
-	using guest_R10			= helper::inPointer<Register<1000>, ULong, 96>;
-	using guest_R11			= helper::inPointer<Register<1000>, ULong, 104>;
-	using guest_R12			= helper::inPointer<Register<1000>, ULong, 112>;
-	using guest_R13			= helper::inPointer<Register<1000>, ULong, 120>;
-	using guest_R14			= helper::inPointer<Register<1000>, ULong, 128>;
-	using guest_R15			= helper::inPointer<Register<1000>, ULong, 136>;
-	
-	using guest_CC_OP		= helper::inPointer<Register<1000>, ULong, 144>;
-	using guest_CC_DEP1		= helper::inPointer<Register<1000>, ULong, 152>;
-	using guest_CC_DEP2		= helper::inPointer<Register<1000>, ULong, 160>;
-	using guest_CC_NDEP		= helper::inPointer<Register<1000>, ULong, 168>;
-
-	using guest_DFLAG		= helper::inPointer<Register<1000>, ULong, 176>;
-	using guest_RIP			= helper::inPointer<Register<1000>, ULong, 184>;
-	using guest_ACFLAG		= helper::inPointer<Register<1000>, ULong, 192>;
-	using guest_IDFLAG		= helper::inPointer<Register<1000>, ULong, 200>;
-	using guest_FS_CONST	= helper::inPointer<Register<1000>, ULong, 208>;
-	using guest_SSEROUND	= helper::inPointer<Register<1000>, ULong, 216>;
-
-	using guest_YMM0		= helper::inPointer<Register<1000>, __m256i, 224>;
-	using guest_YMM1		= helper::inPointer<Register<1000>, __m256i, 224 + 32 * 1>;
-	using guest_YMM2		= helper::inPointer<Register<1000>, __m256i, 224 + 32 * 2>;
-	using guest_YMM3		= helper::inPointer<Register<1000>, __m256i, 224 + 32 * 3>;
-	using guest_YMM4		= helper::inPointer<Register<1000>, __m256i, 224 + 32 * 4>;
-	using guest_YMM5		= helper::inPointer<Register<1000>, __m256i, 224 + 32 * 5>;
-	using guest_YMM6		= helper::inPointer<Register<1000>, __m256i, 224 + 32 * 6>;
-	using guest_YMM7		= helper::inPointer<Register<1000>, __m256i, 224 + 32 * 7>;
-	using guest_YMM8		= helper::inPointer<Register<1000>, __m256i, 224 + 32 * 8>;
-	using guest_YMM9		= helper::inPointer<Register<1000>, __m256i, 224 + 32 * 9>;
-	using guest_YMM10		= helper::inPointer<Register<1000>, __m256i, 224 + 32 * 10>;
-	using guest_YMM11		= helper::inPointer<Register<1000>, __m256i, 224 + 32 * 11>;
-	using guest_YMM12		= helper::inPointer<Register<1000>, __m256i, 224 + 32 * 12>;
-	using guest_YMM13		= helper::inPointer<Register<1000>, __m256i, 224 + 32 * 13>;
-	using guest_YMM14		= helper::inPointer<Register<1000>, __m256i, 224 + 32 * 14>;
-	using guest_YMM15		= helper::inPointer<Register<1000>, __m256i, 224 + 32 * 15>;
-	using guest_YMM16		= helper::inPointer<Register<1000>, __m256i, 224 + 32 * 16>;
-
-	using guest_FTOP		= helper::inPointer<Register<1000>, UInt, 768>;
-	using pad1				= helper::inPointer<Register<1000>, UInt, 772>;
-	using guest_FPREG		= helper::Pointer<Register<1000>, ULong, 776>;
-	using guest_FPTAG		= helper::Pointer<Register<1000>, UChar, 840>;
-	using guest_FPROUND		= helper::inPointer<Register<1000>, ULong, 848>;
-	using guest_FC3210		= helper::inPointer<Register<1000>, ULong, 856>;
-
-	using guest_EMNOTE		= helper::inPointer<Register<1000>, UInt, 864>;
-	using pad2				= helper::inPointer<Register<1000>, UInt, 868>;
-	using guest_CMSTART		= helper::inPointer<Register<1000>, ULong, 872>;
-	using guest_CMLEN		= helper::inPointer<Register<1000>, ULong, 880>;
-	using guest_NRADDR		= helper::inPointer<Register<1000>, ULong, 888>;
-	using guest_SC_CLASS	= helper::inPointer<Register<1000>, ULong, 896>;
-	using guest_GS_CONST	= helper::inPointer<Register<1000>, ULong, 904>;
-	using guest_IP_AT_SYSCALL = helper::inPointer<Register<1000>, ULong, 912>;
-}
-
-namespace _X86State {
-    using host_EvC_FAILADDR = helper::inPointer<Register<1000>, UInt, 0>;
-    using host_EvC_COUNTER = helper::inPointer<Register<1000>, UInt, 4>;
-    using guest_EAX = helper::inPointer<Register<1000>, UInt, 8>;
-    using guest_ECX = helper::inPointer<Register<1000>, UInt, 12>;
-    using guest_EDX = helper::inPointer<Register<1000>, UInt, 16>;
-    using guest_EBX = helper::inPointer<Register<1000>, UInt, 20>;
-    using guest_ESP = helper::inPointer<Register<1000>, UInt, 24>;
-    using guest_EBP = helper::inPointer<Register<1000>, UInt, 28>;
-    using guest_ESI = helper::inPointer<Register<1000>, UInt, 32>;
-    using guest_EDI = helper::inPointer<Register<1000>, UInt, 36>;
-
-    using guest_CC_OP = helper::inPointer<Register<1000>, UInt, 40>;
-    using guest_CC_DEP1 = helper::inPointer<Register<1000>, UInt, 44>;
-    using guest_CC_DEP2 = helper::inPointer<Register<1000>, UInt, 48>;
-    using guest_CC_NDEP = helper::inPointer<Register<1000>, UInt, 52>;
-    using guest_DFLAG = helper::inPointer<Register<1000>, UInt, 56>;
-    using guest_IDFLAG = helper::inPointer<Register<1000>, UInt, 60>;
-    using guest_ACFLAG = helper::inPointer<Register<1000>, UInt, 64>;
-
-    using guest_EIP = helper::inPointer<Register<1000>, UInt, 68>;
-
-    using guest_FPREG = helper::Pointer<Register<1000>, ULong, 72>;
-    using guest_FPTAG = helper::Pointer<Register<1000>, UChar, 136>;
-    using guest_FPROUND = helper::inPointer<Register<1000>, UInt, 144>; 
-    using guest_FC3210 = helper::inPointer<Register<1000>, UInt, 148>;  
-    using guest_FTOP = helper::inPointer<Register<1000>, UInt, 152>;    
-
-    using guest_SSEROUND = helper::inPointer<Register<1000>, UInt, 156>;   
-    using guest_XMM0 = helper::inPointer<Register<1000>, U128, 160>;       
-    using guest_XMM1 = helper::inPointer<Register<1000>, U128, 160 + 1*16>;
-    using guest_XMM2 = helper::inPointer<Register<1000>, U128, 160 + 2*16>;
-    using guest_XMM3 = helper::inPointer<Register<1000>, U128, 160 + 3*16>;
-    using guest_XMM4 = helper::inPointer<Register<1000>, U128, 160 + 4*16>;
-    using guest_XMM5 = helper::inPointer<Register<1000>, U128, 160 + 5*16>;
-    using guest_XMM6 = helper::inPointer<Register<1000>, U128, 160 + 6*16>;
-    using guest_XMM7 = helper::inPointer<Register<1000>, U128, 160 + 7*16>;
-
-    using guest_CS = helper::inPointer<Register<1000>, UShort, 288>;
-    using guest_DS = helper::inPointer<Register<1000>, UShort, 290>;
-    using guest_ES = helper::inPointer<Register<1000>, UShort, 292>;
-    using guest_FS = helper::inPointer<Register<1000>, UShort, 294>;
-    using guest_GS = helper::inPointer<Register<1000>, UShort, 296>;
-    using guest_SS = helper::inPointer<Register<1000>, UShort, 298>;
-    using guest_LDT = helper::inPointer<Register<1000>, ULong, 304>;
-    using guest_GDT = helper::inPointer<Register<1000>, ULong, 312>;
-
-    using guest_EMNOTE = helper::inPointer<Register<1000>, UInt, 320>;
-
-    using guest_CMSTART = helper::inPointer<Register<1000>, UInt, 324>;
-    using guest_CMLEN = helper::inPointer<Register<1000>, UInt, 328>;
-
-    using guest_NRADDR = helper::inPointer<Register<1000>, UInt, 332>;
-
-    using guest_SC_CLASS = helper::inPointer<Register<1000>, UInt, 336>;
-
-    using guest_IP_AT_SYSCALL = helper::inPointer<Register<1000>, UInt, 340>;
-
-    using padding1 = helper::inPointer<Register<1000>, UInt, 344>;
-    using padding2 = helper::inPointer<Register<1000>, UInt, 348>;
-    using padding3 = helper::inPointer<Register<1000>, UInt, 352>;
-}
 
 
 
-class Guest_State {
-	State *state;
+
+
+template<typename Type = UChar, UInt offset = -1>
+class Reg  {
+    Register<REGISTER_LEN>& m_obj;
 public:
-	Guest_State(State &state):
-		state(&state)
-	{
 
-	}
-	operator MEM &() {
-		return state->mem;
-	}
-	template<int len>
-	operator Register<len> &() {
-		return state->regs;
-	}
+    Reg(Register<REGISTER_LEN>& r) :
+        m_obj(r)
+    { }
+
+    Reg(State& r) :
+        m_obj(r.regs)
+    { }
+
+
+
+    Register<REGISTER_LEN>& obj() const{
+        return static_cast<Register<REGISTER_LEN> &>(m_obj);
+    }
+
+    template<typename T>
+    inline operator T () const {
+        return (T)obj().Iex_Get<(IRType)(sizeof(Type)<<3)>(offset);
+    }
+
+    inline operator Vns () const{
+        return obj().Iex_Get<(IRType)(sizeof(Type) << 3)>(offset);
+    }
+
+    template<typename T>
+    inline void operator=(T  data) {
+        obj().Ist_Put(offset, data);
+    }
+    
+#define REG_OPERATOR(op)					\
+		template<typename _dataType>		\
+		Vns operator op(_dataType data) const{\
+			return operator Vns() op data;	\
+		}
+
+    REG_OPERATOR(+);
+    REG_OPERATOR(-);
+    REG_OPERATOR(*);
+    REG_OPERATOR(/ );
+    REG_OPERATOR(>> );
+    REG_OPERATOR(<< );
+    REG_OPERATOR(| );
+    REG_OPERATOR(&);
+    REG_OPERATOR(== );
+
+#undef REG_OPERATOR
+
+private:
+    template<typename T>
+    T operator &() = delete;
+    template<typename T>
+    T operator &() const = delete;
+
+    operator z3::expr() = delete;
+    operator z3::expr& () = delete;
+    operator z3::expr& () const = delete;
+    operator const z3::expr() = delete;
+    operator const z3::expr& () = delete;
+    operator const z3::expr& () const = delete;
+
 };
 
-
-class _VexGuestAMD64State:public Guest_State {
+template<typename Type = UChar, UInt offset = -1>
+class RegL {
+    Register<REGISTER_LEN>& obj;
 public:
-	/* Event check fail addr, counter, and padding to make RAX 16
-	 aligned. */
-	/*   0 */ _AMD64State::host_EvC_FAILADDR host_EvC_FAILADDR;
-	/*   8 */ _AMD64State::host_EvC_COUNTER host_EvC_COUNTER;
-	/*  12 */ _AMD64State::pad0 pad0;
-	/*  16 */ _AMD64State::guest_RAX guest_RAX;
-	/*  24 */ _AMD64State::guest_RCX guest_RCX;
-	/*  32 */ _AMD64State::guest_RDX guest_RDX;
-	/*  40 */ _AMD64State::guest_RBX guest_RBX;
-	/*  48 */ _AMD64State::guest_RSP guest_RSP;
-	/*  56 */ _AMD64State::guest_RBP guest_RBP;
-	/*  64 */ _AMD64State::guest_RSI guest_RSI;
-	/*  72 */ _AMD64State::guest_RDI guest_RDI;
-	/*  80 */ _AMD64State::guest_R8 guest_R8;
-	/*  88 */ _AMD64State::guest_R9 guest_R9;
-	/*  96 */ _AMD64State::guest_R10 guest_R10;
-	/* 104 */ _AMD64State::guest_R11 guest_R11;
-	/* 112 */ _AMD64State::guest_R12 guest_R12;
-	/* 120 */ _AMD64State::guest_R13 guest_R13;
-	/* 128 */ _AMD64State::guest_R14 guest_R14;
-	/* 136 */ _AMD64State::guest_R15 guest_R15;
-	/* 4-word thunk used to calculate O S Z A C P flags. */
-	/* 144 */ _AMD64State::guest_CC_OP guest_CC_OP;
-	/* 152 */ _AMD64State::guest_CC_DEP1 guest_CC_DEP1;
-	/* 160 */ _AMD64State::guest_CC_DEP2 guest_CC_DEP2;
-	/* 168 */ _AMD64State::guest_CC_NDEP guest_CC_NDEP;
-	/* The D flag is stored here, encoded as either -1 or +1 */
-	/* 176 */ _AMD64State::guest_DFLAG guest_DFLAG;
-	/* 184 */ _AMD64State::guest_RIP guest_RIP;
-	/* Bit 18 (AC) of eflags stored here, as either 0 or 1. */
-	/* ... */ _AMD64State::guest_ACFLAG guest_ACFLAG;
-	/* Bit 21 (ID) of eflags stored here, as either 0 or 1. */
-	/* 192 */ _AMD64State::guest_IDFLAG guest_IDFLAG;
-	/* Probably a lot more stuff too.
-	   D,ID flags
-	   16  128-bit SSE registers
-	   all the old x87 FPU gunk
-	   segment registers */
 
-	   /* HACK to e.g. make tls on amd64-linux/solaris work.  %fs only ever seems
-		  to hold a constant value (zero on linux main thread, 0x63 in other
-		  threads), and so guest_FS_CONST holds
-		  the 64-bit offset associated with this constant %fs value. */
-	/* 200 */ _AMD64State::guest_FS_CONST guest_FS_CONST;
+    RegL(Register<REGISTER_LEN>& r) :
+        obj(r)
+    { }
 
-	/* YMM registers.  Note that these must be allocated
-	   consecutively in order that the SSE4.2 PCMP{E,I}STR{I,M}
-	   helpers can treat them as an array.  YMM16 is a fake reg used
-	   as an intermediary in handling aforementioned insns. */
-	/* 208 */_AMD64State::guest_SSEROUND guest_SSEROUND;
-	/* 216 */_AMD64State::guest_YMM0 guest_YMM0;
-	_AMD64State::guest_YMM1	guest_YMM1;
-	_AMD64State::guest_YMM2	guest_YMM2;
-	_AMD64State::guest_YMM3	guest_YMM3;
-	_AMD64State::guest_YMM4	guest_YMM4;
-	_AMD64State::guest_YMM5	guest_YMM5;
-	_AMD64State::guest_YMM6	guest_YMM6;
-	_AMD64State::guest_YMM7	guest_YMM7;
-	_AMD64State::guest_YMM8	guest_YMM8;
-	_AMD64State::guest_YMM9	guest_YMM9;
-	_AMD64State::guest_YMM10 guest_YMM10;
-	_AMD64State::guest_YMM11 guest_YMM11;
-	_AMD64State::guest_YMM12 guest_YMM12;
-	_AMD64State::guest_YMM13 guest_YMM13;
-	_AMD64State::guest_YMM14 guest_YMM14;
-	_AMD64State::guest_YMM15 guest_YMM15;
-	_AMD64State::guest_YMM16 guest_YMM16;
+    RegL(State& r) :
+        obj(r.regs)
+    { }
 
-	/* FPU */
-	/* Note.  Setting guest_FTOP to be ULong messes up the
-	   delicately-balanced PutI/GetI optimisation machinery.
-	   Therefore best to leave it as a UInt. */
-	_AMD64State::guest_FTOP guest_FTOP;
-	_AMD64State::pad1 pad1;
-	_AMD64State::guest_FPREG guest_FPREG;
-	_AMD64State::guest_FPTAG guest_FPTAG;
-	_AMD64State::guest_FPROUND guest_FPROUND;
-	_AMD64State::guest_FC3210 guest_FC3210;
+};
 
-	/* Emulation notes */
-	_AMD64State::guest_EMNOTE guest_EMNOTE;
-	_AMD64State::pad2 pad2;
-
-	/* Translation-invalidation area description.  Not used on amd64
-	   (there is no invalidate-icache insn), but needed so as to
-	   allow users of the library to uniformly assume that the guest
-	   state contains these two fields -- otherwise there is
-	   compilation breakage.  On amd64, these two fields are set to
-	   zero by LibVEX_GuestAMD64_initialise and then should be
-	   ignored forever thereafter. */
-	_AMD64State::guest_CMSTART guest_CMSTART;
-	_AMD64State::guest_CMLEN guest_CMLEN;
-
-	/* Used to record the unredirected guest address at the start of
-	   a translation whose start has been redirected.  By reading
-	   this pseudo-register shortly afterwards, the translation can
-	   find out what the corresponding no-redirection address was.
-	   Note, this is only set for wrap-style redirects, not for
-	   replace-style ones. */
-	_AMD64State::guest_NRADDR guest_NRADDR;
-
-	/* Used for Darwin syscall dispatching. */
-	_AMD64State::guest_SC_CLASS guest_SC_CLASS;
-
-	/* HACK to make e.g. tls on darwin work, wine on linux work, ...
-	   %gs only ever seems to hold a constant value (e.g. 0x60 on darwin,
-	   0x6b on linux), and so guest_GS_CONST holds the 64-bit offset
-	   associated with this constant %gs value.  (A direct analogue
-	   of the %fs-const hack for amd64-linux/solaris). */
-	_AMD64State::guest_GS_CONST guest_GS_CONST;
-
-	/* Needed for Darwin (but mandated for all guest architectures):
-	   RIP at the last syscall insn (int 0x80/81/82, sysenter,
-	   syscall).  Used when backing up to restart a syscall that has
-	   been interrupted by a signal. */
-	_AMD64State::guest_IP_AT_SYSCALL guest_IP_AT_SYSCALL;
-
+template<typename Type = UChar>
+class GM {
+    Vns m_base;
+    MEM& m_obj;
 public:
-	_VexGuestAMD64State(State &state):
-		Guest_State(state),
-		host_EvC_FAILADDR(state.regs),
-		host_EvC_COUNTER(state.regs),
-		pad0(state.regs),
-		pad1(state.regs),
-		pad2(state.regs),
-		guest_RAX(state.regs),
-		guest_RCX(state.regs),
-		guest_RDX(state.regs),
-		guest_RBX(state.regs),
-		guest_RSP(state.regs),
-		guest_RBP(state.regs),
-		guest_RSI(state.regs),
-		guest_RDI(state.regs),
-		guest_R8(state.regs),
-		guest_R9(state.regs),
-		guest_R10(state.regs),
-		guest_R11(state.regs),
-		guest_R12(state.regs),
-		guest_R13(state.regs),
-		guest_R14(state.regs),
-		guest_R15(state.regs),
-		guest_CC_OP(state.regs),
-		guest_CC_DEP1(state.regs),
-		guest_CC_DEP2(state.regs),
-		guest_CC_NDEP(state.regs),
-		guest_DFLAG(state.regs),
-		guest_RIP(state.regs),
-		guest_ACFLAG(state.regs),
-		guest_IDFLAG(state.regs),
-		guest_FS_CONST(state.regs),
-		guest_SSEROUND(state.regs),
-		guest_YMM0(state.regs),
-		guest_YMM1(state.regs),
-		guest_YMM2(state.regs),
-		guest_YMM3(state.regs),
-		guest_YMM4(state.regs),
-		guest_YMM5(state.regs),
-		guest_YMM6(state.regs),
-		guest_YMM7(state.regs),
-		guest_YMM8(state.regs),
-		guest_YMM9(state.regs),
-		guest_YMM10(state.regs),
-		guest_YMM11(state.regs),
-		guest_YMM12(state.regs),
-		guest_YMM13(state.regs),
-		guest_YMM14(state.regs),
-		guest_YMM15(state.regs),
-		guest_YMM16(state.regs),
-		guest_FTOP(state.regs),
-		guest_FPREG(state.regs),
-		guest_FPTAG(state.regs),
-		guest_FPROUND(state.regs),
-		guest_FC3210(state.regs),
-		guest_EMNOTE(state.regs),
-		guest_CMSTART(state.regs),
-		guest_CMLEN(state.regs),
-		guest_NRADDR(state.regs),
-		guest_SC_CLASS(state.regs),
-		guest_GS_CONST(state.regs),
-		guest_IP_AT_SYSCALL(state.regs)
+    GM(MEM& obj, Vns& const base):
+        m_obj(obj),
+        m_base(base)
+    {}
+
+    GM(MEM& obj, ADDR base):
+        m_obj(obj),
+        m_base(obj, base)
+    {}
+
+    template<typename T>
+    GM(MEM& obj, T base) :
+        m_obj(obj),
+        m_base(obj, (ADDR)base)
+    {}
+
+    MEM& obj() const {
+        return static_cast<MEM const&>(m_obj);
+    }
+
+    template<typename T>
+    inline operator T () const {
+        return (T)obj().Iex_Load<(IRType)(sizeof(Type) << 3)>(m_base);
+    }
+
+    inline operator Vns () const {
+        return obj().Iex_Load<(IRType)(sizeof(Type) << 3)>(m_base);
+    }
+
+    template<typename T>
+    inline void operator=(T const data) {
+        obj().Ist_Store(m_base, data);
+    }
+
+    void operator=(Vns const& data) {
+        if ((sizeof(Type) << 3) == data.bitn) {
+            obj().Ist_Store(m_base, data);
+        }
+        else if ((sizeof(Type) << 3) > data.bitn) {
+            if (ISUNSIGNED_TYPE(Type)) {
+                obj().Ist_Store(m_base, data.zext(data.bitn - (sizeof(Type) << 3)));
+            }
+            else {
+               obj().Ist_Store( m_base, data.sext(data.bitn - (sizeof(Type) << 3)));
+            }
+        }
+        else {
+            obj().Ist_Store(m_base, data.extract<(int)((sizeof(Type) << 3) - 1), 0>());
+        }
+    }
+
+    inline GM<Type> operator [](UInt idx) {
+        return GM<Type>(obj(), m_base + idx * (sizeof(Type)));
+    }
+
+
+
+#define REG_OPERATOR(op)					\
+		template<typename _dataType>		\
+		Vns operator op(_dataType data) const{\
+			return operator Vns() op data;	\
+		}
+
+    REG_OPERATOR(+);
+    REG_OPERATOR(-);
+    REG_OPERATOR(*);
+    REG_OPERATOR(/ );
+    REG_OPERATOR(>> );
+    REG_OPERATOR(<< );
+    REG_OPERATOR(| );
+    REG_OPERATOR(&);
+    REG_OPERATOR(== );
+
+#undef REG_OPERATOR
+
+private:
+    template<typename T>
+    T operator &() = delete;
+    template<typename T>
+    T operator &() const = delete;
+
+    operator z3::expr() = delete;
+    operator z3::expr& () = delete;
+    operator z3::expr& () const = delete;
+    operator const z3::expr() = delete;
+    operator const z3::expr& () = delete;
+    operator const z3::expr& () const = delete;
+};
+
+class _VexGuestAMD64State {
+public:
+    Reg<ULong, 0>     host_EvC_FAILADDR;
+    Reg<UInt, 8>      host_EvC_COUNTER;
+    Reg<UInt, 12>     pad0;
+    Reg<ULong, 16>    guest_RAX;
+    Reg<ULong, 24>    guest_RCX;
+    Reg<ULong, 32>    guest_RDX;
+    Reg<ULong, 40>    guest_RBX;
+    Reg<ULong, 48>    guest_RSP;
+    Reg<ULong, 56>    guest_RBP;
+    Reg<ULong, 64>    guest_RSI;
+    Reg<ULong, 72>    guest_RDI;
+    Reg<ULong, 80>    guest_R8;
+    Reg<ULong, 88>    guest_R9;
+    Reg<ULong, 96>    guest_R10;
+    Reg<ULong, 104>   guest_R11;
+    Reg<ULong, 112>   guest_R12;
+    Reg<ULong, 120>   guest_R13;
+    Reg<ULong, 128>   guest_R14;
+    Reg<ULong, 136>   guest_R15;
+    Reg<ULong, 144>   guest_CC_OP;
+    Reg<ULong, 152>   guest_CC_DEP1;
+    Reg<ULong, 160>   guest_CC_DEP2;
+    Reg<ULong, 168>   guest_CC_NDEP;
+    Reg<ULong, 176>   guest_DFLAG;
+    Reg<ULong, 184>   guest_RIP;
+    Reg<ULong, 192>   guest_ACFLAG;
+    Reg<ULong, 200>   guest_IDFLAG;
+    Reg<ULong, 208>   guest_FS_CONST;
+    Reg<ULong, 216>   guest_SSEROUND;
+    Reg<__m256i, 224> guest_YMM0;
+    Reg<__m256i, 256> guest_YMM1;
+    Reg<__m256i, 288> guest_YMM2;
+    Reg<__m256i, 320> guest_YMM3;
+    Reg<__m256i, 352> guest_YMM4;
+    Reg<__m256i, 384> guest_YMM5;
+    Reg<__m256i, 416> guest_YMM6;
+    Reg<__m256i, 448> guest_YMM7;
+    Reg<__m256i, 480> guest_YMM8;
+    Reg<__m256i, 512> guest_YMM9;
+    Reg<__m256i, 544> guest_YMM10;
+    Reg<__m256i, 576> guest_YMM11;
+    Reg<__m256i, 608> guest_YMM12;
+    Reg<__m256i, 640> guest_YMM13;
+    Reg<__m256i, 672> guest_YMM14;
+    Reg<__m256i, 704> guest_YMM15;
+    Reg<__m256i, 736> guest_YMM16;
+    Reg<UInt, 768>    guest_FTOP;
+    Reg<UInt, 772>    pad1;
+    RegL<ULong, 776>  guest_FPREG;
+    RegL<UChar, 840>  guest_FPTAG;
+    Reg<ULong, 848>   guest_FPROUND;
+    Reg<ULong, 856>   guest_FC3210;
+    Reg<UInt, 864>    guest_EMNOTE;
+    Reg<UInt, 868>    pad2;
+    Reg<ULong, 872>   guest_CMSTART;
+    Reg<ULong, 880>   guest_CMLEN;
+    Reg<ULong, 888>   guest_NRADDR;
+    Reg<ULong, 896>   guest_SC_CLASS;
+    Reg<ULong, 904>   guest_GS_CONST;
+    Reg<ULong, 912>   guest_IP_AT_SYSCALL;
+    State& m_state;
+public:
+	_VexGuestAMD64State(State &s):
+        m_state(s),
+        host_EvC_FAILADDR(s),
+        host_EvC_COUNTER(s),
+        pad0(s),
+        guest_RAX(s),
+        guest_RCX(s),
+        guest_RDX(s),
+        guest_RBX(s),
+        guest_RSP(s),
+        guest_RBP(s),
+        guest_RSI(s),
+        guest_RDI(s),
+        guest_R8(s),
+        guest_R9(s),
+        guest_R10(s),
+        guest_R11(s),
+        guest_R12(s),
+        guest_R13(s),
+        guest_R14(s),
+        guest_R15(s),
+        guest_CC_OP(s),
+        guest_CC_DEP1(s),
+        guest_CC_DEP2(s),
+        guest_CC_NDEP(s),
+        guest_DFLAG(s),
+        guest_RIP(s),
+        guest_ACFLAG(s),
+        guest_IDFLAG(s),
+        guest_FS_CONST(s),
+        guest_SSEROUND(s),
+        guest_YMM0(s),
+        guest_YMM1(s),
+        guest_YMM2(s),
+        guest_YMM3(s),
+        guest_YMM4(s),
+        guest_YMM5(s),
+        guest_YMM6(s),
+        guest_YMM7(s),
+        guest_YMM8(s),
+        guest_YMM9(s),
+        guest_YMM10(s),
+        guest_YMM11(s),
+        guest_YMM12(s),
+        guest_YMM13(s),
+        guest_YMM14(s),
+        guest_YMM15(s),
+        guest_YMM16(s),
+        guest_FTOP(s),
+        pad1(s),
+        guest_FPREG(s),
+        guest_FPTAG(s),
+        guest_FPROUND(s),
+        guest_FC3210(s),
+        guest_EMNOTE(s),
+        pad2(s),
+        guest_CMSTART(s),
+        guest_CMLEN(s),
+        guest_NRADDR(s),
+        guest_SC_CLASS(s),
+        guest_GS_CONST(s),
+        guest_IP_AT_SYSCALL(s)
 	{
 
 	}
 
+    inline operator Z3_context() {
+        return m_state.m_ctx;
+    }
+
+    inline operator Register<REGISTER_LEN> &() {
+        return m_state.regs;
+    }
+
+    inline operator MEM&() {
+        return m_state.mem;
+    }
 };
 
 
-class _VexGuestX86State :public Guest_State {
+class _VexGuestX86State {
 public:
-    /* Event check fail addr and counter. */
-    _X86State::host_EvC_FAILADDR  host_EvC_FAILADDR; /* 0 */
-    _X86State::host_EvC_COUNTER host_EvC_COUNTER;  /* 4 */
-    _X86State::guest_EAX guest_EAX;         /* 8 */
-    _X86State::guest_ECX guest_ECX;
-    _X86State::guest_EDX guest_EDX;
-    _X86State::guest_EBX guest_EBX;
-    _X86State::guest_ESP guest_ESP;
-    _X86State::guest_EBP guest_EBP;
-    _X86State::guest_ESI guest_ESI;
-    _X86State::guest_EDI guest_EDI;         /* 36 */
 
-    /* 4-word thunk used to calculate O S Z A C P flags. */
-    _X86State::guest_CC_OP guest_CC_OP;       /* 40 */
-    _X86State::guest_CC_DEP1 guest_CC_DEP1;
-    _X86State::guest_CC_DEP2 guest_CC_DEP2;
-    _X86State::guest_CC_NDEP guest_CC_NDEP;     /* 52 */
-    /* The D flag is stored here, encoded as either -1 or +1 */
-    _X86State::guest_DFLAG guest_DFLAG;       /* 56 */
-    /* Bit 21 (ID) of eflags stored here, as either 0 or 1. */
-    _X86State::guest_IDFLAG guest_IDFLAG;      /* 60 */
-    /* Bit 18 (AC) of eflags stored here, as either 0 or 1. */
-    _X86State::guest_ACFLAG guest_ACFLAG;      /* 64 */
-
-    /* EIP */
-    _X86State::guest_EIP guest_EIP;         /* 68 */
-
-    /* FPU */
-    _X86State::guest_FPREG guest_FPREG;    /* 72 */
-    _X86State::guest_FPTAG guest_FPTAG;   /* 136 */
-    _X86State::guest_FPROUND guest_FPROUND;    /* 144 */
-    _X86State::guest_FC3210 guest_FC3210;     /* 148 */
-    _X86State::guest_FTOP guest_FTOP;       /* 152 */
-
-    /* SSE */
-    _X86State::guest_SSEROUND guest_SSEROUND;   /* 156 */
-    _X86State::guest_XMM0 guest_XMM0;       /* 160 */
-    _X86State::guest_XMM1 guest_XMM1;
-    _X86State::guest_XMM2 guest_XMM2;
-    _X86State::guest_XMM3 guest_XMM3;
-    _X86State::guest_XMM4 guest_XMM4;
-    _X86State::guest_XMM5 guest_XMM5;
-    _X86State::guest_XMM6 guest_XMM6;
-    _X86State::guest_XMM7 guest_XMM7;
-
-    /* Segment registers. */
-    _X86State::guest_CS guest_CS;
-    _X86State::guest_DS guest_DS;
-    _X86State::guest_ES guest_ES;
-    _X86State::guest_FS guest_FS;
-    _X86State::guest_GS guest_GS;
-    _X86State::guest_SS guest_SS;
-    /* LDT/GDT stuff. */
-    _X86State::guest_LDT guest_LDT; /* host addr, a VexGuestX86SegDescr* */
-    _X86State::guest_GDT guest_GDT; /* host addr, a VexGuestX86SegDescr* */
-
-    /* Emulation notes */
-    _X86State::guest_EMNOTE guest_EMNOTE;
-
-    /* For clflush/clinval: record start and length of area */
-    _X86State::guest_CMSTART guest_CMSTART;
-    _X86State::guest_CMLEN guest_CMLEN;
-
-    /* Used to record the unredirected guest address at the start of
-       a translation whose start has been redirected.  By reading
-       this pseudo-register shortly afterwards, the translation can
-       find out what the corresponding no-redirection address was.
-       Note, this is only set for wrap-style redirects, not for
-       replace-style ones. */
-    _X86State::guest_NRADDR guest_NRADDR;
-
-    /* Used for Darwin syscall dispatching. */
-    _X86State::guest_SC_CLASS guest_SC_CLASS;
-
-    /* Needed for Darwin (but mandated for all guest architectures):
-       EIP at the last syscall insn (int 0x80/81/82, sysenter,
-       syscall).  Used when backing up to restart a syscall that has
-       been interrupted by a signal. */
-    _X86State::guest_IP_AT_SYSCALL guest_IP_AT_SYSCALL;
-
-    /* Padding to make it have an 16-aligned size */
-    _X86State::padding1 padding1;
-    _X86State::padding2 padding2;
-    _X86State::padding3 padding3;
+    Reg<UInt, 0>        host_EvC_FAILADDR;
+    Reg<UInt, 4>        host_EvC_COUNTER;
+    Reg<UInt, 8>        guest_EAX;
+    Reg<UInt, 12>       guest_ECX;
+    Reg<UInt, 16>       guest_EDX;
+    Reg<UInt, 20>       guest_EBX;
+    Reg<UInt, 24>       guest_ESP;
+    Reg<UInt, 28>       guest_EBP;
+    Reg<UInt, 32>       guest_ESI;
+    Reg<UInt, 36>       guest_EDI;
+    Reg<UInt, 40>       guest_CC_OP;
+    Reg<UInt, 44>       guest_CC_DEP1;
+    Reg<UInt, 48>       guest_CC_DEP2;
+    Reg<UInt, 52>       guest_CC_NDEP;
+    Reg<UInt, 56>       guest_DFLAG;
+    Reg<UInt, 60>       guest_IDFLAG;
+    Reg<UInt, 64>       guest_ACFLAG;
+    Reg<UInt, 68>       guest_EIP;
+    RegL<ULong, 72>     guest_FPREG;
+    RegL<UChar, 136>    guest_FPTAG;
+    Reg<UInt, 144>      guest_FPROUND;
+    Reg<UInt, 148>      guest_FC3210;
+    Reg<UInt, 152>      guest_FTOP;
+    Reg<UInt, 156>      guest_SSEROUND;
+    Reg<U128, 160>      guest_XMM0;
+    Reg<U128, 176>      guest_XMM1;
+    Reg<U128, 192>      guest_XMM2;
+    Reg<U128, 208>      guest_XMM3;
+    Reg<U128, 224>      guest_XMM4;
+    Reg<U128, 240>      guest_XMM5;
+    Reg<U128, 256>      guest_XMM6;
+    Reg<U128, 272>      guest_XMM7;
+    Reg<UShort, 288>    guest_CS;
+    Reg<UShort, 290>    guest_DS;
+    Reg<UShort, 292>    guest_ES;
+    Reg<UShort, 294>    guest_FS;
+    Reg<UShort, 296>    guest_GS;
+    Reg<UShort, 298>    guest_SS;
+    Reg<ULong, 304>     guest_LDT;
+    Reg<ULong, 312>     guest_GDT;
+    Reg<UInt, 320>      guest_EMNOTE;
+    Reg<UInt, 324>      guest_CMSTART;
+    Reg<UInt, 328>      guest_CMLEN;
+    Reg<UInt, 332>      guest_NRADDR;
+    Reg<UInt, 336>      guest_SC_CLASS;
+    Reg<UInt, 340>      guest_IP_AT_SYSCALL;
+    Reg<UInt, 344>      padding1;
+    Reg<UInt, 348>      padding2;
+    Reg<UInt, 352>      padding3;
 public:
-    _VexGuestX86State(State &state) :
-        Guest_State(state),
-        host_EvC_FAILADDR(state.regs),
-        host_EvC_COUNTER(state.regs),
-        guest_EAX(state.regs),
-        guest_ECX(state.regs),
-        guest_EDX(state.regs),
-        guest_EBX(state.regs),
-        guest_ESP(state.regs),
-        guest_EBP(state.regs),
-        guest_ESI(state.regs),
-        guest_EDI(state.regs),
-        guest_CC_OP(state.regs),
-        guest_CC_DEP1(state.regs),
-        guest_CC_DEP2(state.regs),
-        guest_CC_NDEP(state.regs),
-        guest_DFLAG(state.regs),
-        guest_IDFLAG(state.regs),
-        guest_ACFLAG(state.regs),
-        guest_EIP(state.regs),
-        guest_FPREG(state.regs),
-        guest_FPTAG(state.regs),
-        guest_FPROUND(state.regs),
-        guest_FC3210(state.regs),
-        guest_FTOP(state.regs),
-        guest_SSEROUND(state.regs),
-        guest_XMM0(state.regs),
-        guest_XMM1(state.regs),
-        guest_XMM2(state.regs),
-        guest_XMM3(state.regs),
-        guest_XMM4(state.regs),
-        guest_XMM5(state.regs),
-        guest_XMM6(state.regs),
-        guest_XMM7(state.regs),
-        guest_CS(state.regs),
-        guest_DS(state.regs),
-        guest_ES(state.regs),
-        guest_FS(state.regs),
-        guest_GS(state.regs),
-        guest_SS(state.regs),
-        guest_LDT(state.regs),
-        guest_GDT(state.regs),
-        guest_EMNOTE(state.regs),
-        guest_CMSTART(state.regs),
-        guest_CMLEN(state.regs),
-        guest_NRADDR(state.regs),
-        guest_SC_CLASS(state.regs),
-        guest_IP_AT_SYSCALL(state.regs),
-        padding1(state.regs),
-        padding2(state.regs),
-        padding3(state.regs)
+    _VexGuestX86State(State& s):
+        host_EvC_FAILADDR(s),
+        host_EvC_COUNTER(s),
+        guest_EAX(s),
+        guest_ECX(s),
+        guest_EDX(s),
+        guest_EBX(s),
+        guest_ESP(s),
+        guest_EBP(s),
+        guest_ESI(s),
+        guest_EDI(s),
+        guest_CC_OP(s),
+        guest_CC_DEP1(s),
+        guest_CC_DEP2(s),
+        guest_CC_NDEP(s),
+        guest_DFLAG(s),
+        guest_IDFLAG(s),
+        guest_ACFLAG(s),
+        guest_EIP(s),
+        guest_FPREG(s),
+        guest_FPTAG(s),
+        guest_FPROUND(s),
+        guest_FC3210(s),
+        guest_FTOP(s),
+        guest_SSEROUND(s),
+        guest_XMM0(s),
+        guest_XMM1(s),
+        guest_XMM2(s),
+        guest_XMM3(s),
+        guest_XMM4(s),
+        guest_XMM5(s),
+        guest_XMM6(s),
+        guest_XMM7(s),
+        guest_CS(s),
+        guest_DS(s),
+        guest_ES(s),
+        guest_FS(s),
+        guest_GS(s),
+        guest_SS(s),
+        guest_LDT(s),
+        guest_GDT(s),
+        guest_EMNOTE(s),
+        guest_CMSTART(s),
+        guest_CMLEN(s),
+        guest_NRADDR(s),
+        guest_SC_CLASS(s),
+        guest_IP_AT_SYSCALL(s),
+        padding1(s),
+        padding2(s),
+        padding3(s)
     {
 
     }
@@ -903,72 +868,72 @@ namespace _X86SegDescr {
     using word2 = helper::inPointer<MEM, UInt, 4>;
 }
 
-class _VexGuestX86SegDescr : public Guest_State {
-public:
-    class _Bits {
-    public:
-        _X86SegDescr::LimitLow LimitLow;
-        _X86SegDescr::BaseLow BaseLow;
-        _X86SegDescr::BaseMid BaseMid;
-        _X86SegDescr::Type Type;
-        _X86SegDescr::Dpl Dpl;
-        _X86SegDescr::Pres Pres;
-        _X86SegDescr::LimitHi LimitHi;
-        _X86SegDescr::Sys Sys;
-        _X86SegDescr::Reserved_0 Reserved_0;
-        _X86SegDescr::Default_Big Default_Big;
-        _X86SegDescr::Granularity Granularity;
-        _X86SegDescr::BaseHi BaseHi;
-        _Bits(State &state, ADDR base):
-            LimitLow(state.mem, base + 0),
-            BaseLow(state.mem, base + 2),
-            BaseMid(state.mem, base + 4),
-            Type(state.mem, base + 4),
-            Dpl(state.mem, base + 4),
-            Pres(state.mem, base + 4),
-            LimitHi(state.mem, base + 4),
-            Sys(state.mem, base + 4),
-            Reserved_0(state.mem, base + 4),
-            Default_Big(state.mem, base + 4),
-            Granularity(state.mem, base + 4),
-            BaseHi(state.mem, base + 4)
-        {
-        }
-    };
-    class _Words {
-    public:
-        _X86SegDescr::word1 word1;
-        _X86SegDescr::word2 word2;
-        _Words(State& state, ADDR base) :
-            word1(state.mem, base),
-            word2(state.mem, base + 4)
-        {
-        }
-    };
-
-    class _LdtEnt {
-    public:
-        _Words Words;
-        _Bits Bits;
-        _LdtEnt(State &state, ADDR base) :
-            Words(state, base),
-            Bits(state, base)
-        {
-        }
-    };
-
-    _LdtEnt LdtEnt;
-    _VexGuestX86SegDescr(State &state, void* base) :
-        Guest_State(state), 
-        LdtEnt(state, (ADDR)base)
-    {
-    }
-};
+//class _VexGuestX86SegDescr : public Guest_State {
+//public:
+//    class _Bits {
+//    public:
+//        _X86SegDescr::LimitLow LimitLow;
+//        _X86SegDescr::BaseLow BaseLow;
+//        _X86SegDescr::BaseMid BaseMid;
+//        _X86SegDescr::Type Type;
+//        _X86SegDescr::Dpl Dpl;
+//        _X86SegDescr::Pres Pres;
+//        _X86SegDescr::LimitHi LimitHi;
+//        _X86SegDescr::Sys Sys;
+//        _X86SegDescr::Reserved_0 Reserved_0;
+//        _X86SegDescr::Default_Big Default_Big;
+//        _X86SegDescr::Granularity Granularity;
+//        _X86SegDescr::BaseHi BaseHi;
+//        _Bits(State &state, ADDR base):
+//            LimitLow(state.mem, base + 0),
+//            BaseLow(state.mem, base + 2),
+//            BaseMid(state.mem, base + 4),
+//            Type(state.mem, base + 4),
+//            Dpl(state.mem, base + 4),
+//            Pres(state.mem, base + 4),
+//            LimitHi(state.mem, base + 4),
+//            Sys(state.mem, base + 4),
+//            Reserved_0(state.mem, base + 4),
+//            Default_Big(state.mem, base + 4),
+//            Granularity(state.mem, base + 4),
+//            BaseHi(state.mem, base + 4)
+//        {
+//        }
+//    };
+//    class _Words {
+//    public:
+//        _X86SegDescr::word1 word1;
+//        _X86SegDescr::word2 word2;
+//        _Words(State& state, ADDR base) :
+//            word1(state.mem, base),
+//            word2(state.mem, base + 4)
+//        {
+//        }
+//    };
+//
+//    class _LdtEnt {
+//    public:
+//        _Words Words;
+//        _Bits Bits;
+//        _LdtEnt(State &state, ADDR base) :
+//            Words(state, base),
+//            Bits(state, base)
+//        {
+//        }
+//    };
+//
+//    _LdtEnt LdtEnt;
+//    _VexGuestX86SegDescr(State &state, void* base) :
+//        Guest_State(state), 
+//        LdtEnt(state, (ADDR)base)
+//    {
+//    }
+//};
 
 namespace Regs {
 	using AMD64 = _VexGuestAMD64State;
     using X86 = _VexGuestX86State;
-    using X86SegDescr = _VexGuestX86SegDescr;
+    //using X86SegDescr = _VexGuestX86SegDescr;
 }
 
 #undef ISUNSIGNED_TYPE

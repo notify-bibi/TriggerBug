@@ -562,6 +562,15 @@ inline void State::add_assert_eq(Vns & eqA, Vns & eqB)
 inline void State::write_regs(int offset, void* addr, int length) { regs.write_regs(offset, addr, length); }
 inline void State::read_regs(int offset, void* addr, int length) { regs.read_regs(offset, addr, length); }
 
+inline Vns symbolic_check(Z3_context ctx, ULong ret, UInt bitn) {
+    if (ret & (0xfa1dull << 48)) {
+        return Vns(ctx, (Z3_ast)(ret & ((1ull << 48) - 1)), bitn);
+    }
+    else {
+        return Vns(ctx, ret, bitn);
+    }
+}
+
 inline Vns State::CCall(IRCallee *cee, IRExpr **exp_args, IRType ty)
 {
     Int regparms = cee->regparms;
@@ -571,22 +580,22 @@ inline Vns State::CCall(IRCallee *cee, IRExpr **exp_args, IRType ty)
     if (!exp_args[0]) return Vns(m_ctx, ((Function_0)(cee->addr))(), bitn);
     Vns arg0 = tIRExpr(exp_args[0]);
     if (arg0.symbolic()) z3_mode = True;
-    if (!exp_args[1]) return (z3_mode) ? ((Z3_Function1)(funcDict(cee->addr)))(arg0) : Vns(m_ctx, ((Function_1)(cee->addr))(arg0), bitn);
+    if (!exp_args[1]) return (z3_mode) ? ((Z3_Function1)(funcDict(cee->addr)))(arg0) : symbolic_check(m_ctx, ((Function_1)(cee->addr))(arg0), bitn);
     Vns arg1 = tIRExpr(exp_args[1]);
     if (arg1.symbolic()) z3_mode = True;
-    if (!exp_args[2]) return (z3_mode) ? ((Z3_Function2)(funcDict(cee->addr)))(arg0, arg1) : Vns(m_ctx, ((Function_2)(cee->addr))(arg0, arg1), bitn);
+    if (!exp_args[2]) return (z3_mode) ? ((Z3_Function2)(funcDict(cee->addr)))(arg0, arg1) : symbolic_check(m_ctx, ((Function_2)(cee->addr))(arg0, arg1), bitn);
     Vns arg2 = tIRExpr(exp_args[2]);
     if (arg2.symbolic()) z3_mode = True;
-    if (!exp_args[3]) return (z3_mode) ? ((Z3_Function3)(funcDict(cee->addr)))(arg0, arg1, arg2) : Vns(m_ctx, ((Function_3)(cee->addr))(arg0, arg1, arg2), bitn);
+    if (!exp_args[3]) return (z3_mode) ? ((Z3_Function3)(funcDict(cee->addr)))(arg0, arg1, arg2) : symbolic_check(m_ctx, ((Function_3)(cee->addr))(arg0, arg1, arg2), bitn);
     Vns arg3 = tIRExpr(exp_args[3]);
     if (arg3.symbolic()) z3_mode = True;
-    if (!exp_args[4]) return (z3_mode) ? ((Z3_Function4)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3) : Vns(m_ctx, ((Function_4)(cee->addr))(arg0, arg1, arg2, arg3), bitn);
+    if (!exp_args[4]) return (z3_mode) ? ((Z3_Function4)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3) : symbolic_check(m_ctx, ((Function_4)(cee->addr))(arg0, arg1, arg2, arg3), bitn);
     Vns arg4 = tIRExpr(exp_args[4]);
     if (arg4.symbolic()) z3_mode = True;
-    if (!exp_args[5]) return (z3_mode) ? ((Z3_Function5)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3, arg4) : Vns(m_ctx, ((Function_5)(cee->addr))(arg0, arg1, arg2, arg3, arg4), bitn);
+    if (!exp_args[5]) return (z3_mode) ? ((Z3_Function5)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3, arg4) : symbolic_check(m_ctx, ((Function_5)(cee->addr))(arg0, arg1, arg2, arg3, arg4), bitn);
     Vns arg5 = tIRExpr(exp_args[5]);
     if (arg5.symbolic()) z3_mode = True;
-    if (!exp_args[6]) return (z3_mode) ? ((Z3_Function6)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3, arg4, arg5) : Vns(m_ctx, ((Function_6)(cee->addr))(arg0, arg1, arg2, arg3, arg4, arg5), bitn);
+    if (!exp_args[6]) return (z3_mode) ? ((Z3_Function6)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3, arg4, arg5) : symbolic_check(m_ctx, ((Function_6)(cee->addr))(arg0, arg1, arg2, arg3, arg4, arg5), bitn);
 }
 
 
@@ -716,7 +725,7 @@ inline Vns State::tIRExpr(IRExpr* e)
         if (!VexGuestARCHState) {
             switch (guest) {
             case VexArchX86: VexGuestARCHState = new VexGuestX86State; break;
-            case VexArchAMD64: VexGuestARCHState = new Regs::AMD64(*this); break;
+            case VexArchAMD64: VexGuestARCHState = new _VexGuestAMD64State(*this); break;
             case VexArchARM: VexGuestARCHState = new VexGuestARMState; break;
             case VexArchARM64: VexGuestARCHState = new VexGuestARM64State; break;
             case VexArchMIPS32: VexGuestARCHState = new VexGuestMIPS32State; break;
@@ -771,7 +780,7 @@ For_Begin:
 For_Begin_NO_Trans:
                 for (UInt stmtn = 0; stmtn < irsb->stmts_used; stmtn++) {
                     IRStmt *s = irsb->stmts[stmtn];
-                    traceIRStmt(s);
+                    traceIRStmtBegin(s);
                     switch (s->tag) {
                     case Ist_Put: { regs.Ist_Put(s->Ist.Put.offset, tIRExpr(s->Ist.Put.data)); break; }
                     case Ist_Store: { mem.Ist_Store(tIRExpr(s->Ist.Store.addr), tIRExpr(s->Ist.Store.data)); break; };
@@ -808,6 +817,7 @@ Exit_guard_true:
                                     && s->Ist.Exit.jk != Ijk_Ret
                                     )
                                 {
+                                    ppIRSB(irsb);
                                     status = Ijk_call(s->Ist.Exit.jk);
                                     if (status != Running) {
                                         goto EXIT;
@@ -923,9 +933,11 @@ Exit_guard_true:
                     case Ist_Dirty: {
                         IRDirty *dirty = s->Ist.Dirty.details;
                         auto guard = tIRExpr(dirty->guard);
-                        auto k = CCall(dirty->cee, dirty->args, Ity_I64);
-                        if (dirty->tmp != -1 && (UChar)guard) {
-                            irTemp[dirty->tmp] = k;
+                        if (((UChar)guard) & 1) {
+                            auto k = CCall(dirty->cee, dirty->args, Ity_I64);
+                            if (dirty->tmp != -1) {
+                                irTemp[dirty->tmp] = k;
+                            }
                         }
                         break;
                     }
@@ -961,7 +973,10 @@ Exit_guard_true:
                         vex_printf("what ppIRStmt %d\n", s->tag);
                         vpanic("what ppIRStmt");
                     }
+
+                    traceIRStmtEnd(s);
                 }
+
                 switch (irsb->jumpkind) {
                 case Ijk_Boring:        break;
                 case Ijk_Call:            break;
@@ -1010,7 +1025,12 @@ bkp_pass:
                         }
                     }
                 }
-/*Ijk_Sys_syscall, Ijk_NoDecode, Ijk_ClientReq,Ijk_Yield, Ijk_EmWarn, Ijk_EmFail, Ijk_MapFail, Ijk_InvalICache, 
+                case Ijk_NoDecode:{
+                    vex_printf("Ijk_NoDecode: %p", guest_start);
+                    status = NoDecode;
+                    goto EXIT;
+                }
+/*Ijk_Sys_syscall, Ijk_ClientReq,Ijk_Yield, Ijk_EmWarn, Ijk_EmFail, Ijk_MapFail, Ijk_InvalICache, 
 Ijk_FlushDCache, Ijk_NoRedir, Ijk_SigILL, Ijk_SigSEGV, Ijk_SigBUS, Ijk_SigFPE, Ijk_SigFPE_IntDiv, Ijk_SigFPE_IntOvf, 
 Ijk_Sys_int32,Ijk_Sys_int128, Ijk_Sys_int129, Ijk_Sys_int130, Ijk_Sys_int145, Ijk_Sys_int210, Ijk_Sys_sysenter:*/
                 default:

@@ -18,24 +18,39 @@
 <!-- VexArchMIPS64=0x409 -->
 
 
+
+<!-- traceflags -->
+<!-- VEX_TRACE_FE   =128  --> 
+<!-- VEX_TRACE_OPT1 =64  --> 
+<!-- VEX_TRACE_INST =32  --> 
+<!-- VEX_TRACE_OPT2 =16  --> 
+<!-- VEX_TRACE_TREES=8  --> 
+<!-- VEX_TRACE_VCODE=4  --> 
+<!-- VEX_TRACE_RCODE=2  --> 
+<!-- VEX_TRACE_ASM  =1  --> 
+
+
 <TriggerBug>
 	<VexArch>0x402</VexArch>
 	<VexArchSystem>linux</VexArchSystem>
 	<MaxThreadsNum>16</MaxThreadsNum>
-	<MemoryDumpPath>C:\Users\bibi\Desktop\TriggerBug\PythonFrontEnd\examples\xctf-asong\TriggerBug Engine/asong.dump</MemoryDumpPath>
+	<MemoryDumpPath>C:\Users\bibi\Desktop\TriggerBug\PythonFrontEnd\examples\xctf-asong\TriggerBug Engine\asong.dump</MemoryDumpPath>
 	<!-- <GuestStartAddress>0x444444</GuestStartAddress> -->
-	<RegsIpOffset>184</RegsIpOffset>
 	<PassSigSEGV>1</PassSigSEGV>
 	<VexControl>
 		<iropt_register_updates_default>0x701</iropt_register_updates_default>
 		<pxControl>0x701</pxControl>
-		<iropt_level>2</iropt_level>
+		<iropt_level>-1</iropt_level>
+		<traceflags>0</traceflags>
 	</VexControl>
 	
 	<DEBUG>
-		<TraceIrAddrress>0x00007ffff7fe9268</TraceIrAddrress>
+		<ppStmts>0</ppStmts>
+		<TraceIrAddrress>0x7FFFF</TraceIrAddrress>
 		<TraceState>1</TraceState>
 		<TraceJmp>0</TraceJmp>
+        <TraceSymbolic>0</TraceSymbolic>
 	</DEBUG>
 
 </TriggerBug>
+

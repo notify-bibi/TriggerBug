@@ -130,7 +130,6 @@ typedef
    }
    VexEmNote;
 
-
 /* Produces a short string describing the warning. */
 extern const HChar* LibVEX_EmNote_string ( VexEmNote );
 

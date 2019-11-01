@@ -219,7 +219,6 @@ void LibVEX_Init (
    vassert(debuglevel >= 0);
 
    vassert(vcon->iropt_verbosity >= 0);
-   vassert(vcon->iropt_level >= 0);
    vassert(vcon->iropt_level <= 2);
    vassert(vcon->iropt_unroll_thresh >= 0);
    vassert(vcon->iropt_unroll_thresh <= 400);
@@ -632,10 +631,12 @@ IRSB* LibVEX_FrontEnd ( /*MOD*/ VexTranslateArgs* vta,
    vexAllocSanityCheck();
 
    /* Clean it up, hopefully a lot. */
+   
    irsb = do_iropt_BB ( irsb, specHelper, preciseMemExnsFn, *pxControl,
                               vta->guest_bytes_addr,
                               vta->arch_guest );
 
+   
    //ppIRSB(irsb);
    // JRS 2016 Aug 03: Sanity checking is expensive, we already checked
    // the output of the front end, and iropt never screws up the IR by

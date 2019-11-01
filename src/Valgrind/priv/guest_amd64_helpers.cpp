@@ -32,11 +32,6 @@
    used to endorse or promote products derived from this software
    without prior written permission.
 */
-#include "Engine/engine.hpp"
-#include "Engine/SimulationEngine/Variable.hpp"
-#include "Engine/SimulationEngine/Register.hpp"
-#include "Engine/SimulationEngine/memory.hpp"
-#include "Engine/SimulationEngine/State_class.hpp"
 #include "Engine/SimulationEngine/Z3_Target_Call/Guest_Helper.hpp"
 extern "C" {
 
@@ -928,24 +923,20 @@ ULong amd64g_calculate_condition(ULong/*AMD64Condcode*/ cond,
 
 
 /* VISIBLE TO LIBVEX CLIENT */
-ULong LibVEX_GuestAMD64_get_rflags( /*IN*/const VexGuestAMD64State* vex_state)
+ULong LibVEX_GuestAMD64_get_rflags( /*IN*/ _VexGuestAMD64State* vex_state)
 {
-	ULong rflags = amd64g_calculate_rflags_all_WRK(
-		vex_state->guest_CC_OP,
-		vex_state->guest_CC_DEP1,
-		vex_state->guest_CC_DEP2,
-		vex_state->guest_CC_NDEP
+	auto rflags = z3_amd64g_calculate_rflags_all(
+		(Vns)vex_state->guest_CC_OP,
+		(Vns)vex_state->guest_CC_DEP1,
+		(Vns)vex_state->guest_CC_DEP2,
+		(Vns)vex_state->guest_CC_NDEP
 	);
-	Long dflag = vex_state->guest_DFLAG;
-	vassert(dflag == 1 || dflag == -1);
-	if (dflag == -1)
-		rflags |= (1 << 10);
-	if (vex_state->guest_IDFLAG == 1)
-		rflags |= (1 << 21);
-	if (vex_state->guest_ACFLAG == 1)
-		rflags |= (1 << 18);
 
-	return rflags;
+	Vns dflag = vex_state->guest_DFLAG;
+    rflags = ite(dflag == -1, rflags | (1 << 10), rflags);
+    rflags = ite(vex_state->guest_IDFLAG == 1, rflags | (1 << 21), rflags);
+    rflags = ite(vex_state->guest_ACFLAG == 1, rflags | (1 << 21), rflags);
+	return TRRET(rflags);
 }
 
 /* VISIBLE TO LIBVEX CLIENT */
@@ -2142,90 +2133,50 @@ VexEmNote do_put_x87(Bool moveRegs,
 	return ew;
 }
 
-
 /* Create an x87 FPU state from the guest state, as close as
    we can approximate it. */
 static
 void do_get_x87( /*IN*/VexGuestAMD64State* vex_state,
-	/*OUT*/Fpu_State* x87_state)
+    /*OUT*/Fpu_State* x87_state)
 {
-	Int        i, stno, preg;
-	UInt       tagw;
-	ULong*     vexRegs = (ULong*)(&vex_state->guest_FPREG[0]);
-	UChar*     vexTags = (UChar*)(&vex_state->guest_FPTAG[0]);
-	UInt       ftop = vex_state->guest_FTOP;
-	UInt       c3210 = vex_state->guest_FC3210;
+    Int        i, stno, preg;
+    UInt       tagw;
+    ULong* vexRegs = (ULong*)(&vex_state->guest_FPREG[0]);
+    UChar* vexTags = (UChar*)(&vex_state->guest_FPTAG[0]);
+    UInt       ftop = vex_state->guest_FTOP;
+    UInt       c3210 = vex_state->guest_FC3210;
 
-	for (i = 0; i < 14; i++)
-		x87_state->env[i] = 0;
+    for (i = 0; i < 14; i++)
+        x87_state->env[i] = 0;
 
-	x87_state->env[1] = x87_state->env[3] = x87_state->env[5]
-		= x87_state->env[13] = 0xFFFF;
-	x87_state->env[FP_ENV_STAT]
-		= toUShort(((ftop & 7) << 11) | (c3210 & 0x4700));
-	x87_state->env[FP_ENV_CTRL]
-		= toUShort(amd64g_create_fpucw(vex_state->guest_FPROUND));
+    x87_state->env[1] = x87_state->env[3] = x87_state->env[5]
+        = x87_state->env[13] = 0xFFFF;
+    x87_state->env[FP_ENV_STAT]
+        = toUShort(((ftop & 7) << 11) | (c3210 & 0x4700));
+    x87_state->env[FP_ENV_CTRL]
+        = toUShort(amd64g_create_fpucw(vex_state->guest_FPROUND));
 
-	/* Dump the register stack in ST order. */
-	tagw = 0;
-	for (stno = 0; stno < 8; stno++) {
-		preg = (stno + ftop) & 7;
-		if (vexTags[preg] == 0) {
-			/* register is empty */
-			tagw |= (3 << (2 * preg));
-			convert_f64le_to_f80le((UChar*)&vexRegs[preg],
-				&x87_state->reg[10 * stno]);
-		}
-		else {
-			/* register is full. */
-			tagw |= (0 << (2 * preg));
-			convert_f64le_to_f80le((UChar*)&vexRegs[preg],
-				&x87_state->reg[10 * stno]);
-		}
-	}
-	x87_state->env[FP_ENV_TAG] = toUShort(tagw);
+    /* Dump the register stack in ST order. */
+    tagw = 0;
+    for (stno = 0; stno < 8; stno++) {
+        preg = (stno + ftop) & 7;
+        if (vexTags[preg] == 0) {
+            /* register is empty */
+            tagw |= (3 << (2 * preg));
+            convert_f64le_to_f80le((UChar*)&vexRegs[preg],
+                &x87_state->reg[10 * stno]);
+        }
+        else {
+            /* register is full. */
+            tagw |= (0 << (2 * preg));
+            convert_f64le_to_f80le((UChar*)&vexRegs[preg],
+                &x87_state->reg[10 * stno]);
+        }
+    }
+    x87_state->env[FP_ENV_TAG] = toUShort(tagw);
 }
 
-static
-void do_get_x87( /*IN*/Regs::AMD64* vex_state,
-	/*OUT*/Fpu_State* x87_state)
-{
-	Int        i, stno, preg;
-	UInt       tagw;
-	helper::Pointer<Register<1000>, ULong>     vexRegs = (helper::Pointer<Register<1000>, ULong>)(&vex_state->guest_FPREG[0]);
-	helper::Pointer<Register<1000>, UChar>     vexTags = (helper::Pointer<Register<1000>, UChar>)(&vex_state->guest_FPTAG[0]);
-	UInt       ftop = vex_state->guest_FTOP;
-	UInt       c3210 = vex_state->guest_FC3210;
 
-	for (i = 0; i < 14; i++)
-		x87_state->env[i] = 0;
-
-	x87_state->env[1] = x87_state->env[3] = x87_state->env[5]
-		= x87_state->env[13] = 0xFFFF;
-	x87_state->env[FP_ENV_STAT]
-		= toUShort(((ftop & 7) << 11) | (c3210 & 0x4700));
-	x87_state->env[FP_ENV_CTRL]
-		= toUShort(amd64g_create_fpucw(vex_state->guest_FPROUND));
-
-	/* Dump the register stack in ST order. */
-	tagw = 0;
-	for (stno = 0; stno < 8; stno++) {
-		preg = (stno + ftop) & 7;
-		if (vexTags[preg] == 0) {
-			/* register is empty */
-			tagw |= (3 << (2 * preg));
-			convert_f64le_to_f80le((UChar*)&vexRegs[preg],
-				&x87_state->reg[10 * stno]);
-		}
-		else {
-			/* register is full. */
-			tagw |= (0 << (2 * preg));
-			convert_f64le_to_f80le((UChar*)&vexRegs[preg],
-				&x87_state->reg[10 * stno]);
-		}
-	}
-	x87_state->env[FP_ENV_TAG] = toUShort(tagw);
-}
 /*---------------------------------------------------------------*/
 /*--- Supporting functions for XSAVE/FXSAVE.                  ---*/
 /*---------------------------------------------------------------*/
@@ -2234,79 +2185,79 @@ void do_get_x87( /*IN*/Regs::AMD64* vex_state,
 /* DIRTY HELPER (reads guest state, writes guest mem) */
 /* XSAVE component 0 is the x87 FPU state. */
 void amd64g_dirtyhelper_XSAVE_COMPONENT_0
-(VexGuestAMD64State* _gst, HWord addr)
+(VexGuestAMD64State* gst, HWord addr)
 {
-	/* Derived from values obtained from
-	   vendor_id       : AuthenticAMD
-	   cpu family      : 15
-	   model           : 12
-	   model name      : AMD Athlon(tm) 64 Processor 3200+
-	   stepping        : 0
-	   cpu MHz         : 2200.000
-	   cache size      : 512 KB
-	*/
-	/* Somewhat roundabout, but at least it's simple. */
-	Regs::AMD64* gst = (Regs::AMD64*)_gst;
-	Fpu_State tmp;
-	helper::UShort_   addrS (*gst, addr);
-	helper::UChar_    addrC (*gst, addr);
-	UShort    fp_tags;
-	UInt      summary_tags;
-	Int       r, stno;
-	UShort    *srcS, *dstS;
+    /* Derived from values obtained from
+       vendor_id       : AuthenticAMD
+       cpu family      : 15
+       model           : 12
+       model name      : AMD Athlon(tm) 64 Processor 3200+
+       stepping        : 0
+       cpu MHz         : 2200.000
+       cache size      : 512 KB
+    */
+    /* Somewhat roundabout, but at least it's simple. */
+    Fpu_State tmp;
+    UShort* addrS = (UShort*)addr;
+    UChar* addrC = (UChar*)addr;
+    UShort    fp_tags;
+    UInt      summary_tags;
+    Int       r, stno;
+    UShort* srcS, * dstS;
 
-	do_get_x87(gst, &tmp);
+    do_get_x87(gst, &tmp);
 
-	/* Now build the proper fxsave x87 image from the fsave x87 image
-	   we just made. */
+    /* Now build the proper fxsave x87 image from the fsave x87 image
+       we just made. */
+    return;
 
-	addrS[0] = tmp.env[FP_ENV_CTRL]; /* FCW: fpu control word */
-	addrS[1] = tmp.env[FP_ENV_STAT]; /* FCW: fpu status word */
+    addrS[0] = tmp.env[FP_ENV_CTRL]; /* FCW: fpu control word */
+    addrS[1] = tmp.env[FP_ENV_STAT]; /* FCW: fpu status word */
 
-	/* set addrS[2] in an endian-independent way */
-	summary_tags = 0;
-	fp_tags = tmp.env[FP_ENV_TAG];
-	for (r = 0; r < 8; r++) {
-		if (((fp_tags >> (2 * r)) & 3) != 3)
-			summary_tags |= (1 << r);
-	}
-	addrC[4] = toUChar(summary_tags); /* FTW: tag summary byte */
-	addrC[5] = 0; /* pad */
+    /* set addrS[2] in an endian-independent way */
+    summary_tags = 0;
+    fp_tags = tmp.env[FP_ENV_TAG];
+    for (r = 0; r < 8; r++) {
+        if (((fp_tags >> (2 * r)) & 3) != 3)
+            summary_tags |= (1 << r);
+    }
+    addrC[4] = toUChar(summary_tags); /* FTW: tag summary byte */
+    addrC[5] = 0; /* pad */
 
-	/* FOP: faulting fpu opcode.  From experimentation, the real CPU
-	   does not write this field. (?!) */
-	addrS[3] = 0; /* BOGUS */
+    /* FOP: faulting fpu opcode.  From experimentation, the real CPU
+       does not write this field. (?!) */
+    addrS[3] = 0; /* BOGUS */
 
-	/* RIP (Last x87 instruction pointer).  From experimentation, the
-	   real CPU does not write this field. (?!) */
-	addrS[4] = 0; /* BOGUS */
-	addrS[5] = 0; /* BOGUS */
-	addrS[6] = 0; /* BOGUS */
-	addrS[7] = 0; /* BOGUS */
+    /* RIP (Last x87 instruction pointer).  From experimentation, the
+       real CPU does not write this field. (?!) */
+    addrS[4] = 0; /* BOGUS */
+    addrS[5] = 0; /* BOGUS */
+    addrS[6] = 0; /* BOGUS */
+    addrS[7] = 0; /* BOGUS */
 
-	/* RDP (Last x87 data pointer).  From experimentation, the real CPU
-	   does not write this field. (?!) */
-	addrS[8] = 0; /* BOGUS */
-	addrS[9] = 0; /* BOGUS */
-	addrS[10] = 0; /* BOGUS */
-	addrS[11] = 0; /* BOGUS */
+    /* RDP (Last x87 data pointer).  From experimentation, the real CPU
+       does not write this field. (?!) */
+    addrS[8] = 0; /* BOGUS */
+    addrS[9] = 0; /* BOGUS */
+    addrS[10] = 0; /* BOGUS */
+    addrS[11] = 0; /* BOGUS */
 
-	/* addrS[13,12] are MXCSR -- not written */
-	/* addrS[15,14] are MXCSR_MASK -- not written */
+    /* addrS[13,12] are MXCSR -- not written */
+    /* addrS[15,14] are MXCSR_MASK -- not written */
 
-	/* Copy in the FP registers, in ST order. */
-	for (stno = 0; stno < 8; stno++) {
-		srcS = (UShort*)(&tmp.reg[10 * stno]);
-		dstS = (UShort*)(&addrS[16 + 8 * stno]);
-		dstS[0] = srcS[0];
-		dstS[1] = srcS[1];
-		dstS[2] = srcS[2];
-		dstS[3] = srcS[3];
-		dstS[4] = srcS[4];
-		dstS[5] = 0;
-		dstS[6] = 0;
-		dstS[7] = 0;
-	}
+    /* Copy in the FP registers, in ST order. */
+    for (stno = 0; stno < 8; stno++) {
+        srcS = (UShort*)(&tmp.reg[10 * stno]);
+        dstS = (UShort*)(&addrS[16 + 8 * stno]);
+        dstS[0] = srcS[0];
+        dstS[1] = srcS[1];
+        dstS[2] = srcS[2];
+        dstS[3] = srcS[3];
+        dstS[4] = srcS[4];
+        dstS[5] = 0;
+        dstS[6] = 0;
+        dstS[7] = 0;
+    }
 }
 
 
@@ -2314,20 +2265,25 @@ void amd64g_dirtyhelper_XSAVE_COMPONENT_0
 /* DIRTY HELPER (reads guest state, writes guest mem) */
 /* XSAVE component 1 is the SSE state. */
 void amd64g_dirtyhelper_XSAVE_COMPONENT_1_EXCLUDING_XMMREGS
-(VexGuestAMD64State* gst, HWord addr)
+(VexGuestAMD64State* _gst, HWord addr)
 {
-	UShort* addrS = (UShort*)addr;
-	UInt    mxcsr;
+    _VexGuestAMD64State* gst = (_VexGuestAMD64State*)(_gst);
 
-	/* The only non-register parts of the SSE state are MXCSR and
-	   MXCSR_MASK. */
-	mxcsr = amd64g_create_mxcsr(gst->guest_SSEROUND);
+    //UShort* addrS = (UShort*)addr;
+    GM<UInt>  addrS(*gst, (ADDR)addr);
+    /* The only non-register parts of the SSE state are MXCSR and
+       MXCSR_MASK. */
+    Vns sseround = gst->guest_SSEROUND;
+    sseround &= 3;
+    Vns mxcsr = 0x1F80 | (sseround << 13);
 
-	addrS[12] = toUShort(mxcsr);  /* MXCSR */
-	addrS[13] = toUShort(mxcsr >> 16);
+    //mxcsr = amd64g_create_mxcsr(gst->guest_SSEROUND);
+    
+    addrS[6] = mxcsr;  /* MXCSR */
 
-	addrS[14] = 0xFFFF; /* MXCSR mask (lo16) */
-	addrS[15] = 0x0000; /* MXCSR mask (hi16) */
+    addrS[7] = 0x0000FFFF; 
+    /* MXCSR mask (lo16) */
+    /* MXCSR mask (hi16) */
 }
 
 
@@ -2433,17 +2389,22 @@ VexEmNote amd64g_dirtyhelper_XRSTOR_COMPONENT_0
 /* CALLED FROM GENERATED CODE */
 /* DIRTY HELPER (writes guest state, reads guest mem) */
 VexEmNote amd64g_dirtyhelper_XRSTOR_COMPONENT_1_EXCLUDING_XMMREGS
-(VexGuestAMD64State* gst, HWord addr)
+(VexGuestAMD64State* _gst, HWord addr)
 {
-	UShort* addrS = (UShort*)addr;
-	UInt    w32 = (((UInt)addrS[12]) & 0xFFFF)
-		| ((((UInt)addrS[13]) & 0xFFFF) << 16);
-	ULong   w64 = amd64g_check_ldmxcsr((ULong)w32);
+    _VexGuestAMD64State* gst = (_VexGuestAMD64State*)(_gst);
 
-	VexEmNote warnXMM = (VexEmNote)(w64 >> 32);
-
-	gst->guest_SSEROUND = w64 & 0xFFFFFFFFULL;
-	return warnXMM;
+	GM<UInt> addrS(*gst, addr);
+    Vns w32 = addrS[6];
+    if (w32.real()) {
+        ULong   w64 = amd64g_check_ldmxcsr((ULong)w32);
+        VexEmNote warnXMM = (VexEmNote)(w64 >> 32);
+        gst->guest_SSEROUND = w64 & 0xFFFFFFFF;
+        return warnXMM;
+    }
+    else {
+        vassert(0);
+    }
+	
 }
 
 

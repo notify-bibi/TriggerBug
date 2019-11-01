@@ -715,7 +715,7 @@ Vns z3_amd64g_calculate_condition(Vns/*AMD64Condcode*/ &cond,
 
 
 
-static inline Vns z3_amd64g_calculate_rflags_c(Vns &cc_op,
+inline Vns z3_amd64g_calculate_rflags_c(Vns &cc_op,
     Vns & cc_dep1,
     Vns & cc_dep2,
     Vns & cc_ndep)

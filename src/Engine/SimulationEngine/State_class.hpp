@@ -14,7 +14,6 @@ extern void* funcDict(void*);
 extern int eval_all(std::vector<Z3_ast>& result, solver& solv, Z3_ast nia);
 extern __m256i  m32_fast[33];
 extern __m256i  m32_mask_reverse[33];
-extern Vns      ir_temp[MAX_THREADS][400];
 extern State*	_states[MAX_THREADS];
 extern std::mutex global_state_mutex;
 extern Bool     TriggerBug_is_init ;
@@ -30,6 +29,14 @@ typedef struct ChangeView {
 
 
 
+typedef enum :UChar {
+    unknowSystem = 0b00,
+    linux,
+    windows
+}GuestSystem;
+
+
+
 class StatetTraceFlag {
 private:
     static tinyxml2::XMLDocument doc;
@@ -37,6 +44,7 @@ private:
     tinyxml2::XMLElement* doc_TriggerBug;
 public:
         VexArch	guest;
+        GuestSystem guest_system;
         UInt    MaxThreadsNum;
         const char*   MemoryDumpPath;
         ADDR    GuestStartAddress;
@@ -65,6 +73,7 @@ public:
         doc_VexControl(doc_TriggerBug->FirstChildElement("VexControl")),
         doc_debug(doc_TriggerBug->FirstChildElement("DEBUG")),
 
+        guest_system(unknowSystem),
         guest(VexArch_INVALID),
         PassSigSEGV(false),
         MemoryDumpPath("你没有这个文件"),
@@ -85,6 +94,7 @@ public:
         TraceSymbolic(false)
     {
         gGuestArch();
+        gVexArchSystem();
         gMaxThreadsNum();
         gMemoryDumpPath();
         gGuestStartAddress();
@@ -153,6 +163,22 @@ private:
     void gGuestStartAddress() {
         tinyxml2::XMLElement* _GuestStartAddress = doc_TriggerBug->FirstChildElement("GuestStartAddress");
         if (_GuestStartAddress) sscanf(_GuestStartAddress->GetText(), "%llx", &GuestStartAddress);
+    }
+
+    void gVexArchSystem() {
+        tinyxml2::XMLElement* _GuestStartAddress = doc_TriggerBug->FirstChildElement("VexArchSystem");
+        if (_GuestStartAddress) {
+
+            if (!strcmp(_GuestStartAddress->GetText(), "linux")) {
+                guest_system = linux;
+            }
+            if (!strcmp(_GuestStartAddress->GetText(), "windows")) {
+                guest_system = windows;
+            }
+            if (!strcmp(_GuestStartAddress->GetText(), "win")) {
+                guest_system = windows;
+            }
+        }
     }
 
     UInt gRegsIpOffset() {
@@ -228,8 +254,6 @@ private:
         LibVEX_default_VexArchInfo(&vai_guest);
         LibVEX_default_VexAbiInfo(&vbi);
 
-        vc.iropt_level = 1;
-
         vbi.guest_amd64_assume_gs_is_const = True;
         vbi.guest_amd64_assume_fs_is_const = True;
         vc.iropt_verbosity = 0;
@@ -269,7 +293,6 @@ private:
         vta.needs_self_check = needs_self_check;
 
 
-        vta.traceflags = NULL;
         vta.traceflags = traceflags;
         vta.pap = &pap;
     }
@@ -386,7 +409,8 @@ public:
     virtual inline void   traceStart() { return; };
     virtual inline void   traceFinish() { return; };
     virtual inline void   traceIRSB(IRSB*) { return; };
-    virtual inline void   traceIRStmt(IRStmt*) { return; };
+    virtual inline void   traceIRStmtBegin(IRStmt*) { return; };
+    virtual inline void   traceIRStmtEnd(IRStmt*) { return; };
 
     virtual inline State_Tag Ijk_call(IRJumpKind) { return Death; };
     virtual inline void   cpu_exception() { status = Death; }
@@ -397,18 +421,18 @@ public:
 
 template <class TC>
 class StatePrinter : public TC {
-    bool m_NEED_CHECK = false;
+    bool m_ppStmts = false;
 public:
     StatePrinter(const char* filename, Addr64 gse, Bool _need_record) :
         TC(filename, gse, _need_record)
     {
-        m_NEED_CHECK = ppStmts;
+        m_ppStmts = ppStmts;
     };
 
     StatePrinter(StatePrinter* father_state, Addr64 gse) :
         TC(father_state, gse)
     {
-        m_NEED_CHECK = ppStmts;
+        m_ppStmts = ppStmts;
     };
 
 
@@ -439,15 +463,26 @@ public:
 
     }
     
-    void   traceIRStmt(IRStmt* s) {
+    void   traceIRStmtBegin(IRStmt* s) {
         if (guest_start == traceIrAddrress) {
-            m_NEED_CHECK = True;
+            m_ppStmts = True;
         }
-        if (m_NEED_CHECK) {
+        if (m_ppStmts) {
             ppIRStmt(s);
         }
     };
-    void   traceIRSB(IRSB*) {
+    void   traceIRStmtEnd(IRStmt* s) {
+        if (m_ppStmts) {
+            if (s->tag == Ist_WrTmp) {
+                std::cout << ir_temp[temp_index()][s->Ist.WrTmp.tmp] << std::endl;
+            }
+            else {
+                vex_printf("\n");
+            }
+        }
+    };
+
+    void   traceIRSB(IRSB* bb) {
         if (traceJmp) {
             vex_printf("Jmp: %llx \n", guest_start);
         }

@@ -6659,6 +6659,9 @@ IRSB* do_iropt_BB(
    /* First flatten the block out, since all other
       phases assume flat code. */
 
+      /* If at level 0, stop now. */
+   if (vex_control.iropt_level < 0) return bb0;
+
    bb = flatten_BB ( bb0 );
 
    if (iropt_verbose) {
@@ -6666,7 +6669,6 @@ IRSB* do_iropt_BB(
       ppIRSB(bb);
    }
 
-   /* If at level 0, stop now. */
    if (vex_control.iropt_level <= 0) return bb;
 
    /* Now do a preliminary cleanup pass, and figure out if we also

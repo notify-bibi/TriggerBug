@@ -72,6 +72,7 @@ typedef enum :unsigned int {
     Running,
     Fork,
     Death,
+    NoDecode,
     Exception
 }State_Tag;
 

@@ -475,6 +475,7 @@ public:
         if (record)  record->write<sizeof(DataTy)>(offset);
     }
 
+
 #define B16_Ist_Put(DataTy)                                                                                     \
 inline void Ist_Put(UInt offset, DataTy  data) {                                                                \
     if (symbolic) {                                                                                             \

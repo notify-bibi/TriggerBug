@@ -328,7 +328,11 @@ def get_xmm(name):
         return int(rv.bytes()[::-1].encode('hex'),16)
     raise('fk names')
     
-
+        
+def get_ymm(name):
+    print("warning: ida not support reg: %s , set high 16 bytes zero"%(name))
+    return get_xmm("x"+name[1:])
+   
 #xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 class Dump:
@@ -367,62 +371,105 @@ class Dump:
     @staticmethod
     def getDbgMem(ea, size):
         b = b''
-        for i in range(0, (size&(-7))-1, 8):
+        for i in range(0, (size&(~7)), 8):
             b+=struct.pack("<Q", idc.get_qword(ea + i))
         
         for i in range(size&7):
-            b+=struct.pack("<B", idc.Byte(ea + (size&(-7)) + i))
+            b+=struct.pack("<B", idc.Byte(ea + (size&(~7)) + i))
             
         return b
+        
+    @staticmethod
+    def getSegName(seg, segm):
+        count=0
+        h=''
+        while (idaapi.get_segm_name(seg, 0)+h) in segm.keys():
+            count+=1
+            h = str(count)
+        name=idaapi.get_segm_name(seg, 0)+h
+        return name
+        
+    @staticmethod    
+    def getDbgMemPage(address, length):
+        data = []
+        L = 0
+        data.append([idaapi.dbg_read_memory(address, 0x400-(address&0x3ff)), address, 0x400-(address&0x3ff)])
+        L += data[-1][2]
+        for ea in range((address+0x400)&(~0x3ff), ((address + length)&(~0x3ff)) , 0x400):
+            data.append([idaapi.dbg_read_memory(ea, 0x400), ea, 0x400])
+            L += 0x400
+        data.append([idaapi.dbg_read_memory((address+length)&(~0x3ff), (address+length)&(0x3ff)), (address+length)&(~0x3ff), (address+length)&(0x3ff)])
+        L += data[-1][2]
+        assert(L==length)
+        return data
         
     def writeMem(self, binfile):
         regs = self.getRegs()
         segm = self.init_segm_mem()
         idaapi.refresh_debugger_memory()
+        print("+-------------------+----------------------+--------------------+----------+--------+")
+        print("|      segment      |          VA          |        size        |   flag   | status |")
+        print("+-------------------+----------------------+--------------------+----------+--------+")
+        
         for n in xrange(idaapi.get_segm_qty()):
             seg = idaapi.getnseg(n)
             if seg:
-                count=0
-                h=''
-                while (idaapi.get_segm_name(seg, 0)+h) in segm.keys():
-                    count+=1
-                    h = str(count)
-                name=idaapi.get_segm_name(seg, 0)+h
+                name = Dump.getSegName(seg, segm)
                 address=seg.startEA
                 length=seg.endEA-seg.startEA
                 
                 db_data=idaapi.dbg_read_memory(address,length)
+                print("| %-17s |  %18x  | %8x -> %5dkb|    %2d    |   "%(name, address, length, length/1024, seg.flags), end = "")
                 if db_data:
-                    print('ok    %20s  '%(name),"  A:0x%16x L:0x%12x (%6d kb) flag:%3d"%(address, length, length/1024, seg.flags))
                     segm[name]=[address,length,db_data]
+                    print('ok   |')
+                    length = len(db_data)
+                    segm[name]=[address,length,db_data]   
                 else:
-                    
                     if(length>=0x400):
-                    
-                        F = Dump.getDbgMem(address, 0x400-(address&0x3ff))
-                        B = b""
-                        is_end = False
-                        for ea in range((address+0x400)&(~0x3ff), ((address+length)&(~0x3ff)) - 1, 0x400):
-                            db_data = Dump.getDbgMem(ea, 0x400)
-                            if not db_data:
-                                is_end = True
-                                break
-                            B += db_data
-                        E = b"" if is_end else Dump.getDbgMem((address+length)&(~0x3ff), (address+length)&(0x400) + 1)
-                        F = b"" if F==None else F
-                        db_data = F+B+E
-                        length = len(db_data)
-                        print('ok    %20s  '%(name),"  A:0x%16x L:0x%12x (%6d kb) flag:%3d"%(address, length, length/1024, seg.flags))
-                        segm[name]=[address,length,db_data]
+                        print("war  |\n+-------------------+----------------------+--------------------+----------+--------+")
+                        data = Dump.getDbgMemPage(address, length)
+                        data.append([b"", 0, 0])
+                        is_unmap = False
+                        tmp = b''
+                        begin = address
+                        fbegin = address
+                        fsize = 0
+                        for i, d in enumerate(data):
+                            db, ea, size = d
+                            if is_unmap:
+                                if db:# 0 1
+                                    is_unmap = False
+                                    begin = ea
+                                    tmp = db
+                                    print("| %-17s |  %18x  | %8x -> %5dkb|    %2d    |  faild |"%(name, fbegin, fsize, fsize/1024, seg.flags))
+                                else: # 0 0
+                                    fsize += size
+                                    if(i==len(data)-1):
+                                        print("| %-17s |  %18x  | %8x -> %5dkb|    %2d    |  faild |"%(name, fbegin, fsize, fsize/1024, seg.flags))
+                                    pass
+                            else:
+                                if db:# 1 1
+                                    is_unmap = False
+                                    tmp += db
+                                else: # 1 0
+                                    fbegin = ea
+                                    fsize = size
+                                    is_unmap = True
+                                    if tmp:
+                                        name = Dump.getSegName(seg, segm)
+                                        segm[name]=[begin, len(tmp), tmp]    
+                                        print("| %-17s |  %18x  | %8x -> %5dkb|    %2d    |   ok   |"%(name, begin, len(tmp), len(tmp)/1024, seg.flags))
+                                    else:
+                                        print("| %-17s |  %18x  | %8x -> %5dkb|    %2d    |  faild |"%(name, fbegin, fsize, fsize/1024, seg.flags))
+                                        break
                         
-                        # d = b"" # just check
-                        # for i in range(length):
-                            # d+=idc.Byte(address+i,1)
-                        # print(db_data == d)
-                        continue
-                    
-                    print('faild %20s  '%(name),"  A:0x%16x L:0x%12x (%6d kb) flag:%3d"%(address, length, length/1024, seg.flags))
-                    pass
+                        print("+-------------------+----------------------+--------------------+----------+--------+")
+                    else:
+                        print('  faild')
+                    continue
+                 
+        print("+-------------------+----------------------+--------------------+----------+--------+")      
         #GetBptQty() GetBptEA(n):
         nameoffset_p=0
         dataoffset_p=0
@@ -454,7 +501,7 @@ class Dump:
                 else:
                     continue
                 segm['registers'+str(regAddress)]=[regAddress,len(db_data),db_data]
-                print(" (%-10s : %-5d) (%-x) (%d)"%(regName, regAddress,(INT),len(db_data)))
+                print(" (%-10s IR_offset: %-5d) (regValue: %-32x nb: %2d) "%(regName, regAddress,(INT),len(db_data)))
             except Exception as e:
                 print("-=1-=1-=1-=1- error:", e, regName, hex(INT), size,"-=1-=1-=1-=1- ")
             
@@ -503,22 +550,22 @@ class AMD64_dump(Dump):
         'mm5':getF64,
         'mm6':getF64,
         'mm7':getF64,
-        'xmm0':get_xmm,
-        'xmm1':get_xmm,
-        'xmm2':get_xmm,
-        'xmm3':get_xmm,
-        'xmm4':get_xmm,
-        'xmm5':get_xmm,
-        'xmm6':get_xmm,
-        'xmm7':get_xmm,
-        'xmm8':get_xmm,
-        'xmm9':get_xmm,
-        'xmm10':get_xmm,
-        'xmm11':get_xmm,
-        'xmm12':get_xmm,
-        'xmm13':get_xmm,
-        'xmm14':get_xmm,
-        'xmm15':get_xmm,
+        'ymm0':get_ymm,
+        'ymm1':get_ymm,
+        'ymm2':get_ymm,
+        'ymm3':get_ymm,
+        'ymm4':get_ymm,
+        'ymm5':get_ymm,
+        'ymm6':get_ymm,
+        'ymm7':get_ymm,
+        'ymm8':get_ymm,
+        'ymm9':get_ymm,
+        'ymm10':get_ymm,
+        'ymm11':get_ymm,
+        'ymm12':get_ymm,
+        'ymm13':get_ymm,
+        'ymm14':get_ymm,
+        'ymm15':get_ymm,
         'd' : lambda name : 0xffffffffffffffff if idc.GetRegValue("DF") else 0x1,
         'fs': lambda name : idaapi.dbg_get_thread_sreg_base(idc.GetCurrentThreadId(),int(cpu.fs)),
         'gs': lambda name : idaapi.dbg_get_thread_sreg_base(idc.GetCurrentThreadId(),int(cpu.gs)),

@@ -696,7 +696,7 @@ _returnaddr:
             count += 8;
         };
         if (align_r) {
-            if ((!((address + count) & 0xfff))) {
+            if ((!((address + count) & 0xfff))||!p_page) {
                 p_page = GETPAGE(address + count);
             }
             if (((*(ULong*)(data + count)) & ((1ull << (align_r << 3)) - 1)) || need_mem || p_page->unit) {
@@ -757,11 +757,16 @@ _returnaddr:
     {
         if (user != P->user) {//WNC
             if (P->user == -1ull) {
+                bool xchgbv = false;
+                while (!xchgbv) {
+                    __asm__ __volatile("xchgb %b0,%1":"=r"(xchgbv) : "m"(P->unit_mutex), "0"(xchgbv) : "memory");
+                }
                 vassert(P->unit == NULL);
                 P->unit = new Register<0x1000>(m_ctx, need_record);
                 P->user = user;
                 memset(P->unit->m_bytes, 0, 0x1000);
                 mem_change_map[ALIGN(address, 0x1000)] = P->unit;
+                P->unit_mutex = True;
                 return;
             }
             Addr64 e_address = address;

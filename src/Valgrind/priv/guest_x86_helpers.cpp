@@ -2739,112 +2739,111 @@ ULong x86g_calculate_mmx_psadbw ( ULong xx, ULong yy )
 /*--- Helpers for dealing with segment overrides.             ---*/
 /*---------------------------------------------------------------*/
 
-static inline 
-Vns get_segdescr_base (Regs::X86SegDescr& ent )
+static inline
+UInt get_segdescr_base(VexGuestX86SegDescr* ent)
 {
-   Vns lo  =  ent.LdtEnt.Bits.BaseLow;
-   Vns mid = ent.LdtEnt.Bits.BaseMid;
-   Vns hi = ent.LdtEnt.Bits.BaseHi;
-   return (hi << 24) | (mid << 16) | lo.zext(16);
+    UInt lo = 0xFFFF & (UInt)ent->LdtEnt.Bits.BaseLow;
+    UInt mid = 0xFF & (UInt)ent->LdtEnt.Bits.BaseMid;
+    UInt hi = 0xFF & (UInt)ent->LdtEnt.Bits.BaseHi;
+    return (hi << 24) | (mid << 16) | lo;
 }
 
 static inline
-Vns get_segdescr_limit (Regs::X86SegDescr& ent )
+UInt get_segdescr_limit(VexGuestX86SegDescr* ent)
 {
-    Vns lo    = ent.LdtEnt.Bits.LimitLow;
-    Vns hi    = ent.LdtEnt.Bits.LimitHi;
-    Vns limit = (hi << 16) | lo.zext(16);
-    if (ent.LdtEnt.Bits.Granularity) 
-       limit = (limit << 12) | 0xFFF;
+    UInt lo = 0xFFFF & (UInt)ent->LdtEnt.Bits.LimitLow;
+    UInt hi = 0xF & (UInt)ent->LdtEnt.Bits.LimitHi;
+    UInt limit = (hi << 16) | lo;
+    if (ent->LdtEnt.Bits.Granularity)
+        limit = (limit << 12) | 0xFFF;
     return limit;
 }
 
 /* CALLED FROM GENERATED CODE: CLEAN HELPER */
-ULong x86g_use_seg_selector ( HWord ldt, HWord gdt,
-                              UInt seg_selector, UInt virtual_addr )
+ULong x86g_use_seg_selector(HWord ldt, HWord gdt,
+    UInt seg_selector, UInt virtual_addr)
 {
-   State *state = current_state();
+    UInt tiBit, base, limit;
+    VexGuestX86SegDescr* the_descrs;
 
-   UInt tiBit, base, limit;
-   VexGuestX86SegDescr* the_descrs;
+    Bool verboze = False;
 
-   Bool verboze = False;
+    /* If this isn't true, we're in Big Trouble. */
+    vassert(8 == sizeof(VexGuestX86SegDescr));
 
-   /* If this isn't true, we're in Big Trouble. */
-   vassert(8 == sizeof(VexGuestX86SegDescr));
+    if (verboze)
+        vex_printf("x86h_use_seg_selector: "
+            "seg_selector = 0x%x, vaddr = 0x%x\n",
+            seg_selector, virtual_addr);
 
-   if (verboze) 
-      vex_printf("x86h_use_seg_selector: "
-                 "seg_selector = 0x%x, vaddr = 0x%x\n", 
-                 seg_selector, virtual_addr);
+    /* Check for wildly invalid selector. */
+    if (seg_selector & ~0xFFFF)
+        goto bad;
 
-   /* Check for wildly invalid selector. */
-   if (seg_selector & ~0xFFFF)
-      goto bad;
+    seg_selector &= 0x0000FFFF;
 
-   seg_selector &= 0x0000FFFF;
-  
-   /* Sanity check the segment selector.  Ensure that RPL=11b (least
-      privilege).  This forms the bottom 2 bits of the selector. */
-   if ((seg_selector & 3) != 3)
-      goto bad;
+    /* Sanity check the segment selector.  Ensure that RPL=11b (least
+       privilege).  This forms the bottom 2 bits of the selector. */
+    if ((seg_selector & 3) != 3)
+        goto bad;
 
-   /* Extract the TI bit (0 means GDT, 1 means LDT) */
-   tiBit = (seg_selector >> 2) & 1;
+    /* Extract the TI bit (0 means GDT, 1 means LDT) */
+    tiBit = (seg_selector >> 2) & 1;
 
-   /* Convert the segment selector onto a table index */
-   seg_selector >>= 3;
-   vassert(seg_selector >= 0 && seg_selector < 8192);
+    /* Convert the segment selector onto a table index */
+    seg_selector >>= 3;
+    vassert(seg_selector >= 0 && seg_selector < 8192);
 
-   if (tiBit == 0) {
+    if (tiBit == 0) {
 
-      /* GDT access. */
-      /* Do we actually have a GDT to look at? */
-      if (gdt == 0)
-         goto bad;
+        /* GDT access. */
+        /* Do we actually have a GDT to look at? */
+        if (gdt == 0)
+            goto bad;
 
-      /* Check for access to non-existent entry. */
-      if (seg_selector >= VEX_GUEST_X86_GDT_NENT)
-         goto bad;
+        /* Check for access to non-existent entry. */
+        if (seg_selector >= VEX_GUEST_X86_GDT_NENT)
+            goto bad;
 
-      the_descrs = (VexGuestX86SegDescr*)gdt;
-      Regs::X86SegDescr tab(*state, &the_descrs[seg_selector]);
-      base  = get_segdescr_base (tab);
-      limit = get_segdescr_limit(tab);
-   } else {
+        the_descrs = (VexGuestX86SegDescr*)gdt;
+        base = get_segdescr_base(&the_descrs[seg_selector]);
+        limit = get_segdescr_limit(&the_descrs[seg_selector]);
 
-      /* All the same stuff, except for the LDT. */
-      if (ldt == 0)
-         goto bad;
+    }
+    else {
 
-      if (seg_selector >= VEX_GUEST_X86_LDT_NENT)
-         goto bad;
+        /* All the same stuff, except for the LDT. */
+        if (ldt == 0)
+            goto bad;
 
-      the_descrs = (VexGuestX86SegDescr*)ldt;
-      Regs::X86SegDescr tab(*state, &the_descrs[seg_selector]);
-      base  = get_segdescr_base (tab);
-      limit = get_segdescr_limit(tab);
+        if (seg_selector >= VEX_GUEST_X86_LDT_NENT)
+            goto bad;
 
-   }
+        the_descrs = (VexGuestX86SegDescr*)ldt;
+        base = get_segdescr_base(&the_descrs[seg_selector]);
+        limit = get_segdescr_limit(&the_descrs[seg_selector]);
 
-   /* Do the limit check.  Note, this check is just slightly too
-      slack.  Really it should be "if (virtual_addr + size - 1 >=
-      limit)," but we don't have the size info to hand.  Getting it
-      could be significantly complex.  */
-   if (virtual_addr >= limit)
-      goto bad;
+    }
 
-   if (verboze) 
-      vex_printf("x86h_use_seg_selector: "
-                 "base = 0x%x, addr = 0x%x\n", 
-                 base, base + virtual_addr);
+    /* Do the limit check.  Note, this check is just slightly too
+       slack.  Really it should be "if (virtual_addr + size - 1 >=
+       limit)," but we don't have the size info to hand.  Getting it
+       could be significantly complex.  */
+    if (virtual_addr >= limit)
+        goto bad;
 
-   /* High 32 bits are zero, indicating success. */
-   return (ULong)( ((UInt)virtual_addr) + base );
+    if (verboze)
+        vex_printf("x86h_use_seg_selector: "
+            "base = 0x%x, addr = 0x%x\n",
+            base, base + virtual_addr);
 
- bad:
-   return 1ULL << 32;
+    /* High 32 bits are zero, indicating success. */
+    return (ULong)(((UInt)virtual_addr) + base);
+
+bad:
+    return 1ULL << 32;
 }
+
 
 
 /*---------------------------------------------------------------*/
