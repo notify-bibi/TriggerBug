@@ -381,7 +381,7 @@ public:
 	inline Vns ILGop(IRLoadG *lg);
 
     Vns get_int_const(UShort nbit);
-
+    UInt getStr(std::stringstream& st, ADDR addr);
     //backpoint add
     void hook_add(ADDR addr, TRtype::Hook_CB func);
     void hook_del(ADDR addr, TRtype::Hook_CB func);

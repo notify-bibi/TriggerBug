@@ -7,14 +7,15 @@ The engine was developed to solve some of angr's more intractable problems.
 
 	进展：
 	python前端准备重写，结构太复杂。
-	很幸运解决了并提供求解DES等一些列现代加密算法的方案。（原理层方案，非自己实现deDes）。demo example有，准备写个常见现代加密算法的crypto ANAlyzer, 方便构建exp。
-	努力构想自动合并路径的算法中。。。。。。（难） (目前只能全手动exp写合并)
+	很幸运解决了并提供求解DES等一些列现代加密算法的方案。（原理层方案，非自己实现deDes）。demo example有，某些隐式加密在原理上是解不开的，只能爆破，故准备写一个常见现代加密算法的crypto ANAlyzer, 方便构建exp，不需要hook table_base进行显式转换。
+	符号地址读写策略变更，之前是求解子集再读写，速度极慢，现在实现了超集求解算法，快速极快一毫秒不到。再根据求得的超集读写。
+	实现了xsave指令的微操作，修复xrstor指令（延迟绑定函数存在该两条指令）
+	努力构想 自动合并路径的算法。。。。。。（难肝） (目前只能全手动exp写合并)
 	计划写反ollvm控制流平坦化的算法。
 	
-	tips:  
-	不浪费你你时间
-	examples的exp还没写完全，也不推荐查看，接口还在更新。 
-	对于使用者 我不建议目前还深入了解该工具，接口还没写完整。
+	tips:  不浪费你的时间
+	examples的exp很旧了，前端也没更新用不了，也不推荐查看，接口还在更新。 
+	对于使用者 目前不建议您深入了解该工具，变更较大。
 
 ing.....。
 
@@ -62,22 +63,23 @@ Finally， Modify some simulator configurations in ```[TriggerBug-default32.xml]
 import TriggerBug
 # import z3 # Don't use the built-in z3 module
 import TriggerBug.z3 as z3
-top_state = TriggerBug.TopState(file_name=r'./easygo.xml',need_record=True)
-name:       msvcrt.dll1 address:00000000772e1000 data offset:0006a16229 length:00000b1000
-name:       msvcrt.dll2 address:0000000077392000 data offset:0006ac7229 length:0000002000
-name:       msvcrt.dll3 address:0000000077394000 data offset:0006ac9229 length:0000004000
-name:       msvcrt.dll4 address:0000000077398000 data offset:0006acd229 length:0000007000
-name:     TIB[00003EE8] address:00000000002db000 data offset:0006ad4229 length:0000008000
-name:     wow64cpu.dll2 address:0000000077493000 data offset:0006adc229 length:0000001000
-name:     wow64cpu.dll3 address:0000000077494000 data offset:0006add229 length:0000001000
-name:     wow64cpu.dll1 address:0000000077491000 data offset:0006ade229 length:0000002000
-name:     wow64cpu.dll6 address:0000000077497000 data offset:0006ae0229 length:0000002000
-name:     wow64cpu.dll4 address:0000000077495000 data offset:0006ae2229 length:0000001000
-name:     wow64cpu.dll5 address:0000000077496000 data offset:0006ae3229 length:0000001000
-name:       registers28 address:000000000000001c data offset:0006ae4229 length:0000000004
-name:          debug025 address:0000000006cad000 data offset:0006ae422d length:0000002000
-name:          debug024 address:0000000006ba8000 data offset:0006ae622d length:0000008000
-name:          debug027 address:0000000006ea0000 data offset:0006aee22d length:0000004000
+top_state = TriggerBug.TopState(file_name=r'./Roads.xml',need_record=True)
++-------------------+----------------------+--------------------+----------+--------+
+|      segment      |          VA          |        size        |   flag   | status |
++-------------------+----------------------+--------------------+----------+--------+
+| LOAD              |              400000  |      f9c ->     3kb|    16    |   ok   |
+| .text             |              401000  |    a0ae5 ->   642kb|    16    |   ok   |
+| Roads             |              4a1ae5  |      51b ->     1kb|    12    |   ok   |
+...........
+| [heap]            |              5a16d8  |      928 ->     2kb|    12    |   ok   |
+| [vvar]            |        7ffff7ffa000  |     3000 ->    12kb|    12    |   war  |
++-------------------+----------------------+--------------------+----------+--------+
+| [vvar]            |        7ffff7ffa000  |      400 ->     1kb|    12    |  faild |
++-------------------+----------------------+--------------------+----------+--------+
+| [vdso]            |        7ffff7ffd000  |     2000 ->     8kb|    12    |   ok   |
+| [stack]           |        7ffffffde000  |    21000 ->   132kb|    12    |   ok   |
+| [vsyscall]        |    ffffffffff600000  |     1000 ->     4kb|    12    |   ok   |
++-------------------+----------------------+--------------------+----------+--------+
 ........
 test ok
 ```

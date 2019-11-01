@@ -1,5 +1,6 @@
 ﻿#include "State_class.hpp"
 #include "State_class.hpp"
+#include "State_class.hpp"
 /*++
 Copyright (c) 2019 Microsoft Corporation
 Module Name:
@@ -469,6 +470,22 @@ Vns State::get_int_const(UShort nbit) {
     char buff[20];
     sprintf_s(buff, sizeof(buff), "part_%lx_%d",guest_start, res);
     return  Vns(m_ctx.bv_const(buff, nbit), nbit);
+}
+
+UInt State::getStr(std::stringstream& st, ADDR addr)
+{
+    UInt p = 0;
+    while (True) {
+        Vns b = mem.Iex_Load<Ity_I8>(addr++);
+        if (b.real()) {
+            p++;
+            st << (UChar)b;
+        }
+        else {
+            return p;
+        }
+    }
+    return -1;
 }
 
 
