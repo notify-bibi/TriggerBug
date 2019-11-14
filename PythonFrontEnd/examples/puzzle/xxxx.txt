@@ -1,0 +1,71 @@
+sat(define-fun part_40ee20_6 () (_ BitVec 8)
+  #xea)
+(define-fun part_40ee20_5 () (_ BitVec 8)
+  #x98)
+(define-fun part_40ee20_1 () (_ BitVec 8)
+  #xaa)
+(define-fun part_40ee20_2 () (_ BitVec 8)
+  #x29)
+(define-fun part_40ee20_0 () (_ BitVec 8)
+  #x7a)
+(define-fun part_40ee20_4 () (_ BitVec 8)
+  #x2a)
+(define-fun part_40ee20_3 () (_ BitVec 8)
+  #x98)
+(define-fun part_40ee20_7 () (_ BitVec 8)
+  #xab)
+
+
+State_Tag cmpr(State* s) {
+
+    _VexGuestX86State v(*s);
+    s->solv.push();
+    ADDR A = v.guest_ESI;
+    UChar enc[] = { 6,
+         1,
+         4,
+         9,
+         5,
+         0,
+         7,
+         2 };
+
+    for (int i = 0; i < 8; i++) {
+        s->add_assert(s->mem.Iex_Load<Ity_I8>(A + i) == enc[i], 1);
+    }
+    
+
+    vex_printf("checking\n\n");
+    auto dfdfs = s->solv.check();
+    if (dfdfs == sat) {
+        vex_printf("sat");
+        auto m = s->solv.get_model();
+        std::cout << m << std::endl;
+    }
+    else {
+        vex_printf("unsat??????????\n\n%d", dfdfs);
+    }
+    s->solv.pop();
+    return Death;
+
+
+
+
+    return (State_Tag)0x233;
+}
+
+
+ StatePrinter<StateX86> state(INIFILENAME, (Addr64)0, True);
+
+    _VexGuestX86State v(state);
+    ULong hexbegin = v.guest_ESI;
+    Vns hex(state.m_ctx, 0, 0);
+    for (int i=0; i < 8; i++) {
+        Vns FLAG = state.get_int_const(8);
+        state.add_assert(FLAG > (UChar)0, True);
+        state.mem.Ist_Store(hexbegin + i, FLAG);
+    }
+state.hook_add(0x040EE5A, cmpr);
+
+State::pushState(state);
+State::pool->wait();

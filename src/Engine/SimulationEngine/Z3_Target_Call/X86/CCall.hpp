@@ -536,6 +536,7 @@ inline static Vns z3_x86g_calculate_eflags_##FLAG ( UInt cc_op,                 
                     "( %u, 0x%x, 0x%x, 0x%x )\n",                                   \
                     cc_op, cc_dep1_formal, cc_dep2_formal, cc_ndep_formal );        \
          vpanic("x86g_calculate_eflags_all_WRK(X86)");                              \
+         return Vns();                                                              \
    }                                                                                \
 }
 
@@ -603,6 +604,7 @@ inline Vns _z3_x86g_calculate_condition (  Int/*X86Condcode*/ cond,
          vex_printf("x86g_calculate_condition( %u, %u, 0x%x, 0x%x, 0x%x )\n",
                     cond, cc_op, cc_dep1, cc_dep2, cc_ndep );
          vpanic("x86g_calculate_condition");
+         return Vns();
    }
 }
 

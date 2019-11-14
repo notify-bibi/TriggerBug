@@ -13,12 +13,12 @@ typedef enum :UChar {
 
 struct no_inc {};
 
-#define CP_DATA(a)                      \
-if (a.bitn <= 64) {                    \
-    this->pack.i64 = a.pack.i64;       \
+#define CP_DATA(a)                     \
+if ((a).bitn <= 64) {                  \
+    this->pack.i64 = (a).pack.i64;     \
 }                                      \
 else {                                 \
-    this->pack.m128i = a.pack.m128i;   \
+    this->pack.m128i = (a).pack.m128i; \
 }                                      
 
 
@@ -441,8 +441,9 @@ public:
             __m256i m32 = GET32(&this->pack._i8[lo >> 3]);
             if (lo & 7) {
                 UChar _n = (hi - lo + 1) >> 6;
+                UChar _s = (64 - (lo & 7));
                 for (int i = 0; i <= _n; i++) {
-                    m32.m256i_u64[i] = (m32.m256i_u64[i] >> (lo & 7)) | m32.m256i_u64[i + 1] << (64 - (lo & 7));
+                    m32.m256i_u64[i] = (m32.m256i_u64[i] >> (lo & 7)) | (m32.m256i_u64[i + 1] << _s);
                 }
             }
             if (m_kind == REAL) {
@@ -466,8 +467,9 @@ public:
             __m256i m32 = GET32(&this->pack._i8[lo >> 3]);
             if (lo & 7) {
                 UChar _n = size >> 6;
+                UChar _s = (64 - (lo & 7));
                 for (int i = 0; i <= _n; i++) {
-                    m32.m256i_u64[i] = (m32.m256i_u64[i] >> (lo & 7)) | m32.m256i_u64[i + 1] << (64 - (lo & 7));
+                    m32.m256i_u64[i] = (m32.m256i_u64[i] >> (lo & 7)) | (m32.m256i_u64[i + 1] << _s);
                 }
             }
             if (m_kind == REAL) {
@@ -482,15 +484,18 @@ public:
 
     Vns Concat(Vns & low) const {
         vassert((low.bitn + bitn) <= 256);
+        if (!low.bitn) return *this;
+        if (!bitn) return low;
         if (real() && low.real()) {
             if (low.bitn & 7) {
                 __m256i m32 = low;
                 auto base = ((low.bitn - 1) >> 6);
                 m32.m256i_u64[base] &= fastMask[low.bitn & 63];
                 auto shln = low.bitn & 63;
+                auto shrn = (64 - shln);
                 m32.m256i_u64[base] |= this->pack.m256i.m256i_u64[0] << shln;
                 for (int i = 1; i <= ((bitn-1) >> 6); i++) {
-                    m32.m256i_u64[base + i] = (this->pack.m256i.m256i_u64[i] << shln) | (this->pack.m256i.m256i_u64[i - 1] >> (64 - shln));
+                    m32.m256i_u64[base + i] = (this->pack.m256i.m256i_u64[i] << shln) | (this->pack.m256i.m256i_u64[i - 1] >> shrn);
                 }
                 return Vns(m_ctx, m32, low.bitn + bitn);
             }
@@ -515,9 +520,10 @@ public:
                     auto base = (((UInt)shn - 1) >> 6);
                     m32.m256i_u64[base] &= fastMask[(UInt)shn & 63];
                     auto shln = (UInt)shn & 63;
+                    auto shrn = (64 - shln);
                     m32.m256i_u64[base] |= this->pack.m256i.m256i_u64[0] << shln;
                     for (int i = 1; i <= ((bitn - 1) >> 6); i++) {
-                        m32.m256i_u64[base + i] = (this->pack.m256i.m256i_u64[i] << shln) | (this->pack.m256i.m256i_u64[i - 1] >> (64 - shln));
+                        m32.m256i_u64[base + i] = (this->pack.m256i.m256i_u64[i] << shln) | (this->pack.m256i.m256i_u64[i - 1] >> shrn);
                     }
                     return Vns(m_ctx, m32, bitn);
                 }
@@ -562,6 +568,7 @@ public:
     }
 
     inline Vns zext(int i) const {
+
         if (i < 0)
             return extract(bitn + i - 1, 0);
         if (m_kind == SYMB) {
@@ -648,7 +655,8 @@ public:
     {
         if (real())
             return Vns(target_ctx, (__m256i)*this, bitn);
-        return Vns(target_ctx, Z3_translate(m_ctx, *this, target_ctx), bitn);
+        Z3_ast t = *this;
+        return Vns(target_ctx, Z3_translate(m_ctx, t, target_ctx), bitn);
     }
 
     inline Vns mkFalse() { return Vns(m_ctx, Z3_mk_false(m_ctx), 1); }
@@ -726,24 +734,24 @@ static inline Vns ashr(Vns const& a, Vns const& b) {
             return Vns(a, Z3_mk_bvashr(a, a, b), a.bitn);
         else if (a.bitn > b.bitn)
             return Vns(a, Z3_mk_bvashr(a, a, b.zext(a.bitn - b.bitn)), a.bitn);
-        else if (a.bitn < b.bitn)
+        else
             return Vns(a, Z3_mk_bvashr(a, a.zext(b.bitn - a.bitn), b), a.bitn);
     }
 }
 
 
-#define Macrro_integer(Macrro, op, issigned, opname)				\
-Macrro(op, unsigned char,	issigned, ##opname);					\
-Macrro(op, unsigned short,	issigned, ##opname);					\
-Macrro(op, unsigned int,	issigned, ##opname);					\
-Macrro(op, unsigned long,	issigned, ##opname);					\
-Macrro(op, unsigned long long,	issigned, ##opname);				\
-Macrro(op, char,	issigned, ##opname);					        \
-Macrro(op, signed char,	issigned, ##opname);					    \
-Macrro(op, short,	issigned, ##opname);					        \
-Macrro(op, int,	issigned, ##opname);								\
-Macrro(op, long,	issigned, ##opname);							\
-Macrro(op, long long,	issigned, ##opname);						\
+#define Macrro_integer(Macrro, op, issigned, ...)				    \
+Macrro(op, unsigned char,	issigned, ##__VA_ARGS__);					\
+Macrro(op, unsigned short,	issigned, ##__VA_ARGS__);					\
+Macrro(op, unsigned int,	issigned, ##__VA_ARGS__);					\
+Macrro(op, unsigned long,	issigned, ##__VA_ARGS__);					\
+Macrro(op, unsigned long long,	issigned, ##__VA_ARGS__);				\
+Macrro(op, char,	issigned, ##__VA_ARGS__);					        \
+Macrro(op, signed char,	issigned, ##__VA_ARGS__);					    \
+Macrro(op, short,	issigned, ##__VA_ARGS__);					        \
+Macrro(op, int,	issigned, ##__VA_ARGS__);								\
+Macrro(op, long,	issigned, ##__VA_ARGS__);							\
+Macrro(op, long long,	issigned, ##__VA_ARGS__);						\
 
 
 
@@ -878,7 +886,7 @@ static inline Vns opname(Vns const &a, Vns const &b) {											\
 
 VnsOperator_bitwishe(/ , Z3_mk_bvudiv, U);
 Macrro_integer(VnsOperator_integer, / , z);
-VnsOperator_bitwishe(%, Z3_mk_bvsmod, U);
+VnsOperator_bitwishe(%, Z3_mk_bvurem, U);
 Macrro_integer(VnsOperator_integer, %, z);
 VnsOperator_bitwishe(*, Z3_mk_bvmul, U);
 Macrro_integer(VnsOperator_integer, *, z);

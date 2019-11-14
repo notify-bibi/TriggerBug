@@ -2740,8 +2740,9 @@ ULong x86g_calculate_mmx_psadbw ( ULong xx, ULong yy )
 /*---------------------------------------------------------------*/
 
 static inline
-UInt get_segdescr_base(VexGuestX86SegDescr* ent)
+UInt get_segdescr_base(_VexGuestX86SegDescr* ent)
 {
+    //_VexGuestX86State sg();
     UInt lo = 0xFFFF & (UInt)ent->LdtEnt.Bits.BaseLow;
     UInt mid = 0xFF & (UInt)ent->LdtEnt.Bits.BaseMid;
     UInt hi = 0xFF & (UInt)ent->LdtEnt.Bits.BaseHi;
@@ -2749,7 +2750,7 @@ UInt get_segdescr_base(VexGuestX86SegDescr* ent)
 }
 
 static inline
-UInt get_segdescr_limit(VexGuestX86SegDescr* ent)
+UInt get_segdescr_limit(_VexGuestX86SegDescr* ent)
 {
     UInt lo = 0xFFFF & (UInt)ent->LdtEnt.Bits.LimitLow;
     UInt hi = 0xF & (UInt)ent->LdtEnt.Bits.LimitHi;
@@ -2806,8 +2807,9 @@ ULong x86g_use_seg_selector(HWord ldt, HWord gdt,
             goto bad;
 
         the_descrs = (VexGuestX86SegDescr*)gdt;
-        base = get_segdescr_base(&the_descrs[seg_selector]);
-        limit = get_segdescr_limit(&the_descrs[seg_selector]);
+        _VexGuestX86SegDescr ent(*current_state(), &the_descrs[seg_selector]);
+        base = get_segdescr_base(&ent);
+        limit = get_segdescr_limit(&ent);
 
     }
     else {
@@ -2820,8 +2822,9 @@ ULong x86g_use_seg_selector(HWord ldt, HWord gdt,
             goto bad;
 
         the_descrs = (VexGuestX86SegDescr*)ldt;
-        base = get_segdescr_base(&the_descrs[seg_selector]);
-        limit = get_segdescr_limit(&the_descrs[seg_selector]);
+        _VexGuestX86SegDescr ent(*current_state(), &the_descrs[seg_selector]);
+        base = get_segdescr_base(&ent);
+        limit = get_segdescr_limit(&ent);
 
     }
 

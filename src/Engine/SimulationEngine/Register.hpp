@@ -690,7 +690,7 @@ inline void Ist_Put(UInt offset, DataTy  data) {                                
             m_ast[org_offset + length] = AstR;
             SETFAST(m_fastindex + org_offset + length, (sort_size >> 3) - fastR);
             if (fastR > length) {
-                register auto AstL = Z3_mk_extract(m_ctx, ((fastR - length) << 3) - 1, 0, m_ast[index]);
+                auto AstL = Z3_mk_extract(m_ctx, ((fastR - length) << 3) - 1, 0, m_ast[index]);
                 Z3_inc_ref(m_ctx, AstL);
                 Z3_dec_ref(m_ctx, m_ast[index]);
                 m_ast[index] = AstL;
@@ -707,7 +707,7 @@ inline void Ist_Put(UInt offset, DataTy  data) {                                
         if (fastL > 0) {
             auto index = org_offset - fastL;
             auto sort_size = Z3_get_bv_sort_size(m_ctx, Z3_get_sort(m_ctx, m_ast[index])) >> 3;
-            register auto newAst = Z3_mk_extract(m_ctx, ((fastL) << 3) - 1, 0, m_ast[index]);
+            auto newAst = Z3_mk_extract(m_ctx, ((fastL) << 3) - 1, 0, m_ast[index]);
             Z3_inc_ref(m_ctx, newAst);
             Z3_dec_ref(m_ctx, m_ast[index]);
             m_ast[index] = newAst;

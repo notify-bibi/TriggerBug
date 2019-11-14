@@ -45,7 +45,7 @@
 	</VexControl>
 	
 	<DEBUG>
-		<ppStmts>0</ppStmts>
+		<ppStmts>1</ppStmts>
 		<TraceIrAddrress>0x7FFFF</TraceIrAddrress>
 		<TraceState>1</TraceState>
 		<TraceJmp>0</TraceJmp>

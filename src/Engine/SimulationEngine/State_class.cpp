@@ -1,6 +1,4 @@
-﻿#include "State_class.hpp"
-#include "State_class.hpp"
-#include "State_class.hpp"
+﻿
 /*++
 Copyright (c) 2019 Microsoft Corporation
 Module Name:
@@ -245,14 +243,14 @@ void IR_init(VexControl& vc) {
 }
 
 
-int eval_all(std::vector<Z3_ast>& result, solver& solv, Z3_ast nia) {
+int eval_all(std::vector<Vns>& result, solver& solv, Z3_ast nia) {
     //std::cout << nia << std::endl;
     //std::cout << state.solv.assertions() << std::endl;
     result.reserve(20);
     solv.push();
     std::vector<Z3_model> mv;
     mv.reserve(20);
-    register Z3_context ctx = solv.ctx();
+    Z3_context ctx = solv.ctx();
     for (int nway = 0; ; nway++) {
         Z3_lbool b = Z3_solver_check(ctx, solv);
         if (b == Z3_L_TRUE) {
@@ -260,9 +258,8 @@ int eval_all(std::vector<Z3_ast>& result, solver& solv, Z3_ast nia) {
             Z3_model_inc_ref(ctx, m_model);
             mv.emplace_back(m_model);
             Z3_ast r = 0;
-            bool status = Z3_model_eval(ctx, m_model, nia, /*model_completion*/false, &r);
-            Z3_inc_ref(ctx, r);
-            result.emplace_back(r);
+            bool status = Z3_model_eval(ctx, m_model, nia, /*model_completion*/true, &r);
+            result.emplace_back(Vns(ctx, r));
             Z3_ast_kind rkind = Z3_get_ast_kind(ctx, r);
             if (rkind != Z3_NUMERAL_AST) {
                 std::cout << rkind << Z3_ast_to_string(ctx, nia) << std::endl;
@@ -279,12 +276,10 @@ int eval_all(std::vector<Z3_ast>& result, solver& solv, Z3_ast nia) {
         }
         else {
 #if defined(OPSTR)
-            //std::cout << "     sizeof symbolic : " << result.size() ;
             for (auto s : result) std::cout << ", " << Z3_ast_to_string(ctx, s);
 #endif
             solv.pop();
             for (auto m : mv) Z3_model_dec_ref(ctx, m);
-
             return result.size();
         }
     }
@@ -303,6 +298,13 @@ State::State(const char *filename, Addr64 gse, Bool _need_record) :
         tactic(m_ctx, "solve-eqs")&
         tactic(m_ctx, "bit-blast")&
         tactic(m_ctx, "smt")
+        /*&
+        tactic(m_ctx, "factor")&
+        tactic(m_ctx, "bv1-blast")&
+        tactic(m_ctx, "qe-sat")&
+        tactic(m_ctx, "ctx-solver-simplify")&
+        tactic(m_ctx, "nla2bv")&
+        tactic(m_ctx, "symmetry-reduce")*/
     ),
     mem(*this, &m_ctx,need_record),
     regs(m_ctx, need_record), 
@@ -320,10 +322,10 @@ State::State(const char *filename, Addr64 gse, Bool _need_record) :
  
     pap.state = (void*)(this);
     pap.n_page_mem = _n_page_mem;
-    assert(MaxThreadsNum <= MAX_THREADS);
+    assert(gMaxThreadsNum() <= MAX_THREADS);
     if (pool) 
         delete pool;
-    pool = new ThreadPool(MaxThreadsNum);
+    pool = new ThreadPool(gMaxThreadsNum());
 
     asserts.resize(5);
     branch.reserve(10);
@@ -335,18 +337,30 @@ State::State(const char *filename, Addr64 gse, Bool _need_record) :
     if (gse)
         guest_start_ep = gse;
     else {
-        if (GuestStartAddress!=-1) {
-            guest_start_ep = GuestStartAddress;
+        if (gGuestStartAddress()!=-1) {
+            guest_start_ep = gGuestStartAddress();
             if (!guest_start_ep) {
                 goto mem_ip;
             }
         }
         else {
 mem_ip:
-            guest_start_ep = regs.Iex_Get(RegsIpOffset, Ity_I64);
+            guest_start_ep = regs.Iex_Get(gRegsIpOffset(), Ity_I64);
         }
     }
     guest_start = guest_start_ep;
+
+
+    auto _TraceIrAddrress = doc_debug->FirstChildElement("TraceIrAddrress");
+    if (_TraceIrAddrress) {
+        for (auto ta = _TraceIrAddrress->FirstChildElement(); ta; ta = ta->NextSiblingElement()) {
+            ULong addr; TRControlFlags flag;
+            sscanf(ta->Attribute("addr"), "%llx", &addr);
+            sscanf(ta->Attribute("cflag"), "%llx", &flag);
+            hook_add(addr, nullptr, flag);
+        }
+    }
+
 };
 
 
@@ -354,17 +368,12 @@ State::State(State *father_state, Addr64 gse) :
     Vex_Info(*father_state),
     m_ctx(),
     m_params(m_ctx),
-    m_tactic(with(tactic(m_ctx, "simplify"), m_params)&
-        tactic(m_ctx, "sat")&
-        tactic(m_ctx, "solve-eqs")&
-        tactic(m_ctx, "bit-blast")&
-        tactic(m_ctx, "smt")
-    ),
-    mem(*this, father_state->mem, &m_ctx, need_record),
+    m_tactic(m_ctx, "smt"),
+    mem(*this, father_state->mem, &m_ctx, father_state->need_record),
     guest_start_ep(gse),
     guest_start(guest_start_ep), 
     solv(m_ctx, father_state->solv,  z3::solver::translate{}),
-    regs(father_state->regs, m_ctx, need_record),
+    regs(father_state->regs, m_ctx, father_state->need_record),
     need_record(father_state->need_record),
     status(NewState),
     VexGuestARCHState(NULL),
@@ -441,19 +450,31 @@ State::operator std::string(){
     return str;
 }
 
+bool State::get_hook(Hook_struct& hs, ADDR addr)
+{
+    auto _where = CallBackDict.lower_bound((ADDR)guest_start);
+    if (_where == CallBackDict.end()) {
+        return false;
+    }
+    hs = _where->second;
+    return true;
+}
+
 inline Vns State::getassert(z3::context &ctx) {
     if (asserts.empty()) {
         vpanic("impossible assertions num is zero");
     }
     auto it = asserts.begin();
     auto end = asserts.end();
-    auto result = *it;
-    it ++;
+    Z3_ast* args = (Z3_ast*)malloc(sizeof(Z3_ast) * asserts.size());
+    UInt i = 0;
     while (it != end) {
-        result = result && *it;
-        it ++;
+        args[i++] = it->operator Z3_ast();
+        it++;
     }
-    return result.translate(ctx).simplify();
+    Vns re = Vns(m_ctx, Z3_mk_and(m_ctx, asserts.size(), args), 1).translate(ctx);
+    free(args);
+    return re;
 }
 
 inline std::ostream & operator<<(std::ostream & out, State & n) {
@@ -468,9 +489,16 @@ Vns State::get_int_const(UShort nbit) {
     auto res = replace_const++;
     unit_lock = true;
     char buff[20];
-    sprintf_s(buff, sizeof(buff), "part_%lx_%d",guest_start, res);
+    sprintf_s(buff, sizeof(buff), "p_%d", res);
     return  Vns(m_ctx.bv_const(buff, nbit), nbit);
 }
+
+Vns State::get_int_const(UShort n, UShort nbit) {
+    char buff[20];
+    sprintf_s(buff, sizeof(buff), "p_%d", n);
+    return  Vns(m_ctx.bv_const(buff, nbit), nbit);
+}
+
 
 UInt State::getStr(std::stringstream& st, ADDR addr)
 {
@@ -480,6 +508,7 @@ UInt State::getStr(std::stringstream& st, ADDR addr)
         if (b.real()) {
             p++;
             st << (UChar)b;
+            if(!(UChar)b) return -1;
         }
         else {
             return p;
@@ -489,17 +518,6 @@ UInt State::getStr(std::stringstream& st, ADDR addr)
 }
 
 
-void State::hook_add(ADDR addr, TRtype::Hook_CB func)
-{
-    if (CallBackDict.find(addr) == CallBackDict.end()) {
-        auto P = mem.getMemPage(addr);
-        CallBackDict[addr] = Hook_struct{ func ,P->unit->m_bytes[addr & 0xfff] };
-        P->unit->m_bytes[addr & 0xfff] = 0xCC;
-    }
-    else {
-        CallBackDict[addr].cb = func;
-    }
-}
 
 void State::hook_del(ADDR addr, TRtype::Hook_CB func)
 {
@@ -548,7 +566,7 @@ inline IRSB* State::BB2IR() {
 
 
 
-inline void State::add_assert(Vns & assert,Bool ToF)
+void State::add_assert(Vns & assert,Bool ToF)
 {
     assert = assert.simplify();
     if(assert.is_bool()){
@@ -618,13 +636,11 @@ inline Vns State::CCall(IRCallee *cee, IRExpr **exp_args, IRType ty)
 
 inline void State::thread_register()
 {
-    traceStart();
     {
         std::unique_lock<std::mutex> lock(global_state_mutex);
         register_tid(GetCurrentThreadId());
     }
     auto i = temp_index();
-    _states[i] = this;
     for (int j = 0; j < 400; j++) {
         ir_temp[i][j].m_kind = REAL;
     }
@@ -639,7 +655,6 @@ inline void State::thread_unregister()
         std::unique_lock<std::mutex> lock(global_state_mutex);
         unregister_tid(GetCurrentThreadId());
     }
-    traceFinish();
 }
 
 void State::read_mem_dump(const char  *filename)
@@ -704,7 +719,7 @@ inline Vns State::ILGop(IRLoadG *lg) {
     case ILGop_Ident32:  { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I32 );            }
     case ILGop_16Uto32:  { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I16 ).zext(16);    }
     case ILGop_16Sto32:  { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I16 ).sext(16);    }
-    case ILGop_8Uto32:   { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I8  ).sext(8);    }
+    case ILGop_8Uto32:   { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I8  ).zext(8);    }
     case ILGop_8Sto32:   { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I8  ).sext(8);    }
     case ILGop_INVALID:
     default: vpanic("ppIRLoadGOp");
@@ -764,37 +779,70 @@ inline Vns State::tIRExpr(IRExpr* e)
 }
 
 
-
-
 void State::start(Bool first_bkp_pass) {
     if (this->status != NewState) {
         vex_printf("this->status != NewState");
         return;
     }
-    Bool is_first_bkp_pass = False;
-    Addr64 hook_bkp = NULL;
     status = Running;
+    traceStart();
     thread_register();
     t_index = temp_index();
+    _states[t_index] = this;
     Vns* irTemp = ir_temp[t_index]; 
     this->is_dynamic_block = false;
+    Hook_struct hs;
 
 Begin_try:
-
+    IRSB* irsb = nullptr;
     try {
         try {
             if(first_bkp_pass)
                 if ((UChar)mem.Iex_Load<Ity_I8>(guest_start) == 0xCC) {
-                    is_first_bkp_pass = True;
-                    goto bkp_pass;
+                    if (get_hook(hs, guest_start)) {
+                        setFlag(hs.cflag);
+                        goto bkp_pass;
+                    }
+                    else {
+                        goto SigTRAP;
+                    }
                 }
+
             for (;;) {
 For_Begin:
-                IRSB* irsb = BB2IR();
+                irsb = BB2IR();
                 traceIRSB(irsb);
                 guest_start_of_block = guest_start;
                 //ppIRSB(irsb);
-For_Begin_NO_Trans:
+                goto For_Begin_NO_Trans;
+            deal_bkp:
+                {
+                    if (hs.cb) {
+                        status = (hs.cb)(this);//State::delta maybe changed by callback
+                    }
+                    if (status != Running) {
+                        goto EXIT;
+                    }
+                    if (delta) {
+                        guest_start = guest_start + delta;
+                        delta = 0;
+                        goto For_Begin;
+                    }
+                    else {
+                    bkp_pass:
+                        __m256i m32 = mem.Iex_Load<Ity_V256>(guest_start);
+                        m32.m256i_i8[0] = hs.original;
+                        pap.start_swap = 2;
+                        vta.guest_bytes = (UChar*)(&m32);
+                        vta.guest_bytes_addr = (Addr64)((ADDR)guest_start);
+                        auto max_insns = pap.guest_max_insns;
+                        pap.guest_max_insns = 1;
+                        irsb = LibVEX_FrontEnd(&vta, &res, &pxControl);
+                        //ppIRSB(irsb);
+                        pap.guest_max_insns = max_insns;
+                    }
+                }
+            For_Begin_NO_Trans:
                 for (UInt stmtn = 0; stmtn < irsb->stmts_used; stmtn++) {
                     IRStmt *s = irsb->stmts[stmtn];
                     traceIRStmtBegin(s);
@@ -812,29 +860,30 @@ For_Begin_NO_Trans:
                         if ((cas.oldHi != IRTemp_INVALID) && (cas.expdHi)) {//double
                             Vns expdHi = tIRExpr(cas.expdHi);
                             Vns dataHi = tIRExpr(cas.dataHi);
-                            irTemp[cas.oldHi] = mem.Iex_Load(addr, length2ty(expdLo.bitn));
-                            irTemp[cas.oldLo] = mem.Iex_Load(addr, length2ty(expdLo.bitn));
+                            irTemp[cas.oldHi] = mem.Iex_Load(addr, (IRType)(expdLo.bitn));
+                            irTemp[cas.oldLo] = mem.Iex_Load(addr, (IRType)(expdLo.bitn));
                             mem.Ist_Store(addr, dataLo);
                             mem.Ist_Store(addr + (dataLo.bitn >> 3), dataHi);
                         }
                         else {//single
-                            irTemp[cas.oldLo] = mem.Iex_Load(addr, length2ty(expdLo.bitn));
+                            irTemp[cas.oldLo] = mem.Iex_Load(addr, (IRType)(expdLo.bitn));
                             mem.Ist_Store(addr, dataLo);
                         }
                         unit_lock = true;
                         break;
                     }
                     case Ist_Exit: {
-                        Vns guard = tIRExpr(s->Ist.Exit.guard);
+                        Vns guard = tIRExpr(s->Ist.Exit.guard).simplify();
+                        std::vector<Vns> guard_result;
                         if (guard.real()) {
                             if ((UChar)guard) {
-Exit_guard_true:
+                            Exit_guard_true:
                                 if (s->Ist.Exit.jk != Ijk_Boring
                                     && s->Ist.Exit.jk != Ijk_Call
                                     && s->Ist.Exit.jk != Ijk_Ret
                                     )
                                 {
-                                    ppIRSB(irsb);
+                                    //ppIRSB(irsb);
                                     status = Ijk_call(s->Ist.Exit.jk);
                                     if (status != Running) {
                                         goto EXIT;
@@ -847,80 +896,34 @@ Exit_guard_true:
                                 }
                                 else {
                                     guest_start = s->Ist.Exit.dst->Ico.U64;
-                                    hook_bkp = NULL;
                                     goto For_Begin;
                                 }
                             }
-                            break;
                         }
                         else {
-                            int rgurd[2];
-                            std::vector<Z3_ast> guard_result;
-                            int num_guard = eval_all(guard_result, solv, guard);
-                            if (num_guard == 1) {
-                                Z3_get_numeral_int(m_ctx, guard_result[0], &rgurd[0]);
-                                Z3_dec_ref(m_ctx, guard_result[0]);
-                                if (rgurd[0]) {
-                                    add_assert(guard, True);
-                                    goto Exit_guard_true;
-                                }
-                                else {
-                                    add_assert(guard, False);
-                                }
+                            switch (eval_all(guard_result, solv, guard)) {
+                            case 0: { status = Death; goto EXIT; }
+                            case 1: {
+                                if (((UChar)guard_result[0].simplify()) & 1) { goto Exit_guard_true; };
+                                break;
                             }
-                            else if (num_guard == 2) {
-                                Z3_dec_ref(m_ctx, guard_result[0]);
-                                Z3_dec_ref(m_ctx, guard_result[1]);
-                                struct _bs {
-                                    ADDR addr;
-                                    Z3_ast _s_addr;
-                                    bool _not;
-                                };
-                                std::vector<_bs> bs_v;
-                                bs_v.emplace_back(_bs{ s->Ist.Exit.dst->Ico.U64 ,NULL, True });
-
-                                Vns _next = tIRExpr(irsb->next);
-                                if (stmtn == irsb->stmts_used - 1) {
-                                    if (_next.real()) {
-                                        bs_v.emplace_back(_bs{ _next ,_next, False });
-                                    }
-                                    else {
-                                        std::vector<Z3_ast> next_result;
-                                        eval_all(next_result, solv, _next);
-                                        for (auto&& re : next_result) {
-                                            uint64_t r_next;
-                                            Z3_get_numeral_uint64(m_ctx, re, &r_next);
-                                            bs_v.emplace_back(_bs{ r_next ,_next, False });
-                                        }
-                                    }
-                                }
-                                else {
-                                    while (irsb->stmts[stmtn]->tag != Ist_IMark) { stmtn--; };
-                                    bs_v.emplace_back(_bs{ guest_start + irsb->stmts[stmtn]->Ist.IMark.len , NULL, False });
-                                }
-                                
-                                for (auto && _bs : bs_v) {
-                                    State *state = ForkState(_bs.addr);
-                                    if (state) {
-                                        branch.emplace_back(state);
-                                        state->add_assert(guard.translate(*state), _bs._not);
-                                        if (_bs._s_addr) {
-                                            auto _next_a = Vns(state->m_ctx, Z3_translate(m_ctx, _bs._s_addr, *state));
-                                            auto _next_b = Vns(state->m_ctx, Z3_mk_unsigned_int64(state->m_ctx, _bs.addr, Z3_get_sort(state->m_ctx, _next_a)));
-                                            state->add_assert_eq(_next_a, _next_b);
-                                        }
-                                    }
-                                }
-                                status = Fork; goto EXIT;
+                            case 2: {
+                                branchChunks.emplace_back(BranchChunk(s->Ist.Exit.dst->Ico.U64, Vns(m_ctx, 0), guard, True));
+                                status = Fork;
+                                break;
                             }
-                            else {
-                                status = Death; goto EXIT;
+                            default: { vpanic("??"); }
                             }
                         }
+                        break;
                     }
                     case Ist_NoOp: break;
                     case Ist_IMark: {
                         guest_start = (ADDR)s->Ist.IMark.addr; 
+                        if (status == Fork) {
+                            branchChunks.emplace_back(BranchChunk(guest_start, Vns(m_ctx, 0), branchChunks[0].m_guard, False));
+                            goto EXIT;
+                        }
                         if (this->is_dynamic_block) {
                             this->is_dynamic_block = false;
                             goto For_Begin;// fresh changed block
@@ -958,7 +961,6 @@ Exit_guard_true:
                         }
                         break;
                     }
-
                     case Ist_LoadG: {
                         IRLoadG *lg = s->Ist.LoadG.details;
                         auto guard = tIRExpr(lg->guard);
@@ -980,15 +982,16 @@ Exit_guard_true:
                         else {
                             auto addr = tIRExpr(sg->addr);
                             auto data = tIRExpr(sg->data);
-                            mem.Ist_Store(addr, ite(guard == 1, mem.Iex_Load(addr, length2ty(data.bitn)), data));
+                            mem.Ist_Store(addr, ite(guard == 1, mem.Iex_Load(addr, (IRType)(data.bitn)), data));
                         }
                         break;
                     }
                     case Ist_MBE:  /*内存总线事件，fence/请求/释放总线锁*/
                     case Ist_LLSC:
-                    default:
+                    default: {
                         vex_printf("what ppIRStmt %d\n", s->tag);
                         vpanic("what ppIRStmt");
+                    }
                     }
 
                     traceIRStmtEnd(s);
@@ -996,51 +999,17 @@ Exit_guard_true:
 
                 switch (irsb->jumpkind) {
                 case Ijk_Boring:        break;
-                case Ijk_Call:            break;
+                case Ijk_Call:          break;
                 case Ijk_Ret:           break;
                 case Ijk_SigTRAP:        {
-bkp_pass:
-                    auto _where = CallBackDict.lower_bound((ADDR)guest_start);
-                    if (_where != CallBackDict.end()) {
-                        if (hook_bkp) {
-                            guest_start = hook_bkp;
-                            hook_bkp = NULL;
-                            goto For_Begin;
-                        }
-                        else {
-                            if (!is_first_bkp_pass) {
-                                if (_where->second.cb) {
-                                    status = (_where->second.cb)(this);//State::delta maybe changed by callback
-                                }
-                                if (status != Running) {
-                                    goto EXIT;
-                                }
-                            }
-                            else {
-                                is_first_bkp_pass = False;
-                            }
-                            if (delta) {
-                                guest_start = guest_start + delta;
-                                delta = 0;
-                                goto For_Begin;
-                            }
-                            else {
-                                __m256i m32 = mem.Iex_Load<Ity_V256>(guest_start);
-                                m32.m256i_i8[0] = _where->second.original;
-                                pap.start_swap = 2;
-                                vta.guest_bytes = (UChar *)(&m32);
-                                vta.guest_bytes_addr = (Addr64)((ADDR)guest_start);
-                                auto max_insns = pap.guest_max_insns;
-                                pap.guest_max_insns = 1;
-                                irsb = LibVEX_FrontEnd(&vta, &res, &pxControl);
-                                //ppIRSB(irsb);
-                                pap.guest_max_insns = max_insns;
-                                hook_bkp = (ADDR)guest_start + irsb->stmts[0]->Ist.IMark.len;
-                                irsb->jumpkind = Ijk_SigTRAP;
-                                goto For_Begin_NO_Trans;
-                            }
-                        }
+                    SigTRAP:
+                    if (get_hook(hs, guest_start)) {
+                        setFlag(hs.cflag);
+                        goto deal_bkp;
                     }
+                    status = Death;
+                    vex_printf("Ijk_SigTRAP: %p", guest_start);
+                    goto EXIT;
                 }
                 case Ijk_NoDecode:{
                     vex_printf("Ijk_NoDecode: %p", guest_start);
@@ -1050,7 +1019,7 @@ bkp_pass:
 /*Ijk_Sys_syscall, Ijk_ClientReq,Ijk_Yield, Ijk_EmWarn, Ijk_EmFail, Ijk_MapFail, Ijk_InvalICache, 
 Ijk_FlushDCache, Ijk_NoRedir, Ijk_SigILL, Ijk_SigSEGV, Ijk_SigBUS, Ijk_SigFPE, Ijk_SigFPE_IntDiv, Ijk_SigFPE_IntOvf, 
 Ijk_Sys_int32,Ijk_Sys_int128, Ijk_Sys_int129, Ijk_Sys_int130, Ijk_Sys_int145, Ijk_Sys_int210, Ijk_Sys_sysenter:*/
-                default:
+                default: {
                     status = Ijk_call(irsb->jumpkind);
                     if (status != Running) {
                         goto EXIT;
@@ -1061,36 +1030,49 @@ Ijk_Sys_int32,Ijk_Sys_int128, Ijk_Sys_int129, Ijk_Sys_int130, Ijk_Sys_int145, Ij
                         goto For_Begin;
                     }
                 }
+                }
 Isb_next:
-                Vns next = tIRExpr(irsb->next);
-                if (next.real()) {
-                    guest_start = next;
+                Vns next = tIRExpr(irsb->next).simplify();
+                if (status == Fork) {
+                    if (next.real()) {
+                        branchChunks.emplace_back(BranchChunk(next, Vns(m_ctx, 0), branchChunks[0].m_guard, False));
+                    }
+                    else {
+                        std::vector<Vns> result;
+                        switch (eval_all(result, solv, next)) {
+                        case 0: status = Death; goto EXIT;
+                        case 1:
+                            branchChunks.emplace_back(BranchChunk(result[0].simplify(), Vns(m_ctx, 0), branchChunks[0].m_guard, False));
+                            break;
+                        default:
+                            for (auto re : result) {
+                                branchChunks.emplace_back(BranchChunk(re.simplify(), next, branchChunks[0].m_guard, False));
+                            }
+                            break;
+                        }
+                    }
+                    goto EXIT;
                 }
                 else {
-                    std::vector<Z3_ast> result;
-                    switch (eval_all(result, solv, next)) {
-                    case 0: next.~Vns(); goto EXIT;
-                    case 1:
-                        uint64_t u64_Addr;
-                        Z3_get_numeral_uint64(m_ctx, result[0], &u64_Addr);
-                        guest_start = u64_Addr;
-                        Z3_dec_ref(m_ctx, result[0]);
-                        break;
-                    default:
-                        for (auto && re : result) {
-                            uint64_t rgurd;
-                            Z3_get_numeral_uint64(m_ctx, re, &rgurd);
-
-                            State *state = ForkState(rgurd);
-                            if (state) {
-                                branch.emplace_back(state);
-                                state->add_assert_eq(Vns(m_ctx, Z3_translate(m_ctx, re, *state)), next.translate(*state));
-                            }
-                            Z3_dec_ref(m_ctx, re);
+                    if (next.real()) {
+                        guest_start = next;
+                    }
+                    else {
+                        std::vector<Vns> result;
+                        switch (eval_all(result, solv, next)) {
+                        case 0: status = Death; goto EXIT;
+                        case 1: {
+                            guest_start = result[0].simplify();
+                            break;
                         }
-                        status = Fork;
-                        next.~Vns();
-                        goto EXIT;
+                        default: {
+                            for (auto re : result) {
+                                branchChunks.emplace_back(BranchChunk(re.simplify(), next, Vns(m_ctx, 0), True));
+                            }
+                            status = Fork;
+                            goto EXIT;
+                        }
+                        };
                     }
                 }
             };
@@ -1121,18 +1103,26 @@ Isb_next:
         status = Running;
         goto Begin_try;
     }
-
-
 EXIT:
     unit_lock = true;
+
+
+    auto b = branchChunks.begin();
+    auto e = branchChunks.end();
+    while (b != e) {
+        branch.emplace_back(b->getState(*this));
+        b++;
+    }
     thread_unregister();
+    traceFinish();
+    branchGo();
 }
 
 void State::branchGo()
 {
     for(auto b : branch){
         State::pool->enqueue([b] {
-            b->start(True);
+            b->start(False);
             });
     }
 }
@@ -1347,14 +1337,168 @@ void StatePrinter<TC>::spIRStmt(const IRStmt* s)
     }
 }
 
-#include "Compress.hpp"
+
+inline Bool State::treeCompress(z3::context& ctx, Addr64 Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid, ChangeView& change_view, std::hash_map<ULong, Vns>& change_map, std::hash_map<UShort, Vns>& regs_change_map) {
+    ChangeView _change_view = { this, &change_view };
+    if (branch.empty()) {
+        for (auto av : avoid) {
+            if (av == status) {
+                return 2;
+            }
+        }
+        if (guest_start == Target_Addr && status == Target_Tag) {
+            ChangeView* _cv = &_change_view;
+            do {
+                auto state = _cv->elders;
+                if (state->regs.record) {
+                    for (auto offset : *state->regs.record) {
+                        auto _Where = regs_change_map.lower_bound(offset);
+                        if (_Where == regs_change_map.end()) {
+                            regs_change_map[offset] = state->regs.Iex_Get(offset, Ity_I64, ctx);
+                        }
+                    }
+                }
+                for (auto mcm : state->mem.mem_change_map) {
+                    vassert(mcm.second->record != NULL);
+                    for (auto offset : *(mcm.second->record)) {
+                        auto _Where = change_map.lower_bound(offset);
+                        if (_Where == change_map.end()) {
+                            auto Address = mcm.first + offset;
+                            auto p = state->mem.getMemPage(Address);
+                            vassert(p->user == state->mem.user);
+                            change_map[Address] = p->unit->Iex_Get(offset, Ity_I64, ctx);
+                        }
+                    }
+                }
+                _cv = _cv->front;
+            } while (_cv->front && _cv->front->elders);
+            return False;
+        }
+        return True;
+    }
+    Bool has_branch = False;
+    std::vector<State*> ::iterator it = branch.begin();
+    while (it != branch.end()) {
+        std::hash_map<ULong, Vns> _change_map;
+        _change_map.reserve(20);
+        std::hash_map<UShort, Vns> _regs_change_map;
+        _change_map.reserve(20);
+        Bool _has_branch = (*it)->treeCompress(ctx, Target_Addr, Target_Tag, avoid, _change_view, _change_map, _regs_change_map);
+        if (!has_branch) {
+            has_branch = _has_branch;
+        }
+        for (auto map_it : _change_map) {
+            auto _Where = change_map.lower_bound(map_it.first);
+            if (_Where == change_map.end()) {
+                change_map[map_it.first] = map_it.second;
+            }
+            else {
+                if (map_it.second.real() && (_Where->second.real()) && ((ULong)(map_it.second) == (ULong)(_Where->second))) {
+
+                }
+                else {
+                    _Where->second = Vns(ctx, Z3_mk_ite(ctx, (*it)->getassert(ctx), map_it.second, _Where->second), 64);
+                }
+            }
+        }
+        for (auto map_it : _regs_change_map) {
+            auto _Where = regs_change_map.lower_bound(map_it.first);
+            if (_Where == regs_change_map.end()) {
+                regs_change_map[map_it.first] = map_it.second;
+            }
+            else {
+                if (((map_it.second.real()) && (_Where->second.real())) && ((ULong)(map_it.second) == (ULong)(_Where->second))) {
+
+                }
+                else {
+                    _Where->second = Vns(ctx, Z3_mk_ite(ctx, (*it)->getassert(ctx), map_it.second, _Where->second), 64);
+                }
+            }
+        }
+        if (_has_branch == False) {
+            delete* it;
+            it = branch.erase(it);
+            continue;
+        }
+        else if (_has_branch == 2) {
+            delete* it;
+            it = branch.erase(it);
+            continue;
+        }
+        it++;
+    }
+    if (branch.empty() && status == Fork) {
+        return 2;
+    }
+    else {
+        return has_branch;
+    }
+}
+
+
+
+void State::compress(Addr64 Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid)
+{
+    ChangeView change_view = { NULL, NULL };
+    std::hash_map<ULong, Vns> change_map;
+    change_map.reserve(20);
+    std::hash_map<UShort, Vns> regs_change_map;
+    regs_change_map.reserve(30);
+    auto flag = treeCompress(m_ctx, Target_Addr, Target_Tag, avoid, change_view, change_map, regs_change_map);
+    if (flag != True) {
+        for (auto map_it : change_map) {
+#ifdef  _DEBUG
+            std::cout << std::hex << map_it.first << map_it.second << std::endl;
+#endif //  _DEBUG
+            mem.Ist_Store(map_it.first, map_it.second);
+        };
+        for (auto map_it : regs_change_map) {
+#ifdef  _DEBUG
+            std::cout << std::hex << map_it.first << map_it.second << std::endl;
+#endif //  _DEBUG
+            regs.Ist_Put(map_it.first, map_it.second);
+        };
+        guest_start = Target_Addr;
+        branchChunks.clear();
+        status = NewState;
+    }
+    else if (flag == True) {
+        State* one_state = new State(this, Target_Addr);
+        for (auto map_it : change_map) {
+#ifdef  _DEBUG
+            std::cout << std::hex << map_it.first << map_it.second << std::endl;
+#endif //  _DEBUG
+            one_state->mem.Ist_Store(map_it.first, map_it.second.translate(*one_state));
+        };
+
+        for (auto map_it : regs_change_map) {
+#ifdef  _DEBUG
+            std::cout << std::hex << map_it.first << map_it.second << std::endl;
+#endif //  _DEBUG
+            one_state->regs.Ist_Put(map_it.first, map_it.second.translate(*one_state));
+        };
+        branch.emplace_back(one_state);
+    }
+
+
+
+}
+
+
+State* BranchChunk::getState(State& fstate)
+{
+    State* ns = fstate.ForkState(m_oep);
+    if (m_sym_addr.symbolic()) {
+        ns->add_assert_eq(m_sym_addr.translate(ns->m_ctx), Vns(ns->m_ctx, m_oep));
+    }
+    if (m_guard.symbolic()) {
+        ns->add_assert(m_guard.translate(ns->m_ctx), m_tof);
+    }
+    return ns;
+}
 
 
 #include "Unop.hpp"
 #include "Binop.hpp"
 #include "Triop.hpp"
 #include "Qop.hpp"
-
-
-
-

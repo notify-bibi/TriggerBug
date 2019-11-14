@@ -1,6 +1,7 @@
 #ifndef State_class_defs
 #define State_class_defs
 
+
 #include "../engine.hpp"
 #include "Variable.hpp"
 #include "Register.hpp"
@@ -21,6 +22,7 @@ extern Bool     TriggerBug_is_init ;
 
 
 class State;
+class GraphView;
 
 typedef struct ChangeView {
     State* elders;
@@ -36,35 +38,42 @@ typedef enum :UChar {
 }GuestSystem;
 
 
+typedef enum :ULong {
+    CF_None = 0,
+    CF_ppStmts = 1ull,
+    CF_traceJmp = 1ull << 1,
+    CF_traceState = 1ull << 2,
+    CF_TraceSymbolic = 1ull << 3,
+    CF_PassSigSEGV = 1ull << 4,
+}TRControlFlags;
+
+
+typedef struct _Hook {
+    TRtype::Hook_CB cb;
+    UChar original;
+    TRControlFlags cflag;
+}Hook_struct;
+
 
 class StatetTraceFlag {
+    friend GraphView;
 private:
     static tinyxml2::XMLDocument doc;
     tinyxml2::XMLError err;
     tinyxml2::XMLElement* doc_TriggerBug;
+    TRControlFlags traceflags;
 public:
         VexArch	guest;
         GuestSystem guest_system;
-        UInt    MaxThreadsNum;
         const char*   MemoryDumpPath;
-        ADDR    GuestStartAddress;
-        UInt    RegsIpOffset;
-        bool    PassSigSEGV;
 
         tinyxml2::XMLElement* doc_VexControl;
             VexRegisterUpdates iropt_register_updates_default;
             VexRegisterUpdates pxControl;
             Int iropt_level;
-            Int traceflags;
             UInt guest_max_insns;
 
         tinyxml2::XMLElement* doc_debug;
-public:     bool ppStmts;
-            Addr64 traceIrAddrress;
-            bool traceJmp;
-            bool traceState;
-            bool TraceSymbolic;
-
 
 public:
     StatetTraceFlag(const char* filename):
@@ -75,51 +84,43 @@ public:
 
         guest_system(unknowSystem),
         guest(VexArch_INVALID),
-        PassSigSEGV(false),
         MemoryDumpPath("你没有这个文件"),
-        GuestStartAddress(-1),
-        MaxThreadsNum(16),
-        RegsIpOffset(0xfffff),
 
         iropt_register_updates_default(VexRegUpdSpAtMemAccess),
         pxControl(VexRegUpdSpAtMemAccess),
         iropt_level(2),
-        traceflags(0),
         guest_max_insns(100),
+        traceflags(CF_None)
 
-        ppStmts(false),
-        traceIrAddrress(NULL),
-        traceJmp(false),
-        traceState(false),
-        TraceSymbolic(false)
     {
         gGuestArch();
         gVexArchSystem();
-        gMaxThreadsNum();
         gMemoryDumpPath();
         gGuestStartAddress();
         gPassSigSEGV();
-        RegsIpOffset = gRegsIpOffset();
+        gRegsIpOffset();
 
         if (doc_VexControl) {
             giropt_register_updates_default();
             giropt_level();
             gpxControl();
-            giropt_level(); 
             gguest_max_insns();
-            gtraceflags();
         }
         if (doc_debug) {
+            bool traceState = false, traceJmp = false, ppStmts = false, TraceSymbolic = false;
             auto _ppStmts = doc_debug->FirstChildElement("ppStmts");
-            auto _TraceIrAddrress = doc_debug->FirstChildElement("TraceIrAddrress");
             auto _TraceState = doc_debug->FirstChildElement("TraceState");
             auto _TraceJmp = doc_debug->FirstChildElement("TraceJmp");
             auto _TraceSymbolic = doc_debug->FirstChildElement("TraceSymbolic");
-            if (_TraceIrAddrress) sscanf(_TraceIrAddrress->GetText(), "%llx", &traceIrAddrress);
+
             if (_TraceState) _TraceState->QueryBoolText(&traceState);
             if (_TraceJmp) _TraceJmp->QueryBoolText(&traceJmp);
             if (_ppStmts) _ppStmts->QueryBoolText(&ppStmts);
             if (_TraceSymbolic) _TraceSymbolic->QueryBoolText(&TraceSymbolic);
+            if (traceState) setFlag(CF_traceState);
+            if (traceJmp) setFlag(CF_traceJmp);
+            if (ppStmts) setFlag(CF_ppStmts);
+            if (TraceSymbolic) setFlag(CF_TraceSymbolic);
         }
         
     }
@@ -128,57 +129,23 @@ public:
     {
         *this = f;
     }
-
-private:
-
-    tinyxml2::XMLError loadFile(const char* filename) {
-        tinyxml2::XMLError error = doc.LoadFile(filename);
-        if (error != tinyxml2::XML_SUCCESS) {
-            printf("Error filename %s    at:%s line %d", filename, __FILE__, __LINE__);
-            exit(1);
-        }
-        return error;
+    inline bool getFlag(TRControlFlags t) const {
+        return traceflags & t;
     }
 
-    void gGuestArch() {
-        auto _VexArch = doc_TriggerBug->FirstChildElement("VexArch");
-        if(_VexArch) sscanf(_VexArch->GetText(), "%x", &guest);
+    inline void setFlag(TRControlFlags t) {
+        *(ULong*)&traceflags |= t;
     }
 
-    void gMaxThreadsNum() {
+    inline void unsetFlag(TRControlFlags t) {
+        *(ULong*)&traceflags &= ~t;
+    }
+
+    UInt gMaxThreadsNum() {
+        UInt    MaxThreadsNum = 16;
         tinyxml2::XMLElement* _MaxThreadsNum = doc_TriggerBug->FirstChildElement("MaxThreadsNum");
-        if(_MaxThreadsNum) _MaxThreadsNum->QueryIntText((Int*)(&MaxThreadsNum));
-    }
-
-    void gMemoryDumpPath() {
-        tinyxml2::XMLElement* _MemoryDumpPath = doc_TriggerBug->FirstChildElement("MemoryDumpPath");
-        if (_MemoryDumpPath) MemoryDumpPath = _MemoryDumpPath->GetText();
-    }
-
-    void gPassSigSEGV(){
-        auto _PassSigSEGV = doc_TriggerBug->FirstChildElement("PassSigSEGV");
-        if (_PassSigSEGV)_PassSigSEGV->QueryBoolText((bool*)(&PassSigSEGV));
-    }
-
-    void gGuestStartAddress() {
-        tinyxml2::XMLElement* _GuestStartAddress = doc_TriggerBug->FirstChildElement("GuestStartAddress");
-        if (_GuestStartAddress) sscanf(_GuestStartAddress->GetText(), "%llx", &GuestStartAddress);
-    }
-
-    void gVexArchSystem() {
-        tinyxml2::XMLElement* _GuestStartAddress = doc_TriggerBug->FirstChildElement("VexArchSystem");
-        if (_GuestStartAddress) {
-
-            if (!strcmp(_GuestStartAddress->GetText(), "linux")) {
-                guest_system = linux;
-            }
-            if (!strcmp(_GuestStartAddress->GetText(), "windows")) {
-                guest_system = windows;
-            }
-            if (!strcmp(_GuestStartAddress->GetText(), "win")) {
-                guest_system = windows;
-            }
-        }
+        if (_MaxThreadsNum) _MaxThreadsNum->QueryIntText((Int*)(&MaxThreadsNum));
+        return MaxThreadsNum;
     }
 
     UInt gRegsIpOffset() {
@@ -199,6 +166,65 @@ private:
     }
 
 
+    UInt gtraceflags() {
+        tinyxml2::XMLElement* _traceflags = doc_VexControl->FirstChildElement("traceflags");
+        if (_traceflags) return _traceflags->IntText();
+        return 0;
+    }
+
+    ADDR gGuestStartAddress() {
+        ULong GuestStartAddress = -1;
+        tinyxml2::XMLElement* _GuestStartAddress = doc_TriggerBug->FirstChildElement("GuestStartAddress");
+        if (_GuestStartAddress) sscanf(_GuestStartAddress->GetText(), "%llx", &GuestStartAddress);
+        return GuestStartAddress;
+    }
+
+private:
+
+    tinyxml2::XMLError loadFile(const char* filename) {
+        tinyxml2::XMLError error = doc.LoadFile(filename);
+        if (error != tinyxml2::XML_SUCCESS) {
+            printf("error: %d Error filename %s    at:%s line %d", error,  filename, __FILE__, __LINE__);
+            exit(1);
+        }
+        return error;
+    }
+
+    void gGuestArch() {
+        auto _VexArch = doc_TriggerBug->FirstChildElement("VexArch");
+        if(_VexArch) sscanf(_VexArch->GetText(), "%x", &guest);
+    }
+
+
+    void gMemoryDumpPath() {
+        tinyxml2::XMLElement* _MemoryDumpPath = doc_TriggerBug->FirstChildElement("MemoryDumpPath");
+        if (_MemoryDumpPath) MemoryDumpPath = _MemoryDumpPath->GetText();
+    }
+
+    void gPassSigSEGV(){
+        auto _PassSigSEGV = doc_TriggerBug->FirstChildElement("PassSigSEGV");
+        bool PassSigSEGV = false;
+        if (_PassSigSEGV)_PassSigSEGV->QueryBoolText((bool*)(&PassSigSEGV));
+        if (PassSigSEGV) setFlag(CF_PassSigSEGV);
+    }
+
+
+    void gVexArchSystem() {
+        tinyxml2::XMLElement* _GuestStartAddress = doc_TriggerBug->FirstChildElement("VexArchSystem");
+        if (_GuestStartAddress) {
+
+            if (!strcmp(_GuestStartAddress->GetText(), "linux")) {
+                guest_system = linux;
+            }
+            if (!strcmp(_GuestStartAddress->GetText(), "windows")) {
+                guest_system = windows;
+            }
+            if (!strcmp(_GuestStartAddress->GetText(), "win")) {
+                guest_system = windows;
+            }
+        }
+    }
+
     void giropt_register_updates_default() {
         tinyxml2::XMLElement* _iropt_register_updates_default = doc_VexControl->FirstChildElement("iropt_register_updates_default");
         if (_iropt_register_updates_default) sscanf(_iropt_register_updates_default->GetText(), "%x", &iropt_register_updates_default);
@@ -218,11 +244,6 @@ private:
         auto _guest_max_insns = doc_TriggerBug->FirstChildElement("guest_max_insns");
         if (_guest_max_insns) guest_max_insns = _guest_max_insns->IntText();
     }
-
-    void gtraceflags() {
-        tinyxml2::XMLElement* _traceflags = doc_VexControl->FirstChildElement("traceflags");
-        if (_traceflags) traceflags = _traceflags->IntText();
-    }
 };
 
 
@@ -236,6 +257,7 @@ extern "C" ULong x86g_use_seg_selector(HWord ldt, HWord gdt, UInt seg_selector, 
 
 class Vex_Info :public StatetTraceFlag {
 
+    friend GraphView;
 protected:
     Pap pap;
     VexTranslateResult res;
@@ -293,7 +315,7 @@ private:
         vta.needs_self_check = needs_self_check;
 
 
-        vta.traceflags = traceflags;
+        vta.traceflags = gtraceflags();
         vta.pap = &pap;
     }
 
@@ -311,8 +333,28 @@ public:
     }
 };
 
+
+class BranchChunk {
+public:
+    ADDR m_oep;
+    Vns  m_sym_addr;
+    Vns  m_guard;
+    bool m_tof;
+
+    BranchChunk(ADDR oep, Vns& sym_addr, Vns& guard, bool tof) :
+        m_oep(oep),
+        m_sym_addr(sym_addr),
+        m_guard(guard),
+        m_tof(tof)
+    {
+    }
+    State* getState(State& fstate);
+};
+
+
 class State:public Vex_Info {
     friend MEM;
+    friend GraphView;
 protected:
     static std::hash_map<ADDR, Hook_struct> CallBackDict;
     static std::hash_map<ADDR/*static table base*/, TRtype::TableIdx_CB> TableIdxDict;
@@ -350,6 +392,7 @@ public:
 	MEM mem;//多线程设置相同user，不同state设置不同user
 	ULong runed = 0;
 	std::vector <State*> branch;
+    std::vector<BranchChunk> branchChunks;
 	State_Tag status;
 
 
@@ -358,10 +401,10 @@ public:
     void read_mem_dump(const char*);
 
 	~State() ;
-	void thread_register();
-	void thread_unregister();
+    static void thread_register();
+    static void thread_unregister();
 	inline IRSB* BB2IR();
-	inline void add_assert(Vns &assert, Bool ToF);
+	void add_assert(Vns &assert, Bool ToF);
     inline void add_assert(Vns& assert) { add_assert(assert, True); };
 	inline void add_assert_eq(Vns &eqA, Vns &eqB);
     virtual void start(Bool first_bkp_pass);
@@ -381,10 +424,8 @@ public:
 	inline Vns ILGop(IRLoadG *lg);
 
     Vns get_int_const(UShort nbit);
+    Vns get_int_const(UShort n, UShort nbit);
     UInt getStr(std::stringstream& st, ADDR addr);
-    //backpoint add
-    void hook_add(ADDR addr, TRtype::Hook_CB func);
-    void hook_del(ADDR addr, TRtype::Hook_CB func);
     //read static_table from symbolic address  定义 index 和 该常量数组 之间的关系 不然z3只能逐一爆破 如DES的4个静态表
     static inline void idx2Value_Decl_add(Addr64 addr, TRtype::TableIdx_CB func) { TableIdxDict[addr] = func; };
     static inline void idx2Value_Decl_del(Addr64 addr, TRtype::TableIdx_CB func) { TableIdxDict.erase(TableIdxDict.find(addr)); };
@@ -394,16 +435,35 @@ public:
     inline operator Z3_context() { return m_ctx; }
     inline ADDR get_cpu_ip() { return guest_start; }
     inline ADDR get_state_ep() { return guest_start_ep; }
+    inline ADDR get_start_of_block() { return guest_start_of_block; }
 	operator std::string();
 
 
     static void pushState(State& s) {
         pool->enqueue([&s] {
-            s.start(False);
+            s.start(True);
             });
     }
 
-
+    //backpoint add
+    void hook_add(ADDR addr, TRtype::Hook_CB func = nullptr, TRControlFlags cflag = CF_None)
+    {
+        if (CallBackDict.find(addr) == CallBackDict.end()) {
+            auto P = mem.getMemPage(addr);
+            CallBackDict[addr] = Hook_struct{ func ,P->unit->m_bytes[addr & 0xfff] , cflag };
+            P->unit->m_bytes[addr & 0xfff] = 0xCC;
+        }
+        else {
+            if (func){
+                CallBackDict[addr].cb = func;
+            }
+            if (cflag != CF_None) {
+                CallBackDict[addr].cflag = cflag;
+            }
+        }
+    }
+    bool get_hook(Hook_struct& hs, ADDR addr);
+    void hook_del(ADDR addr, TRtype::Hook_CB func);
     //interface :
 
     virtual inline void   traceStart() { return; };
@@ -418,21 +478,17 @@ public:
 }; 
 
 
-
 template <class TC>
 class StatePrinter : public TC {
-    bool m_ppStmts = false;
 public:
     StatePrinter(const char* filename, Addr64 gse, Bool _need_record) :
         TC(filename, gse, _need_record)
     {
-        m_ppStmts = ppStmts;
     };
 
     StatePrinter(StatePrinter* father_state, Addr64 gse) :
         TC(father_state, gse)
     {
-        m_ppStmts = ppStmts;
     };
 
 
@@ -453,26 +509,23 @@ public:
     void spIRStmt(const IRStmt* s);
 
     void   traceStart() {
-        if (traceState)
+        if (getFlag(CF_traceState))
             std::cout << "\n+++++++++++++++ Thread ID: " << GetCurrentThreadId() << "  address: " << std::hex << guest_start << "  Started +++++++++++++++\n" << std::endl;
     };
 
     void   traceFinish() {
-        if (traceState)
+        if (getFlag(CF_traceState))
             std::cout << "\n+++++++++++++++ Thread ID: " << GetCurrentThreadId() << "  address: " << std::hex << guest_start << "  OVER +++++++++++++++\n" << std::endl;
 
     }
     
     void   traceIRStmtBegin(IRStmt* s) {
-        if (guest_start == traceIrAddrress) {
-            m_ppStmts = True;
-        }
-        if (m_ppStmts) {
+        if (getFlag(CF_ppStmts)) {
             ppIRStmt(s);
         }
     };
     void   traceIRStmtEnd(IRStmt* s) {
-        if (m_ppStmts) {
+        if (getFlag(CF_ppStmts)) {
             if (s->tag == Ist_WrTmp) {
                 std::cout << ir_temp[temp_index()][s->Ist.WrTmp.tmp] << std::endl;
             }
@@ -483,10 +536,16 @@ public:
     };
 
     void   traceIRSB(IRSB* bb) {
-        if (traceJmp) {
+        if (getFlag(CF_traceJmp)) {
             vex_printf("Jmp: %llx \n", guest_start);
         }
     };
+
+
+    virtual State* ForkState(ADDR ges) {
+        return new StatePrinter<TC>(this, ges);
+    };
+
 };
 
 

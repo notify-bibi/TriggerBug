@@ -287,7 +287,7 @@ extern "C" {
    }                                                                                                        \
 }
 
-#define ACTIONS_ADOX(MASKcf,MASKpf,MASKaf,MASKzf,MASKsf,MASKof,DATA_BITS,DATA_UTYPE,FLAGNAME)               \
+#define ACTIONS_ADOX(MASKcf,MASKpf,MASKaf,MASKzf,MASKsf,MASKof,DATA_BITS,DATA_UTYPE)               \
 {                                                                                                           \
    PREAMBLE(DATA_BITS);                                                                                     \
    {                                                                                                        \
@@ -623,6 +623,7 @@ inline static Vns z3_amd64g_calculate_rflags_##FLAG(                            
             "( %llu, 0x%llx, 0x%llx, 0x%llx )\n",                                        \
             cc_op, cc_dep1_formal, cc_dep2_formal, cc_ndep_formal);                      \
         vpanic("amd64g_calculate_rflags_all_WRK(AMD64)");                                \
+        return Vns();                                                                    \
     }                                                                                    \
 }
 
@@ -691,6 +692,7 @@ static inline Vns _z3_amd64g_calculate_condition(ULong/*AMD64Condcode*/ cond,
             "( %llu, %llu, 0x%llx, 0x%llx, 0x%llx )\n",
             cond, cc_op, cc_dep1, cc_dep2, cc_ndep);
         vpanic("amd64g_calculate_condition");
+        return Vns();
     }
 }
 

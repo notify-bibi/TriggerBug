@@ -86,7 +86,7 @@ private:
             UInt _pcur;
             UInt nb = 0;
             if (_BitScanForward64(&N, m_sym_mask)) {
-                m_sym_ml[0] = shift_mask{ N,((ADDR)1) << N };
+                m_sym_ml[0] = shift_mask{(UChar)N,((ADDR)1) << N };
                 m_sym_ml_n = 1;
                 _pcur = N;
                 tmp_target_bit_blast = ((ADDR)1);
@@ -98,7 +98,7 @@ private:
                             m_sym_ml[m_sym_ml_n - 1].mask |= ((ADDR)1) << N;
                         }
                         else {
-                            m_sym_ml[m_sym_ml_n - 1] = shift_mask{ N,((ADDR)1) << N };
+                            m_sym_ml[m_sym_ml_n - 1] = shift_mask{ (UChar)N,((ADDR)1) << N };
                             m_sym_ml_n++;
                         }
                         tmp_target_bit_blast |= ((ADDR)1) << (nb++);
@@ -112,7 +112,7 @@ private:
 
         parse_sign:
             for (auto s : am.m_sign_mask) {
-                m_sign_ml[m_sign_ml_n++] = shift_mask{ nb, s };
+                m_sign_ml[m_sign_ml_n++] = shift_mask{ (UChar)nb, s };
                 tmp_target_bit_blast |= ((ADDR)1) << (nb++);
             }
             tmp_target_bit_blast += 1;
@@ -185,7 +185,9 @@ private:
         expr base = expr(m_ctx);
         m_offset = _ast2base(base, m_symbolic, 0, 6);
         //std::cout << idx << std::endl;
-        if (base.simplify().is_numeral_u64(m_base)) {
+        ULong _m_base;
+        if (base.simplify().is_numeral_u64(_m_base)) {
+            m_base = _m_base;
 #if defined(NEED_VERIFY)
             if (m_base > 100) {
                 Int is_right;
@@ -534,7 +536,7 @@ public:
             return m_lbool == Z3_L_TRUE;
         }
 
-        inline void operator++()
+        inline void operator++(int)
         {
             Z3_ast eq = Z3_mk_eq(m_ctx, m_addr, last_avoid_addr);
             Z3_inc_ref(m_ctx, eq);
@@ -600,7 +602,7 @@ public:
         return (UChar*)GETPAGE((ULong)(address + 0x1000))->unit->m_bytes;
     }
 
-    inline PAGE* getMemPage(register ADDR address) {
+    inline PAGE* getMemPage(ADDR address) {
         return GETPAGE((ULong)address);
     }
 
@@ -719,7 +721,7 @@ public:
     template<IRType ty>
     Vns Iex_Load(Z3_ast address) {
         addressingMode am(expr(m_state.m_ctx, address));
-        Z3_ast reast;
+        Z3_ast reast = nullptr;
         auto kind = am.analysis_kind();
         if (kind != addressingMode::cant_analysis) {
 #ifdef TRACE_AM

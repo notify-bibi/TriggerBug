@@ -220,6 +220,7 @@ void LibVEX_Init (
 
    vassert(vcon->iropt_verbosity >= 0);
    vassert(vcon->iropt_level <= 2);
+   vassert(vcon->iropt_level >= -1);
    vassert(vcon->iropt_unroll_thresh >= 0);
    vassert(vcon->iropt_unroll_thresh <= 400);
    vassert(vcon->guest_max_insns >= 1);

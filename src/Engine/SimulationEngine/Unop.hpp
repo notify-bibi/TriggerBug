@@ -1,21 +1,33 @@
 
 using namespace z3;
+
+
+Vns bsf(Vns &s) {
+    Vns re(s, (ULong)64, s.bitn);
+    for (int i = s.bitn - 1; i != -1; i--) {
+        re = ite(s.extract(i, i).toZ3Bool(), Vns(s, (UInt)i), re);
+    }
+}
+
+Vns bsr(Vns& s) {
+    Vns re(s, (UInt)64);
+    for (int i = 0; i < s.bitn; i++) {
+        re = ite(s.extract(i, i).toZ3Bool(), Vns(s, (UInt)i), re);
+    }
+}
+
 static inline int CountLeadingZeros32(uint32_t n) {
 #if defined(_MSC_VER)
-    unsigned long result = 0;  // NOLINT(runtime/int)
+    unsigned long result = 0;
     if (_BitScanReverse(&result, n)) {
         return 31 - result;
     }
     return 32;
 #elif defined(__GNUC__)
-
-    // Handle 0 as a special case because __builtin_clz(0) is undefined.
     if (n == 0) {
         return 32;
     }
     return __builtin_clz(n);
-#else
-    return CountLeadingZeros32Slow(n);
 #endif
 }
 
@@ -24,32 +36,17 @@ static inline int MostSignificantBit32(uint32_t n) {
 }
 
 static inline int CountLeadingZeros64(uint64_t n) {
-#if defined(_MSC_VER) && defined(_M_X64)
-    // MSVC does not have __builtin_clzll. Use _BitScanReverse64.
-    unsigned long result = 0;  // NOLINT(runtime/int)
+#if defined(_MSC_VER)
+    unsigned long result = 0; 
     if (_BitScanReverse64(&result, n)) {
         return 63 - result;
     }
     return 64;
-#elif defined(_MSC_VER)
-    // MSVC does not have __builtin_clzll. Compose two calls to _BitScanReverse
-    unsigned long result = 0;  // NOLINT(runtime/int)
-    if ((n >> 32) && _BitScanReverse(&result, n >> 32)) {
-        return 31 - result;
-    }
-    if (_BitScanReverse(&result, n)) {
-        return 63 - result;
-    }
-    return 64;
 #elif defined(__GNUC__)
-
-    // Handle 0 as a special case because __builtin_clzll(0) is undefined.
     if (n == 0) {
         return 64;
     }
     return __builtin_clzll(n);
-#else
-    return CountLeadingZeros64Slow(n);
 #endif
 }
 
@@ -360,56 +357,65 @@ inline Vns State::T_Unop(IROp op, IRExpr* arg1) {
     }
     {
 dosymbol:
-    switch (op) {
-    case Iop_1Uto8: return Iop_ZEXT(1, 8);
-    case Iop_1Uto32:return Iop_ZEXT(1, 32);
-    case Iop_1Uto64:return Iop_ZEXT(1, 64);
-    case Iop_1Sto8: return Iop_SEXT(1, 8);
-    case Iop_1Sto16:return Iop_SEXT(1, 16);
-    case Iop_1Sto32:return Iop_SEXT(1, 32);
-    case Iop_1Sto64:return Iop_SEXT(1, 64);
+        switch (op) {
+        case Iop_1Uto8: return Iop_ZEXT(1, 8);
+        case Iop_1Uto32:return Iop_ZEXT(1, 32);
+        case Iop_1Uto64:return Iop_ZEXT(1, 64);
+        case Iop_1Sto8: return Iop_SEXT(1, 8);
+        case Iop_1Sto16:return Iop_SEXT(1, 16);
+        case Iop_1Sto32:return Iop_SEXT(1, 32);
+        case Iop_1Sto64:return Iop_SEXT(1, 64);
 
-    case Iop_32to1:vassert(a.bitn == 32); return Vns(m_ctx, Z3_mk_extract(m_ctx, 0, 0, a), 1);
-    case Iop_64to1:vassert(a.bitn == 64); return Vns(m_ctx, Z3_mk_extract(m_ctx, 0, 0, a), 1);
+        case Iop_32to1:vassert(a.bitn == 32); return Vns(m_ctx, Z3_mk_extract(m_ctx, 0, 0, a), 1);
+        case Iop_64to1:vassert(a.bitn == 64); return Vns(m_ctx, Z3_mk_extract(m_ctx, 0, 0, a), 1);
 
-    case Iop_Not1: return Vns(m_ctx, Z3_mk_bvnot(m_ctx, a), 1);
-    case Iop_Not8: return Vns(m_ctx, Z3_mk_bvnot(m_ctx, a), 8);
-    case Iop_Not16:return Vns(m_ctx, Z3_mk_bvnot(m_ctx, a), 16);
-    case Iop_Not32:return Vns(m_ctx, Z3_mk_bvnot(m_ctx, a), 32);
-    case Iop_Not64:return Vns(m_ctx, Z3_mk_bvnot(m_ctx, a), 64);
+        case Iop_Not1: return Vns(m_ctx, Z3_mk_bvnot(m_ctx, a), 1);
+        case Iop_Not8: return Vns(m_ctx, Z3_mk_bvnot(m_ctx, a), 8);
+        case Iop_Not16:return Vns(m_ctx, Z3_mk_bvnot(m_ctx, a), 16);
+        case Iop_Not32:return Vns(m_ctx, Z3_mk_bvnot(m_ctx, a), 32);
+        case Iop_Not64:return Vns(m_ctx, Z3_mk_bvnot(m_ctx, a), 64);
 
-    case Iop_8Sto16:return Iop_SEXT(8, 16);
-    case Iop_8Sto32:return Iop_SEXT(8, 32);
-    case Iop_8Sto64:return Iop_SEXT(8, 64);
-    case Iop_8Uto16:return Iop_ZEXT(8, 16);
-    case Iop_8Uto32:return Iop_ZEXT(8, 32);
-    case Iop_8Uto64:return Iop_ZEXT(8, 64);
+        case Iop_8Sto16:return Iop_SEXT(8, 16);
+        case Iop_8Sto32:return Iop_SEXT(8, 32);
+        case Iop_8Sto64:return Iop_SEXT(8, 64);
+        case Iop_8Uto16:return Iop_ZEXT(8, 16);
+        case Iop_8Uto32:return Iop_ZEXT(8, 32);
+        case Iop_8Uto64:return Iop_ZEXT(8, 64);
 
-    case Iop_16Sto32:return Iop_SEXT(16, 32);
-    case Iop_16Sto64:return Iop_SEXT(16, 64);
-    case Iop_16Uto32:return Iop_ZEXT(16, 32);
-    case Iop_16Uto64:return Iop_ZEXT(16, 64);
+        case Iop_16Sto32:return Iop_SEXT(16, 32);
+        case Iop_16Sto64:return Iop_SEXT(16, 64);
+        case Iop_16Uto32:return Iop_ZEXT(16, 32);
+        case Iop_16Uto64:return Iop_ZEXT(16, 64);
                                            
-    case Iop_32Sto64:return Iop_SEXT(32, 64);
-    case Iop_32Uto64:return Iop_ZEXT(32, 64);
-    /*case Iop_32UtoV128:return Vns(ast2z3_vec32x4(zext((expr)a, 128)), 128);
-    case Iop_64UtoV128:return Vns(ast2z3_vec64x2(zext((expr)a, 128)), 128);*/
+        case Iop_32Sto64:return Iop_SEXT(32, 64);
+        case Iop_32Uto64:return Iop_ZEXT(32, 64);
+        case Iop_32UtoV128:return Iop_ZEXT(32, 128);
+        case Iop_64UtoV128:return Iop_ZEXT(64, 128);
 
-    case Iop_32to8:return Vns(m_ctx, Z3_mk_extract(m_ctx, 7, 0, a), 8);
-    case Iop_64to8:return Vns(m_ctx, Z3_mk_extract(m_ctx, 7, 0, a), 8);
-    case Iop_64to16:return Vns(m_ctx, Z3_mk_extract(m_ctx, 15, 0, a), 16);
-    case Iop_32to16:return Vns(m_ctx, Z3_mk_extract(m_ctx, 15, 0, a), 16);
-    case Iop_64to32:return Vns(m_ctx, Z3_mk_extract(m_ctx, 31, 0, a), 32);
-    case Iop_V128to32:return Vns(m_ctx, Z3_mk_extract(m_ctx, 31, 0, a), 32);
-    case Iop_V128to64:return Vns(m_ctx, Z3_mk_extract(m_ctx, 63, 0, a), 64);
-    case Iop_128to64:return Vns(m_ctx, Z3_mk_extract(m_ctx, 63, 0, a), 64);
-    case Iop_16HIto8:return Vns(m_ctx, Z3_mk_extract(m_ctx, 15, 8, a), 8);
-    case Iop_32HIto16:return Vns(m_ctx, Z3_mk_extract(m_ctx, 31, 16, a), 16);
-    case Iop_64HIto32:return Vns(m_ctx, Z3_mk_extract(m_ctx, 63, 32, a), 32);
-    case Iop_V128HIto64:return Vns(m_ctx, Z3_mk_extract(m_ctx, 127, 64, a), 64);
-    case Iop_128HIto64:return Vns(m_ctx, Z3_mk_extract(m_ctx, 127, 64, a), 64);
-    }
+        case Iop_32to8:return Vns(m_ctx, Z3_mk_extract(m_ctx, 7, 0, a), 8);
+        case Iop_64to8:return Vns(m_ctx, Z3_mk_extract(m_ctx, 7, 0, a), 8);
+        case Iop_64to16:return Vns(m_ctx, Z3_mk_extract(m_ctx, 15, 0, a), 16);
+        case Iop_32to16:return Vns(m_ctx, Z3_mk_extract(m_ctx, 15, 0, a), 16);
+        case Iop_64to32:return Vns(m_ctx, Z3_mk_extract(m_ctx, 31, 0, a), 32);
+        case Iop_V128to32:return Vns(m_ctx, Z3_mk_extract(m_ctx, 31, 0, a), 32);
+        case Iop_V128to64:return Vns(m_ctx, Z3_mk_extract(m_ctx, 63, 0, a), 64);
+        case Iop_128to64:return Vns(m_ctx, Z3_mk_extract(m_ctx, 63, 0, a), 64);
+        case Iop_16HIto8:return Vns(m_ctx, Z3_mk_extract(m_ctx, 15, 8, a), 8);
+        case Iop_32HIto16:return Vns(m_ctx, Z3_mk_extract(m_ctx, 31, 16, a), 16);
+        case Iop_64HIto32:return Vns(m_ctx, Z3_mk_extract(m_ctx, 63, 32, a), 32);
+        case Iop_V128HIto64:return Vns(m_ctx, Z3_mk_extract(m_ctx, 127, 64, a), 64);
+        case Iop_128HIto64:return Vns(m_ctx, Z3_mk_extract(m_ctx, 127, 64, a), 64);
 
+
+        case Iop_GetMSBs8x16: {
+            Vns re(m_ctx, 0, 0);
+            for (UInt i = 7; i < 16 * 8; i += 8) {
+                re = a.extract(i, i).Concat(re);
+            }
+            return re;
+        }
+                            
+        };
     }
 FAILD:
     ppIROp(op);

@@ -22,8 +22,7 @@ std::mutex      global_user_mutex;
 
 using namespace z3;
 
-// 自实现的(不确定是否正确) 
-// 解析ast表达式: ast(symbolic address) = numreal(base) + symbolic(offset) 用于cpu符号内存寻址
+// ast(symbolic address) = numreal(base) + symbolic(offset) 
 expr addressingMode::_ast2base(expr& base,
     expr const& e, 
     UInt deep, UInt max_deep
@@ -232,6 +231,7 @@ addressingMode::sbit_struct addressingMode::check_is_extract(expr const& _e, UIn
     context& c = _e.ctx();
     UInt idx = _idx;
     expr e = _e;
+    //std::cout << e;
     while (True) {
         sort so = e.get_sort();
         UInt size = so.bv_size();
@@ -269,7 +269,7 @@ addressingMode::sbit_struct addressingMode::check_is_extract(expr const& _e, UIn
 
             case Z3_OP_BSHL: {
                 ULong shift;
-                if (e.arg(1).is_numeral_u64(shift)) {
+                if (e.arg(1).simplify().is_numeral_u64(shift)) {
                     if (idx < shift) {
                         return sbit_struct{ NULL, false, 0 };
                     }
@@ -277,12 +277,13 @@ addressingMode::sbit_struct addressingMode::check_is_extract(expr const& _e, UIn
                         e = e.arg(0);
                         idx = idx - shift;
                     }
+                    break;
                 }
-                break;
+                goto ret;
             }
             case Z3_OP_BLSHR: {
                 ULong shift;
-                if (e.arg(1).is_numeral_u64(shift)) {
+                if (e.arg(1).simplify().is_numeral_u64(shift)) {
                     if ((size - idx) <= shift) {
                         return sbit_struct{ NULL, false, 0 };
                     }
@@ -290,12 +291,13 @@ addressingMode::sbit_struct addressingMode::check_is_extract(expr const& _e, UIn
                         e = e.arg(0);
                         idx = idx + shift;
                     }
+                    break;
                 }
-                break;
+                goto ret;
             }
             case Z3_OP_BASHR: {
                 ULong shift;
-                if (e.arg(1).is_numeral_u64(shift)) {
+                if (e.arg(1).simplify().is_numeral_u64(shift)) {
                     e = e.arg(0);
                     if ((size - idx) <= shift) {
                         idx = size - 1;
@@ -303,8 +305,9 @@ addressingMode::sbit_struct addressingMode::check_is_extract(expr const& _e, UIn
                     else {
                         idx = idx + shift;
                     }
+                    break;
                 }
-                break;
+                goto ret;
             }
             case Z3_OP_CONCAT: {
                 auto max = e.num_args();
@@ -373,9 +376,6 @@ static inline int dec_used_ref(PAGE *pt) {
         pt->unit_mutex = true;
         return True;
     }else{
-        if (pt->unit)
-            delete pt->unit;
-        delete pt;
         return False;
     }
 }
@@ -415,8 +415,12 @@ MEM::~MEM() {
                     UShort index = page_point->index;
 
                     PAGE* pt = pt_point->pt[index];
-                    dec_used_ref(pt);
-
+                    if (!dec_used_ref(pt)) {
+                        if (pt->unit) {
+                            delete pt->unit;
+                        }
+                        delete pt;
+                    }
                     auto free_page_point = page_point;
                     page_point = page_point->next;
                     delete free_page_point;
@@ -778,7 +782,9 @@ _returnaddr:
             (*page)->unit = new Register<0x1000>(*(P->unit), m_ctx, need_record);
 
             //--P->used_point;
-            dec_used_ref(P);
+            if (!dec_used_ref(P)) {
+                P = (*page);
+            }
             P = (*page);
             P->user = user;
             P->used_point = 1;

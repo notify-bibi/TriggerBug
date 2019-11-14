@@ -2,6 +2,7 @@
 #define HEADER_H
 
 #define HOSTARCH VexArchAMD64
+
 #define GUEST_IS_64 
 #define __i386__
 
@@ -77,27 +78,14 @@ typedef enum :unsigned int {
 }State_Tag;
 
 
-typedef enum :unsigned int {
-    TRMemory,TRRegister
-}Storage;
 
 namespace TRtype {
 typedef State_Tag   (*Hook_CB)         (State *);
-//得到的ast无需添加Z3_inc_ref
+//得到的ast无需Z3_inc_ref
 typedef Z3_ast      (*TableIdx_CB) (State*, ADDR /*base*/, Z3_ast /*idx*/);
 }
 
-typedef struct _Hook {
-    TRtype::Hook_CB cb;
-    UChar original;
-}Hook_struct;
 
-typedef struct {
-    Storage kind;
-    ADDR address;
-    ADDR r_offset;
-    IRType ty;
-}Hook_Replace;
 
 #if defined(_DEBUG)
 #undef dassert
@@ -181,11 +169,8 @@ inline __m256i _mm256_not_si256(__m256i a) {
 }
 
 inline Z3_ast Z3_mk_neq(Z3_context ctx, Z3_ast a, Z3_ast b) {
-    auto eq = Z3_mk_eq(ctx, a, b);
-    Z3_inc_ref(ctx, eq);
-    auto re = Z3_mk_not(ctx, eq);
-    Z3_dec_ref(ctx, eq);
-    return re;
+    Z3_ast args[2] = { a, b };
+    return Z3_mk_distinct(ctx, 2, args);;
 }
 
 extern std::string replace(const char *pszSrc, const char *pszOld, const char *pszNew);
