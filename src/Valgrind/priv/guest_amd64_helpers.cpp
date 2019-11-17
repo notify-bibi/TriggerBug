@@ -2270,7 +2270,8 @@ void amd64g_dirtyhelper_XSAVE_COMPONENT_1_EXCLUDING_XMMREGS
     _VexGuestAMD64State* gst = (_VexGuestAMD64State*)(_gst);
 
     //UShort* addrS = (UShort*)addr;
-    GM<UInt>  addrS(*gst, (ADDR)addr);
+    GMP<UInt>  addrS(*gst, (ADDR)addr);
+
     /* The only non-register parts of the SSE state are MXCSR and
        MXCSR_MASK. */
     Vns sseround = gst->guest_SSEROUND;
@@ -2393,7 +2394,7 @@ VexEmNote amd64g_dirtyhelper_XRSTOR_COMPONENT_1_EXCLUDING_XMMREGS
 {
     _VexGuestAMD64State* gst = (_VexGuestAMD64State*)(_gst);
 
-	GM<UInt> addrS(*gst, addr);
+	GMP<UInt> addrS(*gst, addr);
     Vns w32 = addrS[6];
     if (w32.real()) {
         ULong   w64 = amd64g_check_ldmxcsr((ULong)w32);

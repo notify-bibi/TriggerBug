@@ -45,19 +45,19 @@
 	<VexArchSystem>win</VexArchSystem>
 	<MaxThreadsNum>1</MaxThreadsNum>
 	<MemoryDumpPath>C:\Users\bibi\Desktop\TriggerBug\PythonFrontEnd\examples\puzzle\puzzle.exe.dump</MemoryDumpPath>
-	<!-- <GuestStartAddress>0x444444</GuestStartAddress> -->
+	<!--GuestStartAddress>0x401950</GuestStartAddress-->
 	<PassSigSEGV>1</PassSigSEGV>
 	<VexControl>
 		<iropt_register_updates_default>0x701</iropt_register_updates_default>
 		<pxControl>0x701</pxControl>
-		<iropt_level>2</iropt_level>
+		<iropt_level>-1</iropt_level>
 		<traceflags>0</traceflags>
 	</VexControl>
 	
 	<DEBUG>
 		<ppStmts>0</ppStmts>
 		<TraceIrAddrress>
-            <!--static addr = "0x0401B30" cflag = "1"/-->
+            <!--static addr = "0x401950" cflag = "1"/-->
             <!--static addr = "0x0401B04" cflag = "1"/-->
         </TraceIrAddrress>
         

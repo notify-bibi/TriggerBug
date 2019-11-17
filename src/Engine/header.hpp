@@ -1,11 +1,11 @@
 #ifndef HEADER_H
 #define HEADER_H
 
+#define GUEST_IS_64
+
 #define HOSTARCH VexArchAMD64
-
-#define GUEST_IS_64 
 #define __i386__
-
+#define MAX_IRTEMP 400
 #define Z3_Get_Ref(exp) (((int*)((Z3_ast)((exp))))[2])
 
 #if defined(GUEST_IS_64)

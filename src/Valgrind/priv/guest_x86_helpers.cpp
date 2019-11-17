@@ -32,12 +32,9 @@
    used to endorse or promote products derived from this software
    without prior written permission.
 */
-#include "Engine/engine.hpp"
-#include "Engine/SimulationEngine/Variable.hpp"
-#include "Engine/SimulationEngine/Register.hpp"
-#include "Engine/SimulationEngine/memory.hpp"
 #include "Engine/SimulationEngine/State_class.hpp"
 #include "Engine/SimulationEngine/Z3_Target_Call/Guest_Helper.hpp"
+
 extern "C" {
 
 #include "libvex_basictypes.h"

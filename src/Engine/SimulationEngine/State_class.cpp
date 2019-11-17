@@ -78,7 +78,7 @@ tinyxml2::XMLDocument StatetTraceFlag::doc = tinyxml2::XMLDocument();
 std::hash_map<ADDR, Hook_struct> State::CallBackDict;
 std::hash_map<ADDR/*static table base*/, TRtype::TableIdx_CB> State::TableIdxDict;
 ThreadPool* State::pool;
-Vns State::ir_temp[MAX_THREADS][400];
+Vns State::ir_temp[MAX_THREADS][MAX_IRTEMP];
 
 __attribute__((noreturn))
 void failure_exit() {
@@ -599,7 +599,7 @@ inline void State::read_regs(int offset, void* addr, int length) { regs.read_reg
 
 inline Vns symbolic_check(Z3_context ctx, ULong ret, UInt bitn) {
     if (ret & (0xfa1dull << 48)) {
-        return Vns(ctx, (Z3_ast)(ret & ((1ull << 48) - 1)), bitn);
+        return Vns(ctx, (Z3_ast)(ret & ((1ull << 48) - 1)), bitn, no_inc{});
     }
     else {
         return Vns(ctx, ret, bitn);
@@ -633,7 +633,6 @@ inline Vns State::CCall(IRCallee *cee, IRExpr **exp_args, IRType ty)
     if (!exp_args[6]) return (z3_mode) ? ((Z3_Function6)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3, arg4, arg5) : symbolic_check(m_ctx, ((Function_6)(cee->addr))(arg0, arg1, arg2, arg3, arg4, arg5), bitn);
 }
 
-
 inline void State::thread_register()
 {
     {
@@ -641,14 +640,14 @@ inline void State::thread_register()
         register_tid(GetCurrentThreadId());
     }
     auto i = temp_index();
-    for (int j = 0; j < 400; j++) {
+    for (int j = 0; j < MAX_IRTEMP; j++) {
         ir_temp[i][j].m_kind = REAL;
     }
 }
 inline void State::thread_unregister()
 {
     auto i = temp_index();
-    for (int j = 0; j < 400; j++) {
+    for (int j = 0; j < MAX_IRTEMP; j++) {
         ir_temp[i][j].~Vns();
     }
     {
@@ -683,9 +682,9 @@ void State::read_mem_dump(const char  *filename)
     fread(name_buff, 1, name_end_offset - name_start_offset, infile);
     fseek(infile, 0, SEEK_SET);
     char *name;
-    printf("+--------------------+--------------------+--------------------+------------+\n");
-    printf("|         SN         |         VA         |         FOA        |     LEN    |\n");
-    printf("+--------------------+--------------------+--------------------+------------+\n");
+    printf("/------------------------------+--------------------+--------------------+------------\\\n");
+    printf("|              SN              |         VA         |         FOA        |     LEN    |\n");
+    printf("+------------------------------+--------------------+--------------------+------------+\n");
     for (unsigned int segnum = 0; segnum < length; segnum++) {
         fread(&buf, 32, 1, infile);
         unsigned char *data = (unsigned char *)malloc(buf.length);
@@ -699,7 +698,7 @@ void State::read_mem_dump(const char  *filename)
 #endif
             memcpy((regs.m_bytes + buf.address), data, buf.length);
         }else {
-            printf("| %-18s |  %16llx  |  %16llx  | %10llx |\n", name, buf.address, buf.dataoffset, buf.length);
+            printf("| %-28s |  %16llx  |  %16llx  | %10llx |\n", name, buf.address, buf.dataoffset, buf.length);
             if (err = mem.map(buf.address, buf.length))
                 printf("warning %s had maped before length: %llx\n", name, err);
             mem.write_bytes(buf.address, buf.length, data);
@@ -707,18 +706,17 @@ void State::read_mem_dump(const char  *filename)
         fseek(infile, fp, SEEK_SET);
         free(data);
     }
-    printf("+---------------------------------------------------------------------------+\n");
+    printf("\\-------------------------------------------------------------------------------------/\n");
     free(name_buff);
     fclose(infile);
 }
-
 inline Vns State::ILGop(IRLoadG *lg) {
     switch (lg->cvt) {
     case ILGop_IdentV128:{ return mem.Iex_Load(tIRExpr(lg->addr), Ity_V128);            }
     case ILGop_Ident64:  { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I64 );            }
     case ILGop_Ident32:  { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I32 );            }
-    case ILGop_16Uto32:  { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I16 ).zext(16);    }
-    case ILGop_16Sto32:  { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I16 ).sext(16);    }
+    case ILGop_16Uto32:  { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I16 ).zext(16);   }
+    case ILGop_16Sto32:  { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I16 ).sext(16);   }
     case ILGop_8Uto32:   { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I8  ).zext(8);    }
     case ILGop_8Sto32:   { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I8  ).sext(8);    }
     case ILGop_INVALID:
@@ -734,10 +732,10 @@ inline Vns State::tIRExpr(IRExpr* e)
     switch (e->tag) {
     case Iex_Get: { return regs.Iex_Get(e->Iex.Get.offset, e->Iex.Get.ty); }
     case Iex_RdTmp: { return ir_temp[t_index][e->Iex.RdTmp.tmp]; }
-    case Iex_Unop: { return T_Unop(e->Iex.Unop.op, e->Iex.Unop.arg); }
-    case Iex_Binop: { return T_Binop(e->Iex.Binop.op, e->Iex.Binop.arg1, e->Iex.Binop.arg2); }
-    case Iex_Triop: { return T_Triop(e->Iex.Triop.details->op, e->Iex.Triop.details->arg1, e->Iex.Triop.details->arg2, e->Iex.Triop.details->arg3); }
-    case Iex_Qop: { return T_Qop(e->Iex.Qop.details->op, e->Iex.Qop.details->arg1, e->Iex.Qop.details->arg2, e->Iex.Qop.details->arg3, e->Iex.Qop.details->arg4); }
+    case Iex_Unop: { return T_Unop(m_ctx, e->Iex.Unop.op, tIRExpr(e->Iex.Unop.arg)); }
+    case Iex_Binop: { return T_Binop(m_ctx, e->Iex.Binop.op, tIRExpr(e->Iex.Binop.arg1), tIRExpr(e->Iex.Binop.arg2)); }
+    case Iex_Triop: { return T_Triop(m_ctx, e->Iex.Triop.details->op, tIRExpr(e->Iex.Triop.details->arg1), tIRExpr(e->Iex.Triop.details->arg2), tIRExpr(e->Iex.Triop.details->arg3)); }
+    case Iex_Qop: { return T_Qop(m_ctx, e->Iex.Qop.details->op, tIRExpr(e->Iex.Qop.details->arg1), tIRExpr(e->Iex.Qop.details->arg2), tIRExpr(e->Iex.Qop.details->arg3), tIRExpr(e->Iex.Qop.details->arg4)); }
     case Iex_Load: { return mem.Iex_Load(tIRExpr(e->Iex.Load.addr), e->Iex.Get.ty); }
     case Iex_Const: { return Vns(m_ctx, e->Iex.Const.con); }
     case Iex_ITE: {
@@ -792,9 +790,9 @@ void State::start(Bool first_bkp_pass) {
     Vns* irTemp = ir_temp[t_index]; 
     this->is_dynamic_block = false;
     Hook_struct hs;
+    IRSB* irsb = nullptr;
 
 Begin_try:
-    IRSB* irsb = nullptr;
     try {
         try {
             if(first_bkp_pass)
@@ -812,7 +810,6 @@ Begin_try:
 For_Begin:
                 irsb = BB2IR();
                 traceIRSB(irsb);
-                guest_start_of_block = guest_start;
                 //ppIRSB(irsb);
                 goto For_Begin_NO_Trans;
             deal_bkp:
@@ -843,6 +840,7 @@ For_Begin:
                     }
                 }
             For_Begin_NO_Trans:
+                guest_start_of_block = guest_start;
                 for (UInt stmtn = 0; stmtn < irsb->stmts_used; stmtn++) {
                     IRStmt *s = irsb->stmts[stmtn];
                     traceIRStmtBegin(s);
@@ -878,10 +876,7 @@ For_Begin:
                         if (guard.real()) {
                             if ((UChar)guard) {
                             Exit_guard_true:
-                                if (s->Ist.Exit.jk != Ijk_Boring
-                                    && s->Ist.Exit.jk != Ijk_Call
-                                    && s->Ist.Exit.jk != Ijk_Ret
-                                    )
+                                if (s->Ist.Exit.jk != Ijk_Boring && s->Ist.Exit.jk != Ijk_Call && s->Ist.Exit.jk != Ijk_Ret)
                                 {
                                     //ppIRSB(irsb);
                                     status = Ijk_call(s->Ist.Exit.jk);
@@ -909,8 +904,14 @@ For_Begin:
                             }
                             case 2: {
                                 branchChunks.emplace_back(BranchChunk(s->Ist.Exit.dst->Ico.U64, Vns(m_ctx, 0), guard, True));
+                                if (!Ist_Exit_find_branch(branchChunks, guard, irsb, stmtn)) {
+                                    ppIRSB(irsb);
+                                    status = Death;
+                                    vex_printf("not found!");
+                                    goto EXIT;
+                                };
                                 status = Fork;
-                                break;
+                                goto EXIT;
                             }
                             default: { vpanic("??"); }
                             }
@@ -920,17 +921,14 @@ For_Begin:
                     case Ist_NoOp: break;
                     case Ist_IMark: {
                         guest_start = (ADDR)s->Ist.IMark.addr; 
-                        if (status == Fork) {
-                            branchChunks.emplace_back(BranchChunk(guest_start, Vns(m_ctx, 0), branchChunks[0].m_guard, False));
-                            goto EXIT;
-                        }
                         if (this->is_dynamic_block) {
                             this->is_dynamic_block = false;
                             goto For_Begin;// fresh changed block
                         }
                         break; 
                     };
-                    case Ist_AbiHint:break; //====== AbiHint(t4, 128, 0x400936:I64) ====== call 0xxxxxxx
+                    case Ist_AbiHint: //====== AbiHint(t4, 128, 0x400936:I64) ====== call 0xxxxxxx
+                        break; 
                     case Ist_PutI: {
                         // PutI(840:8xI8)[t10,-1]
                         // 840:arr->base
@@ -1001,8 +999,8 @@ For_Begin:
                 case Ijk_Boring:        break;
                 case Ijk_Call:          break;
                 case Ijk_Ret:           break;
-                case Ijk_SigTRAP:        {
-                    SigTRAP:
+                case Ijk_SigTRAP: {
+                SigTRAP:
                     if (get_hook(hs, guest_start)) {
                         setFlag(hs.cflag);
                         goto deal_bkp;
@@ -1011,14 +1009,11 @@ For_Begin:
                     vex_printf("Ijk_SigTRAP: %p", guest_start);
                     goto EXIT;
                 }
-                case Ijk_NoDecode:{
+                case Ijk_NoDecode: {
                     vex_printf("Ijk_NoDecode: %p", guest_start);
                     status = NoDecode;
                     goto EXIT;
                 }
-/*Ijk_Sys_syscall, Ijk_ClientReq,Ijk_Yield, Ijk_EmWarn, Ijk_EmFail, Ijk_MapFail, Ijk_InvalICache, 
-Ijk_FlushDCache, Ijk_NoRedir, Ijk_SigILL, Ijk_SigSEGV, Ijk_SigBUS, Ijk_SigFPE, Ijk_SigFPE_IntDiv, Ijk_SigFPE_IntOvf, 
-Ijk_Sys_int32,Ijk_Sys_int128, Ijk_Sys_int129, Ijk_Sys_int130, Ijk_Sys_int145, Ijk_Sys_int210, Ijk_Sys_sysenter:*/
                 default: {
                     status = Ijk_call(irsb->jumpkind);
                     if (status != Running) {
@@ -1030,50 +1025,28 @@ Ijk_Sys_int32,Ijk_Sys_int128, Ijk_Sys_int129, Ijk_Sys_int130, Ijk_Sys_int145, Ij
                         goto For_Begin;
                     }
                 }
-                }
+                };
 Isb_next:
                 Vns next = tIRExpr(irsb->next).simplify();
-                if (status == Fork) {
-                    if (next.real()) {
-                        branchChunks.emplace_back(BranchChunk(next, Vns(m_ctx, 0), branchChunks[0].m_guard, False));
-                    }
-                    else {
-                        std::vector<Vns> result;
-                        switch (eval_all(result, solv, next)) {
-                        case 0: status = Death; goto EXIT;
-                        case 1:
-                            branchChunks.emplace_back(BranchChunk(result[0].simplify(), Vns(m_ctx, 0), branchChunks[0].m_guard, False));
-                            break;
-                        default:
-                            for (auto re : result) {
-                                branchChunks.emplace_back(BranchChunk(re.simplify(), next, branchChunks[0].m_guard, False));
-                            }
-                            break;
-                        }
-                    }
-                    goto EXIT;
+                if (next.real()) {
+                    guest_start = next;
                 }
                 else {
-                    if (next.real()) {
-                        guest_start = next;
+                    std::vector<Vns> result;
+                    switch (eval_all(result, solv, next)) {
+                    case 0: status = Death; goto EXIT;
+                    case 1: {
+                        guest_start = result[0].simplify();
+                        break;
                     }
-                    else {
-                        std::vector<Vns> result;
-                        switch (eval_all(result, solv, next)) {
-                        case 0: status = Death; goto EXIT;
-                        case 1: {
-                            guest_start = result[0].simplify();
-                            break;
+                    default: {
+                        for (auto re : result) {
+                            branchChunks.emplace_back(BranchChunk(re.simplify(), next, Vns(m_ctx, 0), True));
                         }
-                        default: {
-                            for (auto re : result) {
-                                branchChunks.emplace_back(BranchChunk(re.simplify(), next, Vns(m_ctx, 0), True));
-                            }
-                            status = Fork;
-                            goto EXIT;
-                        }
-                        };
+                        status = Fork;
+                        goto EXIT;
                     }
+                    };
                 }
             };
 
@@ -1116,6 +1089,8 @@ EXIT:
     thread_unregister();
     traceFinish();
     branchGo();
+    return;
+
 }
 
 void State::branchGo()
@@ -1433,6 +1408,58 @@ inline Bool State::treeCompress(z3::context& ctx, Addr64 Target_Addr, State_Tag 
     else {
         return has_branch;
     }
+}
+
+bool State::Ist_Exit_find_branch(std::vector<BranchChunk> &branchChunks, Vns const& guard, IRSB* bb, UInt stmtn)
+{
+    //ppIRSB(bb);
+    if (stmtn == bb->stmts_used - 1) {
+        Vns next = tIRExpr(bb->next);
+        if (next.real()) {
+            branchChunks.emplace_back(BranchChunk((ADDR)next, Vns(m_ctx, 0), guard, False));
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+    IRExpr* release = bb->next;
+    for (UInt i = bb->stmts_used - 1; i >= 0; i--) {
+        IRStmt* st = bb->stmts[i];
+        switch (st->tag) {
+        case Ist_Put: {
+            if (release->tag == Iex_Get) {
+                if (st->Ist.Put.offset == release->Iex.Get.offset) {
+                    release = st->Ist.Put.data;
+                }
+            }
+            break;
+        }
+        case Ist_WrTmp: {
+            if (release->tag == Iex_RdTmp) {
+                if (st->Ist.WrTmp.tmp == release->Iex.RdTmp.tmp) {
+                    release = st->Ist.WrTmp.data;
+                }
+            }
+            break;
+        }
+        case Ist_Store: {
+            if (release->tag == Iex_Load) {
+                if (st->Ist.Store.addr == release->Iex.Load.addr) {
+                    release = st->Ist.Store.data;
+                }
+            }
+            break;
+        }
+        case Ist_IMark:
+            return false;
+        };
+        if (release->tag == Iex_Const) {
+            branchChunks.emplace_back(BranchChunk((ADDR)release->Iex.Const.con->Ico.U64, Vns(m_ctx, 0), guard, False));
+            return true;;
+        };
+    }
+    return false;
 }
 
 

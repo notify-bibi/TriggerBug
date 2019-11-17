@@ -14,716 +14,554 @@ static inline ULong resultsr(Vns const & retv) {
     return (ret & ((1ull << 48) - 1)) | (0xfa1dull << 48);;
 }
 #define TRRET(retv) (retv.real()? (ULong)(retv):resultsr(retv))
-
-
-namespace helper {
-
-	template<class _object, typename _PointerType = UChar, int offset = -1>
-	class Pointer;
-	class _VexGuestAMD64State;
-
-	template<typename _PoinerType>
-	static inline void operator_set(MEM &obj, Vns const &_where, _PoinerType data) {
-		obj.Ist_Store(_where, data);
-	}
-	
-	template<int maxlength,typename _PoinerType>
-	static inline void operator_set(Register<maxlength> &obj, Vns const &_where, _PoinerType data) {
-		assert(_where.real());
-		obj.Ist_Put(_where, data);
-	}
-
-	static inline void operator_set(MEM &obj, Vns const &_where, Vns const &data) {
-		obj.Ist_Store(_where, data);
-	}
-
-	template<int maxlength>
-	static inline void operator_set(Register<maxlength> &obj, Vns const &_where, Vns const &data) {
-		assert(_where.real());
-		obj.Ist_Put(_where, data);
-	}
-
-
-	template<int bitn>
-	static inline Vns operator_get(MEM &obj, Vns const &_where) {
-		return obj.Iex_Load<((IRType)bitn)>(_where);
-	}
-
-	template<int bitn>
-	static inline Vns operator_get(Register<1000> &obj, Vns const &_where) {
-		assert(_where.real());
-		return obj.Iex_Get<((IRType)bitn)>(_where);
-	}
-
-
 #define ISUNSIGNED_TYPE(type) ((type)-1 > 0)
 
+namespace hp{
 
-	class C_Vns :public Vns {
-	public:
+    template<typename Type>
+    class GM {
+        Vns m_base;
+        MEM& m_obj;
+        template <typename T> friend class GMP;
+        template <typename T, UInt shift, UInt bits> friend class GMW;
 
-		C_Vns(const Vns&_v) :Vns(_v) {};
+        GM(MEM& obj, Vns const& base) :
+            m_obj(obj),
+            m_base(base)
+        {}
 
-		template<typename T>
-		inline operator T() const {
-			if (symbolic()) {
-				std::cout << " error: I got a symbolic Vns. TriggerBug only support numrel there.\nyou can hook and pass this code with your operator" << std::endl;
-			}
-			assert(real());
-			return *(T*)(&this->pack);
-		}
+        GM(MEM& obj) :
+            m_obj(obj),
+            m_base(obj, (ADDR)0)
+        {}
 
-	};
+        GM(MEM& obj, ADDR base) :
+            m_obj(obj),
+            m_base(obj, base)
+        {}
 
+        template<typename T>
+        GM(MEM& obj, T base) :
+            m_obj(obj),
+            m_base(obj, (ADDR)base)
+        {}
 
+        MEM& obj() const {
+            return static_cast<MEM&>(m_obj);
+        }
 
+    public:
 
-	template<class _object, typename _PointerType = UChar, int offset = -1, int shift = 0, int bits = (sizeof(_PointerType)<<3)>
-	class inPointer {
-		template<class __object, typename __PointerType = UChar, int _offset>
-		friend class Pointer;
-		friend class _VexGuestAMD64State;
-	public:
-		_object*m_obj;
-		Vns		m_point;
-		UShort	m_step;
+        /*Read{*/
+        template<typename T>
+        inline operator T () const {
+            return (T)(Type)obj().Iex_Load<(IRType)(sizeof(Type) << 3)>(m_base);
+        }
 
-
-		inline inPointer(_object &obj, ADDR _p) :
-			m_obj(&obj),
-			m_point((Z3_context)obj, _p),
-			m_step(sizeof(_PointerType))
-		{
-		};
-
-		inline inPointer(_object &obj, Vns const &_p) :
-			m_obj(&obj),
-			m_point(_p),
-			m_step(sizeof(_PointerType))
-		{
-		};
-
-		template<int maxlength>
-		inline inPointer(Register<maxlength> &obj) :
-			m_obj(&obj),
-			m_point(obj.m_ctx, offset),
-			m_step(sizeof(_PointerType))
-		{
-			assert(offset != -1);
-		};
-
-		inline inPointer(MEM &obj) :
-			m_obj(&obj),
-			m_point(obj.m_ctx, offset),
-			m_step(sizeof(_PointerType))
-		{
-			assert(offset != -1);
-		}
+        inline operator Vns () const {
+            return obj().Iex_Load<(IRType)(sizeof(Type) << 3)>(m_base);
+        }
+        /*}Read*/
 
 
-		template<typename _dataType>
-		void operator=(_dataType data) {
-			helper::operator_set(operator _object& (), m_point, (_PointerType)data);
-		}
+        /*Write{*/
+        template<typename T>
+        inline void operator=(T const data) {
+            obj().Ist_Store(m_base, (Type)data);
+        }
 
-		void operator=(Vns const & data) {
-			if ((sizeof(_PointerType) << 3) == data.bitn) {
-				helper::operator_set(operator _object& (), m_point, data);
-			}
-			else if ((sizeof(_PointerType) << 3) > data.bitn) {
-				if (ISUNSIGNED_TYPE(_PointerType)) {
-					helper::operator_set<_PointerType>(operator _object& (), m_point, data.zext(data.bitn - (sizeof(_PointerType) << 3)));
-				}
-				else {
-					helper::operator_set<_PointerType>(operator _object& (), m_point, data.sext(data.bitn - (sizeof(_PointerType) << 3)));
-				}
-			}
-			else {
-				helper::operator_set(operator _object& (), m_point, data.extract<(int)((sizeof(_PointerType) << 3) - 1), 0>());
-			}
-		}
-
-
-		inline operator _object& () const {
-			return const_cast<_object&>(*m_obj);
-		}
-
-		template<typename _dataType>
-		operator _dataType() const {
-			auto result = operator Vns();
-			assert(result.real());
-			return (_dataType)(_PointerType)result;
-		}
-
-		operator Vns() const {
-            if (((sizeof(_PointerType) << 3) == bits)&&(shift==0)) {
-                return operator_get<(sizeof(_PointerType) << 3)>(operator _object& (), this->m_point);
+        void operator=(Vns const& data) {
+            if ((sizeof(Type) << 3) == data.bitn) {
+                obj().Ist_Store(m_base, data);
             }
-            if (ISUNSIGNED_TYPE(_PointerType)) {
-                return operator_get<(sizeof(_PointerType) << 3)>(operator _object& (), this->m_point).extract<(shift + bits - 1), shift>().zext((sizeof(_PointerType) << 3) - bits);
+            else if ((sizeof(Type) << 3) > data.bitn) {
+                if (ISUNSIGNED_TYPE(Type)) {
+                    obj().Ist_Store(m_base, data.zext(data.bitn - (sizeof(Type) << 3)));
+                }
+                else {
+                   obj().Ist_Store( m_base, data.sext(data.bitn - (sizeof(Type) << 3)));
+                }
             }
             else {
-                return operator_get<(sizeof(_PointerType) << 3)>(operator _object& (), this->m_point).extract<(shift + bits - 1), shift>().sext((sizeof(_PointerType) << 3) - bits);
+                obj().Ist_Store(m_base, data.extract<(int)((sizeof(Type) << 3) - 1), 0>());
             }
-		}
-
-		Pointer<_object, _PointerType> operator &() const {
-			return Pointer<_object, _PointerType>(operator _object& (), m_point);
-		}
-
-		template<class __object, typename __PointerType>
-		inline operator Pointer<__object, __PointerType>() const
-		{
-			return Pointer<__object, __PointerType>(operator _object& (), this->m_point);
-		}
-
-#define inPointer_operator(op)							\
-		template<typename _dataType>					\
-		C_Vns operator op(_dataType data) {				\
-			return inPointer::operator Vns() op data;	\
-		}
-
-
-
-		template<typename _dataType>					
-		C_Vns operator <=(_dataType data) {
-			if (ISUNSIGNED_TYPE(_PointerType)) {
-				return inPointer::operator Vns() <= data;
-			}else{
-				return le(inPointer::operator Vns(), data);					
-			}											
-		}
-		template<typename _dataType>
-		C_Vns operator <(_dataType data) {
-			if (ISUNSIGNED_TYPE(_PointerType)) {
-				return inPointer::operator Vns() < data;
-			}
-			else {
-				return lt(inPointer::operator Vns(), data);
-			}
-		}
-		template<typename _dataType>
-		C_Vns operator >=(_dataType data) {
-			if (ISUNSIGNED_TYPE(_PointerType)) {
-				return inPointer::operator Vns() >= data;
-			}
-			else {
-				return ge(inPointer::operator Vns(), data);
-			}
-		}
-		template<typename _dataType>
-		C_Vns operator >(_dataType data) {
-			if (ISUNSIGNED_TYPE(_PointerType)) {
-				return inPointer::operator Vns() > data;
-			}
-			else {
-				return gt(inPointer::operator Vns(), data);
-			}
-		}
-		inPointer_operator(+);
-		inPointer_operator(-);
-		inPointer_operator(*);
-		inPointer_operator(/);
-		inPointer_operator(>>);
-		inPointer_operator(<<);
-		inPointer_operator(|);
-		inPointer_operator(&);
-		inPointer_operator(==);
-
-
-#undef inPointer_operator
-	private:
-		operator z3::expr()  = delete;
-		operator z3::expr&()  = delete;
-		operator const z3::expr() = delete;
-		operator const z3::expr&() = delete;
-
-	};
-
-
-
-#define inPointer_operator2(op)			        \
-template<class  T>                              \
-C_Vns operator op(Vns const &a, T const& b) {   \
-	return a op (Vns)b; \
-}
-
-    inPointer_operator2(+);
-    inPointer_operator2(-);
-    inPointer_operator2(*);
-    inPointer_operator2(/ );
-    inPointer_operator2(>> );
-    inPointer_operator2(<< );
-    inPointer_operator2(| );
-    inPointer_operator2(&);
-    inPointer_operator2(== );
-
-#undef inPointer_operator2
-
-	template<class _object, typename _PointerType = UChar, int offset = -1>
-	class Pointer {
-	public:
-		_object*m_obj;
-		Vns		m_point;
-		UShort	m_step;
-
-		inline Pointer(_object  &obj, Addr64 _p) :
-			m_obj(&obj), 
-			m_point((Z3_context)obj, _p),
-			m_step(sizeof(_PointerType)) 
-		{};
-		inline Pointer(_object  &obj, Vns const &_p) :
-			m_obj(&obj),
-			m_point(_p), 
-			m_step(sizeof(_PointerType)) 
-		{};
-
-		template<int maxlength>
-		inline Pointer(Register<maxlength> &obj) :
-			m_obj(&obj),
-			m_point(obj.m_ctx, offset),
-			m_step(sizeof(_PointerType)) 
-		{
-			assert(offset != -1);
-		};
-
-		template<class __object, typename __PointerType>
-		inline Pointer(const Pointer<__object, __PointerType>& p) :
-			m_obj(p.m_obj),
-			m_point(p.m_point),
-			m_step(sizeof(_PointerType))
-		{
-		};
-
-		template<class __object, typename __PointerType>
-		void operator=(Pointer<__object, __PointerType>& _where) {
-			~Pointer();
-			m_obj = _where.m_obj;
-			m_point = _where.m_point;
-		}
-
-
-		template<typename _dataType>
-		void operator=(_dataType _where) {
-			assert(offset == -1);
-			m_point = (void *)_where;
-		}
-
-
-		void operator=(Vns const & data) {
-			assert(data.bitn == m_point.bitn);
-			m_point = _where;
-		}
-
-		operator _object& () const {
-			return const_cast<_object&>(*m_obj);
-		}
-
-		Pointer<_object, _PointerType> operator &() const = delete;
-
-		operator Vns() const {
-			return this->m_point;
-		}
-
-		template<typename _dataType>
-		operator _dataType() const {
-			return (_dataType)this->m_point;
-		}
-
-		helper::inPointer<_object, _PointerType> operator*() const {
-			return helper::inPointer<_object, _PointerType>(*this, this->m_point);
-		}
-
-
-		template<typename _whereType>
-		helper::inPointer<_object, _PointerType> operator[](_whereType offset) {
-			auto ins = (offset * sizeof(_PointerType));
-			return helper::inPointer<_object, _PointerType>(operator _object&(), m_point + ins);
-		}
-
-		~Pointer() {
-			
-		}
-
-	};
-
-
-	/* 
-	int* p = 0x273823988;
-	int a = *p; 
-	int* p1 = &p[10];
-	long long* p1 = (long long*)&p[10];
-	long long d = * p1;
-	long long d2 = * p1 + 10
-	----------------
-	helper::Int_ p(state.mem, 0x273823988);
-	Int a = *p;
-	helper::Long_ p1= (helper::Long_)&p[10];
-	long long d = * p1;
-	long long d2 =* p1 + 10;
-	----------------
-	Regs::AMD64 reg(s.regs);
-	reg.guest_RAX = 0x45;
-	reg.guest_FPREG[2] = 0x23336565;
-	*/
-
-	using Float_ = Pointer<MEM, Float>;
-	using Double_ = Pointer<MEM, Double>;
-
-	using Bool_ = Pointer<MEM, Bool>;
-	using UChar_ = Pointer<MEM, UChar>;
-	using SChar_ = Pointer<MEM, SChar>;
-	using Char_ = Pointer<MEM, SChar>;
-	using UShort_ = Pointer<MEM, UShort>;
-	using Short_ = Pointer<MEM, SShort>;
-	using SShort_ = Pointer<MEM, SShort>;
-	using UInt_ = Pointer<MEM, UInt>;
-	using Int_= Pointer<MEM, Int>;
-	using SInt_ = Pointer<MEM, Int>;
-	using ULong_ = Pointer<MEM, ULong>;
-	using SLong_ = Pointer<MEM, SLong>;
-	using Long_ = Pointer<MEM, SLong>;
-	using m128_ = Pointer<MEM, __m128i>;
-	using m256_ = Pointer<MEM, __m256i>;
-	using V256_ = Pointer<MEM, V256>;
-	using V128_ = Pointer<MEM, V128>;
-
-	using _Float = inPointer<MEM, Float>;
-	using _Double = inPointer<MEM, Double>;
-	using _Bool = inPointer<MEM, Bool>;
-	using _UChar = inPointer<MEM, UChar>;
-	using _SChar = inPointer<MEM, SChar>;
-	using _Char = inPointer<MEM, SChar>;
-	using _UShort = inPointer<MEM, UShort>;
-	using _Short = inPointer<MEM, SShort>;
-	using _SShort = inPointer<MEM, SShort>;
-	using _UInt = inPointer<MEM, UInt>;
-	using _Int = inPointer<MEM, Int>;
-	using _SInt = inPointer<MEM, Int>;
-	using _ULong = inPointer<MEM, ULong>;
-	using _SLong = inPointer<MEM, SLong>;
-	using _m128 = inPointer<MEM, __m128i>;
-	using _m256 = inPointer<MEM, __m256i>;
-	using _V256 = inPointer<MEM, V256>;
-	using _V128 = inPointer<MEM, V128>;
-
-
-}
-
-//register_names = { 
-//16: 'rax', 24 : 'rcx', 32 : 'rdx', 40 : 'rbx', 48 : 'rsp', 56 : 'rbp', 64 : 'rsi', 72 : 'rdi', 
-//80 : 'r8', 88 : 'r9', 96 : 'r10', 104 : 'r11', 112 : 'r12', 120 : 'r13', 128 : 'r14', 136 : 'r15', 
-//144 : 'cc_op', 152 : 'cc_dep1', 160 : 'cc_dep2', 168 : 'cc_ndep', 176 : 'd', 184 : 'rip', 192 : 'ac', 200 : 'id', 208 : 'fs', 216 : 'sseround', 
-//224 : 'ymm0', 256 : 'ymm1', 288 : 'ymm2', 320 : 'ymm3', 352 : 'ymm4', 384 : 'ymm5', 416 : 'ymm6', 448 : 'ymm7', 480 : 'ymm8', 512 : 'ymm9', 544 : 'ymm10', 576 : 'ymm11', 608 : 'ymm12', 640 : 'ymm13', 672 : 'ymm14', 704 : 'ymm15', 736 : 'ymm16', 
-//768 : 'ftop', 776 : 'mm0',784 : "mm1",792 : "mm2",800 : "mm3",808 : "mm4",816 : "mm5",824 : "mm6",832 : "mm7", 840 : 'fptag', 848 : 'fpround', 856 : 'fc3210', 864 : 'emnote',872 : 'cmstart', 
-//880 : 'cmlen', 888 : 'nraddr', 904 : 'gs', 912 : 'ip_at_syscall' }
-
-
-
-
-
-
-template<typename Type = UChar, UInt offset = -1>
-class Reg  {
-    Register<REGISTER_LEN>& m_obj;
-public:
-
-    Reg(Register<REGISTER_LEN>& r) :
-        m_obj(r)
-    { }
-
-    Reg(State& r) :
-        m_obj(r.regs)
-    { }
-
-
-
-    Register<REGISTER_LEN>& obj() const{
-        return static_cast<Register<REGISTER_LEN> &>(m_obj);
-    }
-
-    template<typename T>
-    inline operator T () const {
-        return (T)obj().Iex_Get<(IRType)(sizeof(Type)<<3)>(offset);
-    }
-
-    inline operator Vns () const{
-        return obj().Iex_Get<(IRType)(sizeof(Type) << 3)>(offset);
-    }
-
-    template<typename T>
-    inline void operator=(T  data) {
-        obj().Ist_Put(offset, data);
-    }
-    
-#define REG_OPERATOR(op)					\
-		template<typename _dataType>		\
-		Vns operator op(_dataType data) const{\
-			return operator Vns() op data;	\
-		}
-
-    REG_OPERATOR(+);
-    REG_OPERATOR(-);
-    REG_OPERATOR(*);
-    REG_OPERATOR(/ );
-    REG_OPERATOR(>> );
-    REG_OPERATOR(<< );
-    REG_OPERATOR(| );
-    REG_OPERATOR(&);
-    REG_OPERATOR(== );
-
-#undef REG_OPERATOR
-
-private:
-    template<typename T>
-    T operator &() = delete;
-    template<typename T>
-    T operator &() const = delete;
-
-    operator z3::expr() = delete;
-    operator z3::expr& () = delete;
-    operator z3::expr& () const = delete;
-    operator const z3::expr() = delete;
-    operator const z3::expr& () = delete;
-    operator const z3::expr& () const = delete;
-
-};
-
-template<typename Type = UChar, UInt offset = -1>
-class RegL {
-    Register<REGISTER_LEN>& obj;
-public:
-
-    RegL(Register<REGISTER_LEN>& r) :
-        obj(r)
-    { }
-
-    RegL(State& r) :
-        obj(r.regs)
-    { }
-
-};
-
-template<typename Type = UChar>
-class GM {
-    Vns m_base;
-    MEM& m_obj;
-public:
-    GM(MEM& obj, Vns const& base):
-        m_obj(obj),
-        m_base(base)
-    {}
-
-    GM(MEM& obj, ADDR base):
-        m_obj(obj),
-        m_base(obj, base)
-    {}
-
-    template<typename T>
-    GM(MEM& obj, T base) :
-        m_obj(obj),
-        m_base(obj, (ADDR)base)
-    {}
-
-    MEM& obj() const {
-        return static_cast<MEM &>(m_obj);
-    }
-
-    template<typename T>
-    inline operator T () const {
-        return (T)obj().Iex_Load<(IRType)(sizeof(Type) << 3)>(m_base);
-    }
-
-    inline operator Vns () const {
-        return obj().Iex_Load<(IRType)(sizeof(Type) << 3)>(m_base);
-    }
-
-    template<typename T>
-    inline void operator=(T const data) {
-        obj().Ist_Store(m_base, data);
-    }
-
-    void operator=(Vns const& data) {
-        if ((sizeof(Type) << 3) == data.bitn) {
-            obj().Ist_Store(m_base, data);
         }
-        else if ((sizeof(Type) << 3) > data.bitn) {
+        /*}Write*/
+
+        GMP<Type>& operator &() const {
+            return *(GMP<Type>*)this;;
+        }
+
+
+
+    #define REG_OPERATOR(op)					\
+		    template<typename _dataType>		\
+		    Vns operator op(_dataType data) const{\
+			    return operator Vns() op data;	\
+		    }
+
+        REG_OPERATOR(+);
+        REG_OPERATOR(-);
+        REG_OPERATOR(*);
+        REG_OPERATOR(/ );
+        REG_OPERATOR(>> );
+        REG_OPERATOR(<< );
+        REG_OPERATOR(| );
+        REG_OPERATOR(&);
+        REG_OPERATOR(== );
+
+    #undef REG_OPERATOR
+
+    private:
+        template<typename T>
+        T operator &() = delete;
+        template<typename T>
+        T operator &() const = delete;
+
+        operator z3::expr() = delete;
+        operator z3::expr& () = delete;
+        operator z3::expr& () const = delete;
+        operator const z3::expr() = delete;
+        operator const z3::expr& () = delete;
+        operator const z3::expr& () const = delete;
+    };
+
+
+    template<typename Type>
+    class GMP:private GM<Type> {
+    public:
+        GMP(MEM& obj, Vns const& base): GM<Type>(obj, base)
+        {}
+
+        GMP(MEM& obj) :GM<Type>(obj)
+        {}
+
+        GMP(MEM& obj, ADDR base) : GM<Type>(obj, base)
+        {}
+
+        template<typename T>
+        GMP(MEM& obj, T base) :GM<Type>(obj, base)
+        {}
+
+        template<typename T>
+        GMP(GMP<T> const &C) : GM<Type>(C.obj(), C.operator Vns())
+        {}
+
+        MEM& obj() const {
+            return static_cast<MEM &>(m_obj);
+        }
+
+        template<typename T>
+        inline operator T () const {
+            return (T)m_base;
+        }
+
+        inline operator Vns () const {
+            return m_base;
+        }
+
+        /*convert{*/
+        template <typename T>
+        inline operator GMP<T>& () {
+            return static_cast<GMP<T>&>(*this);
+        }
+        /*}convert*/
+
+        template<typename T>
+        inline void operator=(T const data) {
+            m_base = (ADDR)data;
+        }
+
+        inline void operator=(Vns const &data) {
+            m_base = data;
+        }
+
+
+        inline GM<Type>& operator*() const {
+            return *(GM<Type>*)this;
+        }
+
+
+        inline GM<Type> operator [](UInt idx) {
+            return GM<Type>(obj(), m_base + idx * (sizeof(Type)));
+        }
+
+
+
+    #define REG_OPERATOR(op)					\
+		    template<typename _dataType>		\
+		    Vns operator op(_dataType data) const{\
+			    return operator Vns() op data;	\
+		    }
+
+        REG_OPERATOR(+);
+        REG_OPERATOR(-);
+        REG_OPERATOR(*);
+        REG_OPERATOR(/ );
+        REG_OPERATOR(>> );
+        REG_OPERATOR(<< );
+        REG_OPERATOR(| );
+        REG_OPERATOR(&);
+        REG_OPERATOR(== );
+
+    #undef REG_OPERATOR
+
+    private:
+        template<typename T>
+        T operator &() = delete;
+        template<typename T>
+        T operator &() const = delete;
+
+        operator z3::expr() = delete;
+        operator z3::expr& () = delete;
+        operator z3::expr& () const = delete;
+        operator const z3::expr() = delete;
+        operator const z3::expr& () = delete;
+        operator const z3::expr& () const = delete;
+    };
+
+
+    template<typename Type>
+    class GR {
+        Register<REGISTER_LEN>& m_obj;
+        UInt ir_o;
+        template <typename T> friend class GRP;
+
+    public:
+        GR(Register<REGISTER_LEN>& obj, UInt iro) :
+            m_obj(obj),
+            ir_o(iro)
+        {}
+
+        Register<REGISTER_LEN>& obj() const {
+            return static_cast<Register<REGISTER_LEN>&>(m_obj);
+        }
+
+    public:
+
+        /*Read{*/
+        template<typename T>
+        inline operator T () const {
+            return (T)(Type)obj().Iex_Get<(IRType)(sizeof(Type) << 3)>(ir_o);
+        }
+
+        inline operator Vns () const {
+            return obj().Iex_Get<(IRType)(sizeof(Type) << 3)>(ir_o);
+        }
+        /*}Read*/
+
+
+        /*Write{*/
+        template<typename T>
+        inline void operator=(T const data) {
+            obj().Ist_Put(ir_o, (Type)data);
+        }
+
+        void operator=(Vns const& data) {
+            if ((sizeof(Type) << 3) == data.bitn) {
+                obj().Ist_Put(ir_o, data);
+            }
+            else if ((sizeof(Type) << 3) > data.bitn) {
+                if (ISUNSIGNED_TYPE(Type)) {
+                    obj().Ist_Put(ir_o, data.zext(data.bitn - (sizeof(Type) << 3)));
+                }
+                else {
+                    obj().Ist_Put(ir_o, data.sext(data.bitn - (sizeof(Type) << 3)));
+                }
+            }
+            else {
+                obj().Ist_Put(ir_o, data.extract<(int)((sizeof(Type) << 3) - 1), 0>());
+            }
+        }
+        /*}Write*/
+
+        GRP<Type>& operator &() const {
+            return *(GRP<Type>*)this;;
+        }
+
+
+
+    #define REG_OPERATOR(op)					\
+		    template<typename _dataType>		\
+		    Vns operator op(_dataType data) const{\
+			    return operator Vns() op data;	\
+		    }
+
+        REG_OPERATOR(+);
+        REG_OPERATOR(-);
+        REG_OPERATOR(*);
+        REG_OPERATOR(/ );
+        REG_OPERATOR(>> );
+        REG_OPERATOR(<< );
+        REG_OPERATOR(| );
+        REG_OPERATOR(&);
+        REG_OPERATOR(== );
+
+    #undef REG_OPERATOR
+
+    private:
+        template<typename T>
+        T operator &() = delete;
+        template<typename T>
+        T operator &() const = delete;
+
+        operator z3::expr() = delete;
+        operator z3::expr& () = delete;
+        operator z3::expr& () const = delete;
+        operator const z3::expr() = delete;
+        operator const z3::expr& () = delete;
+        operator const z3::expr& () const = delete;
+    };
+
+
+    template<typename Type>
+    class GRP :private GR<Type> {
+    public:
+        GRP(Register<REGISTER_LEN>& obj, UInt iro) : GR<Type>(obj, iro)
+        {}
+
+        template<typename T>
+        GRP(GRP<T> const& C) : GR<Type>(C.obj(), C.ir_o)
+        {}
+
+        Register<REGISTER_LEN>& obj() const {
+            return static_cast<Register<REGISTER_LEN>&>(m_obj);
+        }
+
+        /*convert{*/
+        template <typename T>
+        inline operator GRP<T>& () {
+            return static_cast<GRP<T>&>(*this);
+        }
+        /*}convert*/
+
+        inline GR<Type>& operator*() const {
+            return *(GR<Type>*)this;
+        }
+
+
+        inline GR<Type> operator [](UInt idx) {
+            return GR<Type>(obj(), m_base + idx * (sizeof(Type)));
+        }
+
+    #define REG_OPERATOR(op)					\
+		    template<typename _dataType>		\
+		    Vns operator op(_dataType data) const{\
+			    return operator Vns() op data;	\
+		    }
+
+        REG_OPERATOR(+);
+        REG_OPERATOR(-);
+        REG_OPERATOR(*);
+        REG_OPERATOR(/ );
+        REG_OPERATOR(>> );
+        REG_OPERATOR(<< );
+        REG_OPERATOR(| );
+        REG_OPERATOR(&);
+        REG_OPERATOR(== );
+
+    #undef REG_OPERATOR
+
+    private:
+        template<typename T>
+        T operator &() = delete;
+        template<typename T>
+        T operator &() const = delete;
+
+        operator z3::expr() = delete;
+        operator z3::expr& () = delete;
+        operator z3::expr& () const = delete;
+        operator const z3::expr() = delete;
+        operator const z3::expr& () = delete;
+        operator const z3::expr& () const = delete;
+    };
+
+
+    template<typename Type, UInt shift = 0, UInt bits = (sizeof(Type) << 3)>
+    class GMW :private GM<Type> {
+    public:
+        GMW(MEM& obj, Vns const& base) :GM(obj, base)
+        {}
+
+        GMW(MEM& obj) :GM(obj)
+        {}
+
+        GMW(MEM& obj, ADDR base) :GM(obj, base)
+        {}
+
+        template<typename T>
+        GMW(MEM& obj, T base) : GM(obj, base)
+        {}
+
+        operator Vns() const {
+            if (((sizeof(Type) << 3) == bits) && (shift == 0)) {
+                return obj().Iex_Load<(sizeof(Type) << 3)>(m_base);
+            }
             if (ISUNSIGNED_TYPE(Type)) {
-                obj().Ist_Store(m_base, data.zext(data.bitn - (sizeof(Type) << 3)));
+                return ((GM<Type>*)this)->operator Vns().extract<(shift + bits - 1), shift>().zext((sizeof(Type) << 3) - bits);
             }
             else {
-               obj().Ist_Store( m_base, data.sext(data.bitn - (sizeof(Type) << 3)));
+                return ((GM<Type>*)this)->operator Vns().extract<(shift + bits - 1), shift>().sext((sizeof(Type) << 3) - bits);
             }
         }
-        else {
-            obj().Ist_Store(m_base, data.extract<(int)((sizeof(Type) << 3) - 1), 0>());
-        }
-    }
+    };
 
-    inline GM<Type> operator [](UInt idx) {
-        return GM<Type>(obj(), m_base + idx * (sizeof(Type)));
-    }
-
-
-
-#define REG_OPERATOR(op)					\
-		template<typename _dataType>		\
-		Vns operator op(_dataType data) const{\
-			return operator Vns() op data;	\
-		}
-
-    REG_OPERATOR(+);
-    REG_OPERATOR(-);
-    REG_OPERATOR(*);
-    REG_OPERATOR(/ );
-    REG_OPERATOR(>> );
-    REG_OPERATOR(<< );
-    REG_OPERATOR(| );
-    REG_OPERATOR(&);
-    REG_OPERATOR(== );
-
-#undef REG_OPERATOR
-
-private:
-    template<typename T>
-    T operator &() = delete;
-    template<typename T>
-    T operator &() const = delete;
-
-    operator z3::expr() = delete;
-    operator z3::expr& () = delete;
-    operator z3::expr& () const = delete;
-    operator const z3::expr() = delete;
-    operator const z3::expr& () = delete;
-    operator const z3::expr& () const = delete;
 };
+
+using namespace hp;
+using FloatP = GMP<Float>;
+using DoubleP = GMP<Double>;
+
+using BoolP = GMP<Bool>;
+using UCharP = GMP<UChar>;
+using SCharP = GMP<SChar>;
+using CharP = GMP<SChar>;
+using UShortP = GMP<UShort>;
+using ShortP = GMP<SShort>;
+using SShortP = GMP<SShort>;
+using UIntP = GMP<UInt>;
+using IntP = GMP<Int>;
+using SIntP = GMP<Int>;
+using ULongP = GMP<ULong>;
+using SLongP = GMP<SLong>;
+using LongP = GMP<SLong>;
+using m128P = GMP<__m128i>;
+using m256P = GMP<__m256i>;
+using V256P = GMP<V256>;
+using V128P = GMP<V128>;
+
+
+
+
+
+
 
 class _VexGuestAMD64State {
 public:
-    Reg<ULong, 0>     host_EvC_FAILADDR;
-    Reg<UInt, 8>      host_EvC_COUNTER;
-    Reg<UInt, 12>     pad0;
-    Reg<ULong, 16>    guest_RAX;
-    Reg<ULong, 24>    guest_RCX;
-    Reg<ULong, 32>    guest_RDX;
-    Reg<ULong, 40>    guest_RBX;
-    Reg<ULong, 48>    guest_RSP;
-    Reg<ULong, 56>    guest_RBP;
-    Reg<ULong, 64>    guest_RSI;
-    Reg<ULong, 72>    guest_RDI;
-    Reg<ULong, 80>    guest_R8;
-    Reg<ULong, 88>    guest_R9;
-    Reg<ULong, 96>    guest_R10;
-    Reg<ULong, 104>   guest_R11;
-    Reg<ULong, 112>   guest_R12;
-    Reg<ULong, 120>   guest_R13;
-    Reg<ULong, 128>   guest_R14;
-    Reg<ULong, 136>   guest_R15;
-    Reg<ULong, 144>   guest_CC_OP;
-    Reg<ULong, 152>   guest_CC_DEP1;
-    Reg<ULong, 160>   guest_CC_DEP2;
-    Reg<ULong, 168>   guest_CC_NDEP;
-    Reg<ULong, 176>   guest_DFLAG;
-    Reg<ULong, 184>   guest_RIP;
-    Reg<ULong, 192>   guest_ACFLAG;
-    Reg<ULong, 200>   guest_IDFLAG;
-    Reg<ULong, 208>   guest_FS_CONST;
-    Reg<ULong, 216>   guest_SSEROUND;
-    Reg<__m256i, 224> guest_YMM0;
-    Reg<__m256i, 256> guest_YMM1;
-    Reg<__m256i, 288> guest_YMM2;
-    Reg<__m256i, 320> guest_YMM3;
-    Reg<__m256i, 352> guest_YMM4;
-    Reg<__m256i, 384> guest_YMM5;
-    Reg<__m256i, 416> guest_YMM6;
-    Reg<__m256i, 448> guest_YMM7;
-    Reg<__m256i, 480> guest_YMM8;
-    Reg<__m256i, 512> guest_YMM9;
-    Reg<__m256i, 544> guest_YMM10;
-    Reg<__m256i, 576> guest_YMM11;
-    Reg<__m256i, 608> guest_YMM12;
-    Reg<__m256i, 640> guest_YMM13;
-    Reg<__m256i, 672> guest_YMM14;
-    Reg<__m256i, 704> guest_YMM15;
-    Reg<__m256i, 736> guest_YMM16;
-    Reg<UInt, 768>    guest_FTOP;
-    Reg<UInt, 772>    pad1;
-    RegL<ULong, 776>  guest_FPREG;
-    RegL<UChar, 840>  guest_FPTAG;
-    Reg<ULong, 848>   guest_FPROUND;
-    Reg<ULong, 856>   guest_FC3210;
-    Reg<UInt, 864>    guest_EMNOTE;
-    Reg<UInt, 868>    pad2;
-    Reg<ULong, 872>   guest_CMSTART;
-    Reg<ULong, 880>   guest_CMLEN;
-    Reg<ULong, 888>   guest_NRADDR;
-    Reg<ULong, 896>   guest_SC_CLASS;
-    Reg<ULong, 904>   guest_GS_CONST;
-    Reg<ULong, 912>   guest_IP_AT_SYSCALL;
+    /*0  */GR<ULong >  host_EvC_FAILADDR;
+    /*8  */GR<UInt >   host_EvC_COUNTER;
+    /*12 */GR<UInt >   pad0;
+    /*16 */GR<ULong>   guest_RAX;
+    /*24 */GR<ULong>   guest_RCX;
+    /*32 */GR<ULong>   guest_RDX;
+    /*40 */GR<ULong>   guest_RBX;
+    /*48 */GR<ULong>   guest_RSP;
+    /*56 */GR<ULong>   guest_RBP;
+    /*64 */GR<ULong>   guest_RSI;
+    /*72 */GR<ULong>   guest_RDI;
+    /*80 */GR<ULong>   guest_R8;
+    /*88 */GR<ULong>   guest_R9;
+    /*96 */GR<ULong>   guest_R10;
+    /*104*/GR<ULong>   guest_R11;
+    /*112*/GR<ULong>   guest_R12;
+    /*120*/GR<ULong>   guest_R13;
+    /*128*/GR<ULong>   guest_R14;
+    /*136*/GR<ULong>   guest_R15;
+    /*144*/GR<ULong>   guest_CC_OP;
+    /*152*/GR<ULong>   guest_CC_DEP1;
+    /*160*/GR<ULong>   guest_CC_DEP2;
+    /*168*/GR<ULong>   guest_CC_NDEP;
+    /*176*/GR<ULong>   guest_DFLAG;
+    /*184*/GR<ULong>   guest_RIP;
+    /*192*/GR<ULong>   guest_ACFLAG;
+    /*200*/GR<ULong>   guest_IDFLAG;
+    /*208*/GR<ULong>   guest_FS_CONST;
+    /*216*/GR<ULong>   guest_SSEROUND;
+    /*224*/GR<__m256i> guest_YMM0;
+    /*256*/GR<__m256i> guest_YMM1;
+    /*288*/GR<__m256i> guest_YMM2;
+    /*320*/GR<__m256i> guest_YMM3;
+    /*352*/GR<__m256i> guest_YMM4;
+    /*384*/GR<__m256i> guest_YMM5;
+    /*416*/GR<__m256i> guest_YMM6;
+    /*448*/GR<__m256i> guest_YMM7;
+    /*480*/GR<__m256i> guest_YMM8;
+    /*512*/GR<__m256i> guest_YMM9;
+    /*544*/GR<__m256i> guest_YMM10;
+    /*576*/GR<__m256i> guest_YMM11;
+    /*608*/GR<__m256i> guest_YMM12;
+    /*640*/GR<__m256i> guest_YMM13;
+    /*672*/GR<__m256i> guest_YMM14;
+    /*704*/GR<__m256i> guest_YMM15;
+    /*736*/GR<__m256i> guest_YMM16;
+    /*768*/GR<UInt>    guest_FTOP;
+    /*772*/GR<UInt>    pad1;
+    /*776*/GRP<ULong>  guest_FPREG;
+    /*840*/GRP<UChar>  guest_FPTAG;
+    /*848*/GR<ULong>   guest_FPROUND;
+    /*856*/GR<ULong>   guest_FC3210;
+    /*864*/GR<UInt>    guest_EMNOTE;
+    /*868*/GR<UInt>    pad2;
+    /*872*/GR<ULong>   guest_CMSTART;
+    /*880*/GR<ULong>   guest_CMLEN;
+    /*888*/GR<ULong>   guest_NRADDR;
+    /*896*/GR<ULong>   guest_SC_CLASS;
+    /*904*/GR<ULong>   guest_GS_CONST;
+    /*912*/GR<ULong>   guest_IP_AT_SYSCALL;
     State& m_state;
 public:
 	_VexGuestAMD64State(State &s):
         m_state(s),
-        host_EvC_FAILADDR(s),
-        host_EvC_COUNTER(s),
-        pad0(s),
-        guest_RAX(s),
-        guest_RCX(s),
-        guest_RDX(s),
-        guest_RBX(s),
-        guest_RSP(s),
-        guest_RBP(s),
-        guest_RSI(s),
-        guest_RDI(s),
-        guest_R8(s),
-        guest_R9(s),
-        guest_R10(s),
-        guest_R11(s),
-        guest_R12(s),
-        guest_R13(s),
-        guest_R14(s),
-        guest_R15(s),
-        guest_CC_OP(s),
-        guest_CC_DEP1(s),
-        guest_CC_DEP2(s),
-        guest_CC_NDEP(s),
-        guest_DFLAG(s),
-        guest_RIP(s),
-        guest_ACFLAG(s),
-        guest_IDFLAG(s),
-        guest_FS_CONST(s),
-        guest_SSEROUND(s),
-        guest_YMM0(s),
-        guest_YMM1(s),
-        guest_YMM2(s),
-        guest_YMM3(s),
-        guest_YMM4(s),
-        guest_YMM5(s),
-        guest_YMM6(s),
-        guest_YMM7(s),
-        guest_YMM8(s),
-        guest_YMM9(s),
-        guest_YMM10(s),
-        guest_YMM11(s),
-        guest_YMM12(s),
-        guest_YMM13(s),
-        guest_YMM14(s),
-        guest_YMM15(s),
-        guest_YMM16(s),
-        guest_FTOP(s),
-        pad1(s),
-        guest_FPREG(s),
-        guest_FPTAG(s),
-        guest_FPROUND(s),
-        guest_FC3210(s),
-        guest_EMNOTE(s),
-        pad2(s),
-        guest_CMSTART(s),
-        guest_CMLEN(s),
-        guest_NRADDR(s),
-        guest_SC_CLASS(s),
-        guest_GS_CONST(s),
-        guest_IP_AT_SYSCALL(s)
+        host_EvC_FAILADDR   (s,0  ),
+        host_EvC_COUNTER    (s,8  ),
+        pad0                (s,12 ),
+        guest_RAX           (s,16 ),
+        guest_RCX           (s,24 ),
+        guest_RDX           (s,32 ),
+        guest_RBX           (s,40 ),
+        guest_RSP           (s,48 ),
+        guest_RBP           (s,56 ),
+        guest_RSI           (s,64 ),
+        guest_RDI           (s,72 ),
+        guest_R8            (s,80 ),
+        guest_R9            (s,88 ),
+        guest_R10           (s,96 ),
+        guest_R11           (s,104),
+        guest_R12           (s,112),
+        guest_R13           (s,120),
+        guest_R14           (s,128),
+        guest_R15           (s,136),
+        guest_CC_OP         (s,144),
+        guest_CC_DEP1       (s,152),
+        guest_CC_DEP2       (s,160),
+        guest_CC_NDEP       (s,168),
+        guest_DFLAG         (s,176),
+        guest_RIP           (s,184),
+        guest_ACFLAG        (s,192),
+        guest_IDFLAG        (s,200),
+        guest_FS_CONST      (s,208),
+        guest_SSEROUND      (s,216),
+        guest_YMM0          (s,224),
+        guest_YMM1          (s,256),
+        guest_YMM2          (s,288),
+        guest_YMM3          (s,320),
+        guest_YMM4          (s,352),
+        guest_YMM5          (s,384),
+        guest_YMM6          (s,416),
+        guest_YMM7          (s,448),
+        guest_YMM8          (s,480),
+        guest_YMM9          (s,512),
+        guest_YMM10         (s,544),
+        guest_YMM11         (s,576),
+        guest_YMM12         (s,608),
+        guest_YMM13         (s,640),
+        guest_YMM14         (s,672),
+        guest_YMM15         (s,704),
+        guest_YMM16         (s,736),
+        guest_FTOP          (s,768),
+        pad1                (s,772),
+        guest_FPREG         (s,776),
+        guest_FPTAG         (s,840),
+        guest_FPROUND       (s,848),
+        guest_FC3210        (s,856),
+        guest_EMNOTE        (s,864),
+        pad2                (s,868),
+        guest_CMSTART       (s,872),
+        guest_CMLEN         (s,880),
+        guest_NRADDR        (s,888),
+        guest_SC_CLASS      (s,896),
+        guest_GS_CONST      (s,904),
+        guest_IP_AT_SYSCALL (s,912)
 	{
 
 	}
@@ -745,106 +583,106 @@ public:
 class _VexGuestX86State {
 public:
 
-    Reg<UInt, 0>        host_EvC_FAILADDR;
-    Reg<UInt, 4>        host_EvC_COUNTER;
-    Reg<UInt, 8>        guest_EAX;
-    Reg<UInt, 12>       guest_ECX;
-    Reg<UInt, 16>       guest_EDX;
-    Reg<UInt, 20>       guest_EBX;
-    Reg<UInt, 24>       guest_ESP;
-    Reg<UInt, 28>       guest_EBP;
-    Reg<UInt, 32>       guest_ESI;
-    Reg<UInt, 36>       guest_EDI;
-    Reg<UInt, 40>       guest_CC_OP;
-    Reg<UInt, 44>       guest_CC_DEP1;
-    Reg<UInt, 48>       guest_CC_DEP2;
-    Reg<UInt, 52>       guest_CC_NDEP;
-    Reg<UInt, 56>       guest_DFLAG;
-    Reg<UInt, 60>       guest_IDFLAG;
-    Reg<UInt, 64>       guest_ACFLAG;
-    Reg<UInt, 68>       guest_EIP;
-    RegL<ULong, 72>     guest_FPREG;
-    RegL<UChar, 136>    guest_FPTAG;
-    Reg<UInt, 144>      guest_FPROUND;
-    Reg<UInt, 148>      guest_FC3210;
-    Reg<UInt, 152>      guest_FTOP;
-    Reg<UInt, 156>      guest_SSEROUND;
-    Reg<U128, 160>      guest_XMM0;
-    Reg<U128, 176>      guest_XMM1;
-    Reg<U128, 192>      guest_XMM2;
-    Reg<U128, 208>      guest_XMM3;
-    Reg<U128, 224>      guest_XMM4;
-    Reg<U128, 240>      guest_XMM5;
-    Reg<U128, 256>      guest_XMM6;
-    Reg<U128, 272>      guest_XMM7;
-    Reg<UShort, 288>    guest_CS;
-    Reg<UShort, 290>    guest_DS;
-    Reg<UShort, 292>    guest_ES;
-    Reg<UShort, 294>    guest_FS;
-    Reg<UShort, 296>    guest_GS;
-    Reg<UShort, 298>    guest_SS;
-    Reg<ULong, 304>     guest_LDT;
-    Reg<ULong, 312>     guest_GDT;
-    Reg<UInt, 320>      guest_EMNOTE;
-    Reg<UInt, 324>      guest_CMSTART;
-    Reg<UInt, 328>      guest_CMLEN;
-    Reg<UInt, 332>      guest_NRADDR;
-    Reg<UInt, 336>      guest_SC_CLASS;
-    Reg<UInt, 340>      guest_IP_AT_SYSCALL;
-    Reg<UInt, 344>      padding1;
-    Reg<UInt, 348>      padding2;
-    Reg<UInt, 352>      padding3;
+    /*0  */GR<UInt>      host_EvC_FAILADDR;
+    /*4  */GR<UInt>      host_EvC_COUNTER;
+    /*8  */GR<UInt>      guest_EAX;
+    /*12 */GR<UInt>      guest_ECX;
+    /*16 */GR<UInt>      guest_EDX;
+    /*20 */GR<UInt>      guest_EBX;
+    /*24 */GR<UInt>      guest_ESP;
+    /*28 */GR<UInt>      guest_EBP;
+    /*32 */GR<UInt>      guest_ESI;
+    /*36 */GR<UInt>      guest_EDI;
+    /*40 */GR<UInt>      guest_CC_OP;
+    /*44 */GR<UInt>      guest_CC_DEP1;
+    /*48 */GR<UInt>      guest_CC_DEP2;
+    /*52 */GR<UInt>      guest_CC_NDEP;
+    /*56 */GR<UInt>      guest_DFLAG;
+    /*60 */GR<UInt>      guest_IDFLAG;
+    /*64 */GR<UInt>      guest_ACFLAG;
+    /*68 */GR<UInt>      guest_EIP;
+    /*72 */GRP<ULong>    guest_FPREG;
+    /*136*/GRP<UChar>    guest_FPTAG;
+    /*144*/GR<UInt>      guest_FPROUND;
+    /*148*/GR<UInt>      guest_FC3210;
+    /*152*/GR<UInt>      guest_FTOP;
+    /*156*/GR<UInt>      guest_SSEROUND;
+    /*160*/GR<U128>      guest_XMM0;
+    /*176*/GR<U128>      guest_XMM1;
+    /*192*/GR<U128>      guest_XMM2;
+    /*208*/GR<U128>      guest_XMM3;
+    /*224*/GR<U128>      guest_XMM4;
+    /*240*/GR<U128>      guest_XMM5;
+    /*256*/GR<U128>      guest_XMM6;
+    /*272*/GR<U128>      guest_XMM7;
+    /*288*/GR<UShort>    guest_CS;
+    /*290*/GR<UShort>    guest_DS;
+    /*292*/GR<UShort>    guest_ES;
+    /*294*/GR<UShort>    guest_FS;
+    /*296*/GR<UShort>    guest_GS;
+    /*298*/GR<UShort>    guest_SS;
+    /*304*/GR<ULong>     guest_LDT;
+    /*312*/GR<ULong>     guest_GDT;
+    /*320*/GR<UInt>      guest_EMNOTE;
+    /*324*/GR<UInt>      guest_CMSTART;
+    /*328*/GR<UInt>      guest_CMLEN;
+    /*332*/GR<UInt>      guest_NRADDR;
+    /*336*/GR<UInt>      guest_SC_CLASS;
+    /*340*/GR<UInt>      guest_IP_AT_SYSCALL;
+    /*344*/GR<UInt>      padding1;
+    /*348*/GR<UInt>      padding2;
+    /*352*/GR<UInt>      padding3;
 public:
     _VexGuestX86State(State& s):
-        host_EvC_FAILADDR(s),
-        host_EvC_COUNTER(s),
-        guest_EAX(s),
-        guest_ECX(s),
-        guest_EDX(s),
-        guest_EBX(s),
-        guest_ESP(s),
-        guest_EBP(s),
-        guest_ESI(s),
-        guest_EDI(s),
-        guest_CC_OP(s),
-        guest_CC_DEP1(s),
-        guest_CC_DEP2(s),
-        guest_CC_NDEP(s),
-        guest_DFLAG(s),
-        guest_IDFLAG(s),
-        guest_ACFLAG(s),
-        guest_EIP(s),
-        guest_FPREG(s),
-        guest_FPTAG(s),
-        guest_FPROUND(s),
-        guest_FC3210(s),
-        guest_FTOP(s),
-        guest_SSEROUND(s),
-        guest_XMM0(s),
-        guest_XMM1(s),
-        guest_XMM2(s),
-        guest_XMM3(s),
-        guest_XMM4(s),
-        guest_XMM5(s),
-        guest_XMM6(s),
-        guest_XMM7(s),
-        guest_CS(s),
-        guest_DS(s),
-        guest_ES(s),
-        guest_FS(s),
-        guest_GS(s),
-        guest_SS(s),
-        guest_LDT(s),
-        guest_GDT(s),
-        guest_EMNOTE(s),
-        guest_CMSTART(s),
-        guest_CMLEN(s),
-        guest_NRADDR(s),
-        guest_SC_CLASS(s),
-        guest_IP_AT_SYSCALL(s),
-        padding1(s),
-        padding2(s),
-        padding3(s)
+        host_EvC_FAILADDR   (s, 0  ),
+        host_EvC_COUNTER    (s, 4  ),
+        guest_EAX           (s, 8  ),
+        guest_ECX           (s, 12 ),
+        guest_EDX           (s, 16 ),
+        guest_EBX           (s, 20 ),
+        guest_ESP           (s, 24 ),
+        guest_EBP           (s, 28 ),
+        guest_ESI           (s, 32 ),
+        guest_EDI           (s, 36 ),
+        guest_CC_OP         (s, 40 ),
+        guest_CC_DEP1       (s, 44 ),
+        guest_CC_DEP2       (s, 48 ),
+        guest_CC_NDEP       (s, 52 ),
+        guest_DFLAG         (s, 56 ),
+        guest_IDFLAG        (s, 60 ),
+        guest_ACFLAG        (s, 64 ),
+        guest_EIP           (s, 68 ),
+        guest_FPREG         (s, 72 ),
+        guest_FPTAG         (s, 136),
+        guest_FPROUND       (s, 144),
+        guest_FC3210        (s, 148),
+        guest_FTOP          (s, 152),
+        guest_SSEROUND      (s, 156),
+        guest_XMM0          (s, 160),
+        guest_XMM1          (s, 176),
+        guest_XMM2          (s, 192),
+        guest_XMM3          (s, 208),
+        guest_XMM4          (s, 224),
+        guest_XMM5          (s, 240),
+        guest_XMM6          (s, 256),
+        guest_XMM7          (s, 272),
+        guest_CS            (s, 288),
+        guest_DS            (s, 290),
+        guest_ES            (s, 292),
+        guest_FS            (s, 294),
+        guest_GS            (s, 296),
+        guest_SS            (s, 298),
+        guest_LDT           (s, 304),
+        guest_GDT           (s, 312),
+        guest_EMNOTE        (s, 320),
+        guest_CMSTART       (s, 324),
+        guest_CMLEN         (s, 328),
+        guest_NRADDR        (s, 332),
+        guest_SC_CLASS      (s, 336),
+        guest_IP_AT_SYSCALL (s, 340),
+        padding1            (s, 344),
+        padding2            (s, 348),
+        padding3            (s, 352)
     {
 
     }
@@ -852,20 +690,20 @@ public:
 };
 
 namespace _X86SegDescr {
-    using LimitLow = helper::inPointer<MEM, UShort, 0>;
-    using BaseLow = helper::inPointer<MEM, UShort, 2>;
-    using BaseMid = helper::inPointer<MEM, UInt, 4, 0, 8>;
-    using Type = helper::inPointer<MEM, UInt, 4, 8, 5>;
-    using Dpl = helper::inPointer<MEM, UInt, 4, 13, 2>;
-    using Pres = helper::inPointer<MEM, UInt, 4, 15, 1>;
-    using LimitHi = helper::inPointer<MEM, UInt, 4, 16, 4>;
-    using Sys = helper::inPointer<MEM, UInt, 4, 20, 1>;
-    using Reserved_0 = helper::inPointer<MEM, UInt, 4, 21, 1>;
-    using Default_Big = helper::inPointer<MEM, UInt, 4, 22, 1>;
-    using Granularity = helper::inPointer<MEM, UInt, 4, 23, 1>;
-    using BaseHi = helper::inPointer<MEM, UInt, 4, 24, 8>;
-    using word1 = helper::inPointer<MEM, UInt, 0>;
-    using word2 = helper::inPointer<MEM, UInt, 4>;
+    using LimitLow =    GMW<UShort>;
+    using BaseLow =     GMW<UShort>;
+    using BaseMid =     GMW<UInt, 0, 8>;
+    using Type =        GMW<UInt, 8, 5>;
+    using Dpl =         GMW<UInt, 13, 2>;
+    using Pres =        GMW<UInt, 15, 1>;
+    using LimitHi =     GMW<UInt, 16, 4>;
+    using Sys =         GMW<UInt, 20, 1>;
+    using Reserved_0 =  GMW<UInt, 21, 1>;
+    using Default_Big = GMW<UInt, 22, 1>;
+    using Granularity = GMW<UInt, 23, 1>;
+    using BaseHi =      GMW<UInt, 24, 8>;
+    using word1 =       GMW<UInt>;
+    using word2 =       GMW<UInt>;
 }
 
 class _VexGuestX86SegDescr {

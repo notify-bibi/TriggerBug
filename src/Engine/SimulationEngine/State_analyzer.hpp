@@ -20,6 +20,63 @@ private:
 
 };
 
+class IRT {
+    UInt irTempSize;
+    IRExpr** irTemp;
+public:
+    IRT() {
+        irTempSize = 10;
+        irTemp = (IRExpr**)malloc(sizeof(IRExpr*) * irTempSize);
+    }
+
+    IRExpr*& operator [](UInt idx) {
+        if (idx >= irTempSize) {
+            if (idx < 2 * irTempSize) {
+                IRExpr** newtmp = (IRExpr**)malloc(sizeof(IRExpr*) * 2 * irTempSize);
+                for (int i = 0; i < irTempSize; i++) {
+                    newtmp[i] = irTemp[i];
+                }
+                irTempSize = 2 * irTempSize;
+                irTemp = newtmp;
+            }
+            else {
+                IRExpr** newtmp = (IRExpr**)malloc(sizeof(IRExpr*) * (idx + 1));
+                for (int i = 0; i < irTempSize; i++) {
+                    newtmp[i] = irTemp[i];
+                }
+                irTempSize = idx + 1;
+                irTemp = newtmp;
+            }
+        }
+        return irTemp[idx];
+    }
+};
+
+
+
+
+class WriteMap {
+    IRSB const* irsb;
+    struct Bms {
+        IRExpr* address;
+        IRExpr* mem;
+        UShort nb;
+    };
+    std::vector<Bms> unit;
+public:
+    WriteMap(IRSB const*bb):
+        irsb(bb)
+    {
+        unit.reserve(10);
+    }
+
+    void Ist_Store(IRExpr *address, IRExpr* data) {
+        IRType ty = typeOfIRExpr(irsb->tyenv, data);
+        UShort dnb = sizeofIRType(ty);
+        unit.emplace_back(Bms{ address, data, dnb });
+    }
+};
+
 class GraphView{
     State& m_state;
     context& m_ctx;
@@ -31,6 +88,7 @@ class GraphView{
     bool is_dynamic_block;
     Pap pap; 
     Long delta;
+    IRT irTemp;
 public:
     GraphView(State& state):
         m_state(state),
@@ -41,12 +99,13 @@ public:
         guest_start_ep(state.guest_start_ep),
         guest_start(state.guest_start),
         pap(state.pap),
-        delta(0)
+        delta(0),
+        irTemp()
     {
     }
     IRSB* BB2IR();
-    inline Vns tIRExpr(IRExpr* e);
-    void analyze(ADDR block_oep, Bool first_bkp_pass);
+    inline IRExpr* tIRExpr(IRExpr* e);
+    void analyze(ADDR block_oep);
 };
 
 
@@ -59,9 +118,9 @@ public:
     {
     }
 
-    void analyze(State &s, Bool first_bkp_pass) {
+    void analyze(State &s) {
         GraphView gv(s);
-        gv.analyze(s.get_start_of_block(), first_bkp_pass);
+        gv.analyze(s.get_start_of_block());
     }
 
     void Run();

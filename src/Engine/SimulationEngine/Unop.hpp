@@ -75,8 +75,7 @@ static inline Z3_ast bool2bv(Z3_context ctx,Z3_ast ast) {
 #define Iop_SEXT(T1, T2) Vns(a, Z3_mk_sign_ext(m_ctx, T2 - T1, a), T2)
 
 
-inline Vns State::T_Unop(IROp op, IRExpr* arg1) {
-    Vns a = tIRExpr(arg1);
+inline Vns State::T_Unop(context &m_ctx, IROp op, Vns const& a) {
     //a.tostr();
     if (a.symbolic()) goto dosymbol;
     {

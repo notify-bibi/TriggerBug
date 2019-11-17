@@ -94,7 +94,7 @@ inline int ty2bit(IRType ty) {
 }
 
 
-static z3::sort translateRM(z3::context&m_ctx, IRRoundingMode md) {
+static z3::sort translateRM(z3::context& m_ctx, IRRoundingMode md) {
     switch (md)
     {
     case Irrm_NEAREST: {return z3::sort(m_ctx, Z3_mk_fpa_rne(m_ctx)); }

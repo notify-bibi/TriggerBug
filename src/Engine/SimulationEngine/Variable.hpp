@@ -144,9 +144,9 @@ public:
             vpanic(Z3_get_error_msg(ctx, Z3_get_error_code(ctx)));
         }
         vassert(ast);
-        if (sort_kind() == Z3_BV_SORT) {
+        /*if (sort_kind() == Z3_BV_SORT) {
             vassert(Z3_get_bv_sort_size(ctx, Z3_get_sort(ctx, m_ast)) == n);
-        }
+        }*/
     }
     
 
@@ -179,6 +179,20 @@ public:
         }
     }
 
+    inline operator IRConstTag() const
+    {
+        switch (bitn) {
+        case 1:  return Ico_U1;
+        case 8:  return Ico_U8;
+        case 16: return Ico_U16;
+        case 32: return Ico_U32;
+        case 64: return Ico_U64;
+        case 128:return Ico_V128;
+        case 256:return Ico_V256;
+        default: 
+            return (IRConstTag)bitn;
+        }
+    }
     inline Vns(context const &ctx, IRConst *con) :
         Vns((Z3_context)ctx, con) {};
 
@@ -356,7 +370,7 @@ public:
     }
 
     template<typename T, UChar offset>
-    inline T get() { assert(real()); return *(T*)(((UChar*)&this->pack) + offset); }
+    inline T get() const { assert(real()); return *(T*)(((UChar*)&this->pack) + offset); }
 
     inline Z3_ast ast(Z3_context ctx) const {
         return (ctx == m_ctx) ? *this : Z3_translate(m_ctx, *this, ctx);
@@ -393,29 +407,29 @@ public:
         return Vns(m_ctx, simp, bitn, no_inc{});
     }
 
-    inline Vns bv2fpa(sort &s) {
+    inline Vns bv2fpa(sort &s) const {
         return Vns(m_ctx, Z3_mk_fpa_to_fp_bv(m_ctx, *this, s), bitn);
     };
 
-    inline Vns fpa2bv() {
+    inline Vns fpa2bv() const {
         return Vns(m_ctx, Z3_mk_fpa_to_ieee_bv(m_ctx, *this), bitn);
     };
 
-    inline Vns integer2fp_bv(z3::sort &rm, sort &fpa_sort) {
+    inline Vns integer2fp_bv(z3::sort &rm, sort &fpa_sort) const {
         return Vns(m_ctx, Z3_mk_fpa_to_fp_signed(m_ctx, rm, *this, fpa_sort), bitn).fpa2bv();
     };
-    inline Vns uinteger2fp_bv(z3::sort &rm, sort &fpa_sort) {
+    inline Vns uinteger2fp_bv(z3::sort &rm, sort &fpa_sort) const {
         return Vns(m_ctx, Z3_mk_fpa_to_fp_unsigned(m_ctx, rm, *this, fpa_sort), bitn).fpa2bv();
     };
 
-    inline Vns fp2integer_bv(z3::sort &rm, sort &fpa_sort) {
+    inline Vns fp2integer_bv(z3::sort &rm, sort &fpa_sort) const {
         return Vns(m_ctx, Z3_mk_fpa_to_sbv(m_ctx, rm, bv2fpa(fpa_sort), bitn));
     };
-    inline Vns fp2uinteger_bv(z3::sort &rm, sort &fpa_sort) {
+    inline Vns fp2uinteger_bv(z3::sort &rm, sort &fpa_sort) const {
         return Vns(m_ctx, Z3_mk_fpa_to_ubv(m_ctx, rm, bv2fpa(fpa_sort), bitn));
     };
 
-    inline Vns fp2fp_bv(z3::sort &rm, sort &fpa_sort, sort &to_fpa_sort, UInt to_size) {
+    inline Vns fp2fp_bv(z3::sort &rm, sort &fpa_sort, sort &to_fpa_sort, UInt to_size) const {
         return Vns(m_ctx, Z3_mk_fpa_to_fp_float(m_ctx, rm, bv2fpa(fpa_sort), to_fpa_sort), to_size).fpa2bv().simplify();
     };
 

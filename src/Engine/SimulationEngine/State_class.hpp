@@ -341,7 +341,7 @@ public:
     Vns  m_guard;
     bool m_tof;
 
-    BranchChunk(ADDR oep, Vns& sym_addr, Vns& guard, bool tof) :
+    BranchChunk(ADDR oep, Vns const& sym_addr, Vns const& guard, bool tof) :
         m_oep(oep),
         m_sym_addr(sym_addr),
         m_guard(guard),
@@ -386,9 +386,10 @@ private:
 	std::vector<Vns> asserts;
 
 	inline Bool treeCompress(z3::context &ctx, Addr64 Target_Addr, State_Tag Target_Tag, std::vector<State_Tag> &avoid, ChangeView& change_view, std::hash_map<ULong, Vns> &change_map, std::hash_map<UShort, Vns> &regs_change_map);
-	
+    bool Ist_Exit_find_branch(std::vector<BranchChunk> &branchChunks, Vns const& guard, IRSB *irsb, UInt stmtn);
+
 public:
-	Register<1000> regs;
+	Register<REGISTER_LEN> regs;
 	MEM mem;//多线程设置相同user，不同state设置不同user
 	ULong runed = 0;
 	std::vector <State*> branch;
@@ -407,7 +408,7 @@ public:
 	void add_assert(Vns &assert, Bool ToF);
     inline void add_assert(Vns& assert) { add_assert(assert, True); };
 	inline void add_assert_eq(Vns &eqA, Vns &eqB);
-    virtual void start(Bool first_bkp_pass);
+    void start(Bool first_bkp_pass);
     void branchGo();
 
 
@@ -417,10 +418,10 @@ public:
 	inline void write_regs(int offset, void*, int length);
 	inline void read_regs(int offset, void*, int length);
 	inline Vns CCall(IRCallee *cee, IRExpr **exp_args, IRType ty);
-	inline Vns T_Unop(IROp, IRExpr*);
-	inline Vns T_Binop(IROp, IRExpr*, IRExpr*);
-	inline Vns T_Triop(IROp, IRExpr*, IRExpr*, IRExpr*);
-	inline Vns T_Qop(IROp, IRExpr*, IRExpr*, IRExpr*, IRExpr*);
+    static Vns T_Unop(context & m_ctx, IROp, Vns const&);
+    static Vns T_Binop(context & m_ctx, IROp, Vns const&, Vns const&);
+    static Vns T_Triop(context & m_ctx, IROp, Vns const&, Vns const&, Vns const&);
+    static Vns T_Qop(context & m_ctx, IROp, Vns const&, Vns const&, Vns const&, Vns const&);
 	inline Vns ILGop(IRLoadG *lg);
 
     Vns get_int_const(UShort nbit);
@@ -433,6 +434,8 @@ public:
 
     inline operator context& () { return m_ctx; }
     inline operator Z3_context() { return m_ctx; }
+    inline operator MEM& () { return mem; }
+    inline operator Register<REGISTER_LEN>&() { return regs; }
     inline ADDR get_cpu_ip() { return guest_start; }
     inline ADDR get_state_ep() { return guest_start_ep; }
     inline ADDR get_start_of_block() { return guest_start_of_block; }

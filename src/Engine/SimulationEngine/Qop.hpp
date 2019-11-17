@@ -1,8 +1,4 @@
-inline Vns State::T_Qop(IROp op, IRExpr* arg1, IRExpr* arg2, IRExpr* arg3, IRExpr* arg4){
-	Vns a = tIRExpr(arg1);
-	Vns b = tIRExpr(arg2);
-	Vns c = tIRExpr(arg3);
-	Vns d = tIRExpr(arg4);
+inline Vns State::T_Qop(context &m_ctx, IROp op, Vns const& a, Vns const& b, Vns const& c, Vns const& d){
 	if (a.symbolic() || b.symbolic() || c.symbolic()|| d.symbolic()) goto dosymbol;
 	switch (op) {
 	case Iop_MAddF64:

@@ -199,9 +199,7 @@ case Iop_##OPNAME##64:{																			\
 
 
 
-inline Vns State::T_Binop(IROp op, IRExpr* arg1, IRExpr* arg2) {
-	Vns a = tIRExpr(arg1);
-	Vns b = tIRExpr(arg2);
+inline Vns State::T_Binop(context &m_ctx, IROp op, Vns const& a, Vns const& b) {
     if (a.symbolic() || b.symbolic()) {
         goto dosymbol;
     }
@@ -575,8 +573,8 @@ dosymbol:
 	case Iop_F32toI32U: {return b.fp2uinteger_bv(translateRM(m_ctx, (IRRoundingMode)a), m_ctx.fpa_sort<32>()); }//ok
 
 	case Iop_CmpF64: {
-		a = a.bv2fpa(m_ctx.fpa_sort<64>());
-		b = b.bv2fpa(m_ctx.fpa_sort<64>());
+		Vns a = a.bv2fpa(m_ctx.fpa_sort<64>());
+		Vns b = b.bv2fpa(m_ctx.fpa_sort<64>());
 		return Vns(m_ctx,
 			ite(expr(m_ctx, Z3_mk_fpa_eq(m_ctx, a, b)),
 				m_ctx.bv_val(0x40, 32),

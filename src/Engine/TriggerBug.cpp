@@ -16,7 +16,7 @@ Revision History:
 //#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.xml"
 //#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\Roads\\Roads.xml"
 //#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\puzzle\\puzzle.xml"
-#define INIFILENAME "C:\\Users\\bibi\\Documents\\Tencent Files\\2496424084\\FileRecv\\easyRE.xml"
+#define INIFILENAME "C:\\Users\\bibi\\Desktop\\reverse\\c++symbol\\childRE.xml"
 
 #include "engine.hpp"
 #define vpanic(...) printf("%s line %d",__FILE__,__LINE__); vpanic(__VA_ARGS__);
@@ -308,44 +308,6 @@ State_Tag whil(State* s) {
     return (State_Tag)0x233;
 }
 
-State_Tag cmpr(State* s) {
-
-    _VexGuestX86State v(*s);
-    s->solv.push();
-    ADDR A = v.guest_ESI;
-    UChar enc[] = { 6,
-         1,
-         4,
-         9,
-         5,
-         0,
-         7,
-         2 };
-
-    for (int i = 0; i < 8; i++) {
-        s->add_assert(s->mem.Iex_Load<Ity_I8>(A + i) == enc[i], 1);
-    }
-    
-
-    vex_printf("checking\n\n");
-    auto dfdfs = s->solv.check();
-    if (dfdfs == sat) {
-        vex_printf("sat");
-        auto m = s->solv.get_model();
-        std::cout << m << std::endl;
-    }
-    else {
-        vex_printf("unsat??????????\n\n%d", dfdfs);
-    }
-    s->solv.pop();
-    return Death;
-
-
-
-
-    return (State_Tag)0x233;
-}
-
 
 State_Tag Dea(State* s) {
     return (State_Tag)Death;
@@ -373,44 +335,31 @@ Vns flag_limit(Vns &flag) {
 
 
 
+//expr r1 = c.bv_val(0x1, 64);
+    //expr r2 = c.bv_val(0x5, 64);
+    //expr r3 = c.bv_val(0x12312, 32);
 
+    //Vns r4 = Vns(c, Z3_mk_bvurem(c, r1, r2)).simplify();
 
+    //while (1) {
+    //    ULong ra = 0;
+    //    ULong rb = 0;
+    //    char ba[100];
+    //    printf("input a >> ");
+    //    scanf("%s", ba);
+    //    sscanf_s(ba, "%llx", &ra);
+    //    printf("input b >> ");
+    //    scanf("%s", ba);
+    //    sscanf(ba, "%llx", &rb);
 
+    //    expr r1 = c.bv_val(ra, 64);
+    //    expr r3 = c.bv_val(rb, 32);
 
-
-
-State_Tag succ(State* s) {
-    _VexGuestAMD64State v(*s);
-    s->solv.push();
-    ADDR A = v.guest_RAX;
-    UChar enc[] = {"Vm0wd2VHUXhTWGhpUm1SWVYwZDRWVll3Wkc5WFJsbDNXa1pPVlUxV2NIcFhhMk0xVmpKS1NHVkdXbFpOYmtKVVZtcEtTMUl5VGtsaVJtUk9ZV3hhZVZadGVHdFRNVTVYVW01T2FGSnRVbGhhVjNoaFZWWmtWMXBFVWxSTmJFcElWbTAxVDJGV1NuTlhia0pXWWxob1dG" };
-
-    for (int i = 0; i < sizeof(enc); i++) {
-        s->add_assert(s->mem.Iex_Load<Ity_I8>(A + i) == enc[i], 1);
-    }
-
-
-    vex_printf("checking\n\n");
-    auto dfdfs = s->solv.check();
-    if (dfdfs == sat) {
-        vex_printf("sat");
-        auto m = s->solv.get_model();
-        std::cout << m << std::endl;
-    }
-    else {
-        vex_printf("unsat??????????\n\n%d", dfdfs);
-    }
-    s->solv.pop();
-    return Death;
-
-
-
-
-    return (State_Tag)0x233;
-}
-
-
-
+    //    Vns r5 = DivModS64to32(Vns(r1), Vns(r3)).simplify();
+    //    Vns r6 = DivModS64to32(Vns(r1).simplify(), Vns(r3).simplify()).simplify();
+    //    Vns r7 = rDivModS64to32(Vns(r1).simplify(), Vns(r3).simplify()).simplify();
+    //    std::cout << (r5 == r6 && r6 == r7)<<r5 <<r6 << r7<< std::endl;
+    //}
 
 
 
@@ -418,29 +367,33 @@ State_Tag succ(State* s) {
 int main() {
     flag_max_count = 1;
     flag_count = 0;
-    
+
     StatePrinter<StateAMD64> state(INIFILENAME, (Addr64)0, True);
     context& c = state;
 
-     _VexGuestAMD64State v(state);
-    ULong hexbegin = v.guest_RAX;
-    Vns hex(state.m_ctx, 0, 0);
-    for (int i = 0; i < 39; i++) {
-        Vns FLAG = state.get_int_const(8);
-        state.add_assert(FLAG > (UChar)0, True);
-        state.mem.Ist_Store(hexbegin + i, FLAG);
-    }
+    GraphView gv(state);
+    gv.analyze(0x0007FF7E17416CD);
 
 
-
-    state.hook_add(0x0000400CC4, succ);
-
+    return 0;
+    //state.hook_add(0x040EE5A, cmpr);
+    state.hook_add(0x0401A19, Dea);
+    state.hook_add(0x00401991, whil);
+    
+    state.hook_add(0x040EE62, success_ret3);
+    state.hook_add(0x00040EE7C, success_ret2);
+    
+    std::vector<State_Tag> avoid;
+    avoid.emplace_back(Death);
     State::pushState(state);
     State::pool->wait();
+    for (int i = 0; i < 8; i++) {
+        state.compress(0x00401991, (State_Tag)0x233, avoid);
 
+        State::pushState(state);
+        State::pool->wait();
 
-
-
+    }
 
     std::cout << (std::string)state;
 
@@ -455,97 +408,4 @@ int main() {
 
 
 
-
-
-
-//
-//
-//int main() {
-//    flag_max_count = 1;
-//    flag_count = 0;
-//    
-//
-//    StatePrinter<StateX86> state(INIFILENAME, (Addr64)0, True);
-//    context& c = state;
-//
-//
-//    //expr r1 = c.bv_val(0x1, 64);
-//    //expr r2 = c.bv_val(0x5, 64);
-//    //expr r3 = c.bv_val(0x12312, 32);
-//
-//    //Vns r4 = Vns(c, Z3_mk_bvurem(c, r1, r2)).simplify();
-//
-//    //while (1) {
-//    //    ULong ra = 0;
-//    //    ULong rb = 0;
-//    //    char ba[100];
-//    //    printf("input a >> ");
-//    //    scanf("%s", ba);
-//    //    sscanf_s(ba, "%llx", &ra);
-//    //    printf("input b >> ");
-//    //    scanf("%s", ba);
-//    //    sscanf(ba, "%llx", &rb);
-//
-//    //    expr r1 = c.bv_val(ra, 64);
-//    //    expr r3 = c.bv_val(rb, 32);
-//
-//    //    Vns r5 = DivModS64to32(Vns(r1), Vns(r3)).simplify();
-//    //    Vns r6 = DivModS64to32(Vns(r1).simplify(), Vns(r3).simplify()).simplify();
-//    //    Vns r7 = rDivModS64to32(Vns(r1).simplify(), Vns(r3).simplify()).simplify();
-//    //    std::cout << (r5 == r6 && r6 == r7)<<r5 <<r6 << r7<< std::endl;
-//    //}
-//    UChar bf[] = { 0x7a, 0xaa, 0x29, 0x98, 0x2a, 0x98, 0xea, 0xab };
-//    _VexGuestX86State v(state);
-//    ULong hexbegin = v.guest_ESI;
-//    Vns hex(state.m_ctx, 0, 0);
-//    for (int i=0; i < 8; i++) {
-//        Vns FLAG = state.get_int_const(8);
-//        state.add_assert(FLAG > (UChar)0, True);
-//        //state.add_assert(FLAG == (UChar)bf[i], True);
-//        
-//        state.mem.Ist_Store(hexbegin + i, FLAG);
-//    }
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//
-//    //state.hook_add(0x040EE5A, cmpr);
-//    state.hook_add(0x0401A19, Dea);
-//    state.hook_add(0x00401991, whil);
-//    
-//    state.hook_add(0x040EE62, success_ret3);
-//    state.hook_add(0x00040EE7C, success_ret2);
-//    
-//    std::vector<State_Tag> avoid;
-//    avoid.emplace_back(Death);
-//    State::pushState(state);
-//    State::pool->wait();
-//    for (int i = 0; i < 8; i++) {
-//        state.compress(0x00401991, (State_Tag)0x233, avoid);
-//
-//        State::pushState(state);
-//        State::pool->wait();
-//
-//    }
-//
-//    std::cout << (std::string)state;
-//
-//    printf("OVER");
-//    getchar();
-//
-//
-//    StateAnalyzer sa(state);
-//    sa.Run();
-//    return 0;
-//}
-//
-//
-//
 
