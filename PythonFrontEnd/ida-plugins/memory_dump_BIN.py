@@ -10,6 +10,7 @@ import pyvex
 import archinfo#没有pyvex则archinfo无法工作
 import ctypes
 import re
+import base64
 
 arch = None
 mode = None
@@ -535,6 +536,24 @@ class Dump:
     def init_segm_mem(self):
         return {}
         
+def get_sreg_base_x64(name):
+    sdb = idaapi.dbg_get_thread_sreg_base(idc.GetCurrentThreadId(),int(getattr(cpu, name)))
+    if not sdb:
+        for n in xrange(idaapi.get_segm_qty()):
+            seg = idaapi.getnseg(n)
+            sgname = idaapi.get_segm_name(seg, 0)
+            if sgname.startswith('TIB['):
+                _sdb = seg.startEA + 0x1000
+                sdb_self=int(base64.b16encode(idaapi.dbg_read_memory(_sdb+0x30, 8)[::-1]), 16)
+                if(sdb_self==_sdb):
+                    sdb = _sdb
+                    print("\nwarning: the segname:%s is zero,I give %016x"%(name, sdb))
+                break
+    if not sdb:
+        print("\n\nwarning: the segname:%s is zero, U need set it by yourself\n"%(name))
+    return sdb
+    
+    
 class AMD64_dump(Dump):
     def __init__(self, arch, mode):
         Dump.__init__(self, arch, mode)
@@ -567,8 +586,8 @@ class AMD64_dump(Dump):
         'ymm14':get_ymm,
         'ymm15':get_ymm,
         'd' : lambda name : 0xffffffffffffffff if idc.GetRegValue("DF") else 0x1,
-        'fs': lambda name : idaapi.dbg_get_thread_sreg_base(idc.GetCurrentThreadId(),int(cpu.fs)),
-        'gs': lambda name : idaapi.dbg_get_thread_sreg_base(idc.GetCurrentThreadId(),int(cpu.gs)),
+        'fs': lambda name : get_sreg_base_x64(name),
+        'gs': lambda name : get_sreg_base_x64(name),
         'fpround':getfpround,
         'sseround':getSseRound,
         'ftop':getftop,

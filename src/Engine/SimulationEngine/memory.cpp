@@ -22,6 +22,63 @@ std::mutex      global_user_mutex;
 
 using namespace z3;
 
+void addressingMode::_offset2opAdd(std::vector<Vns> &ret, expr const& _e)
+{
+    expr e = _e;
+    context& c = e.ctx();
+    if (e.kind() == Z3_APP_AST) {
+        func_decl f = e.decl();
+        switch (f.decl_kind())
+        {
+        case Z3_OP_BADD: {
+            auto max = e.num_args();
+            for (UInt i = 0; i < max; i++) {
+                _offset2opAdd(ret, e.arg(i));
+            }
+            return;
+        }
+        case Z3_OP_BSUB: {
+            auto max = e.num_args();
+            for (UInt i = 0; i < max; i++) {
+                if (i == 0) {
+                    _offset2opAdd(ret, e.arg(i));
+                }
+                else {
+                    _offset2opAdd(ret, -e.arg(i));
+                }
+            }
+            return;
+        }
+        }
+        ret.emplace_back(e);
+        return;
+    }
+}
+
+bool addressingMode::_check_add_no_overflow(expr const& e1, expr const& e2) {
+    UInt bs = e1.get_sort().bv_size();
+    bool bit_jw = false;
+  /*  std::cout << e1 << std::endl;
+    std::cout << e2 << std::endl;*/
+    for (int i = 0; i < bs; i++) {
+        addressingMode::sbit_struct ss0 = addressingMode::_check_is_extract(e1, i);
+        addressingMode::sbit_struct ss1 = addressingMode::_check_is_extract(e2, i);
+        bool b0 = (ss0.sym_ast) ? true : ss0.rbit;
+        bool b1 = (ss1.sym_ast) ? true : ss1.rbit;
+
+        if (b0 ^ b1) {}
+        else {
+            if (b0 && b1) {
+                bit_jw = true;
+            }
+            else {
+                bit_jw = false;
+            }
+        }
+    }
+    return !bit_jw;
+}
+
 // ast(symbolic address) = numreal(base) + symbolic(offset) 
 expr addressingMode::_ast2base(expr& base,
     expr const& e, 
@@ -99,6 +156,17 @@ expr addressingMode::_ast2base(expr& base,
                 expr idx1 = _ast2base(arg1, e.arg(0), deep + 1, max_deep);
                 if ((Z3_ast)arg1) {
                     if ((Z3_ast)idx1) {
+                        UInt bs = idx1.get_sort().bv_size();
+                        if (_check_add_no_overflow(idx1.extract(bs - 2, 0), arg1.extract(bs - 2, 0))) {
+                            addressingMode::sbit_struct ss0 = addressingMode::_check_is_extract(idx1, bs - 1);
+                            addressingMode::sbit_struct ss1 = addressingMode::_check_is_extract(arg1, bs - 1);
+                            bool b0 = (ss0.sym_ast) ? true : ss0.rbit;
+                            bool b1 = (ss1.sym_ast) ? true : ss1.rbit;
+                            if ((!b0)||(!b1)) {
+                                base = sext(arg1, extn);
+                                return sext(idx1, extn);
+                            }
+                        }
                         goto goFaild;
                     }
                     else {
@@ -123,6 +191,10 @@ expr addressingMode::_ast2base(expr& base,
                 expr idx1 = _ast2base(arg1, e.arg(0), deep + 1, max_deep);
                 if ((Z3_ast)arg1) {
                     if ((Z3_ast)idx1) {
+                        if (_check_add_no_overflow(idx1, arg1)) {
+                            base = zext(arg1, extn);
+                            return zext(idx1, extn);
+                        }
                         goto goFaild;
                     }
                     else {
@@ -227,7 +299,7 @@ goFaild:
 }
 
 
-addressingMode::sbit_struct addressingMode::check_is_extract(expr const& _e, UInt _idx) {
+addressingMode::sbit_struct addressingMode::_check_is_extract(expr const& _e, UInt _idx) {
     context& c = _e.ctx();
     UInt idx = _idx;
     expr e = _e;
@@ -333,7 +405,7 @@ addressingMode::sbit_struct addressingMode::check_is_extract(expr const& _e, UIn
         else if (e.kind() == Z3_NUMERAL_AST) {
             ULong real;
             e.is_numeral_u64(real);
-            return sbit_struct{ NULL, (bool)(real >> idx), 0 };
+            return sbit_struct{ NULL, (real >> idx) & 1, 0 };
         }
         else {
             break;

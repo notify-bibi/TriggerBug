@@ -1,6 +1,4 @@
 #pragma once
-
-
 #include "../State_class.hpp"
 #include "Z3_Target_Call.hpp"
 

@@ -333,43 +333,25 @@ Vns flag_limit(Vns &flag) {
 #include "example.hpp"
 
 
-
-
-//expr r1 = c.bv_val(0x1, 64);
-    //expr r2 = c.bv_val(0x5, 64);
-    //expr r3 = c.bv_val(0x12312, 32);
-
-    //Vns r4 = Vns(c, Z3_mk_bvurem(c, r1, r2)).simplify();
-
-    //while (1) {
-    //    ULong ra = 0;
-    //    ULong rb = 0;
-    //    char ba[100];
-    //    printf("input a >> ");
-    //    scanf("%s", ba);
-    //    sscanf_s(ba, "%llx", &ra);
-    //    printf("input b >> ");
-    //    scanf("%s", ba);
-    //    sscanf(ba, "%llx", &rb);
-
-    //    expr r1 = c.bv_val(ra, 64);
-    //    expr r3 = c.bv_val(rb, 32);
-
-    //    Vns r5 = DivModS64to32(Vns(r1), Vns(r3)).simplify();
-    //    Vns r6 = DivModS64to32(Vns(r1).simplify(), Vns(r3).simplify()).simplify();
-    //    Vns r7 = rDivModS64to32(Vns(r1).simplify(), Vns(r3).simplify()).simplify();
-    //    std::cout << (r5 == r6 && r6 == r7)<<r5 <<r6 << r7<< std::endl;
-    //}
-
-
-
-
 int main() {
     flag_max_count = 1;
     flag_count = 0;
 
     StatePrinter<StateAMD64> state(INIFILENAME, (Addr64)0, True);
     context& c = state;
+
+    Vns vv1 = state.get_int_const(8);
+    Vns vv2 = state.get_int_const(8);
+    Vns vv3 = state.get_int_const(8);
+    Vns ff1 = 0x007ffa07b3e000 + vv1.sext(56) - vv2.sext(56) + Vns(c, 0x30, 8).Concat(vv1 + vv3).zext(48);
+    std::vector<Vns> ret;
+    addressingMode am(expr(c, ff1));
+    am.offset2opAdd(ret);
+
+    state.mem.Ist_Store(ff1, 0);
+    
+    State::pushState(state);
+    State::pool->wait();
 
     GraphView gv(state);
     gv.analyze(0x0007FF7E17416CD);

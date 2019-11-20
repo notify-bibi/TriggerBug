@@ -85,6 +85,7 @@ private:
             DWORD N;
             UInt _pcur;
             UInt nb = 0;
+
             if (_BitScanForward64(&N, m_sym_mask)) {
                 m_sym_ml[0] = shift_mask{(UChar)N,((ADDR)1) << N };
                 m_sym_ml_n = 1;
@@ -133,7 +134,7 @@ private:
         {
             ADDR re = 0;
             for (UInt sign_ml_n = 0; sign_ml_n < m_sign_ml_n; sign_ml_n++) {
-                if (tmp_bit_blast >> m_sign_ml[sign_ml_n].shift) {
+                if ((tmp_bit_blast >> m_sign_ml[sign_ml_n].shift) & 1) {
                     re |= m_sign_ml[sign_ml_n].mask;
                 }
             }
@@ -179,6 +180,11 @@ public:
             m_analysis_kind = cant_analysis;
         }
     }
+
+    void offset2opAdd(std::vector<Vns>& ret) {
+        _offset2opAdd(ret, m_offset);
+    }
+
 private:
     bool ast2baseAoffset() {
         //std::cout << saddr.simplify() << std::endl << std::endl;
@@ -234,7 +240,8 @@ faild:
 
         std::vector<sbit_struct_r> vec;
         for (UInt idx = 0; idx < size; idx++) {
-            sbit_struct s = check_is_extract(m_offset, idx);
+            sbit_struct s = _check_is_extract(m_offset, idx);
+            //把ast分解为 一个一个bit独立单元
             if (s.sym_ast) {
                 auto end = vec.end();
                 auto m = vec.begin();
@@ -336,7 +343,9 @@ private:
         UInt deep, UInt max_deep
     );
 
-    static sbit_struct check_is_extract(expr const& e, UInt idx);
+    static sbit_struct _check_is_extract(expr const& e, UInt idx);
+    static void _offset2opAdd(std::vector<Vns>& ret, expr const&e);
+    static bool _check_add_no_overflow(expr const& e1, expr const& e2);
 };
 
 
@@ -456,56 +465,60 @@ for (UInt i1 = 0; i1 < CR3_point->used; i1++) {																				\
 #define LSTRUCT5 PAGE
 
 
+namespace TRMem {
 
-typedef struct PAGE {
-    ULong user;
-    UInt used_point;
-    bool unit_mutex;
-    Register<0x1000> *unit;
-}PAGE;
+    typedef struct PAGE {
+        ULong user;
+        UInt used_point;
+        bool unit_mutex;
+        Register<0x1000>* unit;
+    }PAGE;
 
-typedef struct PAGE_link {
-    UShort index;
-    PAGE_link *prev;
-    PAGE_link *next;
-}PAGE_link;
+    typedef struct PAGE_link {
+        UShort index;
+        PAGE_link* prev;
+        PAGE_link* next;
+    }PAGE_link;
 
-typedef struct PT {
-    UShort used;
-    UShort index;
-    PAGE_link *top;
-    PT *prev;
-    PT *next;
-    UInt size;
-    PAGE **pt;
-}PT;
+    typedef struct PT {
+        UShort used;
+        UShort index;
+        PAGE_link* top;
+        PT* prev;
+        PT* next;
+        UInt size;
+        PAGE** pt;
+    }PT;
 
-typedef struct PDT {
-    UShort used;
-    UShort index;
-    PT *top;
-    PDT *prev;
-    PDT *next;
-    UInt size;
-    PT **pt;
-}PDT;
+    typedef struct PDT {
+        UShort used;
+        UShort index;
+        PT* top;
+        PDT* prev;
+        PDT* next;
+        UInt size;
+        PT** pt;
+    }PDT;
 
-typedef struct PDPT {
-    UShort used;
-    UShort index;
-    PDT *top;
-    PDPT *prev;
-    PDPT *next;
-    UInt size;
-    PDT **pt;
-}PDPT;
+    typedef struct PDPT {
+        UShort used;
+        UShort index;
+        PDT* top;
+        PDPT* prev;
+        PDPT* next;
+        UInt size;
+        PDT** pt;
+    }PDPT;
 
-typedef struct PML4T {
-    UShort used;
-    PDPT *top;
-    UInt size;
-    PDPT **pt;
-}PML4T;
+    typedef struct PML4T {
+        UShort used;
+        PDPT* top;
+        UInt size;
+        PDPT** pt;
+    }PML4T;
+};
+
+using namespace TRMem;
 
 class MEM {
     friend class State;
@@ -862,63 +875,40 @@ public:
 
     template<typename DataTy>
     void Ist_Store(Z3_ast address, DataTy data) {
-        uint64_t Z3_RE;
-        bool suspend_solve = true;
-        LARGE_INTEGER   freq = { 0 };
-        LARGE_INTEGER   beginPerformanceCount = { 0 };
-        LARGE_INTEGER   closePerformanceCount = { 0 };
-        QueryPerformanceFrequency(&freq);
-        QueryPerformanceCounter(&beginPerformanceCount);
-    redo:
-        Itaddress it = this->addr_begin(m_state.solv, address);
-        while (it.check()) {
-            if (suspend_solve) {
-                QueryPerformanceCounter(&closePerformanceCount);
-                double delta_seconds = (double)(closePerformanceCount.QuadPart - beginPerformanceCount.QuadPart) / freq.QuadPart;
-                if (delta_seconds > 0.01d) {
-                    break;
-                }
-                else {
-                    suspend_solve = false;
-                }
-            }
-            auto addr = *it;
-            if (!Z3_get_numeral_uint64(m_ctx, addr, &Z3_RE)) vassert(0);
-            auto oData = Iex_Load<(IRType)(sizeof(DataTy) << 3)>(Z3_RE);
-            auto eq = Z3_mk_eq(m_ctx, it, addr);
-            Z3_inc_ref(m_ctx, eq);
-            auto n_Data = Z3_mk_ite(m_ctx, eq, Vns(m_ctx, data), oData);
-            Z3_inc_ref(m_ctx, n_Data);
-            Ist_Store<(IRType)(sizeof(DataTy) << 3)>(Z3_RE, n_Data);
-            Z3_dec_ref(m_ctx, n_Data);
-            Z3_dec_ref(m_ctx, eq);
-            it++;
-        }
-        if (suspend_solve) {
-            addressingMode am(expr(m_state.m_ctx, address));
-            auto kind = am.analysis_kind();
-            if (kind == addressingMode::support_bit_blast) {
+        addressingMode am(expr(m_state.m_ctx, address));
+        auto kind = am.analysis_kind();
+        if (kind == addressingMode::support_bit_blast) {
 #ifdef TRACE_AM
-                printf("addr: %p  Ist_Store base: %p {\n", m_state.get_cpu_ip(), am.getBase());
-                am.print();
-                printf("}\n");
+            printf("addr: %p  Ist_Store base: %p {\n", m_state.get_cpu_ip(), am.getBase());
+            am.print();
+            printf("}\n");
 #endif
-                for (auto offset : am) {
-                    ADDR raddr = am.getBase() + offset;
-                    auto oData = Iex_Load<(IRType)(sizeof(DataTy) << 3)>(raddr);
-                    auto eq = Z3_mk_eq(m_ctx, am.getoffset(), Vns(m_ctx, offset));
-                    Z3_inc_ref(m_ctx, eq);
-                    auto n_Data = Z3_mk_ite(m_ctx, eq, Vns(m_ctx, data), oData);
-                    Z3_inc_ref(m_ctx, n_Data);
-                    Ist_Store<(IRType)(sizeof(DataTy) << 3)>(raddr, n_Data);
-                    Z3_dec_ref(m_ctx, n_Data);
-                    Z3_dec_ref(m_ctx, eq);
-                }
+            for (auto offset : am) {
+                ADDR raddr = am.getBase() + offset;
+                auto oData = Iex_Load<(IRType)(sizeof(DataTy) << 3)>(raddr);
+                auto eq = Z3_mk_eq(m_ctx, am.getoffset(), Vns(m_ctx, offset));
+                Z3_inc_ref(m_ctx, eq);
+                auto n_Data = Z3_mk_ite(m_ctx, eq, Vns(m_ctx, data), oData);
+                Z3_inc_ref(m_ctx, n_Data);
+                Ist_Store<(IRType)(sizeof(DataTy) << 3)>(raddr, n_Data);
+                Z3_dec_ref(m_ctx, n_Data);
+                Z3_dec_ref(m_ctx, eq);
             }
-            else {
-                suspend_solve = false;
-                it.~Itaddress();
-                goto redo;
+        }
+        else {
+            Itaddress it = this->addr_begin(m_state.solv, address);
+            while (it.check()) {
+                Vns addr = *it;
+                ADDR addr_re = addr;
+                auto oData = Iex_Load<(IRType)(sizeof(DataTy) << 3)>(addr_re);
+                auto eq = Z3_mk_eq(m_ctx, it, addr);
+                Z3_inc_ref(m_ctx, eq);
+                auto n_Data = Z3_mk_ite(m_ctx, eq, Vns(m_ctx, data), oData);
+                Z3_inc_ref(m_ctx, n_Data);
+                Ist_Store<(IRType)(sizeof(DataTy) << 3)>(addr_re, n_Data);
+                Z3_dec_ref(m_ctx, n_Data);
+                Z3_dec_ref(m_ctx, eq);
+                it++;
             }
         }
     }
@@ -981,7 +971,6 @@ public:
             }
             else {
                 suspend_solve = false;
-                it.~Itaddress();
                 goto redo;
             }
         }
@@ -995,9 +984,12 @@ public:
             case 16: Ist_Store(address, (UShort)data); break;
             case 32: Ist_Store(address, (UInt)data); break;
             case 64: Ist_Store(address, (ULong)data); break;
-            case 128: Ist_Store(address, (__m128i)data); break;
-            case 256: Ist_Store(address, (__m256i)data); break;
-            default:vpanic("2333333");
+            default:
+                if (data.bitn == 128) Ist_Store(address, (__m128i)data);
+                else {
+                    vassert(data.bitn == 256);
+                    Ist_Store(address, (__m256i)data);
+                }
             }
         }
         else {
@@ -1006,9 +998,13 @@ public:
             case 16: Ist_Store<16>(address, (Z3_ast)data); break;
             case 32: Ist_Store<32>(address, (Z3_ast)data); break;
             case 64: Ist_Store<64>(address, (Z3_ast)data); break;
-            case 128: Ist_Store<128>(address, (Z3_ast)data); break;
-            case 256: Ist_Store<256>(address, (Z3_ast)data); break;
-            default:vpanic("2333333");
+            default:
+                if (data.bitn == 128) 
+                    Ist_Store<128>(address, (Z3_ast)data);
+                else {
+                    vassert(data.bitn == 256);
+                    Ist_Store<256>(address, (Z3_ast)data); break;
+                }
             }
         }
     }
