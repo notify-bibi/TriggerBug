@@ -393,7 +393,7 @@ namespace hp{
 
         operator Vns() const {
             if (((sizeof(Type) << 3) == bits) && (shift == 0)) {
-                return obj().Iex_Load<(sizeof(Type) << 3)>(m_base);
+                return ((GM<Type>*)this)->operator Vns();
             }
             if (ISUNSIGNED_TYPE(Type)) {
                 return ((GM<Type>*)this)->operator Vns().extract<(shift + bits - 1), shift>().zext((sizeof(Type) << 3) - bits);
@@ -401,6 +401,11 @@ namespace hp{
             else {
                 return ((GM<Type>*)this)->operator Vns().extract<(shift + bits - 1), shift>().sext((sizeof(Type) << 3) - bits);
             }
+        }
+
+        template<typename T>
+        inline operator T () const {
+            return (T)(Type)this->operator Vns();
         }
     };
 
@@ -759,7 +764,7 @@ public:
     };
 
     _LdtEnt LdtEnt;
-    _VexGuestX86SegDescr(State &state, void* base) :
+    _VexGuestX86SegDescr(State &state, ADDR base) :
         LdtEnt(state, (ADDR)base)
     {
 

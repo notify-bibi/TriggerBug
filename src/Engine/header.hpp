@@ -1,7 +1,7 @@
 #ifndef HEADER_H
 #define HEADER_H
 
-#define GUEST_IS_64
+//#define GUEST_IS_64
 
 #define HOSTARCH VexArchAMD64
 #define __i386__

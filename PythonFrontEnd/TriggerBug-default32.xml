@@ -30,14 +30,22 @@
 <!-- VEX_TRACE_ASM  =1  --> 
 
 
+
+<!-- typedef enum :ULong {                     --> 
+<!--     CF_None =          0,                 --> 
+<!--     CF_ppStmts =       1ull,              --> 
+<!--     CF_traceJmp =      1ull << 1,         --> 
+<!--     CF_traceState =    1ull << 2,         --> 
+<!--     CF_TraceSymbolic = 1ull << 3,         --> 
+<!--     CF_PassSigSEGV =   1ull << 4,         --> 
+<!-- }TRControlFlags;                          --> 
+
 <TriggerBug>
 	<VexArch>0x401</VexArch>
-	<VexArchSystem>linux</VexArchSystem>
+	<VexArchSystem>win</VexArchSystem>
 	<MaxThreadsNum>1</MaxThreadsNum>
-	<MemoryDumpPath>C:\Users\bibi\Documents\Tencent Files\2496424084\FileRecv\TheDaVinciCode(1).exe.dump</MemoryDumpPath>
-	<!-- <GuestStartAddress>0x444444</GuestStartAddress> -->
-	<GuestStartAddress>0</GuestStartAddress>
-	<RegsIpOffset>68</RegsIpOffset>
+	<MemoryDumpPath>xxxxxxxxxx</MemoryDumpPath>
+	<!--GuestStartAddress>0x401950</GuestStartAddress-->
 	<PassSigSEGV>1</PassSigSEGV>
 	<VexControl>
 		<iropt_register_updates_default>0x701</iropt_register_updates_default>
@@ -47,10 +55,16 @@
 	</VexControl>
 	
 	<DEBUG>
-		<NEED_CHECK>0</NEED_CHECK>
-		<TraceIrAddrress>0xCE13BC</TraceIrAddrress>
+		<ppStmts>0</ppStmts>
+		<TraceIrAddrress>
+            <!--static addr = "0x401950" cflag = "1"/-->
+            <!--static addr = "0x0401B04" cflag = "1"/-->
+        </TraceIrAddrress>
+        
 		<TraceState>1</TraceState>
 		<TraceJmp>1</TraceJmp>
+        <TraceSymbolic>0</TraceSymbolic>
 	</DEBUG>
 
 </TriggerBug>
+

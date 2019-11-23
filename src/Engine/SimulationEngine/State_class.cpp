@@ -1009,11 +1009,6 @@ For_Begin:
                     vex_printf("Ijk_SigTRAP: %p", guest_start);
                     goto EXIT;
                 }
-                case Ijk_NoDecode: {
-                    vex_printf("Ijk_NoDecode: %p", guest_start);
-                    status = NoDecode;
-                    goto EXIT;
-                }
                 default: {
                     status = Ijk_call(irsb->jumpkind);
                     if (status != Running) {

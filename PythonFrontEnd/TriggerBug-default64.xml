@@ -30,27 +30,42 @@
 <!-- VEX_TRACE_ASM  =1  --> 
 
 
+
+<!-- typedef enum :ULong {                     --> 
+<!--     CF_None =          0,                 --> 
+<!--     CF_ppStmts =       1ull,              --> 
+<!--     CF_traceJmp =      1ull << 1,         --> 
+<!--     CF_traceState =    1ull << 2,         --> 
+<!--     CF_TraceSymbolic = 1ull << 3,         --> 
+<!--     CF_PassSigSEGV =   1ull << 4,         --> 
+<!-- }TRControlFlags;                          --> 
+
 <TriggerBug>
 	<VexArch>0x402</VexArch>
-	<VexArchSystem>linux</VexArchSystem>
-	<MaxThreadsNum>16</MaxThreadsNum>
-	<MemoryDumpPath>C:\Users\bibi\Desktop\TriggerBug\PythonFrontEnd\examples\xctf-asong\TriggerBug Engine\asong.dump</MemoryDumpPath>
-	<!-- <GuestStartAddress>0x444444</GuestStartAddress> -->
+	<VexArchSystem>win</VexArchSystem>
+	<MaxThreadsNum>1</MaxThreadsNum>
+	<MemoryDumpPath>xxxxxxxxxx</MemoryDumpPath>
+	<!--GuestStartAddress>0x401950</GuestStartAddress-->
 	<PassSigSEGV>1</PassSigSEGV>
 	<VexControl>
 		<iropt_register_updates_default>0x701</iropt_register_updates_default>
 		<pxControl>0x701</pxControl>
-		<iropt_level>-1</iropt_level>
+		<iropt_level>2</iropt_level>
 		<traceflags>0</traceflags>
 	</VexControl>
 	
 	<DEBUG>
 		<ppStmts>0</ppStmts>
-		<TraceIrAddrress>0x7FFFF</TraceIrAddrress>
+		<TraceIrAddrress>
+            <!--static addr = "0x401950" cflag = "1"/-->
+            <!--static addr = "0x0401B04" cflag = "1"/-->
+        </TraceIrAddrress>
+        
 		<TraceState>1</TraceState>
-		<TraceJmp>0</TraceJmp>
+		<TraceJmp>1</TraceJmp>
         <TraceSymbolic>0</TraceSymbolic>
 	</DEBUG>
 
 </TriggerBug>
+
 

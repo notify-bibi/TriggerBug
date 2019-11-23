@@ -374,7 +374,7 @@ public:
     z3::tactic m_tactic;
 	z3::solver solv;
 	//std::queue< std::function<void()> > check_stack;
-	Long delta;
+	ADDR delta;
 	bool unit_lock;
 
 private:

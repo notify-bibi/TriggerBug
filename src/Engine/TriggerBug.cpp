@@ -16,7 +16,10 @@ Revision History:
 //#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.xml"
 //#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\Roads\\Roads.xml"
 //#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\puzzle\\puzzle.xml"
-#define INIFILENAME "C:\\Users\\bibi\\Desktop\\reverse\\c++symbol\\childRE.xml"
+//#define INIFILENAME "C:\\Users\\bibi\\Desktop\\reverse\\c++symbol\\childRE.xml"
+#define INIFILENAME "C:\\Users\\bibi\\Desktop\\reverse\\reverse\\MiniRE\\mr.xml"
+
+
 
 #include "engine.hpp"
 #define vpanic(...) printf("%s line %d",__FILE__,__LINE__); vpanic(__VA_ARGS__);
@@ -61,6 +64,13 @@ public:
         switch (kd) {
         case Ijk_Sys_syscall:
             return Sys_syscall();
+
+        case Ijk_NoDecode: {
+            delta += 2;
+            vex_printf("Ijk_NoDecode: %p", guest_start);
+
+            return Running;
+        }
         default:
             return Death;
         }
@@ -272,6 +282,7 @@ State_Tag success_ret2(State* s) {
         vex_printf("unsat??????????\n\n%d", dfdfs);
     }
     s->solv.pop();
+    exit(1);
     return Death;
 }
 
@@ -332,62 +343,91 @@ Vns flag_limit(Vns &flag) {
 
 #include "example.hpp"
 
+//
+//int main() {
+//    flag_max_count = 1;
+//    flag_count = 0;
+//
+//    StatePrinter<StateAMD64> state(INIFILENAME, (Addr64)0, True);
+//    context& c = state;
+//
+//    Vns vv1 = state.get_int_const(8);
+//    Vns vv2 = state.get_int_const(8);
+//    Vns vv3 = state.get_int_const(8);
+//    Vns ff1 = 0x007ffa07b3e000 + vv1.sext(56) - vv2.sext(56) + Vns(c, 0x30, 8).Concat(vv1 + vv3).zext(48);
+//    std::vector<Vns> ret;
+//    addressingMode am(expr(c, ff1));
+//    am.offset2opAdd(ret);
+//
+//    state.mem.Ist_Store(ff1, 0);
+//    
+//    State::pushState(state);
+//    State::pool->wait();
+//
+//    GraphView gv(state);
+//    gv.analyze(0x0007FF7E17416CD);
+//
+//
+//    return 0;
+//    //state.hook_add(0x040EE5A, cmpr);
+//    state.hook_add(0x0401A19, Dea);
+//    state.hook_add(0x00401991, whil);
+//    
+//    state.hook_add(0x040EE62, success_ret3);
+//    state.hook_add(0x00040EE7C, success_ret2);
+//    
+//    std::vector<State_Tag> avoid;
+//    avoid.emplace_back(Death);
+//    State::pushState(state);
+//    State::pool->wait();
+//    for (int i = 0; i < 8; i++) {
+//        state.compress(0x00401991, (State_Tag)0x233, avoid);
+//
+//        State::pushState(state);
+//        State::pool->wait();
+//
+//    }
+//
+//    std::cout << (std::string)state;
+//
+//    printf("OVER");
+//    getchar();
+//
+//
+//    StateAnalyzer sa(state);
+//    sa.Run();
+//    return 0;
+//}
+
+
+
 
 int main() {
     flag_max_count = 1;
     flag_count = 0;
 
-    StatePrinter<StateAMD64> state(INIFILENAME, (Addr64)0, True);
+    StatePrinter<StateX86> state(INIFILENAME, (Addr64)0, True);
     context& c = state;
 
-    Vns vv1 = state.get_int_const(8);
-    Vns vv2 = state.get_int_const(8);
-    Vns vv3 = state.get_int_const(8);
-    Vns ff1 = 0x007ffa07b3e000 + vv1.sext(56) - vv2.sext(56) + Vns(c, 0x30, 8).Concat(vv1 + vv3).zext(48);
-    std::vector<Vns> ret;
-    addressingMode am(expr(c, ff1));
-    am.offset2opAdd(ret);
 
-    state.mem.Ist_Store(ff1, 0);
-    
-    State::pushState(state);
-    State::pool->wait();
-
-    GraphView gv(state);
-    gv.analyze(0x0007FF7E17416CD);
-
-
-    return 0;
-    //state.hook_add(0x040EE5A, cmpr);
-    state.hook_add(0x0401A19, Dea);
-    state.hook_add(0x00401991, whil);
-    
-    state.hook_add(0x040EE62, success_ret3);
-    state.hook_add(0x00040EE7C, success_ret2);
-    
-    std::vector<State_Tag> avoid;
-    avoid.emplace_back(Death);
-    State::pushState(state);
-    State::pool->wait();
-    for (int i = 0; i < 8; i++) {
-        state.compress(0x00401991, (State_Tag)0x233, avoid);
-
-        State::pushState(state);
-        State::pool->wait();
-
+    for (int i = 0; i < 32; i++) {
+        auto flag = state.get_int_const(8);
+        auto ao1 = flag >= 'a' && flag <= 'f';
+        auto ao3 = flag >= '0' && flag <= '9';
+        state.mem.Ist_Store(i + 0x0019F554, flag);
+        state.add_assert(ao1 || ao3, 1);
+        if (i == 31) {
+            _VexGuestX86State reg(state);
+            state.mem.Ist_Store(reg.guest_EBP-0x24, flag);
+        }
     }
 
-    std::cout << (std::string)state;
 
-    printf("OVER");
-    getchar();
+    state.hook_add(0x4050B0, Dea);
+    state.hook_add(0x4050D0, success_ret2);
 
+    State::pushState(state);
+    State::pool->wait();
 
-    StateAnalyzer sa(state);
-    sa.Run();
     return 0;
 }
-
-
-
-

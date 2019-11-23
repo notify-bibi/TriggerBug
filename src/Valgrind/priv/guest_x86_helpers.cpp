@@ -2804,7 +2804,7 @@ ULong x86g_use_seg_selector(HWord ldt, HWord gdt,
             goto bad;
 
         the_descrs = (VexGuestX86SegDescr*)gdt;
-        _VexGuestX86SegDescr ent(*current_state(), &the_descrs[seg_selector]);
+        _VexGuestX86SegDescr ent(*current_state(), (ADDR)(size_t)&the_descrs[seg_selector]);
         base = get_segdescr_base(&ent);
         limit = get_segdescr_limit(&ent);
 
@@ -2819,7 +2819,7 @@ ULong x86g_use_seg_selector(HWord ldt, HWord gdt,
             goto bad;
 
         the_descrs = (VexGuestX86SegDescr*)ldt;
-        _VexGuestX86SegDescr ent(*current_state(), &the_descrs[seg_selector]);
+        _VexGuestX86SegDescr ent(*current_state(), (ADDR)(size_t)&the_descrs[seg_selector]);
         base = get_segdescr_base(&ent);
         limit = get_segdescr_limit(&ent);
 
