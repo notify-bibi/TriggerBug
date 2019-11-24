@@ -63,18 +63,37 @@ typedef Vns (*Z3_Function1)(Vns &);
 
 
 
-unsigned char fastalignD1[257];
-unsigned char fastalign[257];
-ULong fastMask[65];
-ULong fastMaskI1[65];
-ULong fastMaskB[9];
-ULong fastMaskBI1[9];
-ULong fastMaskReverse[65];
-ULong fastMaskReverseI1[65];
+  UChar fastalignD1[257];
+  UChar fastalign[257];
+  ULong fastMask[65];
+  ULong fastMaskI1[65];
+  ULong fastMaskB[9];
+  ULong fastMaskBI1[9];
+  ULong fastMaskReverse[65];
+  ULong fastMaskReverseI1[65];
 __m256i m32_fast[33];
 __m256i m32_mask_reverse[33];
 
-tinyxml2::XMLDocument StatetTraceFlag::doc = tinyxml2::XMLDocument();
+
+
+
+
+tinyxml2::XMLDocument Vex_Info::doc = tinyxml2::XMLDocument();
+VexRegisterUpdates Vex_Info::iropt_register_updates_default = VexRegUpdSpAtMemAccess;
+Int Vex_Info::iropt_level = 2;
+UInt Vex_Info::guest_max_insns = 100;
+tinyxml2::XMLError Vex_Info::err = tinyxml2::XML_ERROR_COUNT;
+tinyxml2::XMLElement* Vex_Info::doc_TriggerBug = nullptr;
+tinyxml2::XMLElement* Vex_Info::doc_VexControl = nullptr;
+tinyxml2::XMLElement* Vex_Info::doc_debug = nullptr;
+GuestSystem Vex_Info::guest_system = unknowSystem;
+VexArch Vex_Info::guest = VexArch_INVALID;
+const char* Vex_Info::MemoryDumpPath = "你没有这个文件";
+ADDR Vex_Info::GuestStartAddress = 0;
+UInt Vex_Info::MaxThreadsNum = 16;
+Int Vex_Info::traceflags = 0;
+
+
 std::hash_map<ADDR, Hook_struct> State::CallBackDict;
 std::hash_map<ADDR/*static table base*/, TRtype::TableIdx_CB> State::TableIdxDict;
 ThreadPool* State::pool;
@@ -208,14 +227,12 @@ std::string replace(const char* pszSrc, const char* pszOld, const char* pszNew)
     return strContent;
 }
 
-Bool TriggerBug_is_init = False;
 extern void Func_Map_Init();
 void IR_init(VexControl& vc) {
-    if (!TriggerBug_is_init) {
+    QueryPerformanceFrequency(&freq_global);
+    QueryPerformanceCounter(&beginPerformanceCount_global);
+    if (!vex_initdone) {
         Func_Map_Init();
-        vassert(!vex_initdone);
-        QueryPerformanceFrequency(&freq_global);
-        QueryPerformanceCounter(&beginPerformanceCount_global);
         register_tid(GetCurrentThreadId());
         LibVEX_Init(&failure_exit, &_vex_log_bytes, 0/*debuglevel*/, &vc);
         unregister_tid(GetCurrentThreadId());
@@ -239,7 +256,6 @@ void IR_init(VexControl& vc) {
             memset(&m32_mask_reverse[i].m256i_i8[i], -1ul, 32 - i);
         }
     }
-    TriggerBug_is_init = True;
 }
 
 
@@ -289,7 +305,7 @@ static unsigned char* _n_page_mem(void* pap) {
     return ((State*)(((Pap*)(pap))->state))->mem.get_next_page(((Pap*)(pap))->guest_addr);
 }
 
-State::State(const char *filename, Addr64 gse, Bool _need_record) :
+State::State(const char *filename, ADDR gse, Bool _need_record) :
     Vex_Info(filename),
     m_ctx(), 
     m_params(m_ctx),
@@ -322,10 +338,10 @@ State::State(const char *filename, Addr64 gse, Bool _need_record) :
  
     pap.state = (void*)(this);
     pap.n_page_mem = _n_page_mem;
-    assert(gMaxThreadsNum() <= MAX_THREADS);
+    assert(MaxThreadsNum <= MAX_THREADS);
     if (pool) 
         delete pool;
-    pool = new ThreadPool(gMaxThreadsNum());
+    pool = new ThreadPool(MaxThreadsNum);
 
     asserts.resize(5);
     branch.reserve(10);
@@ -337,8 +353,8 @@ State::State(const char *filename, Addr64 gse, Bool _need_record) :
     if (gse)
         guest_start_ep = gse;
     else {
-        if (gGuestStartAddress()!=-1) {
-            guest_start_ep = gGuestStartAddress();
+        if (GuestStartAddress!=-1) {
+            guest_start_ep = GuestStartAddress;
             if (!guest_start_ep) {
                 goto mem_ip;
             }
@@ -364,7 +380,7 @@ mem_ip:
 };
 
 
-State::State(State *father_state, Addr64 gse) :
+State::State(State *father_state, ADDR gse) :
     Vex_Info(*father_state),
     m_ctx(),
     m_params(m_ctx),
@@ -382,10 +398,8 @@ State::State(State *father_state, Addr64 gse) :
     replace_const(father_state->replace_const),
     isTop(False)
 {
-
     pap.state = (void*)(this);
     pap.n_page_mem = _n_page_mem;
-    IR_init(vc);
 };
 
 State::~State() { 
@@ -551,6 +565,7 @@ inline IRSB* State::BB2IR() {
     vta.guest_bytes      = (UChar *)(pap.t_page_addr);
     vta.guest_bytes_addr = (Addr64)((ADDR)guest_start);
     IRSB *irsb;
+    VexRegisterUpdates pxControl;
     if(0){
         printf("GUESTADDR %16llx   RUND:%ld CODES   ", guest_start, runed);
         TESTCODE(
@@ -599,14 +614,17 @@ inline void State::read_regs(int offset, void* addr, int length) { regs.read_reg
 
 inline Vns symbolic_check(Z3_context ctx, ULong ret, UInt bitn) {
     if (ret & (0xfa1dull << 48)) {
-        return Vns(ctx, (Z3_ast)(ret & ((1ull << 48) - 1)), bitn, no_inc{});
+        Z3_ast ret_ast = (Z3_ast)(ret & ((1ull << 48) - 1));
+        vassert(Z3_get_bv_sort_size(ctx, Z3_get_sort(ctx, ret_ast)) == bitn);
+        return Vns(ctx, ret_ast, bitn, no_inc{});
     }
     else {
         return Vns(ctx, ret, bitn);
     }
 }
 
-inline Vns State::CCall(IRCallee *cee, IRExpr **exp_args, IRType ty)
+
+Vns State::CCall(IRCallee *cee, IRExpr **exp_args, IRType ty)
 {
     Int regparms = cee->regparms;
     UInt mcx_mask = cee->mcx_mask;
@@ -631,6 +649,7 @@ inline Vns State::CCall(IRCallee *cee, IRExpr **exp_args, IRType ty)
     Vns arg5 = tIRExpr(exp_args[5]);
     if (arg5.symbolic()) z3_mode = True;
     if (!exp_args[6]) return (z3_mode) ? ((Z3_Function6)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3, arg4, arg5) : symbolic_check(m_ctx, ((Function_6)(cee->addr))(arg0, arg1, arg2, arg3, arg4, arg5), bitn);
+
 }
 
 inline void State::thread_register()
@@ -834,6 +853,7 @@ For_Begin:
                         vta.guest_bytes_addr = (Addr64)((ADDR)guest_start);
                         auto max_insns = pap.guest_max_insns;
                         pap.guest_max_insns = 1;
+                        VexRegisterUpdates pxControl;
                         irsb = LibVEX_FrontEnd(&vta, &res, &pxControl);
                         //ppIRSB(irsb);
                         pap.guest_max_insns = max_insns;
@@ -1308,7 +1328,61 @@ void StatePrinter<TC>::spIRStmt(const IRStmt* s)
 }
 
 
-inline Bool State::treeCompress(z3::context& ctx, Addr64 Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid, ChangeView& change_view, std::hash_map<ULong, Vns>& change_map, std::hash_map<UShort, Vns>& regs_change_map) {
+bool State::Ist_Exit_find_branch(std::vector<BranchChunk>& branchChunks, Vns const& guard, IRSB* bb, UInt stmtn)
+{
+    //ppIRSB(bb);
+    if (stmtn == bb->stmts_used - 1) {
+        Vns next = tIRExpr(bb->next);
+        if (next.real()) {
+            branchChunks.emplace_back(BranchChunk((ADDR)next, Vns(m_ctx, 0), guard, False));
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+    IRExpr* release = bb->next;
+    for (UInt i = bb->stmts_used - 1; i >= 0; i--) {
+        IRStmt* st = bb->stmts[i];
+        switch (st->tag) {
+        case Ist_Put: {
+            if (release->tag == Iex_Get) {
+                if (st->Ist.Put.offset == release->Iex.Get.offset) {
+                    release = st->Ist.Put.data;
+                }
+            }
+            break;
+        }
+        case Ist_WrTmp: {
+            if (release->tag == Iex_RdTmp) {
+                if (st->Ist.WrTmp.tmp == release->Iex.RdTmp.tmp) {
+                    release = st->Ist.WrTmp.data;
+                }
+            }
+            break;
+        }
+        case Ist_Store: {
+            if (release->tag == Iex_Load) {
+                if (st->Ist.Store.addr == release->Iex.Load.addr) {
+                    release = st->Ist.Store.data;
+                }
+            }
+            break;
+        }
+        default:
+            return false;
+        };
+        if (release->tag == Iex_Const) {
+            branchChunks.emplace_back(BranchChunk((ADDR)release->Iex.Const.con->Ico.U64, Vns(m_ctx, 0), guard, False));
+            return true;;
+        };
+    }
+    return false;
+}
+
+
+
+inline Bool State::treeCompress(z3::context& ctx, ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid, ChangeView& change_view, std::hash_map<ULong, Vns>& change_map, std::hash_map<UShort, Vns>& regs_change_map) {
     ChangeView _change_view = { this, &change_view };
     if (branch.empty()) {
         for (auto av : avoid) {
@@ -1405,61 +1479,7 @@ inline Bool State::treeCompress(z3::context& ctx, Addr64 Target_Addr, State_Tag 
     }
 }
 
-bool State::Ist_Exit_find_branch(std::vector<BranchChunk> &branchChunks, Vns const& guard, IRSB* bb, UInt stmtn)
-{
-    //ppIRSB(bb);
-    if (stmtn == bb->stmts_used - 1) {
-        Vns next = tIRExpr(bb->next);
-        if (next.real()) {
-            branchChunks.emplace_back(BranchChunk((ADDR)next, Vns(m_ctx, 0), guard, False));
-            return true;
-        }
-        else {
-            return false;
-        }
-    }
-    IRExpr* release = bb->next;
-    for (UInt i = bb->stmts_used - 1; i >= 0; i--) {
-        IRStmt* st = bb->stmts[i];
-        switch (st->tag) {
-        case Ist_Put: {
-            if (release->tag == Iex_Get) {
-                if (st->Ist.Put.offset == release->Iex.Get.offset) {
-                    release = st->Ist.Put.data;
-                }
-            }
-            break;
-        }
-        case Ist_WrTmp: {
-            if (release->tag == Iex_RdTmp) {
-                if (st->Ist.WrTmp.tmp == release->Iex.RdTmp.tmp) {
-                    release = st->Ist.WrTmp.data;
-                }
-            }
-            break;
-        }
-        case Ist_Store: {
-            if (release->tag == Iex_Load) {
-                if (st->Ist.Store.addr == release->Iex.Load.addr) {
-                    release = st->Ist.Store.data;
-                }
-            }
-            break;
-        }
-        case Ist_IMark:
-            return false;
-        };
-        if (release->tag == Iex_Const) {
-            branchChunks.emplace_back(BranchChunk((ADDR)release->Iex.Const.con->Ico.U64, Vns(m_ctx, 0), guard, False));
-            return true;;
-        };
-    }
-    return false;
-}
-
-
-
-void State::compress(Addr64 Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid)
+void State::compress(ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid)
 {
     ChangeView change_view = { NULL, NULL };
     std::hash_map<ULong, Vns> change_map;

@@ -278,9 +278,10 @@ inline Vns State::T_Binop(context &m_ctx, IROp op, Vns const& a, Vns const& b) {
 
 	    case Iop_CmpEQ64F0x2:dassert(a.bitn == 128); dassert(b.bitn == 128); return Vns(m_ctx, _mm_cmpneq_sd(a, b));
 	    case Iop_CmpLT64F0x2:dassert(a.bitn == 128); dassert(b.bitn == 128); return Vns(m_ctx, _mm_cmpnlt_sd(a, b));
-	    case Iop_CmpLE64F0x2:dassert(a.bitn == 128); dassert(b.bitn == 128);//ok cmpnlesd xmm5, xmm1
-		    __m128i m128i = _mm_set1_epi16(0xff);
-		    return Vns(m_ctx, _mm_xor_pd(_mm_cmpnle_sd(a, b), *(__m128d*)(&m128i)));
+        case Iop_CmpLE64F0x2:dassert(a.bitn == 128); dassert(b.bitn == 128); {//ok cmpnlesd xmm5, xmm1
+            __m128i m128i = _mm_set1_epi16(0xff);
+            return Vns(m_ctx, _mm_xor_pd(_mm_cmpnle_sd(a, b), *(__m128d*)(&m128i)));
+        }
 	    case Iop_CmpUN64F0x2:dassert(a.bitn == 128); dassert(b.bitn == 128); return Vns(m_ctx, _mm_cmpunord_pd(a, b));
 		
 	    case Iop_Add64F0x2:dassert(a.bitn == 128); dassert(b.bitn == 128); return Vns(m_ctx, _mm_add_sd(a, b));//ok addsd   xmm2, xmm0

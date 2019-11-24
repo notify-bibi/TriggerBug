@@ -44,7 +44,7 @@
 	<VexArch>0x401</VexArch>
 	<VexArchSystem>win</VexArchSystem>
 	<MaxThreadsNum>1</MaxThreadsNum>
-	<MemoryDumpPath>xxxxxxxxxx</MemoryDumpPath>
+	<MemoryDumpPath>C:\Users\bibi\Desktop\reverse\reverse\MiniRE\reMinif.exe.dump</MemoryDumpPath>
 	<!--GuestStartAddress>0x401950</GuestStartAddress-->
 	<VexControl>
 		<iropt_register_updates_default>0x701</iropt_register_updates_default>

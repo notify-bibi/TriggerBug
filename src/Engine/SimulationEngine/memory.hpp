@@ -337,6 +337,10 @@ public:
             printf("\n\t}\n", m_or_mask);
         }
     }
+
+    void print_offset() {
+        std::cout << m_offset << std::endl;
+    }
 private:
     static expr _ast2base(expr& base,
         expr const& e,
@@ -437,7 +441,8 @@ for (UInt i1 = 0; i1 < CR3_point->used; i1++) {																				\
 	auto free_pdpt_point = pdpt_point;																						\
 	pdpt_point = pdpt_point->next;																							\
 	delete free_pdpt_point;																									\
-}
+}                                                                                                                           \
+
 
 
 
@@ -741,6 +746,7 @@ public:
             printf("addr: %p  Iex_Load  base: %p {\n", m_state.get_cpu_ip(), am.getBase());
             am.print();
             printf("}\n");
+            //am.print_offset();
 #endif
             reast = m_state.idx2Value(am.getBase(), am.getoffset());
             if (reast) {

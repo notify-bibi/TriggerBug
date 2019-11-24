@@ -23,24 +23,29 @@ extern Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m
 
 
 #define SETFAST(fast_ptr,__nbytes)                                           \
-if((__nbytes)<8){                                                            \
-__asm__(                                                                     \
-    "mov %[nbytes],%%cl;\n\t"                                                \
-    "shl $3,%%rcx;\n\t"                                                      \
-    "mov %[fast],%%rax;\n\t"                                                 \
-    "shr %%cl,%%rax;\n\t"                                                    \
-    "shl %%cl,%%rax;\n\t"                                                    \
-    "mov $0x0807060504030201,%%rbx;\n\t"                                     \
-    "sub $65,%%cl;\n\t"                                                      \
-    "not %%cl;\n\t"                                                          \
-    "shl %%cl,%%rbx;\n\t"                                                    \
-    "shr %%cl,%%rbx;\n\t"                                                    \
-    "or %%rbx,%%rax;\n\t"                                                    \
-    "mov %%rax,%[out];\n\t"                                                  \
-    : [out]"=r"(GET8((fast_ptr)))                                            \
-    : [fast] "r"(GET8((fast_ptr))), [nbytes] "r"((UChar)(__nbytes))          \
-    : "rax", "rbx", "rcx"                                                    \
-);}                                                                          \
+if((__nbytes)<=8){                                                           \
+    if((__nbytes)==8){                                                           \
+        SET8(fast_ptr, 0x0807060504030201);                                      \
+    }else{                                                                       \
+        __asm__(                                                                     \
+            "mov %[nbytes],%%cl;\n\t"                                                \
+            "shl $3,%%rcx;\n\t"                                                      \
+            "mov %[fast],%%rax;\n\t"                                                 \
+            "shr %%cl,%%rax;\n\t"                                                    \
+            "shl %%cl,%%rax;\n\t"                                                    \
+            "mov $0x0807060504030201,%%rbx;\n\t"                                     \
+            "sub $65,%%cl;\n\t"                                                      \
+            "not %%cl;\n\t"                                                          \
+            "shl %%cl,%%rbx;\n\t"                                                    \
+            "shr %%cl,%%rbx;\n\t"                                                    \
+            "or %%rbx,%%rax;\n\t"                                                    \
+            "mov %%rax,%[out];\n\t"                                                  \
+            : [out]"=r"(GET8((fast_ptr)))                                            \
+            : [fast] "r"(GET8((fast_ptr))), [nbytes] "r"((UChar)(__nbytes))          \
+            : "rax", "rbx", "rcx"                                                    \
+        );                                                                        \
+    }                                                                          \
+}                                                                            \
 else if((__nbytes)<=16){                                                     \
     _mm_store_si128(                                                         \
         (__m128i*)(fast_ptr),                                                \

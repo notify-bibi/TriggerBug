@@ -16,8 +16,7 @@ Revision History:
 //#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.xml"
 //#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\Roads\\Roads.xml"
 //#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\puzzle\\puzzle.xml"
-//#define INIFILENAME "C:\\Users\\bibi\\Desktop\\reverse\\c++symbol\\childRE.xml"
-#define INIFILENAME "C:\\Users\\bibi\\Desktop\\reverse\\reverse\\MiniRE\\mr.xml"
+#define INIFILENAME "C:\\Users\\bibi\\Desktop\\reverse\\c++symbol\\childRE.xml"
 
 
 
@@ -35,12 +34,12 @@ UInt flag_max_count = 0;
 
 class StateX86 : public State {
 public:
-    StateX86(const char* filename, Addr64 gse, Bool _need_record) :
+    StateX86(const char* filename, ADDR gse, Bool _need_record) :
         State(filename, gse, _need_record)
     {
     };
 
-    StateX86(StateX86* father_state, Addr64 gse) :
+    StateX86(StateX86* father_state, ADDR gse) :
         State(father_state, gse)
     {
     };
@@ -64,14 +63,10 @@ public:
         switch (kd) {
         case Ijk_Sys_syscall:
             return Sys_syscall();
-
-        case Ijk_NoDecode: {
-            delta += 2;
-            vex_printf("Ijk_NoDecode: %p", guest_start);
-
-            return Running;
-        }
         default:
+            vex_printf("guest address: %p . error jmp kind: ", guest_start);
+            ppIRJumpKind(kd);
+            vex_printf("\n");
             return Death;
         }
     }
@@ -126,7 +121,9 @@ public:
             case linux:return Sys_syscall_linux();
             }
         default:
-            return Death;
+            vex_printf("guest address: %p . error jmp kind: ", guest_start);
+            ppIRJumpKind(kd);
+            vex_printf("\n");
         }
     }
 
@@ -407,6 +404,12 @@ int main() {
     flag_count = 0;
 
     StatePrinter<StateX86> state(INIFILENAME, (Addr64)0, True);
+
+    ULong sdf = sizeof(State);
+    while (1)
+    {
+        StatePrinter<StateX86> _state(&state, 0u);
+    }
     context& c = state;
 
 

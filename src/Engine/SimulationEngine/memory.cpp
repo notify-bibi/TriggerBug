@@ -398,6 +398,70 @@ addressingMode::sbit_struct addressingMode::_check_is_extract(expr const& _e, UI
                 }
                 break;
             }
+            case Z3_OP_BXOR: {
+                auto max = e.num_args();
+                UInt n_sym = 0;
+                sbit_struct rSS;
+                bool rb = false;
+                for (Int i = max - 1; i >= 0; i--) {
+                    z3::expr arg = e.arg(i);
+                    sbit_struct SS = _check_is_extract(arg, idx);
+                    if (SS.sym_ast) {
+                        n_sym += 1;
+                        rSS = SS;
+                        if (n_sym == 2) goto ret;
+                    }
+                    else {
+                        rb ^= SS.rbit;
+                    }
+                }
+                return n_sym ? rSS : sbit_struct{ NULL, rb , 0 };
+            }
+            case Z3_OP_BAND: {
+                auto max = e.num_args();
+                UInt n_sym = 0;
+                sbit_struct rSS;
+                for (Int i = max - 1; i >= 0; i--) {
+                    z3::expr arg = e.arg(i);
+                    sbit_struct SS = _check_is_extract(arg, idx);
+                    if (SS.sym_ast) {
+                        n_sym += 1;
+                        rSS = SS;
+                    }
+                    else {
+                        if (!SS.rbit) 
+                            return sbit_struct{ NULL, false , 0 };
+                    }
+                }
+                if (n_sym == 1) 
+                    return rSS;
+                if (n_sym == 0)
+                    return sbit_struct{ NULL, true , 0 };
+                goto ret;
+            }
+
+            case Z3_OP_BOR: {
+                auto max = e.num_args();
+                UInt n_sym = 0;
+                sbit_struct rSS;
+                for (Int i = max - 1; i >= 0; i--) {
+                    z3::expr arg = e.arg(i);
+                    sbit_struct SS = _check_is_extract(arg, idx);
+                    if (SS.sym_ast) {
+                        n_sym += 1;
+                        rSS = SS;
+                    }
+                    else {
+                        if (SS.rbit)
+                            return sbit_struct{ NULL, true , 0 };
+                    }
+                }
+                if (n_sym == 1)
+                    return rSS;
+                if (n_sym == 0)
+                    return sbit_struct{ NULL, false , 0 };
+                goto ret;
+            }
             default:
                 goto ret;
             };
@@ -405,7 +469,7 @@ addressingMode::sbit_struct addressingMode::_check_is_extract(expr const& _e, UI
         else if (e.kind() == Z3_NUMERAL_AST) {
             ULong real;
             e.is_numeral_u64(real);
-            return sbit_struct{ NULL, (real >> idx) & 1, 0 };
+            return sbit_struct{ NULL, (bool)((real >> idx) & 1), 0 };
         }
         else {
             break;
@@ -497,9 +561,11 @@ MEM::~MEM() {
                     page_point = page_point->next;
                     delete free_page_point;
                 }
-            )
+                )
         )
     )
+    delete CR3_point;
+    free(CR3);
 }
 
 ULong MEM::map(ULong address, ULong length) {

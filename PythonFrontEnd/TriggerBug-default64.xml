@@ -46,10 +46,8 @@
 	<MaxThreadsNum>1</MaxThreadsNum>
 	<MemoryDumpPath>xxxxxxxxxx</MemoryDumpPath>
 	<!--GuestStartAddress>0x401950</GuestStartAddress-->
-	<PassSigSEGV>1</PassSigSEGV>
 	<VexControl>
 		<iropt_register_updates_default>0x701</iropt_register_updates_default>
-		<pxControl>0x701</pxControl>
 		<iropt_level>2</iropt_level>
 		<traceflags>0</traceflags>
 	</VexControl>
