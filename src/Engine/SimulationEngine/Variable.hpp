@@ -382,9 +382,9 @@ public:
 
     inline Z3_sort_kind sort_kind() const { return Z3_get_sort_kind(m_ctx, Z3_get_sort(m_ctx, *this)); }
 
-    inline Z3_ast_kind ast_kind()const { return Z3_get_ast_kind(m_ctx, *this); }
+    inline Z3_ast_kind ast_kind() const { return Z3_get_ast_kind(m_ctx, *this); }
 
-    inline Vns simplify()
+    inline Vns simplify() const
     {
         if (m_kind != SYMB)
             return *this;

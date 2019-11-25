@@ -621,7 +621,7 @@ public:
     }
 
     inline PAGE* getMemPage(ADDR address) {
-        return GETPAGE((ULong)address);
+        return GETPAGE((ULong)address);//虚拟机逃逸 漏洞（无idx检查 为了速度就不多做检查了）
     }
 
     Itaddress addr_begin(solver& s, Z3_ast addr) { return Itaddress(s, addr); }

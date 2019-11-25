@@ -57,7 +57,6 @@ inline void ThreadPool::wait() {
 			}
 		}
 	}
-
 }
 
 

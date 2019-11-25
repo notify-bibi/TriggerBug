@@ -65,7 +65,15 @@ tid_type register_tid(unsigned int tid) {
 }
 
 tid_type unregister_tid(unsigned int tid) {
-    return unregist_ok;
+    tid &= 0xffff;
+    auto idx = temp_index();
+    if (tid2temp_used[idx]) {
+        tid2temp_used[idx] = 0;
+        return unregist_ok;
+    }
+    else {
+        return unregist_err;
+    }
 }
 
 

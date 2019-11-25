@@ -71,7 +71,7 @@ extern void IR_init(VexControl &vc);
 extern "C" ULong x86g_use_seg_selector(HWord ldt, HWord gdt, UInt seg_selector, UInt virtual_addr);
 
 class Vex_Info :public StatetTraceFlag {
-
+    friend GraphView;
 private:
     static tinyxml2::XMLDocument doc;
     static tinyxml2::XMLError err;
@@ -88,218 +88,28 @@ public:
     static ADDR GuestStartAddress;
     static UInt MaxThreadsNum;
     static Int traceflags;
-
-    friend GraphView;
-
+    UInt gRegsIpOffset();
+protected:
+    static VexGuestExtents     vge_chunk[MAX_THREADS];
+    static VexTranslateArgs    vta_chunk[MAX_THREADS];
 
 protected:
-    Pap pap;
-    VexTranslateResult res;
-    VexArchInfo         vai_guest, vai_host;
-    VexGuestExtents     vge;
-    VexTranslateArgs    vta;
-    VexTranslateResult  vtr;
-    VexAbiInfo	        vbi;
-    VexControl          vc;
+    Vex_Info(const char* filename) :StatetTraceFlag() { init_vex_info(filename); }
+    Vex_Info(Vex_Info& f) :StatetTraceFlag(f) {}
 
 private:
 
-    void init_vex_info(const char* filename) {
-        iropt_register_updates_default = VexRegUpdSpAtMemAccess;
-        iropt_level = 2;
-        guest_max_insns = 100;
-        err = loadFile(filename);
-        doc_TriggerBug = doc.FirstChildElement("TriggerBug");
-        doc_VexControl = doc_TriggerBug->FirstChildElement("VexControl");
-        doc_debug = doc_TriggerBug->FirstChildElement("DEBUG");
-
-        guest_system = unknowSystem;
-        guest = VexArch_INVALID;
-        MemoryDumpPath = "你没有这个文件";
-
-        _gGuestArch();
-        _gVexArchSystem();
-        _gMemoryDumpPath();
-        _gGuestStartAddress();
-        _gMaxThreadsNum();
-
-        if (doc_VexControl) {
-            _giropt_register_updates_default();
-            _giropt_level();
-            _gguest_max_insns();
-        }
-        if (doc_debug) {
-            bool traceState = false, traceJmp = false, ppStmts = false, TraceSymbolic = false;
-            auto _ppStmts = doc_debug->FirstChildElement("ppStmts");
-            auto _TraceState = doc_debug->FirstChildElement("TraceState");
-            auto _TraceJmp = doc_debug->FirstChildElement("TraceJmp");
-            auto _TraceSymbolic = doc_debug->FirstChildElement("TraceSymbolic");
-
-            if (_TraceState) _TraceState->QueryBoolText(&traceState);
-            if (_TraceJmp) _TraceJmp->QueryBoolText(&traceJmp);
-            if (_ppStmts) _ppStmts->QueryBoolText(&ppStmts);
-            if (_TraceSymbolic) _TraceSymbolic->QueryBoolText(&TraceSymbolic);
-            if (traceState) setFlag(CF_traceState);
-            if (traceJmp) setFlag(CF_traceJmp);
-            if (ppStmts) setFlag(CF_ppStmts);
-            if (TraceSymbolic) setFlag(CF_TraceSymbolic);
-        }
-    }
-
-
-    void init()
-    {
-        LibVEX_default_VexControl(&vc);
-        LibVEX_default_VexArchInfo(&vai_host);
-        LibVEX_default_VexArchInfo(&vai_guest);
-        LibVEX_default_VexAbiInfo(&vbi);
-
-        vbi.guest_amd64_assume_gs_is_const = True;
-        vbi.guest_amd64_assume_fs_is_const = True;
-        vc.iropt_verbosity = 0;
-        vc.iropt_level = iropt_level;
-        vc.iropt_unroll_thresh = 0;
-        vc.guest_max_insns = guest_max_insns;
-        pap.guest_max_insns = vc.guest_max_insns;
-        vc.guest_chase_thresh = 0;   //不许追赶
-
-        vc.iropt_register_updates_default = iropt_register_updates_default;
-
-        vex_hwcaps_vai(HOSTARCH, &vai_host);
-        vex_hwcaps_vai(guest, &vai_guest);
-        vai_host.endness = VexEndnessLE;//VexEndnessBE
-        vai_guest.endness = VexEndnessLE;//VexEndnessBE
-
-        vex_prepare_vbi(guest, &vbi);
-        vta.callback_opaque = NULL;
-        vta.preamble_function = NULL;
-        vta.instrument1 = NULL;
-        vta.instrument2 = NULL;
-        vta.finaltidy = NULL;
-        vta.preamble_function = NULL;
-
-        vta.disp_cp_chain_me_to_slowEP = (void*)dispatch;
-        vta.disp_cp_chain_me_to_fastEP = (void*)dispatch;
-        vta.disp_cp_xindir = (void*)dispatch;
-        vta.disp_cp_xassisted = (void*)dispatch;
-
-        vta.arch_guest = guest;
-        vta.archinfo_guest = vai_guest;
-        vta.arch_host = HOSTARCH;
-        vta.archinfo_host = vai_host;
-        vta.abiinfo_both = vbi;
-        vta.guest_extents = &vge;
-        vta.chase_into_ok = chase_into_ok;
-        vta.needs_self_check = needs_self_check;
-
-
-        vta.traceflags = traceflags;
-        vta.pap = &pap;
-    }
-
-protected:
-
-    Vex_Info(const char* filename):
-        StatetTraceFlag()
-    {
-        init_vex_info(filename);
-        init();
-    }
-    Vex_Info(Vex_Info& f):
-        StatetTraceFlag(f)
-    {
-        init();
-    }
-private:
-
-    static UInt _gtraceflags() {
-        tinyxml2::XMLElement* _traceflags = doc_VexControl->FirstChildElement("traceflags");
-        if (_traceflags) return _traceflags->IntText();
-        return 0;
-    }
-
-    static void _gGuestStartAddress() {
-        ULong mGuestStartAddress = -1;
-        tinyxml2::XMLElement* _GuestStartAddress = doc_TriggerBug->FirstChildElement("GuestStartAddress");
-        if (_GuestStartAddress) sscanf(_GuestStartAddress->GetText(), "%llx", &mGuestStartAddress);
-        GuestStartAddress = mGuestStartAddress;
-    }
-
-    static tinyxml2::XMLError loadFile(const char* filename) {
-        tinyxml2::XMLError error = doc.LoadFile(filename);
-        if (error != tinyxml2::XML_SUCCESS) {
-            printf("error: %d Error filename %s    at:%s line %d", error, filename, __FILE__, __LINE__);
-            exit(1);
-        }
-        return error;
-    }
-
-    static void _gGuestArch() {
-        auto _VexArch = doc_TriggerBug->FirstChildElement("VexArch");
-        if (_VexArch) sscanf(_VexArch->GetText(), "%x", &guest);
-    }
-
-
-    static void _gMemoryDumpPath() {
-        tinyxml2::XMLElement* _MemoryDumpPath = doc_TriggerBug->FirstChildElement("MemoryDumpPath");
-        if (_MemoryDumpPath) MemoryDumpPath = _MemoryDumpPath->GetText();
-    }
-
-    static void _gVexArchSystem() {
-        tinyxml2::XMLElement* _GuestStartAddress = doc_TriggerBug->FirstChildElement("VexArchSystem");
-        if (_GuestStartAddress) {
-
-            if (!strcmp(_GuestStartAddress->GetText(), "linux")) {
-                guest_system = linux;
-            }
-            if (!strcmp(_GuestStartAddress->GetText(), "windows")) {
-                guest_system = windows;
-            }
-            if (!strcmp(_GuestStartAddress->GetText(), "win")) {
-                guest_system = windows;
-            }
-        }
-    }
-
-    static void _giropt_register_updates_default() {
-        tinyxml2::XMLElement* _iropt_register_updates_default = doc_VexControl->FirstChildElement("iropt_register_updates_default");
-        if (_iropt_register_updates_default) sscanf(_iropt_register_updates_default->GetText(), "%x", &iropt_register_updates_default);
-    }
-
-    static void _giropt_level() {
-        tinyxml2::XMLElement* _iropt_level = doc_VexControl->FirstChildElement("iropt_level");
-        if (_iropt_level) iropt_level = _iropt_level->IntText();
-    }
-
-    static void _gguest_max_insns() {
-        auto _guest_max_insns = doc_TriggerBug->FirstChildElement("guest_max_insns");
-        if (_guest_max_insns) guest_max_insns = _guest_max_insns->IntText();
-    }
-
-    static void _gMaxThreadsNum() {
-        UInt    mMaxThreadsNum = 16;
-        tinyxml2::XMLElement* _MaxThreadsNum = doc_TriggerBug->FirstChildElement("MaxThreadsNum");
-        if (_MaxThreadsNum) _MaxThreadsNum->QueryIntText((Int*)(&mMaxThreadsNum));
-        MaxThreadsNum = mMaxThreadsNum;
-    }
-
-public:
-    UInt gRegsIpOffset() {
-        switch (guest) {
-        case VexArchX86:return X86_IR_OFFSET::eip;
-        case VexArchAMD64:return AMD64_IR_OFFSET::rip;
-        case VexArchARM:
-        case VexArchARM64:
-        case VexArchPPC32:
-        case VexArchPPC64:
-        case VexArchS390X:
-        case VexArchMIPS32:
-        case VexArchMIPS64:
-        default:
-            std::cout << "Invalid arch in vex_prepare_vai.\n" << std::endl;
-            vassert(0);
-        }
-    }
+    static UInt _gtraceflags();
+    static void _gGuestStartAddress();
+    static tinyxml2::XMLError loadFile(const char* filename);
+    static void _gGuestArch();
+    static void _gMemoryDumpPath();
+    static void _gVexArchSystem();
+    static void _giropt_register_updates_default();
+    static void _giropt_level();
+    static void _gguest_max_insns();
+    static void _gMaxThreadsNum();
+    void init_vex_info(const char* filename);
 
 };
 
@@ -307,13 +117,11 @@ public:
 class BranchChunk {
 public:
     ADDR m_oep;
-    Vns  m_sym_addr;
     Vns  m_guard;
     bool m_tof;
 
-    BranchChunk(ADDR oep, Vns const& sym_addr, Vns const& guard, bool tof) :
+    BranchChunk(ADDR oep, Vns const& guard, bool tof) :
         m_oep(oep),
-        m_sym_addr(sym_addr),
         m_guard(guard),
         m_tof(tof)
     {
@@ -342,6 +150,8 @@ protected:
     bool is_dynamic_block;
 	void *VexGuestARCHState;
 
+    
+
 public:
     static Vns ir_temp[MAX_THREADS][400];
     static ThreadPool* pool;
@@ -354,6 +164,10 @@ public:
 	bool unit_lock;
 
 private:
+    Pap pap;
+    VexArchInfo *vai_guest,  *vai_host;
+    VexTranslateArgs *vta;
+
     bool isTop;
     Bool need_record;
     int replace_const;
@@ -362,8 +176,7 @@ private:
 	std::vector<Vns> asserts;
 
 	inline Bool treeCompress(z3::context &ctx, ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag> &avoid, ChangeView& change_view, std::hash_map<ULong, Vns> &change_map, std::hash_map<UShort, Vns> &regs_change_map);
-    bool Ist_Exit_find_branch(std::vector<BranchChunk> &branchChunks, Vns const& guard, IRSB *irsb, UInt stmtn);
-    
+
 public:
 	Register<REGISTER_LEN> regs;
 	MEM mem;//多线程设置相同user，不同state设置不同user
@@ -380,6 +193,7 @@ public:
 	~State() ;
     static void thread_register();
     static void thread_unregister();
+    void initVexEngine();
 	inline IRSB* BB2IR();
 	void add_assert(Vns &assert, Bool ToF);
     inline void add_assert(Vns& assert) { add_assert(assert, True); };
@@ -390,9 +204,7 @@ public:
 
 	void compress(ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag> &avoid);//最大化缩合状态 
     Vns getassert(z3::context &ctx);
-	inline Vns tIRExpr(IRExpr*);
-	inline void write_regs(int offset, void*, int length);
-	inline void read_regs(int offset, void*, int length);
+	inline Vns tIRExpr(IRExpr*); 
     Vns CCall(IRCallee *cee, IRExpr **exp_args, IRType ty);
     static Vns T_Unop(context & m_ctx, IROp, Vns const&);
     static Vns T_Binop(context & m_ctx, IROp, Vns const&, Vns const&);

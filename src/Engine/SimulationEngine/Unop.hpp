@@ -421,3 +421,6 @@ FAILD:
     vpanic("tIRType");
 }
 
+#undef Iop_ZEXT
+#undef Iop_SEXT
+#undef Iop_to

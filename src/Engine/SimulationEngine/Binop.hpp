@@ -311,6 +311,8 @@ inline Vns State::T_Binop(context &m_ctx, IROp op, Vns const& a, Vns const& b) {
 	    case Iop_CmpEQ32x8:return Vns(m_ctx, _mm256_cmpeq_epi32(a, b));//ok
 	    case Iop_CmpEQ64x4:return Vns(m_ctx, _mm256_cmpeq_epi64(a, b));//ok
 
+        case Iop_PermOrZero8x16: {dassert(a.bitn == 128); dassert(b.bitn == 128); return Vns(m_ctx, _mm_shuffle_epi8(a, b)); }
+
 	    case Iop_ShlN8x16:dassert(a.bitn == 128); dassert(b.bitn == 8); goto FAILD;
 	    case Iop_ShlN16x8:dassert(a.bitn == 128); dassert(b.bitn == 8); return Vns(m_ctx, _mm_slli_epi16(a, (UChar)b));
 	    case Iop_ShlN32x4:dassert(a.bitn == 128); dassert(b.bitn == 8); return Vns(m_ctx, _mm_slli_epi32(a, (UChar)b));
@@ -410,7 +412,7 @@ inline Vns State::T_Binop(context &m_ctx, IROp op, Vns const& a, Vns const& b) {
                 "mov %%rax,%[s];\n\t"
                 "mov %%rdx,%[rem];\n\t"
                 : [s] "=r"(re.m128i_u64[0])[rem] "=r"(re.m128i_u64[1])
-                : [hi64] "r"(na.m128i_u64[0]), [lo64] "r"(na.m128i_u64[1]), [bcs] "r"(nb)
+                : [hi64] "r"(na.m128i_u64[1]), [lo64] "r"(na.m128i_u64[0]), [bcs] "r"(nb)
                 : "rax", "rdx", "rcx"
             );
             return Vns(m_ctx, re);
@@ -427,7 +429,7 @@ inline Vns State::T_Binop(context &m_ctx, IROp op, Vns const& a, Vns const& b) {
                 "mov %%rax,%[s];\n\t"
                 "mov %%rdx,%[rem];\n\t"
                 : [s] "=r"(re.m128i_u64[0])[rem] "=r"(re.m128i_u64[1])
-                : [hi64] "r"(na.m128i_u64[0]), [lo64] "r"(na.m128i_u64[1]), [bcs] "r"(nb)
+                : [hi64] "r"(na.m128i_u64[1]), [lo64] "r"(na.m128i_u64[0]), [bcs] "r"(nb)
                 : "rax", "rdx", "rcx"
             );
             return Vns(m_ctx, re);
@@ -672,3 +674,13 @@ FAILD:
 }
 
 #undef BNxN
+#undef caseIop_Arithmetic
+#undef caseIop_Bitwise_Shift
+#undef caseIop_Bitwise
+#undef caseIop_Relational_Low
+#undef caseIop_Relational_High
+#undef Z3caseIop_Arithmetic
+#undef Z3caseIop_Bitwise_Shift
+#undef Z3caseIop_Bitwise
+#undef Z3caseIop_Relational_High
+#undef Z3caseIop_Relational_Low

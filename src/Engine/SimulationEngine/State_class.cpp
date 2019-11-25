@@ -93,6 +93,9 @@ ADDR Vex_Info::GuestStartAddress = 0;
 UInt Vex_Info::MaxThreadsNum = 16;
 Int Vex_Info::traceflags = 0;
 
+VexTranslateArgs    Vex_Info::vta_chunk[MAX_THREADS];
+VexGuestExtents     Vex_Info::vge_chunk[MAX_THREADS];
+
 
 std::hash_map<ADDR, Hook_struct> State::CallBackDict;
 std::hash_map<ADDR/*static table base*/, TRtype::TableIdx_CB> State::TableIdxDict;
@@ -233,9 +236,7 @@ void IR_init(VexControl& vc) {
     QueryPerformanceCounter(&beginPerformanceCount_global);
     if (!vex_initdone) {
         Func_Map_Init();
-        register_tid(GetCurrentThreadId());
         LibVEX_Init(&failure_exit, &_vex_log_bytes, 0/*debuglevel*/, &vc);
-        unregister_tid(GetCurrentThreadId());
 
         for (int i = 0; i < 257; i++) fastalignD1[i] = (((((i)-1) & -8) + 8) >> 3) - 1;
         for (int i = 0; i < 257; i++) fastalign[i] = (((((i)-1) & -8) + 8) >> 3);
@@ -333,11 +334,14 @@ State::State(const char *filename, ADDR gse, Bool _need_record) :
     unit_lock(true),
     replace_const(0),
     isTop(True)
+    ,
+    vta(nullptr)
 {
     m_params.set("mul2concat", true);
- 
+
     pap.state = (void*)(this);
     pap.n_page_mem = _n_page_mem;
+    pap.guest_max_insns = guest_max_insns;
     assert(MaxThreadsNum <= MAX_THREADS);
     if (pool) 
         delete pool;
@@ -346,8 +350,20 @@ State::State(const char *filename, ADDR gse, Bool _need_record) :
     asserts.resize(5);
     branch.reserve(10);
     init_threads_id(); 
-    tempmeminit(); 
+    tempmeminit();
+
+    vassert(register_tid(GetCurrentThreadId()) == regist_ok);
+    initVexEngine();
+    VexControl vc;
+    LibVEX_default_VexControl(&vc);
+    vc.iropt_verbosity = 0;
+    vc.iropt_level = iropt_level;
+    vc.iropt_unroll_thresh = 0;
+    vc.guest_max_insns = guest_max_insns;
+    vc.guest_chase_thresh = 0;   //不许追赶
+    vc.iropt_register_updates_default = iropt_register_updates_default;
     IR_init(vc);
+    vassert(unregister_tid(GetCurrentThreadId()) == unregist_ok);
     
     read_mem_dump(MemoryDumpPath);
     if (gse)
@@ -397,9 +413,12 @@ State::State(State *father_state, ADDR gse) :
     unit_lock(true),
     replace_const(father_state->replace_const),
     isTop(False)
+    ,
+    vta(nullptr)
 {
     pap.state = (void*)(this);
     pap.n_page_mem = _n_page_mem;
+    pap.guest_max_insns = guest_max_insns;
 };
 
 State::~State() { 
@@ -472,6 +491,56 @@ bool State::get_hook(Hook_struct& hs, ADDR addr)
     }
     hs = _where->second;
     return true;
+}
+
+inline void State::initVexEngine() {
+    t_index = temp_index();
+    VexArchInfo vai_guest;
+    VexArchInfo vai_host;
+    VexAbiInfo vbi;
+
+    VexGuestExtents *vge = &vge_chunk[t_index];
+    vta = &vta_chunk[t_index];
+
+
+    /*vai_host vai_guest*/
+    LibVEX_default_VexArchInfo(&vai_host);
+    LibVEX_default_VexArchInfo(&vai_guest);
+    vex_hwcaps_vai(HOSTARCH, &vai_host);
+    vex_hwcaps_vai(guest, &vai_guest);
+    vai_host.endness = VexEndnessLE;//VexEndnessBE
+    vai_guest.endness = VexEndnessLE;//VexEndnessBE
+
+    /*vbi*/
+    LibVEX_default_VexAbiInfo(&vbi);
+    vbi.guest_amd64_assume_gs_is_const = True;
+    vbi.guest_amd64_assume_fs_is_const = True;
+    vex_prepare_vbi(guest, &vbi);
+
+    vta->callback_opaque = NULL;
+    vta->preamble_function = NULL;
+    vta->instrument1 = NULL;
+    vta->instrument2 = NULL;
+    vta->finaltidy = NULL;
+    vta->preamble_function = NULL;
+
+    vta->disp_cp_chain_me_to_slowEP = (void*)dispatch;
+    vta->disp_cp_chain_me_to_fastEP = (void*)dispatch;
+    vta->disp_cp_xindir = (void*)dispatch;
+    vta->disp_cp_xassisted = (void*)dispatch;
+
+    vta->abiinfo_both   = vbi;
+    vta->archinfo_guest = vai_guest;
+    vta->archinfo_host  = vai_host;
+    vta->arch_guest = guest;
+    vta->arch_host = HOSTARCH;
+    vta->guest_extents = vge;
+    vta->chase_into_ok = chase_into_ok;
+    vta->needs_self_check = needs_self_check;
+
+
+    vta->traceflags = traceflags;
+    vta->pap = &pap;
 }
 
 inline Vns State::getassert(z3::context &ctx) {
@@ -562,18 +631,19 @@ Z3_ast State::idx2Value(ADDR base, Z3_ast idx)
 inline IRSB* State::BB2IR() {
     mem.set_double_page(guest_start, pap);
     pap.start_swap       = 0;
-    vta.guest_bytes      = (UChar *)(pap.t_page_addr);
-    vta.guest_bytes_addr = (Addr64)((ADDR)guest_start);
+    vta->guest_bytes      = (UChar *)(pap.t_page_addr);
+    vta->guest_bytes_addr = (Addr64)((ADDR)guest_start);
     IRSB *irsb;
     VexRegisterUpdates pxControl;
+    VexTranslateResult res;
     if(0){
         printf("GUESTADDR %16llx   RUND:%ld CODES   ", guest_start, runed);
         TESTCODE(
-            irsb = LibVEX_FrontEnd(&vta, &res, &pxControl);
+            irsb = LibVEX_FrontEnd(vta, &res, &pxControl);
         );
     }
     else {
-        return LibVEX_FrontEnd(&vta, &res, &pxControl);
+        return LibVEX_FrontEnd(vta, &res, &pxControl);
     }
     return irsb;
 }
@@ -609,8 +679,6 @@ inline void State::add_assert_eq(Vns & eqA, Vns & eqB)
     asserts.push_back(ass);
 }
 
-inline void State::write_regs(int offset, void* addr, int length) { regs.write_regs(offset, addr, length); }
-inline void State::read_regs(int offset, void* addr, int length) { regs.read_regs(offset, addr, length); }
 
 inline Vns symbolic_check(Z3_context ctx, ULong ret, UInt bitn) {
     if (ret & (0xfa1dull << 48)) {
@@ -656,12 +724,14 @@ inline void State::thread_register()
 {
     {
         std::unique_lock<std::mutex> lock(global_state_mutex);
-        register_tid(GetCurrentThreadId());
+        vassert(register_tid(GetCurrentThreadId()) == regist_ok);
     }
     auto i = temp_index();
     for (int j = 0; j < MAX_IRTEMP; j++) {
         ir_temp[i][j].m_kind = REAL;
     }
+
+
 }
 inline void State::thread_unregister()
 {
@@ -671,7 +741,7 @@ inline void State::thread_unregister()
     }
     {
         std::unique_lock<std::mutex> lock(global_state_mutex);
-        unregister_tid(GetCurrentThreadId());
+        vassert(unregister_tid(GetCurrentThreadId()) == unregist_ok);
     }
 }
 
@@ -729,6 +799,9 @@ void State::read_mem_dump(const char  *filename)
     free(name_buff);
     fclose(infile);
 }
+
+
+
 inline Vns State::ILGop(IRLoadG *lg) {
     switch (lg->cvt) {
     case ILGop_IdentV128:{ return mem.Iex_Load(tIRExpr(lg->addr), Ity_V128);            }
@@ -796,6 +869,7 @@ inline Vns State::tIRExpr(IRExpr* e)
 }
 
 
+
 void State::start(Bool first_bkp_pass) {
     if (this->status != NewState) {
         vex_printf("this->status != NewState");
@@ -804,6 +878,7 @@ void State::start(Bool first_bkp_pass) {
     status = Running;
     traceStart();
     thread_register();
+    initVexEngine();
     t_index = temp_index();
     _states[t_index] = this;
     Vns* irTemp = ir_temp[t_index]; 
@@ -829,7 +904,6 @@ Begin_try:
 For_Begin:
                 irsb = BB2IR();
                 traceIRSB(irsb);
-                //ppIRSB(irsb);
                 goto For_Begin_NO_Trans;
             deal_bkp:
                 {
@@ -849,12 +923,13 @@ For_Begin:
                         __m256i m32 = mem.Iex_Load<Ity_V256>(guest_start);
                         m32.m256i_i8[0] = hs.original;
                         pap.start_swap = 2;
-                        vta.guest_bytes = (UChar*)(&m32);
-                        vta.guest_bytes_addr = (Addr64)((ADDR)guest_start);
+                        vta->guest_bytes = (UChar*)(&m32);
+                        vta->guest_bytes_addr = (Addr64)((ADDR)guest_start);
                         auto max_insns = pap.guest_max_insns;
                         pap.guest_max_insns = 1;
                         VexRegisterUpdates pxControl;
-                        irsb = LibVEX_FrontEnd(&vta, &res, &pxControl);
+                        VexTranslateResult res;
+                        irsb = LibVEX_FrontEnd(vta, &res, &pxControl);
                         //ppIRSB(irsb);
                         pap.guest_max_insns = max_insns;
                     }
@@ -908,6 +983,7 @@ For_Begin:
                                         delta = 0;
                                         goto For_Begin;
                                     }
+                                    guest_start = s->Ist.Exit.dst->Ico.U64;
                                 }
                                 else {
                                     guest_start = s->Ist.Exit.dst->Ico.U64;
@@ -916,39 +992,33 @@ For_Begin:
                             }
                         }
                         else {
-                            switch (eval_all(guard_result, solv, guard)) {
-                            case 0: { status = Death; goto EXIT; }
-                            case 1: {
-                                if (((UChar)guard_result[0].simplify()) & 1) { goto Exit_guard_true; };
-                                break;
+                            UInt eval_size = eval_all(guard_result, solv, guard);
+                            vassert(eval_size <= 2);
+                            if (eval_size == 0) { status = Death; goto EXIT; }
+                            if (eval_size == 1) {
+                                if (((UChar)guard_result[0].simplify()) & 1)
+                                    goto Exit_guard_true;
                             }
-                            case 2: {
-                                branchChunks.emplace_back(BranchChunk(s->Ist.Exit.dst->Ico.U64, Vns(m_ctx, 0), guard, True));
-                                if (!Ist_Exit_find_branch(branchChunks, guard, irsb, stmtn)) {
-                                    ppIRSB(irsb);
-                                    status = Death;
-                                    vex_printf("not found!");
-                                    goto EXIT;
-                                };
+                            if (eval_size == 2) {
+                                branchChunks.emplace_back(BranchChunk(s->Ist.Exit.dst->Ico.U64, guard, True));
+                                branchChunks.emplace_back(BranchChunk(guest_start, guard, False));
                                 status = Fork;
                                 goto EXIT;
-                            }
-                            default: { vpanic("??"); }
                             }
                         }
                         break;
                     }
                     case Ist_NoOp: break;
                     case Ist_IMark: {
-                        guest_start = (ADDR)s->Ist.IMark.addr; 
+                        guest_start = (ADDR)s->Ist.IMark.addr;
                         if (this->is_dynamic_block) {
                             this->is_dynamic_block = false;
                             goto For_Begin;// fresh changed block
                         }
-                        break; 
+                        break;
                     };
                     case Ist_AbiHint: //====== AbiHint(t4, 128, 0x400936:I64) ====== call 0xxxxxxx
-                        break; 
+                        break;
                     case Ist_PutI: {
                         // PutI(840:8xI8)[t10,-1]
                         // 840:arr->base
@@ -959,7 +1029,7 @@ For_Begin:
                         auto ix = tIRExpr(s->Ist.PutI.details->ix);
                         if (ix.real()) {
                             regs.Ist_Put(
-                                s->Ist.PutI.details->descr->base + (((UInt)((s->Ist.PutI.details->bias + (int)(ix)))) % s->Ist.PutI.details->descr->nElems)*ty2length(s->Ist.PutI.details->descr->elemTy),
+                                s->Ist.PutI.details->descr->base + (((UInt)((s->Ist.PutI.details->bias + (int)(ix)))) % s->Ist.PutI.details->descr->nElems) * ty2length(s->Ist.PutI.details->descr->elemTy),
                                 tIRExpr(s->Ist.PutI.details->data)
                             );
                         }
@@ -969,7 +1039,7 @@ For_Begin:
                         break;
                     }
                     case Ist_Dirty: {
-                        IRDirty *dirty = s->Ist.Dirty.details;
+                        IRDirty* dirty = s->Ist.Dirty.details;
                         auto guard = tIRExpr(dirty->guard);
                         if (((UChar)guard) & 1) {
                             auto k = CCall(dirty->cee, dirty->args, Ity_I64);
@@ -980,7 +1050,7 @@ For_Begin:
                         break;
                     }
                     case Ist_LoadG: {
-                        IRLoadG *lg = s->Ist.LoadG.details;
+                        IRLoadG* lg = s->Ist.LoadG.details;
                         auto guard = tIRExpr(lg->guard);
                         if (guard.real()) {
                             irTemp[lg->dst] = (((UChar)guard)) ? ILGop(lg) : tIRExpr(lg->alt);
@@ -991,10 +1061,10 @@ For_Begin:
                         break;
                     }
                     case Ist_StoreG: {
-                        IRStoreG *sg = s->Ist.StoreG.details;
+                        IRStoreG* sg = s->Ist.StoreG.details;
                         auto guard = tIRExpr(sg->guard);
                         if (guard.real()) {
-                            if ((UChar)guard) 
+                            if ((UChar)guard)
                                 mem.Ist_Store(tIRExpr(sg->addr), tIRExpr(sg->data));
                         }
                         else {
@@ -1004,10 +1074,15 @@ For_Begin:
                         }
                         break;
                     }
-                    case Ist_MBE:  /*内存总线事件，fence/请求/释放总线锁*/
+                    case Ist_MBE:  /*内存总线事件，fence/请求/释放总线锁*/{
+                        vex_printf("IR-");
+                        ppIRMBusEvent(s->Ist.MBE.event);
+                        break;
+                    }
                     case Ist_LLSC:
                     default: {
-                        vex_printf("what ppIRStmt %d\n", s->tag);
+                        ppIRSB(irsb);
+                        vex_printf("addr: %p what ppIRStmt %d\n", guest_start, s->tag);
                         vpanic("what ppIRStmt");
                     }
                     }
@@ -1041,27 +1116,24 @@ For_Begin:
                     }
                 }
                 };
-Isb_next:
+            Isb_next:
                 Vns next = tIRExpr(irsb->next).simplify();
                 if (next.real()) {
                     guest_start = next;
                 }
                 else {
                     std::vector<Vns> result;
-                    switch (eval_all(result, solv, next)) {
-                    case 0: status = Death; goto EXIT;
-                    case 1: {
-                        guest_start = result[0].simplify();
-                        break;
-                    }
-                    default: {
+                    UInt eval_size = eval_all(result, solv, next);
+                    if (eval_size == 0) { status = Death; goto EXIT; }
+                    else if (eval_size == 1) { guest_start = result[0].simplify(); }
+                    else {
                         for (auto re : result) {
-                            branchChunks.emplace_back(BranchChunk(re.simplify(), next, Vns(m_ctx, 0), True));
+                            ADDR GN = re.simplify();//guest next ip
+                            branchChunks.emplace_back(BranchChunk(GN, next == GN, True));
                         }
                         status = Fork;
                         goto EXIT;
                     }
-                    };
                 }
             };
 
@@ -1106,6 +1178,16 @@ EXIT:
     branchGo();
     return;
 
+}
+
+
+State* BranchChunk::getState(State& fstate)
+{
+    State* ns = fstate.ForkState(m_oep);
+    if (m_guard.symbolic()) {
+        ns->add_assert(m_guard.translate(ns->m_ctx), m_tof);
+    }
+    return ns;
 }
 
 void State::branchGo()
@@ -1327,58 +1409,58 @@ void StatePrinter<TC>::spIRStmt(const IRStmt* s)
     }
 }
 
-
-bool State::Ist_Exit_find_branch(std::vector<BranchChunk>& branchChunks, Vns const& guard, IRSB* bb, UInt stmtn)
-{
-    //ppIRSB(bb);
-    if (stmtn == bb->stmts_used - 1) {
-        Vns next = tIRExpr(bb->next);
-        if (next.real()) {
-            branchChunks.emplace_back(BranchChunk((ADDR)next, Vns(m_ctx, 0), guard, False));
-            return true;
-        }
-        else {
-            return false;
-        }
-    }
-    IRExpr* release = bb->next;
-    for (UInt i = bb->stmts_used - 1; i >= 0; i--) {
-        IRStmt* st = bb->stmts[i];
-        switch (st->tag) {
-        case Ist_Put: {
-            if (release->tag == Iex_Get) {
-                if (st->Ist.Put.offset == release->Iex.Get.offset) {
-                    release = st->Ist.Put.data;
-                }
-            }
-            break;
-        }
-        case Ist_WrTmp: {
-            if (release->tag == Iex_RdTmp) {
-                if (st->Ist.WrTmp.tmp == release->Iex.RdTmp.tmp) {
-                    release = st->Ist.WrTmp.data;
-                }
-            }
-            break;
-        }
-        case Ist_Store: {
-            if (release->tag == Iex_Load) {
-                if (st->Ist.Store.addr == release->Iex.Load.addr) {
-                    release = st->Ist.Store.data;
-                }
-            }
-            break;
-        }
-        default:
-            return false;
-        };
-        if (release->tag == Iex_Const) {
-            branchChunks.emplace_back(BranchChunk((ADDR)release->Iex.Const.con->Ico.U64, Vns(m_ctx, 0), guard, False));
-            return true;;
-        };
-    }
-    return false;
-}
+//
+//bool State::Ist_Exit_find_branch(std::vector<BranchChunk>& branchChunks, Vns const& guard, IRSB* bb, UInt stmtn)
+//{
+//    //ppIRSB(bb);
+//    if (stmtn == bb->stmts_used - 1) {
+//        Vns next = tIRExpr(bb->next);
+//        if (next.real()) {
+//            branchChunks.emplace_back(BranchChunk((ADDR)next, Vns(m_ctx, 0), guard, False));
+//            return true;
+//        }
+//        else {
+//            return false;
+//        }
+//    }
+//    IRExpr* release = bb->next;
+//    for (UInt i = bb->stmts_used - 1; i >= 0; i--) {
+//        IRStmt* st = bb->stmts[i];
+//        switch (st->tag) {
+//        case Ist_Put: {
+//            if (release->tag == Iex_Get) {
+//                if (st->Ist.Put.offset == release->Iex.Get.offset) {
+//                    release = st->Ist.Put.data;
+//                }
+//            }
+//            break;
+//        }
+//        case Ist_WrTmp: {
+//            if (release->tag == Iex_RdTmp) {
+//                if (st->Ist.WrTmp.tmp == release->Iex.RdTmp.tmp) {
+//                    release = st->Ist.WrTmp.data;
+//                }
+//            }
+//            break;
+//        }
+//        case Ist_Store: {
+//            if (release->tag == Iex_Load) {
+//                if (st->Ist.Store.addr == release->Iex.Load.addr) {
+//                    release = st->Ist.Store.data;
+//                }
+//            }
+//            break;
+//        }
+//        default:
+//            return false;
+//        };
+//        if (release->tag == Iex_Const) {
+//            branchChunks.emplace_back(BranchChunk((ADDR)release->Iex.Const.con->Ico.U64, Vns(m_ctx, 0), guard, False));
+//            return true;;
+//        };
+//    }
+//    return false;
+//}
 
 
 
@@ -1527,20 +1609,137 @@ void State::compress(ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_T
 }
 
 
-State* BranchChunk::getState(State& fstate)
-{
-    State* ns = fstate.ForkState(m_oep);
-    if (m_sym_addr.symbolic()) {
-        ns->add_assert_eq(m_sym_addr.translate(ns->m_ctx), Vns(ns->m_ctx, m_oep));
-    }
-    if (m_guard.symbolic()) {
-        ns->add_assert(m_guard.translate(ns->m_ctx), m_tof);
-    }
-    return ns;
-}
-
 
 #include "Unop.hpp"
 #include "Binop.hpp"
 #include "Triop.hpp"
 #include "Qop.hpp"
+
+void Vex_Info::init_vex_info(const char* filename) {
+    iropt_register_updates_default = VexRegUpdSpAtMemAccess;
+    iropt_level = 2;
+    guest_max_insns = 100;
+    err = loadFile(filename);
+    doc_TriggerBug = doc.FirstChildElement("TriggerBug");
+    doc_VexControl = doc_TriggerBug->FirstChildElement("VexControl");
+    doc_debug = doc_TriggerBug->FirstChildElement("DEBUG");
+
+    guest_system = unknowSystem;
+    guest = VexArch_INVALID;
+    MemoryDumpPath = "你没有这个文件";
+
+    _gGuestArch();
+    _gVexArchSystem();
+    _gMemoryDumpPath();
+    _gGuestStartAddress();
+    _gMaxThreadsNum();
+
+    if (doc_VexControl) {
+        _giropt_register_updates_default();
+        _giropt_level();
+        _gguest_max_insns();
+    }
+    if (doc_debug) {
+        bool traceState = false, traceJmp = false, ppStmts = false, TraceSymbolic = false;
+        auto _ppStmts = doc_debug->FirstChildElement("ppStmts");
+        auto _TraceState = doc_debug->FirstChildElement("TraceState");
+        auto _TraceJmp = doc_debug->FirstChildElement("TraceJmp");
+        auto _TraceSymbolic = doc_debug->FirstChildElement("TraceSymbolic");
+
+        if (_TraceState) _TraceState->QueryBoolText(&traceState);
+        if (_TraceJmp) _TraceJmp->QueryBoolText(&traceJmp);
+        if (_ppStmts) _ppStmts->QueryBoolText(&ppStmts);
+        if (_TraceSymbolic) _TraceSymbolic->QueryBoolText(&TraceSymbolic);
+        if (traceState) setFlag(CF_traceState);
+        if (traceJmp) setFlag(CF_traceJmp);
+        if (ppStmts) setFlag(CF_ppStmts);
+        if (TraceSymbolic) setFlag(CF_TraceSymbolic);
+    }
+}
+
+UInt Vex_Info::_gtraceflags() {
+    tinyxml2::XMLElement* _traceflags = doc_VexControl->FirstChildElement("traceflags");
+    if (_traceflags) return _traceflags->IntText();
+    return 0;
+}
+
+void Vex_Info::_gGuestStartAddress() {
+    ULong mGuestStartAddress = -1;
+    tinyxml2::XMLElement* _GuestStartAddress = doc_TriggerBug->FirstChildElement("GuestStartAddress");
+    if (_GuestStartAddress) sscanf(_GuestStartAddress->GetText(), "%llx", &mGuestStartAddress);
+    GuestStartAddress = mGuestStartAddress;
+}
+
+tinyxml2::XMLError Vex_Info::loadFile(const char* filename) {
+    tinyxml2::XMLError error = doc.LoadFile(filename);
+    if (error != tinyxml2::XML_SUCCESS) {
+        printf("error: %d Error filename %s    at:%s line %d", error, filename, __FILE__, __LINE__);
+        exit(1);
+    }
+    return error;
+}
+
+void Vex_Info::_gGuestArch() {
+    auto _VexArch = doc_TriggerBug->FirstChildElement("VexArch");
+    if (_VexArch) sscanf(_VexArch->GetText(), "%x", &guest);
+}
+
+void Vex_Info::_gMemoryDumpPath() {
+    tinyxml2::XMLElement* _MemoryDumpPath = doc_TriggerBug->FirstChildElement("MemoryDumpPath");
+    if (_MemoryDumpPath) MemoryDumpPath = _MemoryDumpPath->GetText();
+}
+
+void Vex_Info::_gVexArchSystem() {
+    tinyxml2::XMLElement* _GuestStartAddress = doc_TriggerBug->FirstChildElement("VexArchSystem");
+    if (_GuestStartAddress) {
+
+        if (!strcmp(_GuestStartAddress->GetText(), "linux")) {
+            guest_system = linux;
+        }
+        if (!strcmp(_GuestStartAddress->GetText(), "windows")) {
+            guest_system = windows;
+        }
+        if (!strcmp(_GuestStartAddress->GetText(), "win")) {
+            guest_system = windows;
+        }
+    }
+}
+
+void Vex_Info::_giropt_register_updates_default() {
+    tinyxml2::XMLElement* _iropt_register_updates_default = doc_VexControl->FirstChildElement("iropt_register_updates_default");
+    if (_iropt_register_updates_default) sscanf(_iropt_register_updates_default->GetText(), "%x", &iropt_register_updates_default);
+}
+
+void Vex_Info::_giropt_level() {
+    tinyxml2::XMLElement* _iropt_level = doc_VexControl->FirstChildElement("iropt_level");
+    if (_iropt_level) iropt_level = _iropt_level->IntText();
+}
+
+void Vex_Info::_gguest_max_insns() {
+    auto _guest_max_insns = doc_TriggerBug->FirstChildElement("guest_max_insns");
+    if (_guest_max_insns) guest_max_insns = _guest_max_insns->IntText();
+}
+
+void Vex_Info::_gMaxThreadsNum() {
+    UInt    mMaxThreadsNum = 16;
+    tinyxml2::XMLElement* _MaxThreadsNum = doc_TriggerBug->FirstChildElement("MaxThreadsNum");
+    if (_MaxThreadsNum) _MaxThreadsNum->QueryIntText((Int*)(&mMaxThreadsNum));
+    MaxThreadsNum = mMaxThreadsNum;
+}
+
+UInt Vex_Info::gRegsIpOffset() {
+    switch (guest) {
+    case VexArchX86:return X86_IR_OFFSET::eip;
+    case VexArchAMD64:return AMD64_IR_OFFSET::rip;
+    case VexArchARM:
+    case VexArchARM64:
+    case VexArchPPC32:
+    case VexArchPPC64:
+    case VexArchS390X:
+    case VexArchMIPS32:
+    case VexArchMIPS64:
+    default:
+        std::cout << "Invalid arch in vex_prepare_vai.\n" << std::endl;
+        vassert(0);
+    }
+}

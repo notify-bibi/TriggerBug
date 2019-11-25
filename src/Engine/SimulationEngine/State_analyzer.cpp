@@ -14,13 +14,13 @@ void StateAnalyzer::Run() {
 
 
 IRSB* GraphView::BB2IR() {
-    VexTranslateResult res;
     mem.set_double_page(guest_start, pap);
     pap.start_swap = 0;
-    m_state.vta.guest_bytes = (UChar*)(pap.t_page_addr);
-    m_state.vta.guest_bytes_addr = (Addr64)((ADDR)guest_start);
+    m_state.vta->guest_bytes = (UChar*)(pap.t_page_addr);
+    m_state.vta->guest_bytes_addr = (Addr64)((ADDR)guest_start);
     VexRegisterUpdates pxControl;
-    return LibVEX_FrontEnd(&m_state.vta, &res, &pxControl);
+    VexTranslateResult res;
+    return LibVEX_FrontEnd(m_state.vta, &res, &pxControl);
 }
 
 static UInt mk_key(Int offset, IRType ty)
