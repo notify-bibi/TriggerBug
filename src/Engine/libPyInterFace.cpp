@@ -119,8 +119,8 @@ HMODULE     TB_Z3_Model_Handle() { return  GetModuleHandle(TEXT("libz3.dll")); }
 //    return s->base;
 //}
 
-Addr64      TB_state_guest_start(State* s) { return s->get_guest_start(); }
-Addr64      TB_state_guest_start_ep(State* s) { return s->get_guest_start_ep(); }
+Addr64      TB_state_guest_start(State* s) { return s->get_cpu_ip(); }
+Addr64      TB_state_guest_start_ep(State* s) { return s->get_state_ep(); }
 State_Tag   TB_state_status(State* s) { return s->status; }
 //void        TB_state_start(State * s) {
 //    pool->enqueue([s] {

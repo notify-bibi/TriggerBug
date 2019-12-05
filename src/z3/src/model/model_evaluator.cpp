@@ -16,10 +16,8 @@ Author:
 Revision History:
 
 --*/
-#include "model/model.h"
-#include "model/model_evaluator_params.hpp"
-#include "model/model_evaluator.h"
-#include "model/model_v2_pp.h"
+#include "ast/ast_pp.h"
+#include "ast/ast_util.h"
 #include "ast/rewriter/rewriter_types.h"
 #include "ast/rewriter/bool_rewriter.h"
 #include "ast/rewriter/arith_rewriter.h"
@@ -31,10 +29,13 @@ Revision History:
 #include "ast/rewriter/fpa_rewriter.h"
 #include "ast/rewriter/th_rewriter.h"
 #include "ast/rewriter/rewriter_def.h"
-#include "ast/ast_pp.h"
-#include "ast/ast_util.h"
-#include "model/model_smt2_pp.h"
 #include "ast/rewriter/var_subst.h"
+#include "model/model_smt2_pp.h"
+#include "model/model.h"
+#include "model/model_evaluator_params.hpp"
+#include "model/model_evaluator.h"
+#include "model/model_v2_pp.h"
+
 
 namespace {
 
@@ -51,6 +52,8 @@ struct evaluator_cfg : public default_rewriter_cfg {
     fpa_rewriter                    m_f_rw;
     seq_rewriter                    m_seq_rw;
     array_util                      m_ar;
+    arith_util                      m_au;
+    fpa_util                        m_fpau;
     unsigned long long              m_max_memory;
     unsigned                        m_max_steps;
     bool                            m_model_completion;
@@ -75,6 +78,8 @@ struct evaluator_cfg : public default_rewriter_cfg {
         m_f_rw(m),
         m_seq_rw(m),
         m_ar(m),
+        m_au(m),
+        m_fpau(m),
         m_pinned(m) {
         bool flat = true;
         m_b_rw.set_flat(flat);
@@ -129,9 +134,9 @@ struct evaluator_cfg : public default_rewriter_cfg {
         return false;
     }
 
-    bool reduce_quantifier(quantifier * old_q, 
-                           expr * new_body, 
-                           expr * const * new_patterns, 
+    bool reduce_quantifier(quantifier * old_q,
+                           expr * new_body,
+                           expr * const * new_patterns,
                            expr * const * new_no_patterns,
                            expr_ref & result,
                            proof_ref & result_pr) {
@@ -145,7 +150,7 @@ struct evaluator_cfg : public default_rewriter_cfg {
         family_id fid = f->get_family_id();
         bool is_uninterp = fid != null_family_id && m.get_plugin(fid)->is_considered_uninterpreted(f);
         br_status st = BR_FAILED;
-        TRACE("model_evaluator", tout << f->get_name() << " " << is_uninterp << "\n";);        
+        TRACE("model_evaluator", tout << f->get_name() << " " << is_uninterp << "\n";);
         if (num == 0 && (fid == null_family_id || is_uninterp)) { // || m_ar.is_as_array(f)
             expr * val = m_model.get_const_interp(f);
             if (val != nullptr) {
@@ -192,8 +197,8 @@ struct evaluator_cfg : public default_rewriter_cfg {
                     result = m.mk_false();
                     st = BR_DONE;
                 }
-                TRACE("model_evaluator", 
-                      tout << st << " " << mk_pp(s, m) << " " << s_fid << " " << m_ar_rw.get_fid() << " " 
+                TRACE("model_evaluator",
+                      tout << st << " " << mk_pp(s, m) << " " << s_fid << " " << m_ar_rw.get_fid() << " "
                       << mk_pp(args[0], m) << " " << mk_pp(args[1], m) << " " << result << "\n";);
                 if (st != BR_FAILED)
                     return st;
@@ -321,7 +326,28 @@ struct evaluator_cfg : public default_rewriter_cfg {
         result = nullptr;
         result_pr = nullptr;
 
+        if (f->get_family_id() == m_fpau.get_family_id() &&
+            !m_fpau.is_considered_uninterpreted(f, num, args)) {
+            // cwinter: should this be unreachable?
+            return BR_FAILED;
+        }
+
         func_interp * fi = m_model.get_func_interp(f);
+
+        func_decl_ref f_ui(m);
+        if (!fi && m_au.is_considered_uninterpreted(f, num, args, f_ui)) {
+            if (f_ui) {
+                fi = m_model.get_func_interp(f_ui); 
+            }
+            if (!fi) {
+                result = m_au.mk_numeral(rational(0), f->get_range());
+                return BR_DONE;
+            }
+        }
+        else if (!fi && m_fpau.is_considered_uninterpreted(f, num, args)) {
+            result = m.get_some_value(f->get_range());
+            return BR_DONE;
+        }
         if (fi) {
             if (fi->is_partial())
                 fi->set_else(m.get_some_value(f->get_range()));
@@ -517,7 +543,7 @@ struct evaluator_cfg : public default_rewriter_cfg {
 
         func_decl* f = m_ar.get_as_array_func_decl(to_app(a));
         func_interp* g = m_model.get_func_interp(f);
-        if (!g) return false;        
+        if (!g) return false;
         else_case = g->get_else();
         if (!else_case) {
             TRACE("model_evaluator", tout << "no else case " << mk_pp(a, m) << "\n";);

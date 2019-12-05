@@ -332,6 +332,7 @@ namespace smt {
             unsigned m_propagate_automata;
             unsigned m_check_length_coherence;
             unsigned m_branch_variable;
+            unsigned m_branch_nqs;
             unsigned m_solve_nqs;
             unsigned m_solve_eqs;
             unsigned m_add_axiom;
@@ -346,7 +347,6 @@ namespace smt {
         theory_seq_params const&   m_params;
         dependency_manager         m_dm;
         solution_map               m_rep;        // unification representative.
-        bool                       m_reset_cache; // invalidate cache.
         scoped_vector<eq>          m_eqs;        // set of current equations.
         scoped_vector<ne>          m_nqs;        // set of current disequalities.
         scoped_vector<nc>          m_ncs;        // set of non-contains constraints.
@@ -513,6 +513,8 @@ namespace smt {
         bool solve_nqs(unsigned i);
         bool solve_ne(unsigned i);
         bool solve_nc(unsigned i);
+        bool branch_nqs();
+        void branch_nq(ne const& n);
 
         struct cell {
             cell*       m_parent;
@@ -561,12 +563,12 @@ namespace smt {
         expr_ref mk_nth(expr* s, expr* idx);
         expr_ref mk_last(expr* e);
         expr_ref mk_first(expr* e);
-        expr_ref canonize(expr* e, dependency*& eqs);
-        bool canonize(expr* e, expr_ref_vector& es, dependency*& eqs);
-        bool canonize(expr_ref_vector const& es, expr_ref_vector& result, dependency*& eqs);
+        bool canonize(expr* e, dependency*& eqs, expr_ref& result);
+        bool canonize(expr* e, expr_ref_vector& es, dependency*& eqs, bool& change);
+        bool canonize(expr_ref_vector const& es, expr_ref_vector& result, dependency*& eqs, bool& change);
         ptr_vector<expr> m_expand_todo;
-        expr_ref expand(expr* e, dependency*& eqs);
-        expr_ref expand1(expr* e, dependency*& eqs);
+        bool expand(expr* e, dependency*& eqs, expr_ref& result);
+        bool expand1(expr* e, dependency*& eqs, expr_ref& result);
         expr_ref try_expand(expr* e, dependency*& eqs);
         void add_dependency(dependency*& dep, enode* a, enode* b);
     
@@ -592,7 +594,7 @@ namespace smt {
 
         bool has_length(expr *e) const { return m_has_length.contains(e); }
         void add_length(expr* e, expr* l);
-        void enforce_length(expr* n);
+        bool add_length_to_eqc(expr* n);
         bool enforce_length(expr_ref_vector const& es, vector<rational>& len);
         void enforce_length_coherence(enode* n1, enode* n2);
 

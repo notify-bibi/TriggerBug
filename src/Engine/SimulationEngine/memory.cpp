@@ -483,7 +483,7 @@ ret:
 
 
 
-static inline UInt newDifUser()
+static inline Int newDifUser()
 {
     std::unique_lock<std::mutex> lock(global_user_mutex);
     auto re = global_user++;
@@ -508,10 +508,14 @@ static inline int dec_used_ref(PAGE *pt) {
     while (!xchgbv) {
         __asm__ __volatile("xchgb %b0,%1":"=r"(xchgbv) : "m"(pt->unit_mutex), "0"(xchgbv) : "memory");
     }
+    if (!pt->used_point) {
+        vpanic("error dec_used_ref ???");
+    }
     if (--pt->used_point) {
         pt->unit_mutex = true;
         return True;
     }else{
+        pt->unit_mutex = true;
         return False;
     }
 }
@@ -538,34 +542,6 @@ MEM::MEM(State& so, MEM& father_mem, context* ctx, Bool _need_record) :
     this->user = newDifUser();
     vassert(this->user != father_mem.user);
     this->copy(father_mem);
-}
-
-MEM::~MEM() {
-    PML4T* CR3_point = *CR3;
-    //  遍历双向链表
-    LCODEDEF5(LSTRUCT2, pdpt_point, free_pdpt_point, CR3_point, i1,
-        LCODEDEF5(LSTRUCT3, pdt_point, free_pdt_point, pdpt_point, i2,
-            LCODEDEF5(LSTRUCT4, pt_point, free_pt_point, pdt_point, i3,
-                PAGE_link * page_point = pt_point->top;
-                for (UInt i4 = 0; i4 < pt_point->used; i4++) {
-                    UShort index = page_point->index;
-
-                    PAGE* pt = pt_point->pt[index];
-                    if (!dec_used_ref(pt)) {
-                        if (pt->unit) {
-                            delete pt->unit;
-                        }
-                        delete pt;
-                    }
-                    auto free_page_point = page_point;
-                    page_point = page_point->next;
-                    delete free_page_point;
-                }
-                )
-        )
-    )
-    delete CR3_point;
-    free(CR3);
 }
 
 ULong MEM::map(ULong address, ULong length) {
@@ -635,8 +611,9 @@ ULong MEM::map(ULong address, ULong length) {
             (*pt)->used += 1;
             (*page)->unit_mutex = true;
             (*page)->used_point = 1;
-            (*page)->user = -1ull;
+            (*page)->user = user;
             (*page)->unit = NULL;
+            (*page)->is_pad = false;
             //Over
 
             PAGE_link* orignal = (*pt)->top;
@@ -656,200 +633,158 @@ _returnaddr:
     return max - address + 0x1000;
 }
 
-    void MEM::copy(MEM& mem) {
-        PML4T* CR3_point = *(mem.CR3);
-        PML4T* lCR3 = *CR3;
-        LCODEDEF4(LSTRUCT2, pdpt_point, CR3_point, lCR3, LTAB2, i1);
-            LCODEDEF4(LSTRUCT3, pdt_point, pdpt_point, LTAB2, LTAB3, i2);
-                LCODEDEF4(LSTRUCT4, pt_point, pdt_point, LTAB3, LTAB4, i3);
-                    PAGE_link* page_point = pt_point->top;
-                    for (UInt i4 = 0; i4 < pt_point->used; i4++, page_point = page_point->next) {
-                        UShort index = page_point->index;
-                        PAGE_link* page_l = new PAGE_link;
-                        memset(page_l, 0, sizeof(PAGE_link));
-                        if (!pt->pt) {
-                            pt->pt = (PAGE * *)malloc(pt_point->size * 8);
-                            memset(pt->pt, 0, pt_point->size * 8);
-                        }
-                        pt->pt[index] = pt_point->pt[index];//copy
-                        //(pt->pt[index])->used_point += 1;
-                        inc_used_ref((pt->pt[index]));
-                        {
-                            PAGE_link* orignal = (pt)->top;
-                            pt->top = page_l;
-                            (page_l)->prev = NULL;
-                            (page_l)->next = orignal;
-                            (page_l)->index = index;
-                            if (orignal) orignal->prev = page_l;
-                        }
+void MEM::copy(MEM& mem) {
+    PML4T* CR3_point = *(mem.CR3);
+    PML4T* lCR3 = *CR3;
+    LCODEDEF4(LSTRUCT2, pdpt_point, CR3_point, lCR3, LTAB2, i1);
+        LCODEDEF4(LSTRUCT3, pdt_point, pdpt_point, LTAB2, LTAB3, i2);
+            LCODEDEF4(LSTRUCT4, pt_point, pdt_point, LTAB3, LTAB4, i3);
+                PAGE_link* page_point = pt_point->top;
+                for (UInt i4 = 0; i4 < pt_point->used; i4++, page_point = page_point->next) {
+                    UShort index = page_point->index;
+                    PAGE_link* page_l = new PAGE_link;
+                    memset(page_l, 0, sizeof(PAGE_link));
+                    if (!pt->pt) {
+                        pt->pt = (PAGE * *)malloc(pt_point->size * 8);
+                        memset(pt->pt, 0, pt_point->size * 8);
                     }
-                    pt->used = pt_point->used;
-                    pt->size = pt_point->size;
+                    pt->pt[index] = pt_point->pt[index];//copy
+                    //(pt->pt[index])->used_point += 1;
+                    inc_used_ref((pt->pt[index]));
+                        
+                    {
+                        PAGE_link* orignal = (pt)->top;
+                        pt->top = page_l;
+                        (page_l)->prev = NULL;
+                        (page_l)->next = orignal;
+                        (page_l)->index = index;
+                        if (orignal) orignal->prev = page_l;
+                    }
                 }
-                pdt->used = pdt_point->used;
-                pdt->size = pdt_point->size;
+                pt->used = pt_point->used;
+                pt->size = pt_point->size;
             }
-            pdpt->used = pdpt_point->used;
-            pdpt->size = pdpt_point->size;
+            pdt->used = pdt_point->used;
+            pdt->size = pdt_point->size;
         }
-        lCR3->used = CR3_point->used;
-        lCR3->size = CR3_point->size;
+        pdpt->used = pdpt_point->used;
+        pdpt->size = pdpt_point->size;
     }
+    lCR3->used = CR3_point->used;
+    lCR3->size = CR3_point->size;
+}
 
-    ULong MEM::unmap(ULong address, ULong length) {
-        ULong max = (address + length - 1) & (~0xfff);
-        address &= (~0xfff);
+ULong MEM::unmap(ULong address, ULong length) {
+    ULong max = (address + length - 1) & (~0xfff);
+    address &= (~0xfff);
 #ifdef OPSTR
-        int freecount = 0;
+    int freecount = 0;
 #endif
-        while (address <= max) {
-            PDPT** pdpt = (*CR3)->pt + (address >> 39 & 0x1ff);
-            if (!*pdpt) {
-                return address;
-            }
-            PDT** pdt = (*pdpt)->pt + (address >> 30 & 0x1ff);
-            if (!*pdt) {
-                return address;
-            }
-            PT** pt = (*pdt)->pt + (address >> 21 & 0x1ff);
-            if (!*pt) {
-                return address;
-            }
-            UShort PT_ind = (address >> 12 & 0x1ff);
-            PAGE** page = (*pt)->pt + PT_ind;
-            if (*page) {
-                PAGE_link* page_l = (*pt)->top;
-                for (UInt i = 0; i < (*pt)->used; i++, page_l = page_l->next) {
-                    if ((page_l) && (page_l->index == PT_ind)) {
-                        {
-                            PAGE_link* p = (page_l)->prev;
-                            PAGE_link* n = (page_l)->next;
-                            if (p) p->next = n;
-                            if (n) n->prev = p;
-                        }
-                        delete page_l;
-#ifdef OPSTR
-                        freecount++;
-#endif
-                        break;
-                    }
-                }
-                LCODEDEF3(LTAB5, LSTRUCT4, LTAB4)
-                    free((*pt)->pt);
-                LCODEDEF3(LTAB4, LSTRUCT3, LTAB3)
-                    free((*pdt)->pt);
-                LCODEDEF3(LTAB3, LSTRUCT2, LTAB2)
-                    free((*pdpt)->pt);
-                delete* pdpt;
-                *pdpt = 0;
-                (*CR3)->used -= 1;
-                address += 0x1000;
-            }
-            else {
-                return address;
-            }
+    while (address <= max) {
+        PDPT** pdpt = (*CR3)->pt + (address >> 39 & 0x1ff);
+        if (!*pdpt) {
+            return address;
         }
+        PDT** pdt = (*pdpt)->pt + (address >> 30 & 0x1ff);
+        if (!*pdt) {
+            return address;
+        }
+        PT** pt = (*pdt)->pt + (address >> 21 & 0x1ff);
+        if (!*pt) {
+            return address;
+        }
+        UShort PT_ind = (address >> 12 & 0x1ff);
+        PAGE** page = (*pt)->pt + PT_ind;
+        if (*page) {
+            PAGE_link* page_l = (*pt)->top;
+            for (UInt i = 0; i < (*pt)->used; i++, page_l = page_l->next) {
+                if ((page_l) && (page_l->index == PT_ind)) {
+                    {
+                        PAGE_link* p = (page_l)->prev;
+                        PAGE_link* n = (page_l)->next;
+                        if (p) p->next = n;
+                        if (n) n->prev = p;
+                    }
+                    delete page_l;
 #ifdef OPSTR
-        vex_printf("free count %x\n", freecount);
+                    freecount++;
 #endif
-        return 0;
-    };
+                    break;
+                }
+            }
 
-    //very fast
-    void MEM::write_bytes(ULong address, ULong length, UChar* data) {
-        if (length < 8) {
-            {
-                ULong max = address + length;
-                PAGE* p_page = GETPAGE(address);
-                if (!p_page->unit) {
-                    p_page->unit = new Register<0x1000>(m_ctx, need_record);
-                    p_page->user = user;
-                }
-                UInt count = 0;
-                while (address < max) {
-                    if (!(address % 0x1000)) {
-                        p_page = GETPAGE(address);
-                        if (!p_page->unit) {
-                            p_page->unit = new Register<0x1000>(m_ctx, need_record);
-                            p_page->user = user;
-                        }
-                    }
-                    p_page->unit->m_bytes[address & 0xfff] = data[count];
-                    address += 1;
-                    count += 1;
-                };
-                return;
+            //need define
+            if ((*page)->unit) {
+                delete (*page)->unit;
             }
-        }
-        bool first_flag = false;
-        UInt align_l = 8 - (address - ALIGN(address, 8));
-        UInt align_r = (address + length - ALIGN(address + length, 8));
-        if (align_l == 8) {
+            delete *page;	
+
+            // LCODEDEF3(LTAB5, LSTRUCT4, LTAB4)
+            *page = 0;				
+            (*pt)->used -= 1;		
+            if ((*pt)->used) {		
+	            address += 0x1000;	
+	            continue;			
+            }						
+            {						
+	            PT *p = (*pt)->prev;
+	            PT *n = (*pt)->next;
+	            if (p) p->next = n;	
+	            if (n) n->prev = p;	
+            }
+            free((*pt)->pt);
+            LCODEDEF3(LTAB4, LSTRUCT3, LTAB3)
+            free((*pdt)->pt);
+            LCODEDEF3(LTAB3, LSTRUCT2, LTAB2)
+            free((*pdpt)->pt);
+            delete* pdpt;
+            *pdpt = 0;
+            (*CR3)->used -= 1;
+            address += 0x1000;
         }
         else {
-            PAGE* p_page = GETPAGE(address);
-            if ((((ULong*)data)[0] & (~(-1ull << (align_l << 3)))) || p_page->unit){
-                if (!p_page->unit) {
-                    p_page->unit = new Register<0x1000>(m_ctx, need_record);
-                    p_page->user = user;
-                }
-                first_flag = true;
-                memcpy(&p_page->unit->m_bytes[address & 0xfff], data, align_l);
-            }
-            data += align_l;
-            address += align_l;
-            length -= align_l;
-        }
-        UInt count = 0;
-        ULong max = (ALIGN(address + length, 8) - address);
-        PAGE* p_page = nullptr;
-
-        bool need_mem = false;
-        bool need_check = true;
-        while (count < max) {
-            if ((!((address + count) & 0xfff)) || (need_check)) {
-                p_page = GETPAGE(address + count);
-                ULong smax = (count + 0x1000 <= max) ? 0x1000 : max - count;
-                need_mem = false;
-                if (!p_page->unit) {
-                    for (ADDR idx = 0; idx < smax; idx += 8) {
-                        if (*(ULong*)(&data[count + idx])) {
-                            need_mem = true;
-                            break;
-                        }
-                    }
-                    if (need_check) {
-                        need_check = false;
-                        if (first_flag) {
-                            need_mem = true;
-                        }
-                    }
-                    if (!need_mem) {
-                        count = ALIGN(address + count + 0x1000, 0x1000) - address;
-                        continue;
-                    }
-                    else {
-                        p_page->unit = new Register<0x1000>(m_ctx, need_record);
-                        p_page->user = user;
-                    }
-                }
-            }
-            *(ULong*)(&p_page->unit->m_bytes[(address + count) & 0xfff]) = *(ULong*)(data + count);
-            count += 8;
-        };
-        if (align_r) {
-            if ((!((address + count) & 0xfff))||!p_page) {
-                p_page = GETPAGE(address + count);
-            }
-            if (((*(ULong*)(data + count)) & ((1ull << (align_r << 3)) - 1)) || need_mem || p_page->unit) {
-                if (!p_page->unit) {
-                    p_page->unit = new Register<0x1000>(m_ctx, need_record);
-                    p_page->user = user;
-                }
-                memcpy(&p_page->unit->m_bytes[(address + count) & 0xfff], &data[count], align_r);
-            }
+            return address;
         }
     }
+#ifdef OPSTR
+    vex_printf("free count %x\n", freecount);
+#endif
+    return 0;
+};
+
+
+MEM::~MEM() {
+    PML4T* CR3_point = *CR3;
+    //  遍历双向链表
+    LCODEDEF5(LSTRUCT2, pdpt_point, free_pdpt_point, CR3_point, i1,
+        LCODEDEF5(LSTRUCT3, pdt_point, free_pdt_point, pdpt_point, i2,
+            LCODEDEF5(LSTRUCT4, pt_point, free_pt_point, pdt_point, i3,
+                PAGE_link * page_point = pt_point->top;
+                for (UInt i4 = 0; i4 < pt_point->used; i4++) {
+                    UShort index = page_point->index;
+
+                    PAGE* pt = pt_point->pt[index];
+                    if (pt->user == user) {
+                        vassert(pt->used_point == 1);
+                        if (pt->unit) {
+                            delete pt->unit;
+                        }
+                        delete pt;
+                    }
+                    else {
+                        dec_used_ref(pt);
+                    }
+                    auto free_page_point = page_point;
+                    page_point = page_point->next;
+                    delete free_page_point;
+                }
+            )
+        )
+    )
+        delete CR3_point;
+    free(CR3);
+}
+
 
     Vns MEM::Iex_Load(ADDR address, IRType ty)
     {
@@ -895,39 +830,169 @@ _returnaddr:
         }
     }
 
-    void MEM::CheckSelf(PAGE*& P, ADDR address)
-    {
-        if (user != P->user) {//WNC
-            if (P->user == -1ull) {
-                bool xchgbv = false;
-                while (!xchgbv) {
-                    __asm__ __volatile("xchgb %b0,%1":"=r"(xchgbv) : "m"(P->unit_mutex), "0"(xchgbv) : "memory");
-                }
-                vassert(P->unit == NULL);
-                P->unit = new Register<0x1000>(m_ctx, need_record);
-                P->user = user;
-                memset(P->unit->m_bytes, 0, 0x1000);
-                mem_change_map[ALIGN(address, 0x1000)] = P->unit;
-                P->unit_mutex = True;
-                return;
-            }
-            Addr64 e_address = address;
-            PT* pt = GETPT(e_address);
-            auto ptindex = (e_address >> 12 & 0x1ff);
-            PAGE** page = pt->pt + ptindex;
-            PAGE_link* pl = pt->top;
-            *page = new PAGE;
-            (*page)->unit = new Register<0x1000>(*(P->unit), m_ctx, need_record);
-
-            //--P->used_point;
-            if (!dec_used_ref(P)) {
-                P = (*page);
-            }
-            P = (*page);
-            P->user = user;
-            P->used_point = 1;
-            P->unit_mutex = true;
-            mem_change_map[ALIGN(address, 0x1000)] = (*page)->unit;
-        }
+void MEM::CheckSelf(PAGE*& P, ADDR address)
+{
+    if (user == P->user) return;
+    bool xchgbv = false;
+    while (!xchgbv) { __asm__ __volatile("xchgb %b0,%1":"=r"(xchgbv) : "m"(P->unit_mutex), "0"(xchgbv) : "memory"); }
+    PAGE** page = get_pointer_of_mem_page(address);
+    if (user == (*page)->user) {
+        P->unit_mutex = true;
+        P = (*page);
+        return;
+    }
+    //--P->used_point;
+    vassert(P->used_point);
+    --P->used_point;
+    PAGE* np = new PAGE;
+    if (P->is_pad) {// 该页是填充区，则开始分配该页
+        vassert(P->unit == NULL);
+        np->unit = new Register<0x1000>(m_ctx, need_record);
+        memset(np->unit->m_bytes, P->pad, 0x1000);
+    }
+    else {
+        np->unit = new Register<0x1000>(*(P->unit), m_ctx, need_record);
     }
 
+    np->user = user;
+    np->used_point = 1;
+    np->is_pad = false;
+    np->unit_mutex = true;
+    *page = np;
+    P->unit_mutex = true;
+    P = np;
+    mem_change_map[ALIGN(address, 0x1000)] = np->unit;
+}
+
+void MEM::init_page(PAGE*& P, ADDR address)
+{
+    //WNC
+    if (user == P->user) return;
+    bool xchgbv = false;
+    while (!xchgbv) { __asm__ __volatile("xchgb %b0,%1":"=r"(xchgbv) : "m"(P->unit_mutex), "0"(xchgbv) : "memory"); }
+    PAGE** page = get_pointer_of_mem_page(address);
+    if (user == (*page)->user) {
+        P->unit_mutex = true;
+        P = (*page);
+        return;
+    }
+    vassert(P->used_point);
+    --P->used_point;
+    PAGE* np = new PAGE;
+    np->unit = nullptr;
+    np->user = user;
+    np->used_point = 1;
+    np->is_pad = false;
+    np->unit_mutex = true;
+    *page = np;
+    P->unit_mutex = true;
+    P = np;
+    
+}
+
+//very fast
+void MEM::write_bytes(ULong address, ULong length, UChar* data) {
+    if (length < 8) {
+        {
+            ULong max = address + length;
+            PAGE* p_page = getMemPage(address);
+            MEMACCESSASSERT(p_page, address);
+            init_page(p_page, address);
+            if (!p_page->unit) {
+                p_page->unit = new Register<0x1000>(m_ctx, need_record);
+            }
+            UInt count = 0;
+            while (address < max) {
+                if (!(address % 0x1000)) {
+                    p_page = getMemPage(address);
+                    MEMACCESSASSERT(p_page, address);
+                    init_page(p_page, address);
+                    if (!p_page->unit) {
+                        p_page->unit = new Register<0x1000>(m_ctx, need_record);
+                    }
+                }
+                p_page->unit->m_bytes[address & 0xfff] = data[count];
+                address += 1;
+                count += 1;
+            };
+            return;
+        }
+    }
+    bool first_flag = false;
+    UInt align_l = 8 - (address - ALIGN(address, 8));
+    UInt align_r = (address + length - ALIGN(address + length, 8));
+    if (align_l == 8) {
+    }
+    else {
+        PAGE* p_page = getMemPage(address);
+        MEMACCESSASSERT(p_page, address);
+        init_page(p_page, address);
+        if ((((ULong*)data)[0] & (~(-1ull << (align_l << 3)))) || p_page->unit) {
+            if (!p_page->unit) {
+                p_page->unit = new Register<0x1000>(m_ctx, need_record);
+            }
+            first_flag = true;
+            memcpy(&p_page->unit->m_bytes[address & 0xfff], data, align_l);
+        }
+        data += align_l;
+        address += align_l;
+        length -= align_l;
+    }
+    UInt count = 0;
+    ULong max = (ALIGN(address + length, 8) - address);
+    PAGE* p_page = nullptr;
+
+    bool need_mem = false;
+    bool need_check = true;
+    while (count < max) {
+        if ((!((address + count) & 0xfff)) || (need_check)) {
+            p_page = getMemPage(address + count);
+            MEMACCESSASSERT(p_page, address + count);
+            init_page(p_page, address + count);
+            ULong smax = (count + 0x1000 <= max) ? 0x1000 : max - count;
+            need_mem = false;
+            if (!p_page->unit) {
+                for (ADDR idx = 0; idx < smax; idx += 8) {
+                    if (*(ULong*)(&data[count + idx])) {
+                        need_mem = true;
+                        break;
+                    }
+                }
+                if (need_check) {
+                    need_check = false;
+                    if (first_flag) {
+                        need_mem = true;
+                    }
+                }
+                if (need_mem) {
+                    p_page->unit = new Register<0x1000>(m_ctx, need_record);
+                }
+                else {
+                    count = ALIGN(address + count + 0x1000, 0x1000) - address;
+                    p_page->is_pad = True;
+                    p_page->pad = 0;
+                    continue;
+                }
+            }
+        }
+        *(ULong*)(&p_page->unit->m_bytes[(address + count) & 0xfff]) = *(ULong*)(data + count);
+        count += 8;
+    };
+    if (align_r) {
+        if ((!((address + count) & 0xfff)) || !p_page) {
+            p_page = getMemPage(address + count);
+            MEMACCESSASSERT(p_page, address + count);
+            init_page(p_page, address + count);
+        }
+        if (((*(ULong*)(data + count)) & ((1ull << (align_r << 3)) - 1)) || need_mem || p_page->unit) {
+            if (!p_page->unit) {
+                p_page->unit = new Register<0x1000>(m_ctx, need_record);
+            }
+            memcpy(&p_page->unit->m_bytes[(address + count) & 0xfff], &data[count], align_r);
+        }
+        else {
+            p_page->is_pad = True;
+            p_page->pad = 0;
+        }
+    }
+}

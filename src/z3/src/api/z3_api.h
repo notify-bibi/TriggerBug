@@ -80,6 +80,7 @@ typedef bool Z3_bool;
    \brief Z3 string type. It is just an alias for \ccode{const char *}.
 */
 typedef const char * Z3_string;
+typedef char const*  Z3_char_ptr;
 typedef Z3_string * Z3_string_ptr;
 
 /**
@@ -1051,6 +1052,8 @@ typedef enum {
     Z3_OP_SET_SUBSET,
     Z3_OP_AS_ARRAY,
     Z3_OP_ARRAY_EXT,
+    Z3_OP_SET_HAS_SIZE,
+    Z3_OP_SET_CARD,
 
     // Bit-vectors
     Z3_OP_BNUM = 0x400,
@@ -2493,6 +2496,17 @@ extern "C" {
     Z3_ast Z3_API Z3_mk_ge(Z3_context c, Z3_ast t1, Z3_ast t2);
 
     /**
+        \brief Create division predicate.
+
+        The nodes \c t1 and \c t2 must be of integer sort.
+        The predicate is true when \c t1 divides \c t2. For the predicate to be part of 
+        linear integer arithmetic, the first argument \c t1 must be a non-zero integer.
+        
+        def_API('Z3_mk_divides', AST, (_in(CONTEXT), _in(AST), _in(AST)))
+    */
+    Z3_ast Z3_API Z3_mk_divides(Z3_context c, Z3_ast t1, Z3_ast t2);
+
+    /**
         \brief Coerce an integer to a real.
 
         There is also a converse operation exposed.
@@ -2975,6 +2989,7 @@ extern "C" {
        of \c t1 and \c t2 does not overflow.
 
        The nodes \c t1 and \c t2 must have the same bit-vector sort.
+       The returned node is of sort Bool.
 
        def_API('Z3_mk_bvadd_no_overflow', AST, (_in(CONTEXT), _in(AST), _in(AST), _in(BOOL)))
     */
@@ -2985,6 +3000,7 @@ extern "C" {
        of \c t1 and \c t2 does not underflow.
 
        The nodes \c t1 and \c t2 must have the same bit-vector sort.
+       The returned node is of sort Bool.
 
        def_API('Z3_mk_bvadd_no_underflow', AST, (_in(CONTEXT), _in(AST), _in(AST)))
     */
@@ -2995,6 +3011,7 @@ extern "C" {
        of \c t1 and \c t2 does not overflow.
 
        The nodes \c t1 and \c t2 must have the same bit-vector sort.
+       The returned node is of sort Bool.
 
        def_API('Z3_mk_bvsub_no_overflow', AST, (_in(CONTEXT), _in(AST), _in(AST)))
     */
@@ -3005,6 +3022,7 @@ extern "C" {
        of \c t1 and \c t2 does not underflow.
 
        The nodes \c t1 and \c t2 must have the same bit-vector sort.
+       The returned node is of sort Bool.
 
        def_API('Z3_mk_bvsub_no_underflow', AST, (_in(CONTEXT), _in(AST), _in(AST), _in(BOOL)))
     */
@@ -3015,6 +3033,7 @@ extern "C" {
        of \c t1 and \c t2 does not overflow.
 
        The nodes \c t1 and \c t2 must have the same bit-vector sort.
+       The returned node is of sort Bool.
 
        def_API('Z3_mk_bvsdiv_no_overflow', AST, (_in(CONTEXT), _in(AST), _in(AST)))
     */
@@ -3025,6 +3044,7 @@ extern "C" {
        \c t1 is interpreted as a signed bit-vector.
 
        The node \c t1 must have bit-vector sort.
+       The returned node is of sort Bool.
 
        def_API('Z3_mk_bvneg_no_overflow', AST, (_in(CONTEXT), _in(AST)))
     */
@@ -3035,6 +3055,7 @@ extern "C" {
        of \c t1 and \c t2 does not overflow.
 
        The nodes \c t1 and \c t2 must have the same bit-vector sort.
+       The returned node is of sort Bool.
 
        def_API('Z3_mk_bvmul_no_overflow', AST, (_in(CONTEXT), _in(AST), _in(AST), _in(BOOL)))
     */
@@ -3045,6 +3066,7 @@ extern "C" {
        of \c t1 and \c t2 does not underflow.
 
        The nodes \c t1 and \c t2 must have the same bit-vector sort.
+       The returned node is of sort Bool.
 
        def_API('Z3_mk_bvmul_no_underflow', AST, (_in(CONTEXT), _in(AST), _in(AST)))
     */
@@ -6309,6 +6331,18 @@ extern "C" {
        def_API('Z3_solver_dec_ref', VOID, (_in(CONTEXT), _in(SOLVER)))
     */
     void Z3_API Z3_solver_dec_ref(Z3_context c, Z3_solver s);
+    
+    /**
+       \brief Solver local interrupt.
+       Normally you should use Z3_interrupt to cancel solvers because only
+       one solver is enabled concurrently per context.
+       However, per GitHub issue #1006, there are use cases where
+       it is more convenient to cancel a specific solver. Solvers 
+       that are not selected for interrupts are left alone.
+
+       def_API('Z3_solver_interrupt', VOID, (_in(CONTEXT), _in(SOLVER)))
+     */
+    void Z3_API Z3_solver_interrupt(Z3_context c, Z3_solver s);
 
     /**
        \brief Create a backtracking point.
@@ -6688,9 +6722,8 @@ extern "C" {
     */
     uint64_t Z3_API Z3_get_estimated_alloc_size(void);
 
-    /*@}*/
-
     bool Z3_API Z3_get_numeral_bytes(Z3_context c, Z3_ast a, unsigned long long* b);
+    /*@}*/
 
 #ifdef __cplusplus
 }

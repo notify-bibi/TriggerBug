@@ -200,10 +200,159 @@ case Iop_##OPNAME##64:{																			\
 
 
 inline Vns State::T_Binop(context &m_ctx, IROp op, Vns const& a, Vns const& b) {
-    if (a.symbolic() || b.symbolic()) {
-        goto dosymbol;
-    }
+    if (a.symbolic() || b.symbolic()) 
+    {
+        switch (op) {
+            Z3caseIop_Arithmetic(Add, Z3_mk_bvadd, U);
+            Z3caseIop_Arithmetic(Sub, Z3_mk_bvsub, U);
+            Z3caseIop_Arithmetic(Mul, Z3_mk_bvmul, U);
 
+        case Iop_DivU32: {
+            dassert(a.bitn == 32);
+            dassert(b.bitn == 32);
+            return Vns(m_ctx, Z3_mk_bvudiv(m_ctx, a, b), 32);
+        }
+        case Iop_DivU64: {
+            dassert(a.bitn == 64);
+            dassert(b.bitn == 64);
+            return Vns(m_ctx, Z3_mk_bvudiv(m_ctx, a, b), 64);
+        }
+        case Iop_DivS32: {
+            dassert(a.bitn == 32);
+            dassert(b.bitn == 32);
+            return Vns(m_ctx, Z3_mk_bvsdiv(m_ctx, a, b), 32);
+        }
+        case Iop_DivS64: {
+            dassert(a.bitn == 64);
+            dassert(b.bitn == 64);
+            return Vns(m_ctx, Z3_mk_bvsdiv(m_ctx, a, b), 64);
+        }
+        Z3caseIop_Bitwise(And, Z3_mk_bvand, U);
+        Z3caseIop_Bitwise(Or, Z3_mk_bvor, U);
+        Z3caseIop_Bitwise(Xor, Z3_mk_bvxor, U);
+        Z3caseIop_Bitwise_Shift(Shl, Z3_mk_bvshl, U);
+        Z3caseIop_Bitwise_Shift(Shr, Z3_mk_bvlshr, U);
+        Z3caseIop_Bitwise_Shift(Sar, Z3_mk_bvashr, S);
+
+        Z3caseIop_Relational_Low(ExpCmpNE, Z3_mk_neq, U);
+        Z3caseIop_Relational_Low(CmpNE, Z3_mk_neq, U);
+        Z3caseIop_Relational_Low(CmpEQ, Z3_mk_eq, U);
+        Z3caseIop_Relational_Low(CasCmpEQ, Z3_mk_eq, U);
+        Z3caseIop_Relational_Low(CasCmpNE, Z3_mk_neq, U);
+
+        Z3caseIop_Relational_High(ExpCmpNE, Z3_mk_neq, U, );
+        Z3caseIop_Relational_High(CmpNE, Z3_mk_neq, U, );
+        Z3caseIop_Relational_High(CmpEQ, Z3_mk_eq, U, );
+        Z3caseIop_Relational_High(CasCmpEQ, Z3_mk_eq, U, );
+        Z3caseIop_Relational_High(CasCmpNE, Z3_mk_neq, U, );
+
+        Z3caseIop_Relational_High(CmpLE, Z3_mk_bvule, U, U);
+        Z3caseIop_Relational_High(CmpLE, Z3_mk_bvule, S, S);
+        Z3caseIop_Relational_High(CmpLT, Z3_mk_bvult, U, U);
+        Z3caseIop_Relational_High(CmpLT, Z3_mk_bvult, S, S);
+
+        case Iop_8HLto16:dassert(a.bitn == 8); dassert(b.bitn == 8); return Vns(m_ctx, Z3_mk_concat(m_ctx, a, b), 16);
+        case Iop_16HLto32:dassert(a.bitn == 16); dassert(b.bitn == 16); return Vns(m_ctx, Z3_mk_concat(m_ctx, a, b), 32);
+        case Iop_32HLto64:dassert(a.bitn == 32); dassert(b.bitn == 32); return Vns(m_ctx, Z3_mk_concat(m_ctx, a, b), 64);
+        case Iop_64HLto128:
+        case Iop_64HLtoV128: dassert(a.bitn == 64); dassert(b.bitn == 64); return Vns(m_ctx, Z3_mk_concat(m_ctx, a, b), 128);
+
+        case Iop_I64StoF64: { return b.integer2fp_bv(translateRM(m_ctx, (IRRoundingMode)a), m_ctx.fpa_sort<64>()); }//ok
+        case Iop_F64toI64S: { return b.fp2integer_bv(translateRM(m_ctx, (IRRoundingMode)a), m_ctx.fpa_sort<64>()); }//ok
+        case Iop_I64UtoF64: { return b.uinteger2fp_bv(translateRM(m_ctx, (IRRoundingMode)a), m_ctx.fpa_sort<64>()); }//ok
+        case Iop_F64toI64U: { return b.fp2uinteger_bv(translateRM(m_ctx, (IRRoundingMode)a), m_ctx.fpa_sort<64>()); }//ok
+
+        case Iop_I32StoF32: {return b.integer2fp_bv(translateRM(m_ctx, (IRRoundingMode)a), m_ctx.fpa_sort<32>()); }//ok
+        case Iop_F32toI32S: {return b.fp2integer_bv(translateRM(m_ctx, (IRRoundingMode)a), m_ctx.fpa_sort<32>()); }//ok
+        case Iop_I32UtoF32: {return b.uinteger2fp_bv(translateRM(m_ctx, (IRRoundingMode)a), m_ctx.fpa_sort<32>()); }//ok
+        case Iop_F32toI32U: {return b.fp2uinteger_bv(translateRM(m_ctx, (IRRoundingMode)a), m_ctx.fpa_sort<32>()); }//ok
+
+        case Iop_CmpF64: {
+            Vns a = a.bv2fpa(m_ctx.fpa_sort<64>());
+            Vns b = b.bv2fpa(m_ctx.fpa_sort<64>());
+            return Vns(m_ctx,
+                ite(expr(m_ctx, Z3_mk_fpa_eq(m_ctx, a, b)),
+                    m_ctx.bv_val(0x40, 32),
+                    ite(expr(m_ctx, Z3_mk_fpa_lt(m_ctx, a, b)),
+                        m_ctx.bv_val(0x01, 32),
+                        ite(expr(m_ctx, Z3_mk_fpa_gt(m_ctx, a, b)),
+                            m_ctx.bv_val(0x00, 32),
+                            m_ctx.bv_val(0x45, 32)
+                        )
+                    )
+                ), 32);
+        }
+        case Iop_DivModU128to64: {//ok
+            dassert(a.bitn == 128); dassert(b.bitn == 64);
+            Vns nb = b.zext(64);
+            return Vns(m_ctx,
+                Z3_mk_concat(m_ctx,
+                    Vns(m_ctx, Z3_mk_bvurem(m_ctx, a, nb), 128).extract(63, 0),
+                    Vns(m_ctx, Z3_mk_bvudiv(m_ctx, a, nb), 128).extract(63, 0)
+                ), 128);
+        }
+        case Iop_DivModS128to64: {//ok
+            dassert(a.bitn == 128); dassert(b.bitn == 64);
+            Vns nb = b.sext(64);
+            return Vns(m_ctx,
+                Z3_mk_concat(m_ctx,
+                    Vns(m_ctx, Z3_mk_bvsrem(m_ctx, a, nb), 128).extract(63, 0),
+                    Vns(m_ctx, Z3_mk_bvsdiv(m_ctx, a, nb), 128).extract(63, 0)
+                ), 128);
+        }
+        case Iop_DivModU64to32: {
+            dassert(a.bitn == 64); dassert(b.bitn == 32);
+            Vns nb = b.zext(32);
+            return Vns(m_ctx,
+                Z3_mk_concat(m_ctx,
+                    Vns(m_ctx, Z3_mk_bvurem(m_ctx, a, nb), 64).extract(31, 0),
+                    Vns(m_ctx, Z3_mk_bvudiv(m_ctx, a, nb), 64).extract(31, 0)
+                ), 64);
+
+        }
+        case Iop_DivModS64to32: {
+            dassert(a.bitn == 64); dassert(b.bitn == 32);
+            Vns nb = b.sext(32);
+            return Vns(m_ctx,
+                Z3_mk_concat(m_ctx,
+                    Vns(m_ctx, Z3_mk_bvsrem(m_ctx, a, nb), 64).extract(31, 0),
+                    Vns(m_ctx, Z3_mk_bvsdiv(m_ctx, a, nb), 64).extract(31, 0)
+                ), 64);
+
+        }
+        case Iop_MullU32: {
+            dassert(a.bitn == 32);
+            dassert(b.bitn == 32);
+            return Vns(m_ctx, Z3_mk_bvmul(m_ctx, a.zext(32), b.zext(32)), 64);
+        }
+        case Iop_MullS32: {
+            dassert(a.bitn == 32);
+            dassert(b.bitn == 32);
+            return Vns(m_ctx, Z3_mk_bvmul(m_ctx, a.sext(32), b.sext(32)), 64);
+        }
+
+#define BNxN(type,op, N, Mask)\
+{\
+    Vns re(m_ctx, 0, 0);\
+    for (UInt i = 0; i < N; i++) {\
+        re = ite(a.extract((i+1) * (sizeof(type)<<3)-1, i * (sizeof(type)<<3)) op b.extract((i+1) * (sizeof(type)<<3) -1, i * (sizeof(type)<<3)),\
+                    Vns(m_ctx, (type)Mask), Vns(m_ctx, (type)0x0)).Concat(re);\
+    }\
+    return re;\
+}
+        case Iop_CmpEQ8x32: BNxN(UChar, == , 32, 0xFF)
+        case Iop_CmpEQ16x16: BNxN(UShort, == , 16, 0xFFFF)
+        case Iop_CmpEQ32x8: BNxN(UInt, == , 8, 0xFFFFFFFF)
+        case Iop_CmpEQ64x4: BNxN(ULong, == , 4, 0xFFFFFFFFFFFFFFFF)
+
+        case Iop_CmpEQ8x16: BNxN(UChar, == , 16, 0xFF)
+        case Iop_CmpEQ16x8: BNxN(UShort, == , 8, 0xFFFF)
+        case Iop_CmpEQ32x4: BNxN(UInt, == , 4, 0xFFFFFFFF)
+        case Iop_CmpEQ64x2: BNxN(ULong, == , 2, 0xFFFFFFFFFFFFFFFF)
+
+        };
+    }
+    else
     {
 	    switch (op) {
 	    caseIop_Arithmetic(Add, +, U);
@@ -311,7 +460,7 @@ inline Vns State::T_Binop(context &m_ctx, IROp op, Vns const& a, Vns const& b) {
 	    case Iop_CmpEQ32x8:return Vns(m_ctx, _mm256_cmpeq_epi32(a, b));//ok
 	    case Iop_CmpEQ64x4:return Vns(m_ctx, _mm256_cmpeq_epi64(a, b));//ok
 
-        case Iop_PermOrZero8x16: {dassert(a.bitn == 128); dassert(b.bitn == 128); return Vns(m_ctx, _mm_shuffle_epi8(a, b)); }
+        case Iop_PermOrZero8x16: {dassert(a.bitn == 128); dassert(b.bitn == 128); return Vns(m_ctx, _mm_shuffle_epi8(a, b)); }//ok pshufb mm, mm
 
 	    case Iop_ShlN8x16:dassert(a.bitn == 128); dassert(b.bitn == 8); goto FAILD;
 	    case Iop_ShlN16x8:dassert(a.bitn == 128); dassert(b.bitn == 8); return Vns(m_ctx, _mm_slli_epi16(a, (UChar)b));
@@ -502,172 +651,11 @@ inline Vns State::T_Binop(context &m_ctx, IROp op, Vns const& a, Vns const& b) {
             );
             return Vns(m_ctx, re);
 	    }
-
-
-	    default:ppIROp(op); vpanic("???wtf??");
-	    }
-	    goto FAILD;
+        };
     }
-    {
-dosymbol:
-	switch (op) {
-	Z3caseIop_Arithmetic(Add, Z3_mk_bvadd, U);
-	Z3caseIop_Arithmetic(Sub, Z3_mk_bvsub, U);
-	Z3caseIop_Arithmetic(Mul, Z3_mk_bvmul, U);
-
-	case Iop_DivU32:{															
-		dassert(a.bitn == 32);
-		dassert(b.bitn == 32);
-		return Vns(m_ctx, Z3_mk_bvudiv(m_ctx, a, b), 32);
-	}
-	case Iop_DivU64:{
-		dassert(a.bitn == 64);
-		dassert(b.bitn == 64);
-		return Vns(m_ctx, Z3_mk_bvudiv(m_ctx, a, b), 64);
-	}
-	case Iop_DivS32: {
-		dassert(a.bitn == 32);
-		dassert(b.bitn == 32);
-		return Vns(m_ctx, Z3_mk_bvsdiv(m_ctx, a, b), 32);
-	}
-	case Iop_DivS64: {
-		dassert(a.bitn == 64);
-		dassert(b.bitn == 64);
-		return Vns(m_ctx, Z3_mk_bvsdiv(m_ctx, a, b), 64);
-	}
-	Z3caseIop_Bitwise(And, Z3_mk_bvand, U);
-	Z3caseIop_Bitwise(Or , Z3_mk_bvor, U);
-	Z3caseIop_Bitwise(Xor, Z3_mk_bvxor, U);
-	Z3caseIop_Bitwise_Shift(Shl, Z3_mk_bvshl , U);
-	Z3caseIop_Bitwise_Shift(Shr, Z3_mk_bvlshr, U);
-	Z3caseIop_Bitwise_Shift(Sar, Z3_mk_bvashr, S);
-
-	Z3caseIop_Relational_Low(ExpCmpNE,	Z3_mk_neq, U);
-	Z3caseIop_Relational_Low(CmpNE,		Z3_mk_neq, U);
-	Z3caseIop_Relational_Low(CmpEQ,		Z3_mk_eq, U);
-	Z3caseIop_Relational_Low(CasCmpEQ,	Z3_mk_eq, U);
-	Z3caseIop_Relational_Low(CasCmpNE,	Z3_mk_neq, U);
-
-	Z3caseIop_Relational_High(ExpCmpNE, Z3_mk_neq, U, );
-	Z3caseIop_Relational_High(CmpNE	,	Z3_mk_neq, U, );
-	Z3caseIop_Relational_High(CmpEQ	,	Z3_mk_eq, U, );
-	Z3caseIop_Relational_High(CasCmpEQ, Z3_mk_eq, U, );
-	Z3caseIop_Relational_High(CasCmpNE, Z3_mk_neq, U, );
-
-	Z3caseIop_Relational_High(CmpLE, Z3_mk_bvule, U, U);
-	Z3caseIop_Relational_High(CmpLE, Z3_mk_bvule, S, S);
-	Z3caseIop_Relational_High(CmpLT, Z3_mk_bvult, U, U);
-	Z3caseIop_Relational_High(CmpLT, Z3_mk_bvult, S, S);
-
-	case Iop_8HLto16:dassert(a.bitn == 8); dassert(b.bitn == 8); return Vns(m_ctx, Z3_mk_concat(m_ctx, a, b), 16);
-	case Iop_16HLto32:dassert(a.bitn == 16); dassert(b.bitn == 16); return Vns(m_ctx, Z3_mk_concat(m_ctx, a, b), 32);
-	case Iop_32HLto64:dassert(a.bitn == 32); dassert(b.bitn == 32); return Vns(m_ctx, Z3_mk_concat(m_ctx, a, b), 64);
-	case Iop_64HLto128: 
-	case Iop_64HLtoV128: dassert(a.bitn == 64); dassert(b.bitn == 64); return Vns(m_ctx, Z3_mk_concat(m_ctx, a, b), 128);
-
-	case Iop_I64StoF64: { return b.integer2fp_bv(translateRM(m_ctx, (IRRoundingMode)a), m_ctx.fpa_sort<64>()); }//ok
-	case Iop_F64toI64S: { return b.fp2integer_bv(translateRM(m_ctx, (IRRoundingMode)a), m_ctx.fpa_sort<64>()); }//ok
-	case Iop_I64UtoF64: { return b.uinteger2fp_bv(translateRM(m_ctx, (IRRoundingMode)a), m_ctx.fpa_sort<64>()); }//ok
-	case Iop_F64toI64U: { return b.fp2uinteger_bv(translateRM(m_ctx, (IRRoundingMode)a), m_ctx.fpa_sort<64>()); }//ok
-
-	case Iop_I32StoF32: {return b.integer2fp_bv(translateRM(m_ctx, (IRRoundingMode)a), m_ctx.fpa_sort<32>()); }//ok
-	case Iop_F32toI32S: {return b.fp2integer_bv(translateRM(m_ctx, (IRRoundingMode)a), m_ctx.fpa_sort<32>()); }//ok
-	case Iop_I32UtoF32: {return b.uinteger2fp_bv(translateRM(m_ctx, (IRRoundingMode)a), m_ctx.fpa_sort<32>()); }//ok
-	case Iop_F32toI32U: {return b.fp2uinteger_bv(translateRM(m_ctx, (IRRoundingMode)a), m_ctx.fpa_sort<32>()); }//ok
-
-	case Iop_CmpF64: {
-		Vns a = a.bv2fpa(m_ctx.fpa_sort<64>());
-		Vns b = b.bv2fpa(m_ctx.fpa_sort<64>());
-		return Vns(m_ctx,
-			ite(expr(m_ctx, Z3_mk_fpa_eq(m_ctx, a, b)),
-				m_ctx.bv_val(0x40, 32),
-				ite(expr(m_ctx, Z3_mk_fpa_lt(m_ctx, a, b)),
-					m_ctx.bv_val(0x01, 32),
-					ite(expr(m_ctx, Z3_mk_fpa_gt(m_ctx, a, b)),
-						m_ctx.bv_val(0x00, 32),
-						m_ctx.bv_val(0x45, 32)
-					)
-				)
-			), 32);
-	}
-	case Iop_DivModU128to64: {//ok
-        dassert(a.bitn == 128); dassert(b.bitn == 64);
-        Vns nb = b.zext(64);
-        return Vns(m_ctx,
-            Z3_mk_concat(m_ctx,
-                Vns(m_ctx, Z3_mk_bvurem(m_ctx, a, nb), 128).extract(63, 0),
-                Vns(m_ctx, Z3_mk_bvudiv(m_ctx, a, nb), 128).extract(63, 0)
-            ), 128);
-	}
-	case Iop_DivModS128to64: {//ok
-        dassert(a.bitn == 128); dassert(b.bitn == 64);
-        Vns nb = b.sext(64);
-        return Vns(m_ctx,
-            Z3_mk_concat(m_ctx,
-                Vns(m_ctx, Z3_mk_bvsrem(m_ctx, a, nb), 128).extract(63, 0),
-                Vns(m_ctx, Z3_mk_bvsdiv(m_ctx, a, nb), 128).extract(63, 0)
-            ), 128);
-	}
-	case Iop_DivModU64to32: {
-        dassert(a.bitn == 64); dassert(b.bitn == 32);
-        Vns nb = b.zext(32);
-        return Vns(m_ctx,
-            Z3_mk_concat(m_ctx,
-                Vns(m_ctx, Z3_mk_bvurem(m_ctx, a, nb), 64).extract(31, 0),
-                Vns(m_ctx, Z3_mk_bvudiv(m_ctx, a, nb), 64).extract(31, 0)
-            ), 64);
-
-	}
-	case Iop_DivModS64to32: {
-        dassert(a.bitn == 64); dassert(b.bitn == 32);
-        Vns nb = b.sext(32);
-        return Vns(m_ctx,
-            Z3_mk_concat(m_ctx,
-                Vns(m_ctx, Z3_mk_bvsrem(m_ctx, a, nb), 64).extract(31, 0),
-                Vns(m_ctx, Z3_mk_bvsdiv(m_ctx, a, nb), 64).extract(31, 0)
-            ), 64);
-
-	}
-    case Iop_MullU32: {
-        dassert(a.bitn == 32);
-        dassert(b.bitn == 32);
-        return Vns(m_ctx, Z3_mk_bvmul(m_ctx, a.zext(32), b.zext(32)), 64);
-    }
-    case Iop_MullS32: {
-        dassert(a.bitn == 32);
-        dassert(b.bitn == 32);
-        return Vns(m_ctx, Z3_mk_bvmul(m_ctx, a.sext(32), b.sext(32)), 64);
-    }
-
-#define BNxN(type,op, N, Mask)\
-{\
-    Vns re(m_ctx, 0, 0);\
-    for (UInt i = 0; i < N; i++) {\
-        re = ite(a.extract((i+1) * (sizeof(type)<<3)-1, i * (sizeof(type)<<3)) op b.extract((i+1) * (sizeof(type)<<3) -1, i * (sizeof(type)<<3)),\
-                    Vns(m_ctx, (type)Mask), Vns(m_ctx, (type)0x0)).Concat(re);\
-    }\
-    return re;\
-}
-    case Iop_CmpEQ8x32: BNxN(UChar, ==, 32, 0xFF)
-    case Iop_CmpEQ16x16: BNxN(UShort, == , 16, 0xFFFF)
-    case Iop_CmpEQ32x8: BNxN(UInt, == , 8, 0xFFFFFFFF)
-    case Iop_CmpEQ64x4: BNxN(ULong, == , 4, 0xFFFFFFFFFFFFFFFF)
-
-    case Iop_CmpEQ8x16: BNxN(UChar, == , 16, 0xFF)
-    case Iop_CmpEQ16x8: BNxN(UShort, == , 8, 0xFFFF)
-    case Iop_CmpEQ32x4: BNxN(UInt, == , 4, 0xFFFFFFFF)
-    case Iop_CmpEQ64x2: BNxN(ULong, == , 2, 0xFFFFFFFFFFFFFFFF)
-
-
-	case Iop_ShrV128:goto FAILD;
-
-	
-
-
-	default:ppIROp(op); vpanic("???wtf??");
-	}
-    }
+    
 FAILD:
+    vex_printf("unsupport ir binop: ");
 	ppIROp(op);
 	vpanic("tIRType");
 

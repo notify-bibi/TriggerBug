@@ -496,7 +496,7 @@ public:
     }
 
 
-    Vns Concat(Vns & low) const {
+    Vns Concat(Vns const& low) const {
         vassert((low.bitn + bitn) <= 256);
         if (!low.bitn) return *this;
         if (!bitn) return low;
@@ -636,7 +636,7 @@ public:
             return *this;
         }
         else {
-            return Vns(m_ctx, Z3_mk_eq(m_ctx, *this, Vns(m_ctx, 1, 1)));
+            return Vns(m_ctx, Z3_mk_eq(m_ctx, *this, Vns(m_ctx, 1, 1)), 1);
         }
     }
 

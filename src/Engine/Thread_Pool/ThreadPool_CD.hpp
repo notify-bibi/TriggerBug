@@ -27,8 +27,8 @@ private:
 	std::queue< std::function<void()> > tasks;
 
 	std::mutex queue_mutex;
-	bool stop;
-	unsigned int runner;
+	bool stop; 
+    UInt runner;
 };
 
 #endif

@@ -3414,9 +3414,8 @@ lbool context::expand_pob(pob& n, pob_ref_buffer &out)
         return l_undef;
 
     }
-    case l_false:
+    case l_false: {
         // n is unreachable, create new summary facts
-    {
         timeit _timer (is_trace_enabled("spacer_timeit"),
                        "spacer::expand_pob::false",
                        verbose_stream ());
@@ -3494,8 +3493,9 @@ lbool context::expand_pob(pob& n, pob_ref_buffer &out)
             m_stats.m_expand_pob_undef++;
             if (r && r->get_uninterpreted_tail_size() > 0) {
                 // do not trust reach_pred_used
-                for (unsigned i = 0, sz = reach_pred_used.size(); i < sz; ++i)
-                { reach_pred_used[i] = false; }
+                for (unsigned i = 0, sz = reach_pred_used.size(); i < sz; ++i) {
+                    reach_pred_used[i] = false; 
+                }
                 has_new_child = create_children(n, *r, *model, reach_pred_used, out);
             }
             IF_VERBOSE(1, verbose_stream() << " UNDEF "
@@ -3800,6 +3800,7 @@ bool context::create_children(pob& n, datalog::rule const& r,
 
 void context::collect_statistics(statistics& st) const
 {
+	// m_params is not necessarily live when collect_statistics is called.
     m_pool0->collect_statistics(st);
     m_pool1->collect_statistics(st);
     m_pool2->collect_statistics(st);
@@ -3841,7 +3842,6 @@ void context::collect_statistics(statistics& st) const
     // -- time in creating new predecessors
     st.update ("time.spacer.solve.reach.children",
                m_create_children_watch.get_seconds ());
-    st.update("spacer.random_seed", m_params.spacer_random_seed());
     st.update("spacer.lemmas_imported", m_stats.m_num_lemmas_imported);
     st.update("spacer.lemmas_discarded", m_stats.m_num_lemmas_discarded);
 

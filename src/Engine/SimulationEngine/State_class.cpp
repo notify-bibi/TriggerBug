@@ -28,8 +28,9 @@ Revision History:
 #include "libvex_guest_s390x.h"
 
 
-State*        _states[MAX_THREADS];
-std::mutex global_state_mutex;
+State*          _states[MAX_THREADS];
+bool            ret_is_ast[MAX_THREADS];
+std::mutex      global_state_mutex;
 
 LARGE_INTEGER   freq_global = { 0 };
 LARGE_INTEGER   beginPerformanceCount_global = { 0 };
@@ -89,7 +90,6 @@ tinyxml2::XMLElement* Vex_Info::doc_debug = nullptr;
 GuestSystem Vex_Info::guest_system = unknowSystem;
 VexArch Vex_Info::guest = VexArch_INVALID;
 const char* Vex_Info::MemoryDumpPath = "你没有这个文件";
-ADDR Vex_Info::GuestStartAddress = 0;
 UInt Vex_Info::MaxThreadsNum = 16;
 Int Vex_Info::traceflags = 0;
 
@@ -256,6 +256,7 @@ void IR_init(VexControl& vc) {
             m32_mask_reverse[i] = _mm256_setzero_si256();
             memset(&m32_mask_reverse[i].m256i_i8[i], -1ul, 32 - i);
         }
+        for (int i = 0; i <= MAX_THREADS; i++)  ret_is_ast[i] = False;
     }
 }
 
@@ -265,15 +266,15 @@ int eval_all(std::vector<Vns>& result, solver& solv, Z3_ast nia) {
     //std::cout << state.solv.assertions() << std::endl;
     result.reserve(20);
     solv.push();
-    std::vector<Z3_model> mv;
-    mv.reserve(20);
+    //std::vector<Z3_model> mv;
+    //mv.reserve(20);
     Z3_context ctx = solv.ctx();
     for (int nway = 0; ; nway++) {
         Z3_lbool b = Z3_solver_check(ctx, solv);
         if (b == Z3_L_TRUE) {
             Z3_model m_model = Z3_solver_get_model(ctx, solv);
             Z3_model_inc_ref(ctx, m_model);
-            mv.emplace_back(m_model);
+            // mv.emplace_back(m_model);
             Z3_ast r = 0;
             bool status = Z3_model_eval(ctx, m_model, nia, /*model_completion*/true, &r);
             result.emplace_back(Vns(ctx, r));
@@ -290,13 +291,15 @@ int eval_all(std::vector<Vns>& result, solver& solv, Z3_ast nia) {
             Z3_solver_assert(ctx, solv, neq);
             Z3_dec_ref(ctx, eq);
             Z3_dec_ref(ctx, neq);
+
+            Z3_model_dec_ref(ctx, m_model);
         }
         else {
 #if defined(OPSTR)
             for (auto s : result) std::cout << ", " << Z3_ast_to_string(ctx, s);
 #endif
             solv.pop();
-            for (auto m : mv) Z3_model_dec_ref(ctx, m);
+            //for (auto m : mv) Z3_model_dec_ref(ctx, m);
             return result.size();
         }
     }
@@ -306,38 +309,22 @@ static unsigned char* _n_page_mem(void* pap) {
     return ((State*)(((Pap*)(pap))->state))->mem.get_next_page(((Pap*)(pap))->guest_addr);
 }
 
-State::State(const char *filename, ADDR gse, Bool _need_record) :
+State::State(const char* filename, ADDR gse, Bool _need_record) :
     Vex_Info(filename),
-    m_ctx(), 
-    m_params(m_ctx),
-    m_tactic(with(tactic(m_ctx, "simplify"), m_params) &
-        tactic(m_ctx, "sat")&
-        tactic(m_ctx, "solve-eqs")&
-        tactic(m_ctx, "bit-blast")&
-        tactic(m_ctx, "smt")
-        /*&
-        tactic(m_ctx, "factor")&
-        tactic(m_ctx, "bv1-blast")&
-        tactic(m_ctx, "qe-sat")&
-        tactic(m_ctx, "ctx-solver-simplify")&
-        tactic(m_ctx, "nla2bv")&
-        tactic(m_ctx, "symmetry-reduce")*/
-    ),
+    m_ctx(),
     mem(*this, &m_ctx,need_record),
     regs(m_ctx, need_record), 
-    //solv(m_ctx),
-    solv(m_tactic.mk_solver()),
+    solv(m_ctx),
     need_record(_need_record),
     status(NewState),
     VexGuestARCHState(NULL),
     delta(0),
     unit_lock(true),
     replace_const(0),
-    isTop(True)
+    m_father_state(nullptr)
     ,
     vta(nullptr)
 {
-    m_params.set("mul2concat", true);
 
     pap.state = (void*)(this);
     pap.n_page_mem = _n_page_mem;
@@ -369,16 +356,7 @@ State::State(const char *filename, ADDR gse, Bool _need_record) :
     if (gse)
         guest_start_ep = gse;
     else {
-        if (GuestStartAddress!=-1) {
-            guest_start_ep = GuestStartAddress;
-            if (!guest_start_ep) {
-                goto mem_ip;
-            }
-        }
-        else {
-mem_ip:
-            guest_start_ep = regs.Iex_Get(gRegsIpOffset(), Ity_I64);
-        }
+        guest_start_ep = regs.Iex_Get(gRegsIpOffset(), Ity_I64);
     }
     guest_start = guest_start_ep;
 
@@ -399,8 +377,6 @@ mem_ip:
 State::State(State *father_state, ADDR gse) :
     Vex_Info(*father_state),
     m_ctx(),
-    m_params(m_ctx),
-    m_tactic(m_ctx, "smt"),
     mem(*this, father_state->mem, &m_ctx, father_state->need_record),
     guest_start_ep(gse),
     guest_start(guest_start_ep), 
@@ -412,7 +388,7 @@ State::State(State *father_state, ADDR gse) :
     delta(0),
     unit_lock(true),
     replace_const(father_state->replace_const),
-    isTop(False)
+    m_father_state(father_state)
     ,
     vta(nullptr)
 {
@@ -430,7 +406,7 @@ State::~State() {
 }
 
 
-State::operator std::string(){
+State::operator std::string() const{
     std::string str;
     char hex[30];
     std::string strContent;
@@ -482,6 +458,7 @@ State::operator std::string(){
     str.append("\n}\n");
     return str;
 }
+
 
 bool State::get_hook(Hook_struct& hs, ADDR addr)
 {
@@ -560,9 +537,6 @@ inline Vns State::getassert(z3::context &ctx) {
     return re;
 }
 
-inline std::ostream & operator<<(std::ostream & out, State & n) {
-    return out<< (std::string)n;
-}
 
 Vns State::get_int_const(UShort nbit) {
     bool xchgbv = false;
@@ -609,8 +583,13 @@ void State::hook_del(ADDR addr, TRtype::Hook_CB func)
     else {
         pool->wait();
         auto P = mem.getMemPage(addr);
-        P->unit->m_bytes[addr & 0xfff] = CallBackDict[addr].original;
-        CallBackDict.erase(CallBackDict.find(addr));
+        if (!P) {
+            vex_printf("hook_del: mem access error %p not mapped", addr);
+        }
+        else {
+            P->unit->m_bytes[addr & 0xfff] = CallBackDict[addr].original;
+            CallBackDict.erase(CallBackDict.find(addr));
+        }
     }
 }
 
@@ -637,7 +616,6 @@ inline IRSB* State::BB2IR() {
     VexRegisterUpdates pxControl;
     VexTranslateResult res;
     if(0){
-        printf("GUESTADDR %16llx   RUND:%ld CODES   ", guest_start, runed);
         TESTCODE(
             irsb = LibVEX_FrontEnd(vta, &res, &pxControl);
         );
@@ -680,11 +658,11 @@ inline void State::add_assert_eq(Vns & eqA, Vns & eqB)
 }
 
 
-inline Vns symbolic_check(Z3_context ctx, ULong ret, UInt bitn) {
-    if (ret & (0xfa1dull << 48)) {
-        Z3_ast ret_ast = (Z3_ast)(ret & ((1ull << 48) - 1));
-        vassert(Z3_get_bv_sort_size(ctx, Z3_get_sort(ctx, ret_ast)) == bitn);
-        return Vns(ctx, ret_ast, bitn, no_inc{});
+inline Vns symbolic_check(UInt idx, Z3_context ctx, ULong ret, UInt bitn) {
+    if (ret_is_ast[idx]) {
+        ret_is_ast[idx] = False;
+        vassert(Z3_get_bv_sort_size(ctx, Z3_get_sort(ctx, (Z3_ast)ret)) == bitn);
+        return Vns(ctx, (Z3_ast)ret, bitn, no_inc{});
     }
     else {
         return Vns(ctx, ret, bitn);
@@ -701,22 +679,22 @@ Vns State::CCall(IRCallee *cee, IRExpr **exp_args, IRType ty)
     if (!exp_args[0]) return Vns(m_ctx, ((Function_0)(cee->addr))(), bitn);
     Vns arg0 = tIRExpr(exp_args[0]);
     if (arg0.symbolic()) z3_mode = True;
-    if (!exp_args[1]) return (z3_mode) ? ((Z3_Function1)(funcDict(cee->addr)))(arg0) : symbolic_check(m_ctx, ((Function_1)(cee->addr))(arg0), bitn);
+    if (!exp_args[1]) return (z3_mode) ? ((Z3_Function1)(funcDict(cee->addr)))(arg0) : symbolic_check(t_index, m_ctx, ((Function_1)(cee->addr))(arg0), bitn);
     Vns arg1 = tIRExpr(exp_args[1]);
     if (arg1.symbolic()) z3_mode = True;
-    if (!exp_args[2]) return (z3_mode) ? ((Z3_Function2)(funcDict(cee->addr)))(arg0, arg1) : symbolic_check(m_ctx, ((Function_2)(cee->addr))(arg0, arg1), bitn);
+    if (!exp_args[2]) return (z3_mode) ? ((Z3_Function2)(funcDict(cee->addr)))(arg0, arg1) : symbolic_check(t_index, m_ctx, ((Function_2)(cee->addr))(arg0, arg1), bitn);
     Vns arg2 = tIRExpr(exp_args[2]);
     if (arg2.symbolic()) z3_mode = True;
-    if (!exp_args[3]) return (z3_mode) ? ((Z3_Function3)(funcDict(cee->addr)))(arg0, arg1, arg2) : symbolic_check(m_ctx, ((Function_3)(cee->addr))(arg0, arg1, arg2), bitn);
+    if (!exp_args[3]) return (z3_mode) ? ((Z3_Function3)(funcDict(cee->addr)))(arg0, arg1, arg2) : symbolic_check(t_index, m_ctx, ((Function_3)(cee->addr))(arg0, arg1, arg2), bitn);
     Vns arg3 = tIRExpr(exp_args[3]);
     if (arg3.symbolic()) z3_mode = True;
-    if (!exp_args[4]) return (z3_mode) ? ((Z3_Function4)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3) : symbolic_check(m_ctx, ((Function_4)(cee->addr))(arg0, arg1, arg2, arg3), bitn);
+    if (!exp_args[4]) return (z3_mode) ? ((Z3_Function4)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3) : symbolic_check(t_index, m_ctx, ((Function_4)(cee->addr))(arg0, arg1, arg2, arg3), bitn);
     Vns arg4 = tIRExpr(exp_args[4]);
     if (arg4.symbolic()) z3_mode = True;
-    if (!exp_args[5]) return (z3_mode) ? ((Z3_Function5)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3, arg4) : symbolic_check(m_ctx, ((Function_5)(cee->addr))(arg0, arg1, arg2, arg3, arg4), bitn);
+    if (!exp_args[5]) return (z3_mode) ? ((Z3_Function5)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3, arg4) : symbolic_check(t_index, m_ctx, ((Function_5)(cee->addr))(arg0, arg1, arg2, arg3, arg4), bitn);
     Vns arg5 = tIRExpr(exp_args[5]);
     if (arg5.symbolic()) z3_mode = True;
-    if (!exp_args[6]) return (z3_mode) ? ((Z3_Function6)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3, arg4, arg5) : symbolic_check(m_ctx, ((Function_6)(cee->addr))(arg0, arg1, arg2, arg3, arg4, arg5), bitn);
+    if (!exp_args[6]) return (z3_mode) ? ((Z3_Function6)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3, arg4, arg5) : symbolic_check(t_index, m_ctx, ((Function_6)(cee->addr))(arg0, arg1, arg2, arg3, arg4, arg5), bitn);
 
 }
 
@@ -726,18 +704,13 @@ inline void State::thread_register()
         std::unique_lock<std::mutex> lock(global_state_mutex);
         vassert(register_tid(GetCurrentThreadId()) == regist_ok);
     }
-    auto i = temp_index();
-    for (int j = 0; j < MAX_IRTEMP; j++) {
-        ir_temp[i][j].m_kind = REAL;
-    }
-
-
 }
 inline void State::thread_unregister()
 {
     auto i = temp_index();
     for (int j = 0; j < MAX_IRTEMP; j++) {
         ir_temp[i][j].~Vns();
+        ir_temp[i][j].m_kind = REAL;
     }
     {
         std::unique_lock<std::mutex> lock(global_state_mutex);
@@ -971,7 +944,7 @@ For_Begin:
                         if (guard.real()) {
                             if ((UChar)guard) {
                             Exit_guard_true:
-                                if (s->Ist.Exit.jk != Ijk_Boring && s->Ist.Exit.jk != Ijk_Call && s->Ist.Exit.jk != Ijk_Ret)
+                                if (s->Ist.Exit.jk > Ijk_Ret)
                                 {
                                     //ppIRSB(irsb);
                                     status = Ijk_call(s->Ist.Exit.jk);
@@ -1000,16 +973,23 @@ For_Begin:
                                     goto Exit_guard_true;
                             }
                             if (eval_size == 2) {
-                                branchChunks.emplace_back(BranchChunk(s->Ist.Exit.dst->Ico.U64, guard, True));
-                                branchChunks.emplace_back(BranchChunk(guest_start, guard, False));
-                                status = Fork;
-                                goto EXIT;
+                                if (s->Ist.Exit.jk > Ijk_Ret){
+                                    add_assert(guard, False);
+                                }
+                                else {
+                                    branchChunks.emplace_back(BranchChunk(s->Ist.Exit.dst->Ico.U64, Vns(m_ctx, 0), guard, True));
+                                    status = Fork;
+                                }
                             }
                         }
                         break;
                     }
                     case Ist_NoOp: break;
                     case Ist_IMark: {
+                        if (status == Fork) {
+                            branchChunks.emplace_back(BranchChunk((ADDR)s->Ist.IMark.addr, Vns(m_ctx, 0), branchChunks[0].m_guard, False));
+                            goto EXIT;
+                        }
                         guest_start = (ADDR)s->Ist.IMark.addr;
                         if (this->is_dynamic_block) {
                             this->is_dynamic_block = false;
@@ -1118,6 +1098,26 @@ For_Begin:
                 };
             Isb_next:
                 Vns next = tIRExpr(irsb->next).simplify();
+                if (status == Fork) {
+                    Vns& guard = branchChunks[0].m_guard;
+                    if (next.real()) {
+                        branchChunks.emplace_back(BranchChunk(next, Vns(m_ctx, 0), guard, False));
+                    }
+                    else {
+                        std::vector<Vns> result;
+                        UInt eval_size = eval_all(result, solv, next);
+                        if (eval_size == 0) { status = Death; goto EXIT; }
+                        else if (eval_size == 1) { guest_start = result[0].simplify(); }
+                        else {
+                            for (auto re : result) {
+                                ADDR GN = re.simplify();//guest next ip
+                                branchChunks.emplace_back(BranchChunk(GN, next, guard, False));
+                            }
+                        }
+                    }
+                    goto EXIT;
+                }
+
                 if (next.real()) {
                     guest_start = next;
                 }
@@ -1129,7 +1129,7 @@ For_Begin:
                     else {
                         for (auto re : result) {
                             ADDR GN = re.simplify();//guest next ip
-                            branchChunks.emplace_back(BranchChunk(GN, next == GN, True));
+                            branchChunks.emplace_back(BranchChunk(GN, next, Vns(m_ctx, 0), False));
                         }
                         status = Fork;
                         goto EXIT;
@@ -1138,22 +1138,19 @@ For_Begin:
             };
 
         }
-        catch (...) {
-            //SEH Exceptions (/EHa)
+        catch (TRMem::MEMexception & error) {
+            std::cout <<"guest ip: "<< std::hex << guest_start <<" "<< error << std::endl;
             try {
                 cpu_exception();
                 if (status = Death) {
-                    std::cout << "W MEM ERR at " << std::hex << guest_start << std::endl;
                     status = Death;
                 }
-            }
-            catch (...) {
-                std::cout << "W MEM ERR at " << std::hex << guest_start << std::endl;
+            }catch (TRMem::MEMexception & error) {
                 status = Death;
             }
         }
     }
-    catch (exception &error) {
+    catch (exception & error) {
         vex_printf("unexpected z3 error: at %llx\n", guest_start);
         std::cout << error << std::endl;
         status = Death;
@@ -1166,16 +1163,8 @@ For_Begin:
 EXIT:
     unit_lock = true;
 
-
-    auto b = branchChunks.begin();
-    auto e = branchChunks.end();
-    while (b != e) {
-        branch.emplace_back(b->getState(*this));
-        b++;
-    }
-    thread_unregister();
     traceFinish();
-    branchGo();
+    thread_unregister();
     return;
 
 }
@@ -1187,6 +1176,9 @@ State* BranchChunk::getState(State& fstate)
     if (m_guard.symbolic()) {
         ns->add_assert(m_guard.translate(ns->m_ctx), m_tof);
     }
+    if (m_sym_addr.symbolic()) {
+        ns->add_assert_eq(m_sym_addr.translate(ns->m_ctx), Vns(ns->m_ctx, m_oep));
+    }
     return ns;
 }
 
@@ -1194,11 +1186,10 @@ void State::branchGo()
 {
     for(auto b : branch){
         State::pool->enqueue([b] {
-            b->start(False);
+            b->start(True);
             });
     }
 }
-
 
 template<class TC>
 inline void StatePrinter<TC>::spIRExpr(const IRExpr* e)
@@ -1309,6 +1300,19 @@ inline void StatePrinter<TC>::spIRExpr(const IRExpr* e)
 }
 
 template<class TC>
+void StatePrinter<TC>::spIRTemp(IRTemp tmp)
+
+{
+    if (tmp == IRTemp_INVALID)
+        vex_printf("IRTemp_INVALID");
+    else
+    {
+        vex_printf("t%u: ", tmp);
+        std::cout << ir_temp[t_index][tmp];
+    }
+}
+
+template<class TC>
 void StatePrinter<TC>::spIRPutI(const IRPutI* puti)
 {
     vex_printf("PUTI");
@@ -1409,59 +1413,6 @@ void StatePrinter<TC>::spIRStmt(const IRStmt* s)
     }
 }
 
-//
-//bool State::Ist_Exit_find_branch(std::vector<BranchChunk>& branchChunks, Vns const& guard, IRSB* bb, UInt stmtn)
-//{
-//    //ppIRSB(bb);
-//    if (stmtn == bb->stmts_used - 1) {
-//        Vns next = tIRExpr(bb->next);
-//        if (next.real()) {
-//            branchChunks.emplace_back(BranchChunk((ADDR)next, Vns(m_ctx, 0), guard, False));
-//            return true;
-//        }
-//        else {
-//            return false;
-//        }
-//    }
-//    IRExpr* release = bb->next;
-//    for (UInt i = bb->stmts_used - 1; i >= 0; i--) {
-//        IRStmt* st = bb->stmts[i];
-//        switch (st->tag) {
-//        case Ist_Put: {
-//            if (release->tag == Iex_Get) {
-//                if (st->Ist.Put.offset == release->Iex.Get.offset) {
-//                    release = st->Ist.Put.data;
-//                }
-//            }
-//            break;
-//        }
-//        case Ist_WrTmp: {
-//            if (release->tag == Iex_RdTmp) {
-//                if (st->Ist.WrTmp.tmp == release->Iex.RdTmp.tmp) {
-//                    release = st->Ist.WrTmp.data;
-//                }
-//            }
-//            break;
-//        }
-//        case Ist_Store: {
-//            if (release->tag == Iex_Load) {
-//                if (st->Ist.Store.addr == release->Iex.Load.addr) {
-//                    release = st->Ist.Store.data;
-//                }
-//            }
-//            break;
-//        }
-//        default:
-//            return false;
-//        };
-//        if (release->tag == Iex_Const) {
-//            branchChunks.emplace_back(BranchChunk((ADDR)release->Iex.Const.con->Ico.U64, Vns(m_ctx, 0), guard, False));
-//            return true;;
-//        };
-//    }
-//    return false;
-//}
-
 
 
 inline Bool State::treeCompress(z3::context& ctx, ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid, ChangeView& change_view, std::hash_map<ULong, Vns>& change_map, std::hash_map<UShort, Vns>& regs_change_map) {
@@ -1491,6 +1442,7 @@ inline Bool State::treeCompress(z3::context& ctx, ADDR Target_Addr, State_Tag Ta
                         if (_Where == change_map.end()) {
                             auto Address = mcm.first + offset;
                             auto p = state->mem.getMemPage(Address);
+                            vassert(p);
                             vassert(p->user == state->mem.user);
                             change_map[Address] = p->unit->Iex_Get(offset, Ity_I64, ctx);
                         }
@@ -1542,12 +1494,14 @@ inline Bool State::treeCompress(z3::context& ctx, ADDR Target_Addr, State_Tag Ta
             }
         }
         if (_has_branch == False) {
-            delete* it;
+            State* ds = *it;
+            delete ds;
             it = branch.erase(it);
             continue;
         }
         else if (_has_branch == 2) {
-            delete* it;
+            State* ds = *it;
+            delete ds;
             it = branch.erase(it);
             continue;
         }
@@ -1601,6 +1555,7 @@ void State::compress(ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_T
 #endif //  _DEBUG
             one_state->regs.Ist_Put(map_it.first, map_it.second.translate(*one_state));
         };
+        branchChunks.clear();
         branch.emplace_back(one_state);
     }
 
@@ -1631,7 +1586,6 @@ void Vex_Info::init_vex_info(const char* filename) {
     _gGuestArch();
     _gVexArchSystem();
     _gMemoryDumpPath();
-    _gGuestStartAddress();
     _gMaxThreadsNum();
 
     if (doc_VexControl) {
@@ -1663,13 +1617,6 @@ UInt Vex_Info::_gtraceflags() {
     return 0;
 }
 
-void Vex_Info::_gGuestStartAddress() {
-    ULong mGuestStartAddress = -1;
-    tinyxml2::XMLElement* _GuestStartAddress = doc_TriggerBug->FirstChildElement("GuestStartAddress");
-    if (_GuestStartAddress) sscanf(_GuestStartAddress->GetText(), "%llx", &mGuestStartAddress);
-    GuestStartAddress = mGuestStartAddress;
-}
-
 tinyxml2::XMLError Vex_Info::loadFile(const char* filename) {
     tinyxml2::XMLError error = doc.LoadFile(filename);
     if (error != tinyxml2::XML_SUCCESS) {
@@ -1690,16 +1637,16 @@ void Vex_Info::_gMemoryDumpPath() {
 }
 
 void Vex_Info::_gVexArchSystem() {
-    tinyxml2::XMLElement* _GuestStartAddress = doc_TriggerBug->FirstChildElement("VexArchSystem");
-    if (_GuestStartAddress) {
+    tinyxml2::XMLElement* _VexArchSystem = doc_TriggerBug->FirstChildElement("VexArchSystem");
+    if (_VexArchSystem) {
 
-        if (!strcmp(_GuestStartAddress->GetText(), "linux")) {
+        if (!strcmp(_VexArchSystem->GetText(), "linux")) {
             guest_system = linux;
         }
-        if (!strcmp(_GuestStartAddress->GetText(), "windows")) {
+        if (!strcmp(_VexArchSystem->GetText(), "windows")) {
             guest_system = windows;
         }
-        if (!strcmp(_GuestStartAddress->GetText(), "win")) {
+        if (!strcmp(_VexArchSystem->GetText(), "win")) {
             guest_system = windows;
         }
     }

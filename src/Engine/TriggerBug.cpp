@@ -13,10 +13,10 @@ Revision History:
 //#undef _DEBUG
 #define DLL_EXPORTS
 //#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\TriggerBug-asong.xml"
-//#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.xml"
+#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.xml"
 //#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\Roads\\Roads.xml"
 //#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\puzzle\\puzzle.xml"
-#define INIFILENAME "C:\\Users\\bibi\\Desktop\\reverse\\c++symbol\\childRE.xml"
+//#define INIFILENAME "C:\\Users\\bibi\\Desktop\\reverse\\c++symbol\\childRE.xml"
 
 
 
@@ -30,19 +30,13 @@ Revision History:
 
 UInt flag_count = 0;
 UInt flag_max_count = 0;
+extern "C" void dfd();
 
 
 class StateX86 : public State {
 public:
-    StateX86(const char* filename, ADDR gse, Bool _need_record) :
-        State(filename, gse, _need_record)
-    {
-    };
-
-    StateX86(StateX86* father_state, ADDR gse) :
-        State(father_state, gse)
-    {
-    };
+    StateX86(const char* filename, ADDR gse, Bool _need_record) :State(filename, gse, _need_record) {};
+    StateX86(StateX86* father_state, ADDR gse) :State(father_state, gse) {};
 
     void cpu_exception() {
         UInt seh_addr = x86g_use_seg_selector(regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::ldt), regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::gdt), regs.Iex_Get<Ity_I16>(X86_IR_OFFSET::fs).zext(16), 0);
@@ -286,22 +280,20 @@ State_Tag success_ret2(State* s) {
 
 State_Tag success_ret3(State* s) {
     s->solv.push();
-    UChar bf[] = { 0x7a, 0xaa, 0x29, 0x98, 0x2a, 0x98, 0xea, 0xab };
+    UChar bf[] = { 0xEC, 0x29, 0xE3, 0x41, 0xE1, 0xF7, 0xAA, 0x1D, 0x29, 0xED, 0x29, 0x99, 0x39, 0xF3, 0xB7, 0xA9, 0xE7, 0xAC, 0x2B, 0xB7, 0xAB, 0x40, 0x9F, 0xA9, 0x31, 0x35, 0x2C, 0x29, 0xEF, 0xA8, 0x3D, 0x4B, 0xB0, 0xE9, 0xE1, 0x68, 0x7B, 0x41 };
 
-    auto al = s->regs.Iex_Get<Ity_I8>(X86_IR_OFFSET::al);
-    for (int i = 0; i < 8; i++) {
-        Vns FLAG = s->get_int_const(i, 8);
-        s->add_assert(FLAG == (UChar)bf[i], True);
+    auto enc = s->regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::rdi);
+    for (int i = 0; i < 38; i++) {
+        Vns e = s->mem.Iex_Load<Ity_I8>(enc + i);
+        s->add_assert(e == (UChar)bf[i], True);
     }
     vex_printf("checking\n\n");
     auto dfdfs = s->solv.check();
     if (dfdfs == sat) {
-        vex_printf("sat");
+        vex_printf("issat");
         auto m = s->solv.get_model();
         std::cout << m << std::endl;
-        expr a(s->m_ctx, al);
-        std::cout << m.eval(a) << std::endl;
-
+        exit(0);
     }
     else {
         vex_printf("unsat??????????\n\n%d", dfdfs);
@@ -316,6 +308,13 @@ State_Tag whil(State* s) {
     return (State_Tag)0x233;
 }
 
+State_Tag pp(State* s) {
+    auto al = s->regs.Iex_Get<Ity_I32>(AMD64_IR_OFFSET::eax);
+    std::cout << Z3_ast_to_string(al, al) << std::endl;
+    s->regs.Ist_Put(AMD64_IR_OFFSET::eax, 38ul);
+    s->hook_pass(5);
+    return (State_Tag)Running;
+}
 
 State_Tag Dea(State* s) {
     return (State_Tag)Death;
@@ -339,60 +338,91 @@ Vns flag_limit(Vns &flag) {
 
 
 #include "example.hpp"
-
+ 
 
 int main() {
-    flag_max_count = 1;
-    flag_count = 0;
+    {
+        context c,c1,c2;
+        solver ss(c);
+        solver ss2(ss);
+        expr bv8 = (c.bv_const("j", 8)+445-6767)*676;
 
-    StatePrinter<StateAMD64> state(INIFILENAME, (Addr64)0, True);
-    context& c = state;
-    State::pushState(state);
-    State::pool->wait();
-    /*Vns vv1 = state.get_int_const(8);
-    Vns vv2 = state.get_int_const(8);
-    Vns vv3 = state.get_int_const(8);
-    Vns ff1 = 0x7ffe0000 + vv1.sext(56) - vv2.sext(56) + Vns(c, 0x30, 8).Concat(vv1 + vv3).zext(48);
-    std::vector<Vns> ret;
-    addressingMode am(expr(c, ff1));
-    am.offset2opAdd(ret);
+        flag_max_count = 1;
+        flag_count = 0;
 
-    state.mem.Ist_Store(ff1, 0);*/
-
-    
-
-    GraphView gv(state);
-    gv.analyze(0x0007FF7E17416CD);
+        StatePrinter<StateAMD64> state(INIFILENAME, (Addr64)0, True);
+        context& m_ctx = state;
 
 
-    return 0;
-    //state.hook_add(0x040EE5A, cmpr);
-    state.hook_add(0x0401A19, Dea);
-    state.hook_add(0x00401991, whil);
-    
-    state.hook_add(0x040EE62, success_ret3);
-    state.hook_add(0x00040EE7C, success_ret2);
-    
-    std::vector<State_Tag> avoid;
-    avoid.emplace_back(Death);
-    State::pushState(state);
-    State::pool->wait();
-    for (int i = 0; i < 8; i++) {
-        state.compress(0x00401991, (State_Tag)0x233, avoid);
 
-        State::pushState(state);
-        State::pool->wait();
+      /*  State::pool->enqueue(
+            [&c, &c1, &bv8] {
+                for (int i = 0; i < 5000; i++) {
+                    expr(c1, Z3_translate(c, bv8, c1));
+                };
+            }
+        );
 
-    }
-
-    std::cout << (std::string)state;
-
-    printf("OVER");
-    getchar();
+        State::pool->enqueue(
+            [&c, &c2, &bv8] {
+                for (int i = 0; i < 10000; i++) {
+                    expr(c2, Z3_translate(c, bv8, c2));
+                };
+            }
+        );
 
 
-    StateAnalyzer sa(state);
-    sa.Run();
+        State::pool->wait();*/
+
+
+
+
+        z3::params m_params(m_ctx);
+        z3::tactic m_tactic(with(tactic(m_ctx, "simplify"), m_params) &
+            tactic(m_ctx, "sat") &
+            tactic(m_ctx, "solve-eqs") &
+            tactic(m_ctx, "bit-blast") &
+            tactic(m_ctx, "smt")
+            &
+            tactic(m_ctx, "factor") &
+            tactic(m_ctx, "bv1-blast") &
+            tactic(m_ctx, "qe-sat") &
+            tactic(m_ctx, "ctx-solver-simplify") &
+            tactic(m_ctx, "nla2bv") &
+            tactic(m_ctx, "symmetry-reduce")/**/
+        );
+        //state.setSolver(m_tactic);
+
+
+        _VexGuestAMD64State reg(state);
+        for (int i = 0; i < 38; i++) {
+            auto flag = state.get_int_const(8);
+            auto ao3 = flag >= 1 && flag <= 122;
+            state.mem.Ist_Store(reg.guest_RDI + i, flag);
+            std::vector<Vns> guard_result;
+
+
+            state.add_assert(ao3, 1);
+            /*TESTCODE(
+                eval_size = eval_all(guard_result, state.solv, flag);
+            );*/
+        }
+        state.hook_add(0x000400E7A, pp);
+        state.hook_add(0x400CC0, success_ret3);
+
+        {
+            StatePrinter<StateAMD64> state2(&state, 0x00400F7A);
+            auto df = state2.get_int_const(64);
+            state2.add_assert(df < 10, 1);
+            state2.mem.Ist_Store(0x000400E7A + df, state2.get_int_const(8));
+            state2.mem.Iex_Load<Ity_I64>(0x000400E7A);
+            State::pushState(state2);
+            State::pool->wait();
+        }
+
+        StateAnalyzer gv(state);
+        gv.Run();
+    };
     return 0;
 }
 

@@ -565,7 +565,6 @@ namespace smt {
 
     // start exploring subgraph below `app`
     bool theory_datatype::occurs_check_enter(enode * app) {
-        context& ctx = get_context();
         app = app->get_root();
         theory_var v = app->get_th_var(get_id());
         if (v == null_theory_var) {
@@ -759,7 +758,6 @@ namespace smt {
         SASSERT(d->m_constructor);
         func_decl * c_decl = d->m_constructor->get_decl();
         datatype_value_proc * result = alloc(datatype_value_proc, c_decl);
-        unsigned num = d->m_constructor->get_num_args();
         for (enode* arg : enode::args(d->m_constructor)) {
             result->add_dependency(arg);
         }
@@ -887,6 +885,7 @@ namespace smt {
                 unassigned_idx = idx;
             num_unassigned++;
         }
+        TRACE("datatype", tout << "propagate " << num_unassigned << " eqs: " << eqs.size() << "\n";);
         if (num_unassigned == 0) {
             // conflict
             SASSERT(!lits.empty());
@@ -940,12 +939,13 @@ namespace smt {
         enode * n             = get_enode(v);
         sort * s              = m.get_sort(n->get_owner());
         func_decl * non_rec_c = m_util.get_non_rec_constructor(s); 
-        TRACE("datatype_bug", tout << "non_rec_c: " << non_rec_c->get_name() << "\n";);
         unsigned non_rec_idx  = m_util.get_constructor_idx(non_rec_c);
         var_data * d          = m_var_data[v];
         SASSERT(d->m_constructor == nullptr);
         func_decl * r         = nullptr;
         m_stats.m_splits++;
+
+        TRACE("datatype_bug", tout << "non_rec_c: " << non_rec_c->get_name() << " #rec: " << d->m_recognizers.size() << "\n";);
 
         if (d->m_recognizers.empty()) {
             r = m_util.get_constructor_is(non_rec_c);
@@ -988,7 +988,7 @@ namespace smt {
                     return; // all recognizers are asserted to false... conflict will be detected...
             }
         }
-        SASSERT(r != 0);
+        SASSERT(r != nullptr);
         app * r_app     = m.mk_app(r, n->get_owner());
         TRACE("datatype", tout << "creating split: " << mk_pp(r_app, m) << "\n";);
         ctx.internalize(r_app, false);

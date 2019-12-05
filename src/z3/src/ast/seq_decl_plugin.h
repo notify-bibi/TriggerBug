@@ -207,6 +207,7 @@ public:
 
     bool has_re() const { return m_has_re; }
 
+    bool is_considered_uninterpreted(func_decl * f) override;
 };
 
 class seq_util {
@@ -279,8 +280,9 @@ public:
         app* mk_lex_le(expr* a, expr* b) const { expr* es[2] = { a, b }; return m.mk_app(m_fid, OP_STRING_LE, 2, es); }
 
 
-        bool is_nth_i(func_decl* f)       const { return is_decl_of(f, m_fid, OP_SEQ_NTH_I); }
-        bool is_nth_u(func_decl* f)       const { return is_decl_of(f, m_fid, OP_SEQ_NTH_U); }
+        bool is_nth_i(func_decl const* f)       const { return is_decl_of(f, m_fid, OP_SEQ_NTH_I); }
+        bool is_nth_u(func_decl const* f)       const { return is_decl_of(f, m_fid, OP_SEQ_NTH_U); }
+        bool is_skolem(func_decl const* f)      const { return is_decl_of(f, m_fid, _OP_SEQ_SKOLEM); }
 
         bool is_string(expr const * n) const { return is_app_of(n, m_fid, OP_STRING_CONST); }
         bool is_string(expr const* n, symbol& s) const {
@@ -347,12 +349,14 @@ public:
     };
 
     class re {
+        seq_util&    u;
         ast_manager& m;
         family_id    m_fid;
     public:
-        re(seq_util& u): m(u.m), m_fid(u.m_fid) {}
+        re(seq_util& u): u(u), m(u.m), m_fid(u.m_fid) {}
 
         sort* mk_re(sort* seq) { parameter param(seq); return m.mk_sort(m_fid, RE_SORT, 1, &param); }
+        sort* to_seq(sort* re);
 
         app* mk_to_re(expr* s) { return m.mk_app(m_fid, OP_SEQ_TO_RE, 1, &s); }
         app* mk_in_re(expr* s, expr* r) { return m.mk_app(m_fid, OP_SEQ_IN_RE, s, r); }
@@ -366,6 +370,8 @@ public:
         app* mk_opt(expr* r) { return m.mk_app(m_fid, OP_RE_OPTION, r); }
         app* mk_loop(expr* r, unsigned lo);
         app* mk_loop(expr* r, unsigned lo, unsigned hi);
+        app* mk_loop(expr* r, expr* lo);
+        app* mk_loop(expr* r, expr* lo, expr* hi);
         app* mk_full_char(sort* s);
         app* mk_full_seq(sort* s);
         app* mk_empty(sort* s);
@@ -394,6 +400,8 @@ public:
         MATCH_UNARY(is_opt);
         bool is_loop(expr const* n, expr*& body, unsigned& lo, unsigned& hi);
         bool is_loop(expr const* n, expr*& body, unsigned& lo);
+        bool is_loop(expr const* n, expr*& body, expr*& lo, expr*& hi);
+        bool is_loop(expr const* n, expr*& body, expr*& lo);
         bool is_unroll(expr const* n) const { return is_app_of(n, m_fid, _OP_RE_UNROLL); }
     };
     str str;

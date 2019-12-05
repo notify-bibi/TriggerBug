@@ -1,6 +1,6 @@
 
 variables:
-  cmakeStdArgs: '-DBUILD_DOTNET_BINDINGS=True -DBUILD_JAVA_BINDINGS=True -DBUILD_PYTHON_BINDINGS=True -G "Ninja" ../'
+  cmakeStdArgs: '-DZ3_BUILD_DOTNET_BINDINGS=True -DZ3_BUILD_JAVA_BINDINGS=True -DZ3_BUILD_PYTHON_BINDINGS=True -G "Ninja" ../'
   asanEnv: 'CXXFLAGS="${CXXFLAGS} -fsanitize=address -fno-omit-frame-pointer" CFLAGS="${CFLAGS} -fsanitize=address -fno-omit-frame-pointer"'
   ubsanEnv: 'CXXFLAGS="${CXXFLAGS} -fsanitize=undefined" CFLAGS="${CFLAGS} -fsanitize=undefined"'
 
@@ -27,6 +27,7 @@ jobs:
         cd ..
     - template: scripts/test-z3.yml
     - template: scripts/test-regressions.yml
+    - template: scripts/generate-doc.yml
 
 #       ./cpp_example
 #       ./c_example
@@ -89,6 +90,13 @@ jobs:
   steps:
     - script: scripts\vsts-vs2017.cmd x64
 
+- job: "Windows2017ARM64"
+  displayName: "Windows 2017 ARM64 build"
+  pool:
+    vmImage: "vs2017-win2016"
+  steps:
+    - script: scripts\vsts-vs2017.cmd amd64_arm64
+
 - job: "MacOS"
   displayName: "MacOS build"
   pool:
@@ -118,7 +126,7 @@ jobs:
         set -e
         mkdir build
         cd build
-        CC=clang CXX=clang++ cmake -DBUILD_JAVA_BINDINGS=True -DBUILD_PYTHON_BINDINGS=True -DBUILD_DOTNET_BINDINGS=False -G "Ninja" ../
+        CC=clang CXX=clang++ cmake -DZ3_BUILD_JAVA_BINDINGS=True -DZ3_BUILD_PYTHON_BINDINGS=True -DZ3_BUILD_DOTNET_BINDINGS=False -G "Ninja" ../
         ninja
         ninja test-z3
         cd ..

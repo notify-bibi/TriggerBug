@@ -26,9 +26,9 @@
 #include "ast/rewriter/th_rewriter.h"
 #include "ast/rewriter/seq_rewriter.h"
 #include "ast/seq_decl_plugin.h"
+#include "model/value_factory.h"
 #include "smt/smt_theory.h"
 #include "smt/params/theory_str_params.h"
-#include "smt/proto_model/value_factory.h"
 #include "smt/smt_model_generator.h"
 #include "smt/smt_arith_value.h"
 #include<set>
@@ -346,6 +346,9 @@ protected:
     // include an occurrence of the term for which axioms are being generated
     obj_hashtable<expr> axiomatized_terms;
 
+    // hashtable of all top-level exprs for which set_up_axioms() has been called
+    obj_hashtable<expr> existing_toplevel_exprs;
+
     int tmpStringVarCount;
     int tmpXorVarCount;
     int tmpLenTestVarCount;
@@ -572,6 +575,7 @@ protected:
     expr * z3str2_get_eqc_value(expr * n , bool & hasEqcValue);
     bool in_same_eqc(expr * n1, expr * n2);
     expr * collect_eq_nodes(expr * n, expr_ref_vector & eqcSet);
+    bool is_var(expr * e) const;
 
     bool get_arith_value(expr* e, rational& val) const;
     bool get_len_value(expr* e, rational& val);

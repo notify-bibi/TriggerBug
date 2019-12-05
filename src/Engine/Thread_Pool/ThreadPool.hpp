@@ -3,9 +3,8 @@
 
 
 // the constructor just launches some amount of workers
-inline ThreadPool::ThreadPool(size_t threads) : stop(false)
+inline ThreadPool::ThreadPool(size_t threads) : stop(false), runner(0)
 {
-	runner = threads;
 	for (size_t i = 0; i < threads; ++i){
 		workers.emplace_back(
 			[this]
@@ -15,18 +14,28 @@ inline ThreadPool::ThreadPool(size_t threads) : stop(false)
 						std::function<void()> task;
 						{
 							std::unique_lock<std::mutex> lock(this->queue_mutex);
-							runner -= 1;
-							if (runner == 0) {
-								wait_condition.notify_one();
-							}
-							this->condition.wait(lock, [this] { return this->stop || !this->tasks.empty(); });
+							this->condition.wait(lock, [this] {
+                                return this->stop || !this->tasks.empty();
+                                });//成立就不阻塞
 							if (this->stop && this->tasks.empty())
 								return;
 							task = std::move(this->tasks.front());
 							this->tasks.pop();
-							runner += 1;
+                            runner++;
 						}
 						task();
+                        bool beed_notify = false;
+                        {
+                            std::unique_lock<std::mutex> lock(this->queue_mutex);
+                            runner--;
+                            //printf("xxx: %d\n", runner);
+                            if (!runner && this->tasks.empty()) {
+                                beed_notify = true;
+                            }
+                        }
+                        if (beed_notify) {
+                            wait_condition.notify_one();
+                        }
 					}
 				}
 		);
@@ -41,22 +50,19 @@ auto ThreadPool::enqueue(F&& f, Args&&... args)
 		std::unique_lock<std::mutex> lock(queue_mutex);
 		tasks.emplace([task]() { (task)(); });
 	}
-	condition.notify_one();
+    condition.notify_one();
 }
 
 
 
 
 inline void ThreadPool::wait() {
-	for (;;) {
-		{
-			std::unique_lock<std::mutex> lock(this->queue_mutex);
-			wait_condition.wait(lock, [this] { return this->tasks.empty(); });
-			if (this->tasks.empty()&& !runner) {
-				return;
-			}
-		}
-	}
+	std::unique_lock<std::mutex> lock(queue_mutex);
+	wait_condition.wait(lock, [this] {
+        //printf("??????? bk %d\n", !runner && this->tasks.empty());
+        return !runner && this->tasks.empty();
+        });
+	return;
 }
 
 

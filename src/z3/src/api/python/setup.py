@@ -5,6 +5,7 @@ import platform
 import subprocess
 import multiprocessing
 import re
+import glob
 from setuptools import setup
 from distutils.util import get_platform
 from distutils.errors import LibError
@@ -116,6 +117,7 @@ def _build_z3():
                     env=build_env, cwd=BUILD_DIR) != 0:
             raise LibError("Unable to build Z3.")
 
+
 def _copy_bins():
     """
     Copy the library and header files into their final destinations
@@ -141,6 +143,8 @@ def _copy_bins():
     os.mkdir(HEADERS_DIR)
     shutil.copy(os.path.join(BUILD_DIR, LIBRARY_FILE), LIBS_DIR)
     shutil.copy(os.path.join(BUILD_DIR, EXECUTABLE_FILE), BINS_DIR)
+    for filepath in glob.glob(os.path.join(BUILD_DIR, "msvcp*")) + glob.glob(os.path.join(BUILD_DIR, "vcomp*")):
+        shutil.copy(filepath, LIBS_DIR)
 
     for header_dir in HEADER_DIRS:
         for fname in os.listdir(header_dir):

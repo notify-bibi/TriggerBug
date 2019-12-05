@@ -24,10 +24,17 @@ extern std::mutex global_user_mutex;
 
 #ifdef _DEBUG
 #define NEED_VERIFY 
-#endif
 #define TRACE_AM
+#endif
 
 #define BIT_BLAST_MAX_BIT 14
+
+
+#define LINETOSTR(A) #A
+#define CONCATSTR(A, B) " ACCESS MEM ERR UNMAPPED" A " AT Line: " LINETOSTR(B)
+#define MEMACCESSASSERT(CODE, ADDRESS) if (!(CODE)) throw TRMem::MEMexception(CONCATSTR(__FILE__, __LINE__), ADDRESS);
+
+
 
 
 class addressingMode
@@ -352,7 +359,6 @@ private:
     static bool _check_add_no_overflow(expr const& e1, expr const& e2);
 };
 
-
 #define GETPT(address) ((*CR3)->pt[(address) >> 39 & 0x1ff]->pt[(address) >> 30 & 0x1ff]->pt[(address) >> 21 & 0x1ff])
 #define GETPAGE(address) ((*CR3)->pt[(address) >> 39 & 0x1ff]->pt[(address) >> 30 & 0x1ff]->pt[(address) >> 21 & 0x1ff]->pt[(address) >> 12 & 0x1ff])
 #define COPY_SYM(new_page, p_page,index) (new_page)->unit[(index)] = (p_page)->unit[(index)]
@@ -445,7 +451,6 @@ for (UInt i1 = 0; i1 < CR3_point->used; i1++) {																				\
 
 
 
-
 #define LMAX1 PML4T_max
 #define LMAX2 PDPT_max
 #define LMAX3 PDT_max
@@ -472,8 +477,28 @@ for (UInt i1 = 0; i1 < CR3_point->used; i1++) {																				\
 
 namespace TRMem {
 
+
+    class MEMexception {
+        std::string m_msg;
+        ADDR m_gaddr;
+    public:
+        MEMexception(char const* msg, ADDR gaddr) :m_msg(msg), m_gaddr(gaddr){}
+        std::string msg() const {
+            char buffer[50];
+            snprintf(buffer, 50, "Gest mem access addr: %p { ", m_gaddr);
+            std::string ret;
+            return ret.assign(buffer) + m_msg;
+        }
+        friend std::ostream& operator<<(std::ostream& out, MEMexception const& e);
+    };
+    inline std::ostream& operator<<(std::ostream& out, MEMexception const& e) { out << e.msg() << " }" ; return out; }
+
+
+
     typedef struct PAGE {
-        ULong user;
+        Int user;
+        UChar pad;
+        UChar is_pad;
         UInt used_point;
         bool unit_mutex;
         Register<0x1000>* unit;
@@ -535,7 +560,7 @@ public:
         Z3_ast m_addr;
         Z3_ast last_avoid_addr;
         UShort m_nbit;
-        std::vector<Z3_model> v_model;
+        //std::vector<Z3_model> v_model;
     public:
         Z3_lbool m_lbool;
         inline Itaddress(solver& s, Z3_ast addr) :m_ctx(m_solver.ctx()), m_solver(s), m_addr(addr), m_nbit(Z3_get_bv_sort_size(m_ctx, Z3_get_sort(m_ctx, m_addr))) {
@@ -546,7 +571,7 @@ public:
             Z3_inc_ref(m_ctx, so);
             Z3_solver_assert(m_ctx, m_solver, so);
             Z3_dec_ref(m_ctx, so);
-            v_model.reserve(20);
+            //v_model.reserve(20);
         }
 
         inline bool check() { 
@@ -566,38 +591,39 @@ public:
             Z3_dec_ref(m_ctx, last_avoid_addr);
         }
 
-        inline operator Z3_ast() { return m_addr; }
-
         inline Vns operator*()
         {
             Z3_model m_model = Z3_solver_get_model(m_ctx, m_solver); vassert(m_model);
             Z3_model_inc_ref(m_ctx, m_model);
-            v_model.emplace_back(m_model);
+            //v_model.emplace_back(m_model);
             Z3_ast r = 0;
             bool status = Z3_model_eval(m_ctx, m_model, m_addr, /*model_completion*/false, &r);
             Z3_inc_ref(m_ctx, r);
             last_avoid_addr = r;
-            Z3_ast_kind rkind = Z3_get_ast_kind(m_ctx, r);
-            if (rkind != Z3_NUMERAL_AST) { 
-                vassert(0); 
-            }
-            return Vns(m_ctx, r, m_nbit);
+            ULong ret;
+            vassert(Z3_get_ast_kind(m_ctx, r) == Z3_NUMERAL_AST);
+            vassert(Z3_get_numeral_uint64(m_ctx, r, &ret));
+            Z3_model_dec_ref(m_ctx, m_model);
+            return Vns(m_ctx, ret, m_nbit);
         }
         inline ~Itaddress() {
             Z3_dec_ref(m_ctx, m_addr);
-            if ((context*)(&m_ctx) != nullptr) {
-                m_solver.pop();
-                for (auto m : v_model) Z3_model_dec_ref(m_ctx, m);
-            }
+            m_solver.pop();
+            //for (auto m : v_model) Z3_model_dec_ref(m_ctx, m);
         }
     };
 private:
     std::hash_map<ADDR, Register<0x1000>*> mem_change_map;
     Bool need_record;
+    Int user;
+    PML4T** CR3;
+
+private:
+    void CheckSelf(PAGE*& P, ADDR address);
+    void init_page(PAGE*& P, ADDR address);
+    void write_bytes(ULong address, ULong length, UChar* data);
 
 public:
-    PML4T **CR3;
-    UInt user;
     Z3_context m_ctx;
     State &m_state;
     MEM(State& so, context* ctx, Bool _need_record);
@@ -607,34 +633,115 @@ public:
     ULong map(ULong address, ULong length);
     void copy(MEM& mem);
     ULong unmap(ULong address, ULong length);
-
-    void write_bytes(ULong address, ULong length, UChar* data);
+    Int getUser() { return user; }
 
     inline void set_double_page(ADDR address, Pap &addrlst) {
         addrlst.guest_addr = address;
         addrlst.Surplus = 0x1000 - (address & 0xfff);
-        addrlst.t_page_addr = (UChar*)GETPAGE((ULong)address)->unit->m_bytes + (address & 0xfff);
+        PAGE* P = getMemPage(address);
+        MEMACCESSASSERT(P, address);
+        addrlst.t_page_addr = (UChar*)P->unit->m_bytes + (address & 0xfff);
     }
 
     inline UChar* get_next_page(ADDR address) {
-        return (UChar*)GETPAGE((ULong)(address + 0x1000))->unit->m_bytes;
+        PAGE* P = getMemPage((ULong)(address + 0x1000));
+        return P ? P->unit->m_bytes : nullptr;
     }
 
-    inline PAGE* getMemPage(ADDR address) {
-        return GETPAGE((ULong)address);//虚拟机逃逸 漏洞（无idx检查 为了速度就不多做检查了）
+
+    inline PAGE** get_pointer_of_mem_page(ADDR address) {
+        if (sizeof(address) == 4) {
+            UShort PDPT_ind = (address >> 30 & 0x3);
+            UShort PDT_ind = (address >> 21 & 0x1ff);
+            UShort PT_ind = (address >> 12 & 0x1ff);
+            if (!(*CR3)->size) {
+                PDPT* pdpt = (*CR3)->pt[0];
+                if (pdpt && PDPT_ind < pdpt->size) {
+                    PDT* pdt = pdpt->pt[PDPT_ind];
+                    if (pdt && PDT_ind < pdt->size) {
+                        PT* pt = pdt->pt[PDT_ind];
+                        if (pt && PT_ind < pt->size) {
+                            return &pt->pt[PT_ind];
+                        }
+                    }
+                }
+            }
+        }
+        else {
+            UShort PML4T_ind = (address >> 39 & 0x1ff);
+            UShort PDPT_ind = (address >> 30 & 0x1ff);
+            UShort PDT_ind = (address >> 21 & 0x1ff);
+            UShort PT_ind = (address >> 12 & 0x1ff);
+            if (PML4T_ind < (*CR3)->size) {
+                PDPT* pdpt = (*CR3)->pt[PML4T_ind];
+                if (pdpt && PDPT_ind < pdpt->size) {
+                    PDT* pdt = pdpt->pt[PDPT_ind];
+                    if (pdt && PDT_ind < pdt->size) {
+                        PT* pt = pdt->pt[PDT_ind];
+                        if (pt && PT_ind < pt->size) {
+                            return &pt->pt[PT_ind];
+                        }
+                    }
+                }
+            }
+        }
+        return nullptr;
     }
+
+
+    inline PAGE* getMemPage(ADDR address) {
+        if (sizeof(address) == 4) {
+            UShort PDPT_ind = (address >> 30 & 0x3);
+            UShort PDT_ind = (address >> 21 & 0x1ff);
+            UShort PT_ind = (address >> 12 & 0x1ff);
+            if (!(*CR3)->size) {
+                PDPT* pdpt = (*CR3)->pt[0];
+                if (pdpt && PDPT_ind < pdpt->size) {
+                    PDT* pdt = pdpt->pt[PDPT_ind];
+                    if (pdt && PDT_ind < pdt->size) {
+                        PT* pt = pdt->pt[PDT_ind];
+                        if (pt && PT_ind < pt->size) {
+                            return pt->pt[PT_ind];
+                        }
+                    }
+                }
+            }
+        }
+        else {
+            UShort PML4T_ind = (address >> 39 & 0x1ff);
+            UShort PDPT_ind = (address >> 30 & 0x1ff);
+            UShort PDT_ind = (address >> 21 & 0x1ff);
+            UShort PT_ind = (address >> 12 & 0x1ff);
+            if (PML4T_ind < (*CR3)->size) {
+                PDPT* pdpt = (*CR3)->pt[PML4T_ind];
+                if (pdpt && PDPT_ind < pdpt->size) {
+                    PDT* pdt = pdpt->pt[PDPT_ind];
+                    if (pdt && PDT_ind < pdt->size) {
+                        PT* pt = pdt->pt[PDT_ind];
+                        if (pt && PT_ind < pt->size) {
+                            return pt->pt[PT_ind];
+                        }
+                    }
+                }
+            }
+        }
+        return nullptr;
+    }
+
 
     Itaddress addr_begin(solver& s, Z3_ast addr) { return Itaddress(s, addr); }
 
     private:
         Vns _Iex_Load_a(PAGE* P, ADDR address, UShort size) {
             PAGE* nP = getMemPage(address + 0x1000);
+            MEMACCESSASSERT(nP, address + 0x1000);
             UInt plength = 0x1000 - ((UShort)address & 0xfff);
             return nP->unit->Iex_Get(0, size - plength).translate(m_ctx).Concat(P->unit->Iex_Get(((UShort)address & 0xfff), plength));
         }
 
         Vns _Iex_Load_b(PAGE* P, ADDR address, UShort size) {
             PAGE* nP = getMemPage(address + 0x1000);
+            MEMACCESSASSERT(nP, address + 0x1000);
             UInt plength = 0x1000 - ((UShort)address & 0xfff);
             return nP->unit->Iex_Get(0, size - plength).translate(m_ctx).Concat(P->unit->Iex_Get(((UShort)address & 0xfff), plength, m_ctx));
         }
@@ -666,7 +773,11 @@ public:
     inline Vns Iex_Load(ADDR address)
     {
         PAGE *P = getMemPage(address);
+        MEMACCESSASSERT(P, address);
         UShort offset = (UShort)address & 0xfff;
+        if (P->is_pad) {
+            return ReZero<ty>();
+        };
         if (user == P->user) {//WNC
             switch (ty) {
             case 8:
@@ -697,7 +808,7 @@ public:
             default:vpanic("error IRType");
             }
         }
-        else if (P->user != -1ull) {
+        else {
             switch (ty) {
             case 8:
             case Ity_I8: {
@@ -729,9 +840,6 @@ public:
             default:vpanic("error IRType");
             }
         }
-        else {
-            return ReZero<ty>();
-        };
     }
 
     Vns Iex_Load(ADDR address, IRType ty);
@@ -783,7 +891,7 @@ public:
             if (!Z3_get_numeral_uint64(m_ctx, addr, &Z3_RE)) vassert(0);
             Vns data = Iex_Load<ty>(Z3_RE);
             if (reast) {
-                auto eq = Z3_mk_eq(m_ctx, it, addr);
+                auto eq = Z3_mk_eq(m_ctx, address, addr);
                 Z3_inc_ref(m_ctx, eq);
                 auto ift = Z3_mk_ite(m_ctx, eq, data, reast);
                 Z3_inc_ref(m_ctx, ift);
@@ -835,10 +943,12 @@ public:
             m_state.is_dynamic_block = true;
         }
         PAGE* P = getMemPage(address);
+        MEMACCESSASSERT(P, address);
         CheckSelf(P, address);
         UShort offset = address & 0xfff;
         if (fastalignD1[sizeof(data) << 3] > 0xFFF - offset) {
             PAGE* nP = getMemPage(address + 0x1000);
+            MEMACCESSASSERT(nP, address + 0x1000);
             CheckSelf(nP, address + 0x1000);
             UInt plength = (0x1000 - offset);
             P->unit->Ist_Put(offset, (void*)&data, plength);
@@ -859,10 +969,12 @@ public:
             m_state.is_dynamic_block = true;
         }
         PAGE* P = getMemPage(address);
+        MEMACCESSASSERT(P, address);
         CheckSelf(P, address);
         UShort offset = address & 0xfff;
         if (fastalignD1[bitn] > 0xFFF - offset) {
             PAGE* nP = getMemPage(address + 0x1000);
+            MEMACCESSASSERT(nP, address + 0x1000);
             CheckSelf(nP, address + 0x1000);
             UInt plength = (0x1000 - offset);
             Z3_ast Low = Z3_mk_extract(m_ctx, (plength << 3) - 1, 0, data);
@@ -907,7 +1019,7 @@ public:
                 Vns addr = *it;
                 ADDR addr_re = addr;
                 auto oData = Iex_Load<(IRType)(sizeof(DataTy) << 3)>(addr_re);
-                auto eq = Z3_mk_eq(m_ctx, it, addr);
+                auto eq = Z3_mk_eq(m_ctx, address, addr);
                 Z3_inc_ref(m_ctx, eq);
                 auto n_Data = Z3_mk_ite(m_ctx, eq, Vns(m_ctx, data), oData);
                 Z3_inc_ref(m_ctx, n_Data);
@@ -930,29 +1042,31 @@ public:
         QueryPerformanceFrequency(&freq);
         QueryPerformanceCounter(&beginPerformanceCount);
     redo:
-        Itaddress it = this->addr_begin(m_state.solv, address);
-        while (it.check()) {
-            if (suspend_solve) {
-                QueryPerformanceCounter(&closePerformanceCount);
-                double delta_seconds = (double)(closePerformanceCount.QuadPart - beginPerformanceCount.QuadPart) / freq.QuadPart;
-                if (delta_seconds > 0.01d) {
-                    break;
+        {
+            Itaddress it = this->addr_begin(m_state.solv, address);
+            while (it.check()) {
+                if (suspend_solve) {
+                    QueryPerformanceCounter(&closePerformanceCount);
+                    double delta_seconds = (double)(closePerformanceCount.QuadPart - beginPerformanceCount.QuadPart) / freq.QuadPart;
+                    if (delta_seconds > 0.01d) {
+                        break;
+                    }
+                    else {
+                        suspend_solve = false;
+                    }
                 }
-                else {
-                    suspend_solve = false;
-                }
+                auto addr = *it;
+                if (!Z3_get_numeral_uint64(m_ctx, addr, &Z3_RE)) vassert(0);
+                auto oData = Iex_Load<(IRType)bitn>(Z3_RE);
+                auto eq = Z3_mk_eq(m_ctx, address, addr);
+                Z3_inc_ref(m_ctx, eq);
+                auto n_Data = Z3_mk_ite(m_ctx, eq, data, oData);
+                Z3_inc_ref(m_ctx, n_Data);
+                Ist_Store<(IRType)bitn>(Z3_RE, n_Data);
+                Z3_dec_ref(m_ctx, n_Data);
+                Z3_dec_ref(m_ctx, eq);
+                it++;
             }
-            auto addr = *it;
-            if (!Z3_get_numeral_uint64(m_ctx, addr, &Z3_RE)) vassert(0);
-            auto oData = Iex_Load<(IRType)bitn>(Z3_RE); 
-            auto eq = Z3_mk_eq(m_ctx, it, addr);
-            Z3_inc_ref(m_ctx, eq);
-            auto n_Data = Z3_mk_ite(m_ctx, eq, data, oData);
-            Z3_inc_ref(m_ctx, n_Data);
-            Ist_Store<(IRType)bitn>(Z3_RE, n_Data);
-            Z3_dec_ref(m_ctx, n_Data);
-            Z3_dec_ref(m_ctx, eq);
-            it++;
         }
         if (suspend_solve) {
             addressingMode am(expr(m_state.m_ctx, address));
@@ -1063,7 +1177,6 @@ public:
     inline operator Z3_context() { return m_ctx; }
 
 private:
-    void CheckSelf(PAGE*& P, ADDR address);
 
     template<>
     inline void Ist_Store(ADDR address, Vns data) = delete;
@@ -1084,6 +1197,7 @@ private:
     inline void Ist_Store(Z3_ast address, Vns const &data) = delete;
 
 };
+
 
 #ifndef UNDEFMEM
 #undef GETPT
@@ -1113,6 +1227,9 @@ private:
 #undef LSTRUCT3
 #undef LSTRUCT4
 #undef LSTRUCT5
+#undef LINETOSTR
+#undef CONCATSTR
+#undef MEMACCESSERR
 #endif
 
 #endif //  MEMORY_DEFS_H

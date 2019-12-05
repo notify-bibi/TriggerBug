@@ -20,24 +20,24 @@ Revision History:
 #ifndef THEORY_ARITH_H_
 #define THEORY_ARITH_H_
 
-#include "smt/smt_theory.h"
 #include "util/map.h"
 #include "util/heap.h"
 #include "util/nat_set.h"
 #include "util/inf_rational.h"
 #include "util/s_integer.h"
 #include "util/inf_s_integer.h"
+#include "util/obj_pair_hashtable.h"
+#include "util/uint_set.h"
 #include "ast/arith_decl_plugin.h"
+#include "model/numeral_factory.h"
+#include "smt/smt_theory.h"
 #include "smt/params/theory_arith_params.h"
 #include "smt/arith_eq_adapter.h"
-#include "smt/proto_model/numeral_factory.h"
 #include "smt/smt_context.h"
-#include "util/obj_pair_hashtable.h"
 #include "smt/old_interval.h"
-#include "math/grobner/grobner.h"
 #include "smt/arith_eq_solver.h"
 #include "smt/theory_opt.h"
-#include "util/uint_set.h"
+#include "math/grobner/grobner.h"
 
 namespace smt {
     
@@ -440,6 +440,7 @@ namespace smt {
         arith_eq_solver         m_arith_eq_solver;
         bool                    m_found_unsupported_op;
         bool                    m_found_underspecified_op;
+        ptr_vector<app>         m_underspecified_ops;
         arith_eq_adapter        m_arith_eq_adapter;
         vector<row>             m_rows;
         svector<unsigned>       m_dead_rows;
@@ -1077,6 +1078,7 @@ namespace smt {
         //
         // -----------------------------------
         bool get_value(enode * n, expr_ref & r) override;
+        bool include_func_interp(func_decl* f) override;
 
         bool get_lower(enode* n, expr_ref& r);
         bool get_upper(enode* n, expr_ref& r);

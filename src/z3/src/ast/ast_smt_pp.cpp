@@ -841,7 +841,7 @@ public:
         else {
             m_out << "(declare-sort ";
             visit_sort(s);
-            m_out << ")";
+            m_out << " 0)";
             newline();
         }
         mark.mark(s, true);
@@ -957,7 +957,7 @@ void ast_smt_pp::display_smt2(std::ostream& strm, expr* n) {
 #if 0
     decls.display_decls(strm);
 #else
-    decls.order_deps();
+    decls.order_deps(0);
     ast_mark sort_mark;
     for (sort* s : decls.get_sorts()) {
         if (!(*m_is_declared)(s)) {

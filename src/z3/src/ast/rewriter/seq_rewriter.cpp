@@ -18,16 +18,16 @@ Notes:
 
 --*/
 
+#include "util/uint_set.h"
 #include "ast/rewriter/seq_rewriter.h"
 #include "ast/arith_decl_plugin.h"
 #include "ast/ast_pp.h"
 #include "ast/ast_ll_pp.h"
 #include "ast/ast_util.h"
-#include "util/uint_set.h"
-#include "math/automata/automaton.h"
 #include "ast/well_sorted.h"
 #include "ast/rewriter/var_subst.h"
 #include "ast/rewriter/bool_rewriter.h"
+#include "math/automata/automaton.h"
 #include "math/automata/symbolic_automata_def.h"
 
 
@@ -251,7 +251,7 @@ eautomaton* re2automaton::operator()(expr* e) {
     if (r) {        
         r->compress(); 
         bool_rewriter br(m);
-        TRACE("seq", display_expr1 disp(m); r->display(tout, disp););
+        TRACE("seq", display_expr1 disp(m); r->display(tout << mk_pp(e, m) << " -->\n", disp););
     }
     return r;
 } 
@@ -348,7 +348,9 @@ eautomaton* re2automaton::re2aut(expr* e) {
         return a.detach();
     }
     else if (u.re.is_intersection(e, e1, e2) && m_sa && (a = re2aut(e1)) && (b = re2aut(e2))) {
-        return m_sa->mk_product(*a, *b);
+        eautomaton* r = m_sa->mk_product(*a, *b);
+        TRACE("seq", display_expr1 disp(m); a->display(tout << "a:", disp); b->display(tout << "b:", disp); r->display(tout << "intersection:", disp););
+        return r;
     }
     else {
         TRACE("seq", tout << "not handled " << mk_pp(e, m) << "\n";);
@@ -441,7 +443,7 @@ br_status seq_rewriter::mk_app_core(func_decl * f, unsigned num_args, expr * con
         st = mk_re_complement(args[0], result);
         break;
     case OP_RE_LOOP:
-        st = mk_re_loop(num_args, args, result);
+        st = mk_re_loop(f, num_args, args, result);
         break;
     case OP_RE_EMPTY_SET:
         return BR_FAILED;    
@@ -808,6 +810,10 @@ br_status seq_rewriter::mk_seq_extract(expr* a, expr* b, expr* c, expr_ref& resu
             result = m_util.str.mk_concat(_len, as.c_ptr() + offset);
             return BR_DONE;
         }
+        if (i == as.size()) {
+            result = m_util.str.mk_concat(as.size() - offset, as.c_ptr() + offset);
+            return BR_DONE;
+        }
     }
     if (offset == 0) {
         return BR_FAILED;
@@ -981,20 +987,18 @@ br_status seq_rewriter::mk_seq_contains(expr* a, expr* b, expr_ref& result) {
 br_status seq_rewriter::mk_seq_at(expr* a, expr* b, expr_ref& result) {
     zstring c;
     rational r;
-    if (!m_autil.is_numeral(b, r)) {
+    expr_ref_vector lens(m());
+    if (!get_lengths(b, lens, r)) {
         return BR_FAILED;
     }
-    if (r.is_neg()) {
+    if (lens.empty() && r.is_neg()) {
         result = m_util.str.mk_empty(m().get_sort(a));
         return BR_DONE;
     } 
-    if (!r.is_unsigned()) {
-        return BR_FAILED;
-    }
-    unsigned len = r.get_unsigned();
+
     expr* a2 = nullptr, *i2 = nullptr;
-    if (m_util.str.is_at(a, a2, i2)) {
-        if (len > 0) {
+    if (lens.empty() && m_util.str.is_at(a, a2, i2)) {
+        if (r.is_pos()) {
             result = m_util.str.mk_empty(m().get_sort(a));
         }
         else {
@@ -1003,29 +1007,45 @@ br_status seq_rewriter::mk_seq_at(expr* a, expr* b, expr_ref& result) {
         return BR_DONE;            
     }
 
-    expr_ref_vector as(m());
-    m_util.str.get_concat_units(a, as);
+    m_lhs.reset();
+    m_util.str.get_concat_units(a, m_lhs);
 
-    for (unsigned i = 0; i < as.size(); ++i) {
-        expr* a = as.get(i);
-        if (m_util.str.is_unit(a)) {
-            if (len == i) {
-                result = a;
-                return BR_REWRITE1;
-            }            
+    if (m_lhs.empty()) {
+        result = m_util.str.mk_empty(m().get_sort(a));
+        return BR_DONE;        
+    }
+    
+    unsigned i = 0;
+    for (; i < m_lhs.size(); ++i) {
+        expr* lhs = m_lhs.get(i);
+        if (lens.contains(lhs) && !r.is_neg()) {
+            lens.erase(lhs);
         }
-        else if (i > 0) {
-            SASSERT(len >= i);
-            result = m_util.str.mk_concat(as.size() - i, as.c_ptr() + i);
-            result = m().mk_app(m_util.get_family_id(), OP_SEQ_AT, result, m_autil.mk_int(len - i));
-            return BR_REWRITE2;
+        else if (m_util.str.is_unit(lhs) && r.is_zero() && lens.empty()) {
+            result = lhs;
+            return BR_REWRITE1;
+        }
+        else if (m_util.str.is_unit(lhs) && r.is_pos()) {
+            r -= rational(1);
         }
         else {
-            return BR_FAILED;
+            break;
         }
     }
-    result = m_util.str.mk_empty(m().get_sort(a));
-    return BR_DONE;
+    if (i == 0) {
+        return BR_FAILED;
+    }
+    if (m_lhs.size() == i) {
+        result = m_util.str.mk_empty(m().get_sort(a));
+        return BR_DONE;
+    }
+    expr_ref pos(m_autil.mk_int(r), m());
+    for (expr* rhs : lens) {
+        pos = m_autil.mk_add(pos, m_util.str.mk_length(rhs));
+    }
+    result = m_util.str.mk_concat(m_lhs.size() - i , m_lhs.c_ptr() + i);
+    result = m_util.str.mk_at(result, pos);
+    return BR_REWRITE2;   
 }
 
 br_status seq_rewriter::mk_seq_nth(expr* a, expr* b, expr_ref& result) {
@@ -1673,6 +1693,48 @@ br_status seq_rewriter::mk_re_concat(expr* a, expr* b, expr_ref& result) {
         result = a;
         return BR_DONE;
     }
+    expr* a1 = nullptr, *b1 = nullptr;
+    if (m_util.re.is_star(a, a1) && m_util.re.is_star(b, b1) && a1 == b1) {
+        result = a;
+        return BR_DONE;
+    }
+    if (m_util.re.is_star(a, a1) && a1 == b) {
+        result = m_util.re.mk_concat(b, a);
+        return BR_DONE;
+    }
+    unsigned lo1, hi1, lo2, hi2;
+
+    if (m_util.re.is_loop(a, a1, lo1, hi1) && lo1 <= hi1 && m_util.re.is_loop(b, b1, lo2, hi2) && lo2 <= hi2 && a1 == b1) {
+        result = m_util.re.mk_loop(a1, lo1 + lo2, hi1 + hi2);
+        return BR_DONE;
+    }
+    if (m_util.re.is_loop(a, a1, lo1) && m_util.re.is_loop(b, b1, lo2) && a1 == b1) {
+        result = m_util.re.mk_loop(a1, lo1 + lo2);
+        return BR_DONE;
+    }
+    for (unsigned i = 0; i < 2; ++i) {
+        // (loop a lo1) + (loop a lo2 hi2) = (loop a lo1 + lo2) 
+        if (m_util.re.is_loop(a, a1, lo1) && m_util.re.is_loop(b, b1, lo2, hi2) && lo2 <= hi2 && a1 == b1) {
+            result = m_util.re.mk_loop(a1, lo1 + lo2);
+            return BR_DONE;
+        }
+        // (loop a lo1 hi1) + a* = (loop a lo1)
+        if (m_util.re.is_loop(a, a1, lo1, hi1) && m_util.re.is_star(b, b1) && a1 == b1) {
+            result = m_util.re.mk_loop(a1, lo1);
+            return BR_DONE;
+        }
+        // (loop a lo1) + a* = (loop a lo1)
+        if (m_util.re.is_loop(a, a1, lo1) && m_util.re.is_star(b, b1) && a1 == b1) {
+            result = a;
+            return BR_DONE;
+        }
+        // (loop a lo1 hi1) + a = (loop a lo1+1 hi1+1)
+        if (m_util.re.is_loop(a, a1, lo1, hi1) && lo1 <= hi1 && a1 == b) {
+            result = m_util.re.mk_loop(a1, lo1+1, hi1+1);
+            return BR_DONE;
+        }
+        std::swap(a, b);
+    }
     return BR_FAILED;
 }
 /*
@@ -1773,22 +1835,56 @@ br_status seq_rewriter::mk_re_inter(expr* a, expr* b, expr_ref& result) {
 }
 
 
-br_status seq_rewriter::mk_re_loop(unsigned num_args, expr* const* args, expr_ref& result) {
+br_status seq_rewriter::mk_re_loop(func_decl* f, unsigned num_args, expr* const* args, expr_ref& result) {
     rational n1, n2;
+    unsigned lo, hi, lo2, hi2, np;
+    expr* a = nullptr;
     switch (num_args) {
     case 1: 
+        np = f->get_num_parameters();
+        lo2 = np > 0 ? f->get_parameter(0).get_int() : 0;
+        hi2 = np > 1 ? f->get_parameter(1).get_int() : 0;
+        if  (np == 2 && lo2 > hi2) {
+            result = m_util.re.mk_loop(args[0], lo2, lo2);
+            return BR_REWRITE1;
+        }
+        // (loop (loop a lo) lo2) = (loop lo*lo2)
+        if (m_util.re.is_loop(args[0], a, lo) && np == 1) {
+            result = m_util.re.mk_loop(a, lo2 * lo);
+            return BR_REWRITE1;
+        }
+        // (loop (loop a l l) h h) = (loop a l*h l*h)
+        if (m_util.re.is_loop(args[0], a, lo, hi) && np == 2 && lo == hi && lo2 == hi2) {
+            result = m_util.re.mk_loop(a, lo2 * lo, hi2 * hi);
+            return BR_REWRITE1;
+        }
+        // (loop a 0 0) = ""
+        if (np == 2 && hi2 == 0) {
+            result = m_util.re.mk_to_re(m_util.str.mk_empty(m_util.re.to_seq(m().get_sort(args[0]))));
+            return BR_DONE;
+        }
+        // (loop a 1 1) = a
+        if (np == 2 && lo2 == 1 && hi2 == 1) {
+            result = args[0];
+            return BR_DONE;
+        }
+        // (loop a 0) = a*
+        if (np == 1 && lo2 == 0) {
+            result = m_util.re.mk_star(args[0]);
+            return BR_DONE;
+        }
         break;
     case 2:
         if (m_autil.is_numeral(args[1], n1) && n1.is_unsigned()) {
             result = m_util.re.mk_loop(args[0], n1.get_unsigned());
-            return BR_DONE;
+            return BR_REWRITE1;
         }
         break;
     case 3:
         if (m_autil.is_numeral(args[1], n1) && n1.is_unsigned() &&
             m_autil.is_numeral(args[2], n2) && n2.is_unsigned()) {
             result = m_util.re.mk_loop(args[0], n1.get_unsigned(), n2.get_unsigned());
-            return BR_DONE;
+            return BR_REWRITE1;
         }
         break;
     default:

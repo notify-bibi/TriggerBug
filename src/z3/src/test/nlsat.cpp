@@ -315,10 +315,31 @@ static void project(nlsat::solver& s, nlsat::explain& ex, nlsat::var x, unsigned
     std::cout << "\n";
 }
 
+static void project_fa(nlsat::solver& s, nlsat::explain& ex, nlsat::var x, unsigned num, nlsat::literal const* lits) {
+    std::cout << "Project ";
+    nlsat::scoped_literal_vector result(s);
+    ex(num, lits, result);
+    std::cout << "(or";
+    for (auto l : result) {
+        s.display(std::cout << " ", l);
+    }
+    for (unsigned i = 0; i < num; ++i) {
+        s.display(std::cout << " ", ~lits[i]);
+    }
+    std::cout << ")\n";
+}
+
 static nlsat::literal mk_gt(nlsat::solver& s, nlsat::poly* p) {
     nlsat::poly * _p[1] = { p };
     bool is_even[1] = { false };
     return s.mk_ineq_literal(nlsat::atom::GT, 1, _p, is_even);
+}
+
+
+static nlsat::literal mk_lt(nlsat::solver& s, nlsat::poly* p) {
+    nlsat::poly * _p[1] = { p };
+    bool is_even[1] = { false };
+    return s.mk_ineq_literal(nlsat::atom::LT, 1, _p, is_even);
 }
 
 static nlsat::literal mk_eq(nlsat::solver& s, nlsat::poly* p) {
@@ -695,7 +716,83 @@ static void tst10() {
     std::cout << "\n";
 }
 
+static void tst11() {
+    params_ref      ps;
+    reslimit        rlim;
+    nlsat::solver s(rlim, ps, false);
+    anum_manager & am     = s.am();
+    nlsat::pmanager & pm  = s.pm();
+    nlsat::assignment as(am);
+    nlsat::explain& ex    = s.get_explain();
+    nlsat::var x, y, z;
+    y = s.mk_var(false);
+    z = s.mk_var(false);
+    x = s.mk_var(false);
+    polynomial_ref p1(pm), p2(pm), _x(pm), _y(pm), _z(pm);
+    _x = pm.mk_polynomial(x);
+    _y = pm.mk_polynomial(y);
+    _z = pm.mk_polynomial(z);
+
+    nlsat::scoped_literal_vector lits(s);
+    scoped_anum zero(am), one(am), five(am);
+    am.set(zero, 0);
+    am.set(one, 1);
+    am.set(five, 5);
+    as.set(z, zero);
+    as.set(y, five);
+    as.set(x, five);
+    s.set_rvalues(as);
+
+    p1 = (_x - _y);
+    p2 = ((_x*_x) - (_x*_y) - _z);
+    lits.reset();
+    lits.push_back(mk_gt(s, p1));
+    lits.push_back(mk_eq(s, p2));
+    project_fa(s, ex, x, 2, lits.c_ptr());
+//    return;
+
+    p1 = ((_x * _x) - (2 * _y * _x)  - _z + (_y *_y));
+    p2 = _x + _y;
+    as.set(_x, one);
+    as.set(_y, zero);
+    as.set(_z, one);
+    lits.reset();
+    lits.push_back(mk_lt(s, p1));
+    lits.push_back(mk_eq(s, p2));
+    project_fa(s, ex, x, 2, lits.c_ptr());
+    return;
+
+    as.set(z, zero);
+    as.set(y, five);
+    as.set(x, five);    
+    p1 = (_x - _y);
+    p2 = ((_x*_x) - (_x*_y));
+    lits.reset();
+    lits.push_back(mk_gt(s, p1));
+    lits.push_back(mk_eq(s, p2));
+    project_fa(s, ex, x, 2, lits.c_ptr());
+
+#if 0
+
+!(x5^4 - 2 x3^2 x5^2 - 2 x1^2 x5^2 + 4 x0 x1 x5^2 - 2 x0^2 x5^2 + x3^4 - 2 x1^2 x3^2 + 4 x0 x1 x3^2 - 2 x0^2 x3^2 + x1^4 - 4 x0 x1^3 + 6 x0^2 x1^2 - 4 x0^3 x1 + x0^4 = 0) or !(x5 < 0) or !(x4 > root[1](x1 x4 - x0 x4 + x3)) or !(x3 + x1 - x0 > 0) or !(x1 - x0 < 0) or !(x7 > root[1](x1^2 x7 - 2 x0 x1 x7 + x0^2 x7 + x1 x3 - x0 x3)) or x7 - x4 = 0 or !(x1 x3 x7^2 - x0 x3 x7^2 - x5^2 x7 + x3^2 x7 + x1^2 x7 - 2 x0 x1 x7 + x0^2 x7 + x1 x3 - x0 x3 = 0)
+
+x0 := -1
+x1 := -21.25
+x2 := 0.0470588235?
+x3 := 2
+x4 := -0.03125
+x5 := -18.25
+x6 := -0.5
+x7 := 1
+
+#endif
+
+}
+
 void tst_nlsat() {
+    tst11();
+    std::cout << "------------------\n";
+    return;
     tst10();
     std::cout << "------------------\n";
     tst9();

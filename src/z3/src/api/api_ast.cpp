@@ -804,7 +804,7 @@ extern "C" {
         RESET_ERROR_CODE();
         ast_manager& m = mk_c(c)->m();
         expr* a = to_expr(_a);
-        expr* const* args = to_exprs(_args);
+        expr* const* args = to_exprs(num_args, _args);
         switch(a->get_kind()) {
         case AST_APP: {
             app* e = to_app(a);
@@ -843,8 +843,8 @@ extern "C" {
         RESET_ERROR_CODE();
         ast_manager & m = mk_c(c)->m();
         expr * a = to_expr(_a);
-        expr * const * from = to_exprs(_from);
-        expr * const * to   = to_exprs(_to);
+        expr * const * from = to_exprs(num_exprs, _from);
+        expr * const * to   = to_exprs(num_exprs, _to);
         expr * r = nullptr;
         for (unsigned i = 0; i < num_exprs; i++) {
             if (m.get_sort(from[i]) != m.get_sort(to[i])) {
@@ -875,7 +875,7 @@ extern "C" {
         RESET_ERROR_CODE();
         ast_manager & m = mk_c(c)->m();
         expr * a = to_expr(_a);
-        expr * const * to   = to_exprs(_to);
+        expr * const * to   = to_exprs(num_exprs, _to);
         var_subst subst(m, false);
         expr_ref new_a = subst(a, num_exprs, to);
         mk_c(c)->save_ast_trail(new_a);
@@ -1051,6 +1051,8 @@ extern "C" {
             case OP_SET_SUBSET: return Z3_OP_SET_SUBSET;
             case OP_AS_ARRAY: return Z3_OP_AS_ARRAY;
             case OP_ARRAY_EXT: return Z3_OP_ARRAY_EXT;
+            case OP_SET_CARD: return Z3_OP_SET_CARD;
+            case OP_SET_HAS_SIZE: return Z3_OP_SET_HAS_SIZE;
             default:
                 return Z3_OP_INTERNAL;
             }

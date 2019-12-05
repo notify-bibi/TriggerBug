@@ -12,10 +12,11 @@
 
 
 extern void* funcDict(void*);
-extern int eval_all(std::vector<Z3_ast>& result, solver& solv, Z3_ast nia);
+extern int eval_all(std::vector<Vns>& result, solver& solv, Z3_ast nia);
 extern __m256i  m32_fast[33];
 extern __m256i  m32_mask_reverse[33];
 extern State*	_states[MAX_THREADS];
+extern bool     ret_is_ast[MAX_THREADS];
 extern std::mutex global_state_mutex;
 
 
@@ -85,7 +86,6 @@ public:
     static const char* MemoryDumpPath;
     static tinyxml2::XMLElement* doc_VexControl;
     static tinyxml2::XMLElement* doc_debug;
-    static ADDR GuestStartAddress;
     static UInt MaxThreadsNum;
     static Int traceflags;
     UInt gRegsIpOffset();
@@ -100,7 +100,6 @@ protected:
 private:
 
     static UInt _gtraceflags();
-    static void _gGuestStartAddress();
     static tinyxml2::XMLError loadFile(const char* filename);
     static void _gGuestArch();
     static void _gMemoryDumpPath();
@@ -117,16 +116,19 @@ private:
 class BranchChunk {
 public:
     ADDR m_oep;
+    Vns  m_sym_addr;
     Vns  m_guard;
     bool m_tof;
 
-    BranchChunk(ADDR oep, Vns const& guard, bool tof) :
+    BranchChunk(ADDR oep, Vns const& sym_addr, Vns const& guard, bool tof) :
         m_oep(oep),
+        m_sym_addr(sym_addr),
         m_guard(guard),
         m_tof(tof)
     {
     }
     State* getState(State& fstate);
+    ~BranchChunk(){}
 };
 
 
@@ -139,6 +141,8 @@ typedef struct ChangeView {
 class State:public Vex_Info {
     friend MEM;
     friend GraphView;
+    friend StateAnalyzer;
+
 protected:
     static std::hash_map<ADDR, Hook_struct> CallBackDict;
     static std::hash_map<ADDR/*static table base*/, TRtype::TableIdx_CB> TableIdxDict;
@@ -150,44 +154,35 @@ protected:
     bool is_dynamic_block;
 	void *VexGuestARCHState;
 
-    
-
-public:
-    static Vns ir_temp[MAX_THREADS][400];
-    static ThreadPool* pool;
-	z3::context m_ctx;
-    z3::params m_params; 
-    z3::tactic m_tactic;
-	z3::solver solv;
-	//std::queue< std::function<void()> > check_stack;
-	ADDR delta;
-	bool unit_lock;
-
 private:
     Pap pap;
     VexArchInfo *vai_guest,  *vai_host;
     VexTranslateArgs *vta;
 
-    bool isTop;
     Bool need_record;
-    int replace_const;
-
-
-	std::vector<Vns> asserts;
-
-	inline Bool treeCompress(z3::context &ctx, ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag> &avoid, ChangeView& change_view, std::hash_map<ULong, Vns> &change_map, std::hash_map<UShort, Vns> &regs_change_map);
+    int  replace_const;
+    bool unit_lock;
+    ADDR delta;
 
 public:
-	Register<REGISTER_LEN> regs;
-	MEM mem;//多线程设置相同user，不同state设置不同user
-	ULong runed = 0;
-	std::vector <State*> branch;
+    static Vns              ir_temp[MAX_THREADS][400];
+    static ThreadPool*      pool;
+    State*                  m_father_state;
+    State_Tag               status;
+    z3::context             m_ctx;
+    z3::solver              solv;
+    std::vector<Vns>        asserts;
+    //客户机寄存器
+	Register<REGISTER_LEN>  regs;
+    //客户机内存 （多线程设置相同user，不同state设置不同user）
+	MEM                     mem;
+    std::vector<State*>     branch;
     std::vector<BranchChunk> branchChunks;
-	State_Tag status;
 
 
     State(const char* filename, ADDR gse, Bool _need_record) ;
 	State(State *father_state, ADDR gse) ;
+    void setSolver(z3::tactic const& tactic) { solv = tactic.mk_solver(); };
     void read_mem_dump(const char*);
 
 	~State() ;
@@ -200,6 +195,8 @@ public:
 	inline void add_assert_eq(Vns &eqA, Vns &eqB);
     void start(Bool first_bkp_pass);
     void branchGo();
+    //ip = ip + offset
+    inline void hook_pass(ADDR offset) { delta = offset; };
 
 
 	void compress(ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag> &avoid);//最大化缩合状态 
@@ -221,13 +218,13 @@ public:
     Z3_ast idx2Value(ADDR base, Z3_ast idx);
 
     inline operator context& () { return m_ctx; }
-    inline operator Z3_context() { return m_ctx; }
+    inline operator Z3_context() const { return m_ctx; }
     inline operator MEM& () { return mem; }
     inline operator Register<REGISTER_LEN>&() { return regs; }
     inline ADDR get_cpu_ip() { return guest_start; }
     inline ADDR get_state_ep() { return guest_start_ep; }
     inline ADDR get_start_of_block() { return guest_start_of_block; }
-	operator std::string();
+	operator std::string() const;
 
 
     static void pushState(State& s) {
@@ -241,8 +238,13 @@ public:
     {
         if (CallBackDict.find(addr) == CallBackDict.end()) {
             auto P = mem.getMemPage(addr);
-            CallBackDict[addr] = Hook_struct{ func ,P->unit->m_bytes[addr & 0xfff] , cflag };
-            P->unit->m_bytes[addr & 0xfff] = 0xCC;
+            if (!P) {
+                vex_printf("hook_add: mem access error %p not mapped", addr);
+            }
+            else {
+                CallBackDict[addr] = Hook_struct{ func ,P->unit->m_bytes[addr & 0xfff] , cflag };
+                P->unit->m_bytes[addr & 0xfff] = 0xCC;
+            }
         }
         else {
             if (func){
@@ -266,36 +268,27 @@ public:
     virtual inline State_Tag Ijk_call(IRJumpKind) { return Death; };
     virtual inline void   cpu_exception() { status = Death; }
     virtual inline State* ForkState(ADDR ges) { return nullptr; }
+
+private:
+    inline Bool treeCompress(z3::context& ctx, ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid, ChangeView& change_view, std::hash_map<ULong, Vns>& change_map, std::hash_map<UShort, Vns>& regs_change_map);
+
 }; 
 
+
+static inline std::ostream& operator<<(std::ostream& out, State const& n) {
+    return out << (std::string)n;
+}
 
 template <class TC>
 class StatePrinter : public TC {
 public:
-    StatePrinter(const char* filename, Addr64 gse, Bool _need_record) :
-        TC(filename, gse, _need_record)
-    {
-    };
+    StatePrinter(const char* filename, Addr64 gse, Bool _need_record) : TC(filename, gse, _need_record){};
 
-    StatePrinter(StatePrinter* father_state, Addr64 gse) :
-        TC(father_state, gse)
-    {
-    };
+    StatePrinter(StatePrinter* father_state, Addr64 gse) : TC(father_state, gse) {};
 
 
     void spIRExpr(const IRExpr* e);
-
-    void spIRTemp(IRTemp tmp)
-    {
-        if (tmp == IRTemp_INVALID)
-            vex_printf("IRTemp_INVALID");
-        else
-        {
-            vex_printf("t%u: ", tmp);
-            std::cout << ir_temp[t_index][tmp];
-        }
-    }
-
+    void spIRTemp(IRTemp tmp);
     void spIRPutI(const IRPutI* puti);
     void spIRStmt(const IRStmt* s);
 
@@ -305,9 +298,16 @@ public:
     };
 
     void   traceFinish() {
-        if (getFlag(CF_traceState))
+        if (getFlag(CF_traceState)) {
+            if (status == Fork) {
+                vex_printf("Fork from: %p to:{ ", guest_start);
+                for (BranchChunk& bc : branchChunks) {
+                    vex_printf(" %p", bc.m_oep);
+                }
+                vex_printf(" };", guest_start);
+            }
             std::cout << "\n+++++++++++++++ Thread ID: " << GetCurrentThreadId() << "  address: " << std::hex << guest_start << "  OVER +++++++++++++++\n" << std::endl;
-
+        }
     }
     
     void   traceIRStmtBegin(IRStmt* s) {

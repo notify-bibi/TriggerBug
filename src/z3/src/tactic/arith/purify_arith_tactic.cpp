@@ -740,7 +740,7 @@ struct purify_arith_proc {
             scoped_ptr<expr_replacer> replacer = mk_default_expr_replacer(m());
             replacer->set_substitution(&subst);
             (*replacer)(new_body, new_body);
-            new_body = m().mk_exists(num_vars, sorts.c_ptr(), names.c_ptr(), new_body);
+            new_body = m().mk_exists(num_vars, sorts.c_ptr(), names.c_ptr(), new_body, q->get_weight());
             result = m().update_quantifier(q, new_body);
             if (m_produce_proofs) {
                 proof_ref_vector & cnstr_prs = r.cfg().m_new_cnstr_prs;
@@ -794,6 +794,15 @@ struct purify_arith_proc {
                 app * v = to_app(kv.m_value);
                 SASSERT(is_uninterp_const(v));
                 fmc->hide(v->get_decl());
+            }
+            if (!divs.empty()) {
+                expr_ref body(u().mk_real(0), m());
+                expr_ref v0(m().mk_var(0, u().mk_real()), m());
+                expr_ref v1(m().mk_var(1, u().mk_real()), m());
+                for (auto const& p : divs) {
+                    body = m().mk_ite(m().mk_and(m().mk_eq(v0, p.x), m().mk_eq(v1, p.y)), p.d, body);
+                }
+                fmc->add(u().mk_div0(), body);
             }
         }
         if (produce_models && !m_sin_cos.empty()) {

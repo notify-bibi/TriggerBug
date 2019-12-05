@@ -2,14 +2,10 @@
 #include "../State_class.hpp"
 #include "Z3_Target_Call.hpp"
 
-
 static inline ULong resultsr(Vns const & retv) {
     Z3_inc_ref(retv, retv);
-    ULong ret = (ULong)(Z3_ast)retv;
-    if (ret & (~((1ull << 48) - 1))) {
-        vex_printf("system error");
-    }
-    return (ret & ((1ull << 48) - 1)) | (0xfa1dull << 48);;
+    ret_is_ast[temp_index()] = True;
+    return (ULong)(Z3_ast)retv;
 }
 #define TRRET(retv) (retv.real()? (ULong)(retv):resultsr(retv))
 #define ISUNSIGNED_TYPE(type) ((type)-1 > 0)

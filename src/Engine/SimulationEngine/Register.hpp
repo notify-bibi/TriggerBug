@@ -12,13 +12,51 @@ Revision History:
 #ifndef REGISTER_HL_CD
 #define REGISTER_HL_CD
 #define REGISTER_LEN 1000
+#define USE_HASH_AST_MANAGER
 
 #include "../engine.hpp"
 #include "Variable.hpp"
 
 extern __m256i m32_fast[33];
 extern __m256i m32_mask_reverse[33];
-extern Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, Z3_context ctx);
+
+#ifdef USE_HASH_AST_MANAGER
+class AstManager {
+    friend class AstManagerX;
+    std::hash_map<Int, Z3_ast> m_mem;
+public:
+    class AstManagerX {
+        std::hash_map<Int, Z3_ast>& m_mem;
+        Int m_offset;
+    public:
+        inline AstManagerX(AstManager& am) :m_mem(am.m_mem), m_offset(0) {}
+        inline AstManagerX(AstManager& am, Int offset) : m_mem(am.m_mem), m_offset(offset) {}
+        inline AstManagerX(std::hash_map<Int, Z3_ast>& mem, Int offset) : m_mem(mem), m_offset(offset) {}
+        inline Z3_ast& operator[](Int idx) { return m_mem[m_offset + idx]; }
+        AstManagerX operator+(Int offset) { return AstManagerX(m_mem, m_offset + offset); }
+        AstManagerX operator-(Int offset) { return AstManagerX(m_mem, m_offset - offset); }
+    };
+    inline AstManager() {}
+    inline Z3_ast& operator[](Int idx) { return m_mem[idx]; }
+    AstManagerX operator+(Int offset) { return AstManagerX(*this, offset); }
+    AstManagerX operator-(Int offset) { return AstManagerX(*this, -offset); }
+};
+
+
+#endif
+
+#ifdef USE_HASH_AST_MANAGER
+    extern Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX& m_ast, Z3_context ctx);
+#else
+    extern Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, Z3_context ctx);
+#endif
+
+#ifdef USE_HASH_AST_MANAGER
+    extern Z3_ast Reg2Ast(Char nbytes, UChar * m_bytes, UChar * m_fastindex, AstManager::AstManagerX & m_ast, Z3_context ctx, Z3_context toctx);
+#else
+    extern Z3_ast Reg2Ast(Char nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_ast, Z3_context ctx, Z3_context toctx);
+#endif
+
 
 
 
@@ -101,6 +139,7 @@ else if((__nbytes)<=16){                                                     \
 //    }
 //};
 
+
 template<int maxlength>
 class Symbolic
 {
@@ -109,14 +148,18 @@ class Symbolic
 public:
     /* SETFAST macro Setfast overstepping the bounds is not thread-safe(heap), so +32 solves the hidden bug !*/
     __declspec(align(32)) UChar m_fastindex[maxlength + 32];
+#ifdef USE_HASH_AST_MANAGER
+    AstManager m_ast;
+#else
     __declspec(align(8)) Z3_ast m_ast[maxlength];
+#endif
     Z3_context m_ctx;
     inline Symbolic(Z3_context ctx) : m_ctx(ctx) {
         memset(m_fastindex, 0, sizeof(m_fastindex));
     }
     inline Symbolic(Z3_context ctx, Symbolic<maxlength> *father) : m_ctx(ctx) {
         memcpy(m_fastindex, father->m_fastindex, maxlength);
-        m_fastindex[maxlength] = 0;
+        memset(m_fastindex + maxlength, 0, 32);
         Int _pcur = maxlength - 1;
         DWORD N;
         for (; _pcur > 0; ) {
@@ -240,17 +283,6 @@ public:
 
 
 //Register<maxlength>
-
-
-
-
-inline Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar *m_fastindex, Z3_ast* m_ast, Z3_context ctx, Z3_context toctx) {
-    auto res = Reg2Ast(nbytes, m_bytes, m_fastindex, m_ast, ctx);
-    auto tast = Z3_translate(ctx, res, toctx);
-    Z3_inc_ref(toctx, tast);
-    Z3_dec_ref(ctx, res);
-    return tast;
-}
 
 
 #define GET_from_nbytes(nbytes, ... )    \
