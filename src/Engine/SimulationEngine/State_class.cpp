@@ -11,9 +11,6 @@ Revision History:
 --*/
 #include "State_class.hpp"
 
-
-#define vpanic(...) printf("%s line %d",__FILE__,__LINE__); vpanic(__VA_ARGS__);
-
 #include "Z3_Target_Call/Z3_Target_Call.hpp"
 #include "Z3_Target_Call/Guest_Helper.hpp"
 extern "C" {
@@ -27,6 +24,7 @@ extern "C" {
 #include "libvex_guest_ppc64.h"
 #include "libvex_guest_s390x.h"
 }
+
 thread_local State* g_state = nullptr;
 thread_local bool   ret_is_ast = false;
 thread_local Pap    pap;
@@ -515,7 +513,7 @@ inline void State::initVexEngine() {
 
 inline Vns State::getassert(z3::context &ctx) {
     if (solv.m_asserts.empty()) {
-        vpanic("impossible assertions num is zero");
+        VPANIC("impossible assertions num is zero");
     }
     auto it = solv.m_asserts.begin();
     auto end = solv.m_asserts.end();
@@ -779,7 +777,7 @@ inline Vns State::ILGop(IRLoadG *lg) {
     case ILGop_8Uto32:   { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I8  ).zext(8);    }
     case ILGop_8Sto32:   { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I8  ).sext(8);    }
     case ILGop_INVALID:
-    default: vpanic("ppIRLoadGOp");
+    default: VPANIC("ppIRLoadGOp");
     }
 }
 
@@ -822,7 +820,7 @@ inline Vns State::tIRExpr(IRExpr* e)
             case VexArchPPC32: VexGuestARCHState = new VexGuestPPC32State; break;
             case VexArchPPC64: VexGuestARCHState = new VexGuestPPC64State; break;
             case VexArchS390X: VexGuestARCHState = new VexGuestS390XState; break;
-            default:vpanic("not support");
+            default:VPANIC("not support");
             }
         }
         return Vns(m_ctx, VexGuestARCHState);
@@ -831,7 +829,7 @@ inline Vns State::tIRExpr(IRExpr* e)
     case Iex_Binder:
     default:
         vex_printf("tIRExpr error:  %d", e->tag);
-        vpanic("not support");
+        VPANIC("not support");
     }
 }
 
@@ -1054,7 +1052,7 @@ For_Begin:
                     default: {
                         ppIRSB(irsb);
                         vex_printf("addr: %p what ppIRStmt %d\n", guest_start, s->tag);
-                        vpanic("what ppIRStmt");
+                        VPANIC("what ppIRStmt");
                     }
                     }
 
@@ -1286,7 +1284,7 @@ inline void StatePrinter<TC>::spIRExpr(const IRExpr* e)
         vex_printf("GSPTR");
         break;
     default:
-        vpanic("ppIRExpr");
+        VPANIC("ppIRExpr");
     }
 }
 
@@ -1400,7 +1398,7 @@ void StatePrinter<TC>::spIRStmt(const IRStmt* s)
         vex_printf(" } ");
         break;
     default:
-        vpanic("ppIRStmt");
+        VPANIC("ppIRStmt");
     }
 }
 

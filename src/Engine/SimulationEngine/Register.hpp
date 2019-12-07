@@ -11,8 +11,6 @@ Revision History:
 --*/
 #ifndef REGISTER_HL_CD
 #define REGISTER_HL_CD
-#define REGISTER_LEN 1000
-#define USE_HASH_AST_MANAGER
 
 #include "../engine.hpp"
 #include "Variable.hpp"
@@ -60,13 +58,13 @@ public:
 
 
 
-#define SETFAST(fast_ptr,__nbytes)                                           \
-if((__nbytes)<=8){                                                           \
-    if((__nbytes)==8){                                                           \
+#define SETFAST(fast_ptr,__nbytes)                                            \
+if((__nbytes)<=8){                                                             \
+    if((__nbytes)==8){                                                          \
         SET8(fast_ptr, 0x0807060504030201);                                      \
-    }else{                                                                       \
-        __asm__(                                                                     \
-            "mov %[nbytes],%%cl;\n\t"                                                \
+    }else{                                                                        \
+        __asm__(                                                                   \
+            "mov %[nbytes],%%cl;\n\t"                                               \
             "shl $3,%%rcx;\n\t"                                                      \
             "mov %[fast],%%rax;\n\t"                                                 \
             "shr %%cl,%%rax;\n\t"                                                    \
@@ -166,10 +164,6 @@ public:
             if (_BitScanReverse64(&N, ((DWORD64*)(m_fastindex))[_pcur >> 3] & fastMaskBI1[_pcur % 8])) {
                 _pcur = ALIGN(_pcur, 8) + (N >> 3);
                 _pcur = _pcur - m_fastindex[_pcur] + 1;
-
-#if !defined(CLOSECNW)&&!defined(USECNWNOAST)
-                std::unique_lock<std::mutex> lock(father->m_ctx);
-#endif
                 m_ast[_pcur] = Z3_translate(father->m_ctx, father->m_ast[_pcur], m_ctx);
                 vassert(m_ast[_pcur] != NULL);
                 Z3_inc_ref(m_ctx, m_ast[_pcur]);
@@ -200,7 +194,7 @@ public:
 
 
 //Record
-
+//写入记录器，8字节记录为m_flag的一个bit
 template<int maxlength>
 class Record {
 public:
@@ -236,7 +230,7 @@ public:
                     ) << ((offset >> 3) % 8);
         }
     }
-
+    //写入遍历器
     class iterator
     {
     private:
@@ -329,7 +323,7 @@ public:
         record(_need_record ? new Record<maxlength>() : NULL),
         symbolic(NULL)
     { }
-
+    //翻译转换父register
     inline Register(Register<maxlength>& father_regs, TRcontext& ctx, Bool _need_record) :
         m_ctx(ctx),
         record(_need_record ? new Record<maxlength>() : NULL),
@@ -525,6 +519,7 @@ public:
     }
 
 
+ //simd数据不会使用扩展寄存器传递。使用地址传递速度快点。
 #define B16_Ist_Put(DataTy)                                                                                     \
 inline void Ist_Put(UInt offset, DataTy  data) {                                                                \
     if (symbolic) {                                                                                             \
@@ -539,8 +534,9 @@ inline void Ist_Put(UInt offset, DataTy  data) {                                
     if (record)  record->write<sizeof(DataTy)>(offset);                                                         \
 }
 
+//simd数据不会使用扩展寄存器传递。使用地址传递速度快点。
 #define B32_Ist_Put(DataTy)                                                                                     \
-inline void Ist_Put(UInt offset, DataTy  data) {                                                                \
+inline void Ist_Put(UInt offset, DataTy & data) {                                                                \
     if (symbolic) {                                                                                             \
         auto fastindex = m_fastindex + offset;                                                                  \
         if ((GET8(fastindex)) || (GET8(fastindex + 8)) || (GET8(fastindex + 16)) || (GET8(fastindex + 24)))     \
@@ -699,7 +695,7 @@ inline void Ist_Put(UInt offset, DataTy  data) {                                
         return Vns(m_ctx, ast_vector, nbytes << 3, no_inc{});
     }
 
-    //is slowly 
+    //is slowly 变长取值
     Vns Iex_Get(UInt offset, UInt nbytes, TRcontext& ctx) {
         auto fastindex = m_fastindex + offset;
         auto _nbytes = nbytes;
@@ -725,7 +721,7 @@ inline void Ist_Put(UInt offset, DataTy  data) {                                
         }
         return Vns(ctx, ast_vector, nbytes << 3, no_inc{});
     }
-
+    //将fastindex offset位置的ast清空（剪切&释放）
     void clear(UInt org_offset, Int LEN)
     {
         Char length = LEN;
@@ -825,6 +821,8 @@ private:
 #undef SETFAST
 #undef GET_from_nbytes
 #undef SET_from_nbytes
+#undef B32_Ist_Put
+#undef B16_Ist_Put
 #endif
 
 #undef m_fastindex

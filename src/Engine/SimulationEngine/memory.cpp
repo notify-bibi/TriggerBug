@@ -15,13 +15,13 @@ Revision History:
 #define UNDEFMEM
 #include "memory.hpp"
 #include "State_class.hpp"
-#define vpanic(...) printf("%s line %d",__FILE__,__LINE__); vpanic(__VA_ARGS__);
 
 unsigned int    global_user;
 std::mutex      global_user_mutex;
 
 using namespace z3;
 
+//a=b+c+d+e...+z -> b c d e
 void addressingMode::_offset2opAdd(std::vector<Vns> &ret, expr const& _e)
 {
     expr e = _e;
@@ -496,7 +496,7 @@ static inline void inc_used_ref(PAGE *pt) {
         __asm__ __volatile("xchgb %b0,%1":"=r"(xchgbv) : "m"(pt->unit_mutex), "0"(xchgbv) : "memory");
     }
     if (!pt->used_point) {
-        vpanic("error inc_used_ref ???");
+        VPANIC("error inc_used_ref ???");
     }
     pt->used_point++;
     pt->unit_mutex = true;
@@ -509,7 +509,7 @@ static inline int dec_used_ref(PAGE *pt) {
         __asm__ __volatile("xchgb %b0,%1":"=r"(xchgbv) : "m"(pt->unit_mutex), "0"(xchgbv) : "memory");
     }
     if (!pt->used_point) {
-        vpanic("error dec_used_ref ???");
+        VPANIC("error dec_used_ref ???");
     }
     if (--pt->used_point) {
         pt->unit_mutex = true;
@@ -849,7 +849,7 @@ MEM::~MEM() {
         case Ity_V128:return Iex_Load<Ity_V128>(address);
         case 256:
         case Ity_V256:return Iex_Load<Ity_V256>(address);
-        default:vpanic("2333333");
+        default:VPANIC("2333333");
         }
     }
 
@@ -871,7 +871,7 @@ MEM::~MEM() {
         case 256:
         case Ity_V256:return Iex_Load<Ity_V256>(address);
         default:
-            vpanic("2333333");
+            VPANIC("2333333");
         }
     }
 

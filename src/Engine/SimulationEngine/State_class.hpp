@@ -1,3 +1,14 @@
+/*++
+Copyright (c) 2019 Microsoft Corporation
+Module Name:
+    State_class.hpp:
+Abstract:
+    ·ûºÅ±äÁ¿
+Author:
+    WXC 2019-05-31.
+Revision History:
+--*/
+
 #ifndef State_class_defs
 #define State_class_defs
 

@@ -6,6 +6,8 @@ Abstract:
     Address mapping technique;
     Copy-on-Write;
     Fork technology;
+    符号地址解析
+    符号地址爆破
     符号地址存取;
 Author:
     WXC 2019-10-28
@@ -28,12 +30,15 @@ extern std::mutex global_user_mutex;
 #endif
 
 #define BIT_BLAST_MAX_BIT 14
-
+#define ANALYZER_TIMEOUT 0.4d
 
 #define LINETOSTR(A) #A
 #define CONCATSTR(A, B) " ACCESS MEM ERR UNMAPPED; " A " AT Line: " LINETOSTR(B)
+
+//客户机内存访问检查
 #define MEMACCESSASSERT(CODE, ADDRESS) if (!(CODE)) throw TRMem::MEMexception(CONCATSTR(__FILE__, __LINE__), ADDRESS);
 
+//检查是否将ir translate的block区代码修改了，避免某些vmp或者ctf的恶作剧
 #define CODEBLOCKISWRITECHECK(address){                                                  \
 ADDR delta = (address) - guest_start_of_block;                                           \
 if (delta > 0 && delta < pap.delta) {                                                    \
@@ -63,6 +68,7 @@ private:
         UInt nbit;
     };
 
+    //超集的解遍历算法
     class iterator
     {
         struct shift_mask {
@@ -197,6 +203,7 @@ public:
     }
 
 private:
+    // ast(symbolic address) = numreal(base) + symbolic(offset) 
     bool ast2baseAoffset() {
         //std::cout << saddr.simplify() << std::endl << std::endl;
         expr base = expr(m_ctx);
@@ -244,7 +251,7 @@ faild:
         vpanic("sorry .engine error.  report me and i will fix it\n");
     }
 
-
+    //分析offset 使分析器能够求解出超集
     bool offset_bit_blast() {
         z3::sort so = m_offset.get_sort();
         UInt size = so.bv_size();
@@ -359,6 +366,7 @@ private:
     );
 
     static sbit_struct _check_is_extract(expr const& e, UInt idx);
+    //a=b+c+d+e...+z -> b c d e
     static void _offset2opAdd(std::vector<Vns>& ret, expr const&e);
     static bool _check_add_no_overflow(expr const& e1, expr const& e2);
 };
@@ -633,13 +641,16 @@ public:
     MEM(State& so, TRcontext& ctx, Bool _need_record);
     MEM(State& so, MEM& father_mem, TRcontext& ctx, Bool _need_record);
     ~MEM();
-
+    //客户机的分配空间算法 类似cpu的硬件虚拟映射技术。这里我们使用软件虚拟映射
     ULong map(ULong address, ULong length);
+    //类似于linux的sys_fork.写时复制.速度快
     void copy(MEM& mem);
+    //释放物理页
     ULong unmap(ULong address, ULong length);
     Int getUser() { return user; }
+    //清空写入记录
     void clearRecord();
-
+    //把两个不连续的页放到Pap里，以支持valgrind的跨页翻译
     inline void set_double_page(ADDR address, Pap &addrlst) {
         addrlst.guest_addr = address;
         addrlst.Surplus = 0x1000 - (address & 0xfff);
@@ -647,13 +658,13 @@ public:
         MEMACCESSASSERT(P, address);
         addrlst.t_page_addr = (UChar*)P->unit->m_bytes + (address & 0xfff);
     }
-
+    
     inline UChar* get_next_page(ADDR address) {
         PAGE* P = getMemPage((ULong)(address + 0x1000));
         return P ? P->unit->m_bytes : nullptr;
     }
 
-
+    //虚拟映射一个虚拟地址
     inline PAGE** get_pointer_of_mem_page(ADDR address) {
         if (sizeof(address) == 4) {
             UShort PDPT_ind = (address >> 30 & 0x3);
@@ -1009,7 +1020,7 @@ public:
                 if (suspend_solve) {
                     QueryPerformanceCounter(&closePerformanceCount);
                     double delta_seconds = (double)(closePerformanceCount.QuadPart - beginPerformanceCount.QuadPart) / freq.QuadPart;
-                    if (delta_seconds > 0.01d) {
+                    if (delta_seconds > ANALYZER_TIMEOUT) {
                         break;
                     }
                     else {

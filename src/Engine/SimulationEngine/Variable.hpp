@@ -1,4 +1,14 @@
 #pragma once
+/*++
+Copyright (c) 2019 Microsoft Corporation
+Module Name:
+    Variable.hpp:
+Abstract:
+    ·ûºÅ±äÁ¿
+Author:
+    WXC 2019-05-31.
+Revision History:
+--*/
 #ifndef _Vns_H_
 #define _Vns_H_
 using namespace z3;

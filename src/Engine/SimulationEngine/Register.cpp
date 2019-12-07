@@ -12,7 +12,7 @@ Revision History:
 #define UNDEFREG
 #include "Register.hpp"
 
-//Register<maxlength>
+//取值函数。将多个ast和真值组合为一个ast
 #ifdef USE_HASH_AST_MANAGER
 Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX &m_ast, TRcontext& ctx) {
 #else

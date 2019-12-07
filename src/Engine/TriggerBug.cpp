@@ -21,8 +21,6 @@ Revision History:
 
 
 #include "engine.hpp"
-#define vpanic(...) printf("%s line %d",__FILE__,__LINE__); vpanic(__VA_ARGS__);
-
 #include "Register.hpp"
 #include "memory.hpp"
 #include "SimulationEngine/State_class.hpp"

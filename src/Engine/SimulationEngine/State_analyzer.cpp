@@ -1,7 +1,15 @@
+/*++
+Copyright (c) 2019 Microsoft Corporation
+Module Name:
+    State analyzer.class:
+Abstract:
+    API list;
+Author:
+    WXC 2019-05-31.
+Revision History:
+--*/
+
 #include "State_analyzer.hpp"
-
-
-
 bool check_has_loop(State *s, ADDR oep) {
     while (s) {
         if (s->get_state_ep() == oep) {
