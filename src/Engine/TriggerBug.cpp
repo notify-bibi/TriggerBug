@@ -86,12 +86,12 @@ public:
 class StateAMD64 : public State {
     ULong g_brk = ALIGN(0x000000000060A000, 32);
 public:
-    StateAMD64(const char* filename, Addr64 gse, Bool _need_record) :
+    StateAMD64(const char* filename, ADDR gse, Bool _need_record) :
         State(filename, gse, _need_record)
     {
     };
 
-    StateAMD64(StateAMD64* father_state, Addr64 gse) :
+    StateAMD64(StateAMD64* father_state, ADDR gse) :
         State(father_state, gse)
     {
     };
@@ -487,74 +487,16 @@ int main() {
         flag_max_count = 1;
         flag_count = 0;
 
-        StatePrinter<StateAMD64> state(INIFILENAME, (Addr64)0, True);
-        context& m_ctx = state;
-
-
-
-        /*  State::pool->enqueue(
-              [&c, &c1, &bv8] {
-                  for (int i = 0; i < 5000; i++) {
-                      expr(c1, Z3_translate(c, bv8, c1));
-                  };
-              }
-          );
-
-          State::pool->enqueue(
-              [&c, &c2, &bv8] {
-                  for (int i = 0; i < 10000; i++) {
-                      expr(c2, Z3_translate(c, bv8, c2));
-                  };
-              }
-          );
-
-
-          State::pool->wait();*/
-
-
-
-
-        z3::params m_params(m_ctx);
-        z3::tactic m_tactic(with(tactic(m_ctx, "simplify"), m_params) &
-            tactic(m_ctx, "sat") &
-            tactic(m_ctx, "solve-eqs") &
-            tactic(m_ctx, "bit-blast") &
-            tactic(m_ctx, "smt")
-            &
-            tactic(m_ctx, "factor") &
-            tactic(m_ctx, "bv1-blast") &
-            tactic(m_ctx, "qe-sat") &
-            tactic(m_ctx, "ctx-solver-simplify") &
-            tactic(m_ctx, "nla2bv") &
-            tactic(m_ctx, "symmetry-reduce")/**/
-        );
-        //state.setSolver(m_tactic);
-
-
+        StatePrinter<StateAMD64> state(INIFILENAME, 0, True);
         TRGL::VexGuestAMD64State reg(state);
         for (int i = 0; i < 38; i++) {
             auto flag = state.get_int_const(8);
             auto ao3 = flag >= 1 && flag <= 128;
             state.mem.Ist_Store(reg.guest_RDI + i, flag);
             state.add_assert(ao3, 1);
-            /*TESTCODE(
-                eval_size = eval_all(guard_result, state.solv, flag);
-            );*/
         }
         state.hook_add(0x000400E7A, pp);
-       // state.hook_add(0x00400ED3, success_ret33);
         state.hook_add(0x400CC0, success_ret3);
-        
-        {
-            StatePrinter<StateAMD64> state2(&state, 0x00400F7A);
-            auto df = state2.get_int_const(64);
-            state2.add_assert(df < 10, 1);
-            state2.mem.Ist_Store(0x000400E7A + df, state2.get_int_const(8));
-            state2.mem.Iex_Load<Ity_I64>(0x000400E7A);
-            State::pushState(state2);
-            State::pool->wait();
-        }
-
         StateAnalyzer gv(state);
         gv.Run();
     };

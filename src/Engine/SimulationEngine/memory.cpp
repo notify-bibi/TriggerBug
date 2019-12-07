@@ -520,9 +520,9 @@ static inline int dec_used_ref(PAGE *pt) {
     }
 }
 
-MEM::MEM(State& so, context* ctx, Bool _need_record) :
+MEM::MEM(State& so, TRcontext& ctx, Bool _need_record) :
     m_state(so),
-    m_ctx(*ctx),
+    m_ctx(ctx),
     need_record(_need_record)
 {
     this->CR3 = (PML4T * *)malloc(8);
@@ -531,9 +531,9 @@ MEM::MEM(State& so, context* ctx, Bool _need_record) :
     this->user = newDifUser();
 }
 
-MEM::MEM(State& so, MEM& father_mem, context* ctx, Bool _need_record) :
+MEM::MEM(State& so, MEM& father_mem, TRcontext& ctx, Bool _need_record) :
     m_state(so),
-    m_ctx(*ctx),
+    m_ctx(ctx),
     need_record(_need_record)
 {
     this->CR3 = (PML4T * *)malloc(8);

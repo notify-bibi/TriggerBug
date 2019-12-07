@@ -14,9 +14,9 @@ Revision History:
 
 //Register<maxlength>
 #ifdef USE_HASH_AST_MANAGER
-Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX &m_ast, Z3_context ctx) {
+Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX &m_ast, TRcontext& ctx) {
 #else
-Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, Z3_context ctx) {
+Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, TRcontext & ctx) {
 #endif
     ULong fast_index = GET8(m_fastindex);
     Z3_ast result;
@@ -151,12 +151,16 @@ Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, Z
 
 
 class Translate {
-    Z3_context m_toctx;
+    TRcontext& m_toctx;
     Z3_ast m_ast;
 public:
-    inline Translate(Z3_context ctx, Z3_context toctx, Z3_ast s):
-        m_toctx(toctx),m_ast(Z3_translate(ctx, s, toctx))
+    inline Translate(TRcontext& ctx, TRcontext& toctx, Z3_ast s):
+        m_toctx(toctx)
     {
+#if !defined(CLOSECNW)&&!defined(USECNWNOAST)
+        std::unique_lock<std::mutex> lock(ctx);
+#endif
+        m_ast = Z3_translate(ctx, s, toctx);
         Z3_inc_ref(toctx, m_ast);
     }
 
@@ -171,9 +175,9 @@ public:
 };
 
 #ifdef USE_HASH_AST_MANAGER
-Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX& m_ast, Z3_context ctx, Z3_context toctx) {
+Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX& m_ast, TRcontext& ctx, TRcontext& toctx) {
 #else
-Z3_ast Reg2Ast(Char nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_ast, Z3_context ctx, Z3_context toctx) {
+Z3_ast Reg2Ast(Char nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_ast, TRcontext & ctx, TRcontext & toctx) {
 #endif
     ULong fast_index = GET8(m_fastindex);
     Z3_ast result;

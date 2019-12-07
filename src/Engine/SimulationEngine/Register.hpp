@@ -46,13 +46,13 @@ public:
 #endif
 
 #ifdef USE_HASH_AST_MANAGER
-    extern Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX& m_ast, Z3_context ctx);
+    extern Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX& m_ast, TRcontext& ctx);
 #else
     extern Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, Z3_context ctx);
 #endif
 
 #ifdef USE_HASH_AST_MANAGER
-    extern Z3_ast Reg2Ast(Char nbytes, UChar * m_bytes, UChar * m_fastindex, AstManager::AstManagerX & m_ast, Z3_context ctx, Z3_context toctx);
+    extern Z3_ast Reg2Ast(Char nbytes, UChar * m_bytes, UChar * m_fastindex, AstManager::AstManagerX & m_ast, TRcontext& ctx, TRcontext& toctx);
 #else
     extern Z3_ast Reg2Ast(Char nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_ast, Z3_context ctx, Z3_context toctx);
 #endif
@@ -153,11 +153,11 @@ public:
 #else
     __declspec(align(8)) Z3_ast m_ast[maxlength];
 #endif
-    Z3_context m_ctx;
-    inline Symbolic(Z3_context ctx) : m_ctx(ctx) {
+    TRcontext &m_ctx;
+    inline Symbolic(TRcontext& ctx) : m_ctx(ctx) {
         memset(m_fastindex, 0, sizeof(m_fastindex));
     }
-    inline Symbolic(Z3_context ctx, Symbolic<maxlength> *father) : m_ctx(ctx) {
+    inline Symbolic(TRcontext& ctx, Symbolic<maxlength> *father) : m_ctx(ctx) {
         memcpy(m_fastindex, father->m_fastindex, maxlength);
         memset(m_fastindex + maxlength, 0, 32);
         Int _pcur = maxlength - 1;
@@ -166,7 +166,10 @@ public:
             if (_BitScanReverse64(&N, ((DWORD64*)(m_fastindex))[_pcur >> 3] & fastMaskBI1[_pcur % 8])) {
                 _pcur = ALIGN(_pcur, 8) + (N >> 3);
                 _pcur = _pcur - m_fastindex[_pcur] + 1;
-                std::unique_lock<std::mutex> lock(global_user_mutex);
+
+#if !defined(CLOSECNW)&&!defined(USECNWNOAST)
+                std::unique_lock<std::mutex> lock(father->m_ctx);
+#endif
                 m_ast[_pcur] = Z3_translate(father->m_ctx, father->m_ast[_pcur], m_ctx);
                 vassert(m_ast[_pcur] != NULL);
                 Z3_inc_ref(m_ctx, m_ast[_pcur]);
@@ -262,7 +265,7 @@ public:
         {
             unsigned long N;
             for (;;) {
-                if (_BitScanForward64(&N, m_flag[_pcur >> 6] & fastMaskReverse[_pcur % 64])) {
+                if (_BitScanForward64(&N, m_flag[_pcur >> 6] & fastMaskReverse(_pcur % 64))) {
                     _pcur = ALIGN(_pcur, 64) + N;
                     return;
                 }
@@ -316,18 +319,18 @@ public:
 template<int maxlength>
 class Register {
 public:
-    Z3_context m_ctx;
+    TRcontext& m_ctx;
     __declspec(align(32)) UChar m_bytes[maxlength];
     Symbolic<maxlength> *symbolic;
     Record<maxlength> *record;
 
-    inline Register(Z3_context ctx, Bool _need_record) :
+    inline Register(TRcontext& ctx, Bool _need_record) :
         m_ctx(ctx),
         record(_need_record ? new Record<maxlength>() : NULL),
         symbolic(NULL)
     { }
 
-    inline Register(Register<maxlength>& father_regs, Z3_context ctx, Bool _need_record) :
+    inline Register(Register<maxlength>& father_regs, TRcontext& ctx, Bool _need_record) :
         m_ctx(ctx),
         record(_need_record ? new Record<maxlength>() : NULL),
         symbolic(father_regs.symbolic ? new Symbolic<maxlength>(m_ctx, father_regs.symbolic) : NULL)
@@ -428,7 +431,7 @@ public:
 
     // <IRType> or <nbit>
     template<IRType ty>
-    inline Vns Iex_Get(UInt offset, Z3_context ctx) {
+    inline Vns Iex_Get(UInt offset, TRcontext& ctx) {
         switch (ty) {
 #define lazydef(vectype,nbit,nbytes,compare)                                                                            \
     case nbit:                                                                                                          \
@@ -488,7 +491,7 @@ public:
     }
 
     //ty = (IRType)nbits or IRType
-    inline Vns Iex_Get(UInt offset, IRType ty, Z3_context ctx) {
+    inline Vns Iex_Get(UInt offset, IRType ty, TRcontext& ctx) {
         switch (ty) {
 #define lazydef(vectype,nbit)                                   \
     case nbit:                                                  \
@@ -697,7 +700,7 @@ inline void Ist_Put(UInt offset, DataTy  data) {                                
     }
 
     //is slowly 
-    Vns Iex_Get(UInt offset, UInt nbytes, Z3_context ctx) {
+    Vns Iex_Get(UInt offset, UInt nbytes, TRcontext& ctx) {
         auto fastindex = m_fastindex + offset;
         auto _nbytes = nbytes;
         while (_nbytes) {

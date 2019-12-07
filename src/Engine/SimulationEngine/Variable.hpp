@@ -613,7 +613,7 @@ public:
         auto m32 = GET32(&this->pack);
         if ((this->pack._u8[(bitn - 1) >> 3] >> ((bitn-1) & 7)) & 1) {
             if (bitn & 7) {
-                m32.m256i_i8[(bitn - 1) >> 3] |= fastMaskReverse[(bitn & 7)];
+                m32.m256i_i8[(bitn - 1) >> 3] |= fastMaskReverse((bitn & 7));
             }
             memset(&m32.m256i_i8[((bitn - 1) >> 3) + 1], -1ul, i >> 3);
         }

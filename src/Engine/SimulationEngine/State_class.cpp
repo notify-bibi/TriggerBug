@@ -66,14 +66,6 @@ typedef Vns (*Z3_Function1)(Vns &);
 
 
 
-  UChar fastalignD1[257];
-  UChar fastalign[257];
-  ULong fastMask[65];
-  ULong fastMaskI1[65];
-  ULong fastMaskB[9];
-  ULong fastMaskBI1[9];
-  ULong fastMaskReverse[65];
-  ULong fastMaskReverseI1[65];
 __m256i m32_fast[33];
 __m256i m32_mask_reverse[33];
 
@@ -100,104 +92,29 @@ std::hash_map<ADDR/*static table base*/, TRtype::TableIdx_CB>   State::TableIdxD
 ThreadPool*                                                     State::pool;
 
 __attribute__((noreturn))
-void failure_exit() {
+static void failure_exit() {
     QueryPerformanceCounter(&closePerformanceCount_global);
     double delta_seconds = (double)(closePerformanceCount_global.QuadPart - beginPerformanceCount_global.QuadPart) / freq_global.QuadPart;
     printf("failure_exit  %s line:%d spend %f \n", __FILE__, __LINE__, delta_seconds);
     throw (z3::exception("failure_exit exception  "));
 }
 
-void _vex_log_bytes(const HChar* bytes, SizeT nbytes) {
+static void _vex_log_bytes(const HChar* bytes, SizeT nbytes) {
     std::cout << bytes;
 }
 
 
-void vex_hwcaps_vai(VexArch arch, VexArchInfo* vai) {
-    switch (arch) {
-    case VexArchX86:
-        vai->hwcaps = VEX_HWCAPS_X86_MMXEXT |
-            VEX_HWCAPS_X86_SSE1 |
-            VEX_HWCAPS_X86_SSE2 |
-            VEX_HWCAPS_X86_SSE3 |
-            VEX_HWCAPS_X86_LZCNT;
-        break;
-    case VexArchAMD64:
-        vai->hwcaps =
-            VEX_HWCAPS_AMD64_SSE3 |
-            VEX_HWCAPS_AMD64_SSSE3 |
-            VEX_HWCAPS_AMD64_CX16 |
-            VEX_HWCAPS_AMD64_LZCNT |
-            VEX_HWCAPS_AMD64_AVX |
-            VEX_HWCAPS_AMD64_RDTSCP |
-            VEX_HWCAPS_AMD64_BMI |
-            VEX_HWCAPS_AMD64_AVX2;
-        break;
-    case VexArchARM:
-        vai->hwcaps = VEX_ARM_ARCHLEVEL(8) |
-            VEX_HWCAPS_ARM_NEON |
-            VEX_HWCAPS_ARM_VFP3;
-        break;
-    case VexArchARM64:
-        vai->hwcaps = 0;
-        vai->arm64_dMinLine_lg2_szB = 6;
-        vai->arm64_iMinLine_lg2_szB = 6;
-        break;
-    case VexArchPPC32:
-        vai->hwcaps = VEX_HWCAPS_PPC32_F |
-            VEX_HWCAPS_PPC32_V |
-            VEX_HWCAPS_PPC32_FX |
-            VEX_HWCAPS_PPC32_GX |
-            VEX_HWCAPS_PPC32_VX |
-            VEX_HWCAPS_PPC32_DFP |
-            VEX_HWCAPS_PPC32_ISA2_07;
-        vai->ppc_icache_line_szB = 32;
-        break;
-    case VexArchPPC64:
-        vai->hwcaps = VEX_HWCAPS_PPC64_V |
-            VEX_HWCAPS_PPC64_FX |
-            VEX_HWCAPS_PPC64_GX |
-            VEX_HWCAPS_PPC64_VX |
-            VEX_HWCAPS_PPC64_DFP |
-            VEX_HWCAPS_PPC64_ISA2_07;
-        vai->ppc_icache_line_szB = 64;
-        break;
-    case VexArchS390X:
-        vai->hwcaps = 0;
-        break;
-    case VexArchMIPS32:
-    case VexArchMIPS64:
-        vai->hwcaps = VEX_PRID_COMP_CAVIUM;
-        break;
-    default:
-        std::cout << "Invalid arch in vex_prepare_vai.\n" << std::endl;
-        break;
-    }
-}
-void vex_prepare_vbi(VexArch arch, VexAbiInfo* vbi) {
-    // only setting the guest_stack_redzone_size for now
-    // this attribute is only specified by the X86, AMD64 and PPC64 ABIs
-
-    switch (arch) {
-    case VexArchX86:
-        vbi->guest_stack_redzone_size = 0;
-        break;
-    case VexArchAMD64:
-        vbi->guest_stack_redzone_size = 128;
-        break;
-    case VexArchPPC64:
-        vbi->guest_stack_redzone_size = 288;
-        break;
-    default:
-        break;
-    }
+static unsigned char* _n_page_mem(void* pap) {
+    return ((State*)(((Pap*)(pap))->state))->mem.get_next_page(((Pap*)(pap))->guest_addr);
 }
 
-UInt needs_self_check(void* callback_opaque, VexRegisterUpdates* pxControl, const VexGuestExtents* guest_extents) {
+
+static UInt needs_self_check(void* callback_opaque, VexRegisterUpdates* pxControl, const VexGuestExtents* guest_extents) {
     //std::cout << "needs_self_check\n" << std::endl;
     return 0;
 }
 
-void* dispatch(void) {
+static void* dispatch(void) {
     std::cout << "dispatch\n" << std::endl;
     return NULL;
 }
@@ -227,7 +144,6 @@ std::string replace(const char* pszSrc, const char* pszOld, const char* pszNew)
     return strContent;
 }
 
-extern void Func_Map_Init();
 void IR_init(VexControl& vc) {
     QueryPerformanceFrequency(&freq_global);
     QueryPerformanceCounter(&beginPerformanceCount_global);
@@ -235,14 +151,14 @@ void IR_init(VexControl& vc) {
         Func_Map_Init();
         LibVEX_Init(&failure_exit, &_vex_log_bytes, 0/*debuglevel*/, &vc);
 
-        for (int i = 0; i < 257; i++) fastalignD1[i] = (((((i)-1) & -8) + 8) >> 3) - 1;
-        for (int i = 0; i < 257; i++) fastalign[i] = (((((i)-1) & -8) + 8) >> 3);
-        for (int i = 0; i <= 64; i++) fastMask[i] = (1ull << i) - 1; fastMask[64] = -1ULL;
-        for (int i = 0; i <= 64; i++) fastMaskI1[i] = (1ull << (i + 1)) - 1; fastMaskI1[63] = -1ULL; fastMaskI1[64] = -1ULL;
-        for (int i = 0; i <= 7; i++) fastMaskB[i] = (1ull << (i << 3)) - 1; fastMaskB[8] = -1ULL;
-        for (int i = 0; i <= 7; i++) fastMaskBI1[i] = (1ull << ((i + 1) << 3)) - 1; fastMaskBI1[7] = -1ULL;
-        for (int i = 0; i <= 64; i++) fastMaskReverse[i] = ~fastMask[i];
-        for (int i = 0; i <= 64; i++) fastMaskReverseI1[i] = ~fastMaskI1[i];
+        //for (int i = 0; i < 257; i++) fastalignD1[i] = (((((i)-1) & -8) + 8) >> 3) - 1;
+        //for (int i = 0; i < 257; i++) fastalign[i] = (((((i)-1) & -8) + 8) >> 3);
+        //for (int i = 0; i <= 64; i++) fastMask[i] = (1ull << i) - 1; fastMask[64] = -1ULL;
+        //for (int i = 0; i <= 64; i++) fastMaskI1[i] = (1ull << (i + 1)) - 1; fastMaskI1[63] = -1ULL; fastMaskI1[64] = -1ULL;
+        //for (int i = 0; i <= 7; i++) fastMaskB[i] = (1ull << (i << 3)) - 1; fastMaskB[8] = -1ULL;
+        //for (int i = 0; i <= 7; i++) fastMaskBI1[i] = (1ull << ((i + 1) << 3)) - 1; fastMaskBI1[7] = -1ULL;
+        //for (int i = 0; i <= 64; i++) fastMaskReverse[i] = ~fastMask[i];
+        //for (int i = 0; i <= 64; i++) fastMaskReverseI1[i] = ~fastMaskI1[i];
 
         __m256i m32 = _mm256_setr_epi64x(0x0807060504030201, 0x100f0e0d0c0b0a09, 0x1817161514131211, 0x201f1e1d1c1b1a19);
         for (int i = 0; i <= 32; i++) {
@@ -302,14 +218,27 @@ int eval_all(std::vector<Vns>& result, solver& solv, Z3_ast nia) {
     }
 }
 
-static unsigned char* _n_page_mem(void* pap) {
-    return ((State*)(((Pap*)(pap))->state))->mem.get_next_page(((Pap*)(pap))->guest_addr);
-}
 
+//DES等加密算法需要配置tactic策略才能求解出答案。
+//z3::params m_params(m_ctx);
+//z3::tactic m_tactic(with(tactic(m_ctx, "simplify"), m_params) &
+//    tactic(m_ctx, "sat") &
+//    tactic(m_ctx, "solve-eqs") &
+//    tactic(m_ctx, "bit-blast") &
+//    tactic(m_ctx, "smt")
+//    &
+//    tactic(m_ctx, "factor") &
+//    tactic(m_ctx, "bv1-blast") &
+//    tactic(m_ctx, "qe-sat") &
+//    tactic(m_ctx, "ctx-solver-simplify") &
+//    tactic(m_ctx, "nla2bv") &
+//    tactic(m_ctx, "symmetry-reduce")/**/
+//);
+//state.setSolver(m_tactic);
 State::State(const char* filename, ADDR gse, Bool _need_record) :
     Vex_Info(filename),
     m_ctx(),
-    mem(*this, &m_ctx,need_record),
+    mem(*this, m_ctx,need_record),
     regs(m_ctx, need_record), 
     solv(m_ctx),
     need_record(_need_record),
@@ -325,9 +254,7 @@ State::State(const char* filename, ADDR gse, Bool _need_record) :
         delete pool;
     pool = new ThreadPool(MaxThreadsNum);
 
-    asserts.resize(5);
-    branch.reserve(10);
-
+    branch.reserve(5);
     initVexEngine();
     VexControl vc;
     LibVEX_default_VexControl(&vc);
@@ -364,7 +291,7 @@ State::State(const char* filename, ADDR gse, Bool _need_record) :
 State::State(State *father_state, ADDR gse) :
     Vex_Info(*father_state),
     m_ctx(),
-    mem(*this, father_state->mem, &m_ctx, father_state->need_record),
+    mem(*this, father_state->mem, m_ctx, father_state->need_record),
     guest_start_ep(gse),
     guest_start(guest_start_ep), 
     solv(m_ctx, father_state->solv,  z3::solver::translate{}),
@@ -452,6 +379,94 @@ bool State::get_hook(Hook_struct& hs, ADDR addr)
     return true;
 }
 
+
+
+
+
+static void vex_hwcaps_vai(VexArch arch, VexArchInfo* vai) {
+    switch (arch) {
+    case VexArchX86:
+        vai->hwcaps = VEX_HWCAPS_X86_MMXEXT |
+            VEX_HWCAPS_X86_SSE1 |
+            VEX_HWCAPS_X86_SSE2 |
+            VEX_HWCAPS_X86_SSE3 |
+            VEX_HWCAPS_X86_LZCNT;
+        break;
+    case VexArchAMD64:
+        vai->hwcaps =
+            VEX_HWCAPS_AMD64_SSE3 |
+            VEX_HWCAPS_AMD64_SSSE3 |
+            VEX_HWCAPS_AMD64_CX16 |
+            VEX_HWCAPS_AMD64_LZCNT |
+            VEX_HWCAPS_AMD64_AVX |
+            VEX_HWCAPS_AMD64_RDTSCP |
+            VEX_HWCAPS_AMD64_BMI |
+            VEX_HWCAPS_AMD64_AVX2;
+        break;
+    case VexArchARM:
+        vai->hwcaps = VEX_ARM_ARCHLEVEL(8) |
+            VEX_HWCAPS_ARM_NEON |
+            VEX_HWCAPS_ARM_VFP3;
+        break;
+    case VexArchARM64:
+        vai->hwcaps = 0;
+        vai->arm64_dMinLine_lg2_szB = 6;
+        vai->arm64_iMinLine_lg2_szB = 6;
+        break;
+    case VexArchPPC32:
+        vai->hwcaps = VEX_HWCAPS_PPC32_F |
+            VEX_HWCAPS_PPC32_V |
+            VEX_HWCAPS_PPC32_FX |
+            VEX_HWCAPS_PPC32_GX |
+            VEX_HWCAPS_PPC32_VX |
+            VEX_HWCAPS_PPC32_DFP |
+            VEX_HWCAPS_PPC32_ISA2_07;
+        vai->ppc_icache_line_szB = 32;
+        break;
+    case VexArchPPC64:
+        vai->hwcaps = VEX_HWCAPS_PPC64_V |
+            VEX_HWCAPS_PPC64_FX |
+            VEX_HWCAPS_PPC64_GX |
+            VEX_HWCAPS_PPC64_VX |
+            VEX_HWCAPS_PPC64_DFP |
+            VEX_HWCAPS_PPC64_ISA2_07;
+        vai->ppc_icache_line_szB = 64;
+        break;
+    case VexArchS390X:
+        vai->hwcaps = 0;
+        break;
+    case VexArchMIPS32:
+    case VexArchMIPS64:
+        vai->hwcaps = VEX_PRID_COMP_CAVIUM;
+        break;
+    default:
+        std::cout << "Invalid arch in vex_prepare_vai.\n" << std::endl;
+        break;
+    }
+}
+
+static void vex_prepare_vbi(VexArch arch, VexAbiInfo* vbi) {
+    // only setting the guest_stack_redzone_size for now
+    // this attribute is only specified by the X86, AMD64 and PPC64 ABIs
+
+    switch (arch) {
+    case VexArchX86:
+        vbi->guest_stack_redzone_size = 0;
+        break;
+    case VexArchAMD64:
+        vbi->guest_stack_redzone_size = 128;
+        break;
+    case VexArchPPC64:
+        vbi->guest_stack_redzone_size = 288;
+        break;
+    default:
+        break;
+    }
+}
+
+
+
+
 inline void State::initVexEngine() {
     VexArchInfo vai_guest;
     VexArchInfo vai_host;
@@ -499,18 +514,18 @@ inline void State::initVexEngine() {
 }
 
 inline Vns State::getassert(z3::context &ctx) {
-    if (asserts.empty()) {
+    if (solv.m_asserts.empty()) {
         vpanic("impossible assertions num is zero");
     }
-    auto it = asserts.begin();
-    auto end = asserts.end();
-    Z3_ast* args = (Z3_ast*)malloc(sizeof(Z3_ast) * asserts.size());
+    auto it = solv.m_asserts.begin();
+    auto end = solv.m_asserts.end();
+    Z3_ast* args = (Z3_ast*)malloc(sizeof(Z3_ast) * solv.m_asserts.size());
     UInt i = 0;
     while (it != end) {
         args[i++] = it->operator Z3_ast();
         it++;
     }
-    Vns re = Vns(m_ctx, Z3_mk_and(m_ctx, asserts.size(), args), 1).translate(ctx);
+    Vns re = Vns(m_ctx, Z3_mk_and(m_ctx, solv.m_asserts.size(), args), 1).translate(ctx);
     free(args);
     return re;
 }
@@ -609,30 +624,38 @@ inline IRSB* State::BB2IR() {
 
 void State::add_assert(Vns & assert,Bool ToF)
 {
-    assert = assert.simplify();
+    assert = assert;
     if(assert.is_bool()){
         if (ToF) {
             Z3_solver_assert(m_ctx, solv, assert);
-            asserts.push_back(assert);
+            if (!solv.is_snapshot()) {
+                solv.m_asserts.push_back(assert);
+            }
         }
         else {
             auto not = !  assert;
             Z3_solver_assert(m_ctx, solv, not);
-            asserts.push_back(not);
+            if (!solv.is_snapshot()) {
+                solv.m_asserts.push_back(not);
+            }
         }
     }
     else {
         auto ass = assert == Vns(m_ctx, (ULong)ToF, assert.bitn);
         Z3_solver_assert(m_ctx, solv, ass);
-        asserts.push_back(ass);
+        if (!solv.is_snapshot()) {
+            solv.m_asserts.push_back(ass);
+        }
     }
 }
 
 inline void State::add_assert_eq(Vns & eqA, Vns & eqB)
 {
-    Vns ass = (eqA == eqB).simplify();
+    Vns ass = (eqA == eqB);
     Z3_solver_assert(m_ctx, solv, ass);
-    asserts.push_back(ass);
+    if (!solv.is_snapshot()) {
+        solv.m_asserts.push_back(ass);
+    }
 }
 
 
@@ -1383,7 +1406,7 @@ void StatePrinter<TC>::spIRStmt(const IRStmt* s)
 
 
 
-inline Bool State::treeCompress(z3::context& ctx, ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid, ChangeView& change_view, std::hash_map<ULong, Vns>& change_map, std::hash_map<UShort, Vns>& regs_change_map) {
+inline Bool State::treeCompress(TRcontext& ctx, ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid, ChangeView& change_view, std::hash_map<ULong, Vns>& change_map, std::hash_map<UShort, Vns>& regs_change_map) {
     ChangeView _change_view = { this, &change_view };
     if (branch.empty()) {
         for (auto av : avoid) {

@@ -11,9 +11,10 @@
 
 #define ir_temp ((Vns*)ir_temp_trunk)
 extern void* funcDict(void*);
+extern void Func_Map_Init();
 extern int eval_all(std::vector<Vns>& result, solver& solv, Z3_ast nia);
 extern std::string replace(const char* pszSrc, const char* pszOld, const char* pszNew);
-extern unsigned char* _n_page_mem(void*);
+extern "C" ULong x86g_use_seg_selector(HWord ldt, HWord gdt, UInt seg_selector, UInt virtual_addr);
 extern __m256i  m32_fast[33];
 extern __m256i  m32_mask_reverse[33];
 
@@ -67,14 +68,6 @@ public:
     inline TRControlFlags gtrtraceflags() { return trtraceflags; }
 };
 
-
-extern Bool chase_into_ok(void* value, Addr addr);
-extern void vex_hwcaps_vai(VexArch arch, VexArchInfo* vai);
-extern void vex_prepare_vbi(VexArch arch, VexAbiInfo* vbi);
-extern void* dispatch(void);
-extern UInt needs_self_check(void* callback_opaque, VexRegisterUpdates* pxControl, const VexGuestExtents* guest_extents);
-extern void IR_init(VexControl &vc);
-extern "C" ULong x86g_use_seg_selector(HWord ldt, HWord gdt, UInt seg_selector, UInt virtual_addr);
 
 class Vex_Info :public StatetTraceFlag {
     friend GraphView;
@@ -143,6 +136,20 @@ typedef struct ChangeView {
 }ChangeView;
 
 
+class TRsolver :public z3::solver{
+    friend class State;
+    bool                    m_solver_snapshot = false;
+    std::vector<Vns>        m_asserts;
+    public:
+        TRsolver(context& c) :z3::solver(c) { m_asserts.reserve(2); }
+        TRsolver(context& c, solver const& src, translate x) : z3::solver(c, src, x) { m_asserts.reserve(2); }
+        void push() { m_solver_snapshot = true; z3::solver::push(); }
+        void pop() { z3::solver::pop(); m_solver_snapshot = false; }
+        bool is_snapshot() { return m_solver_snapshot; }
+};
+
+
+class StateAnalyzer;
 class State:public Vex_Info {
     friend MEM;
     friend GraphView;
@@ -168,9 +175,9 @@ public:
     static ThreadPool*      pool;
     State*                  m_father_state;
     State_Tag               status;
-    z3::context             m_ctx;
-    z3::solver              solv;
-    std::vector<Vns>        asserts;
+    TRcontext               m_ctx;
+    TRsolver                solv;
+public:
     //客户机寄存器
 	Register<REGISTER_LEN>  regs;
     //客户机内存 （多线程设置相同user，不同state设置不同user）
@@ -183,7 +190,7 @@ public:
 	State(State *father_state, ADDR gse) ;
     void setSolver(z3::tactic const& tactic) { 
         solv.reset();
-        solv = tactic.mk_solver(); 
+        (solver)solv = tactic.mk_solver(); 
     };
     void read_mem_dump(const char*);
 
@@ -272,7 +279,7 @@ public:
     virtual inline State* ForkState(ADDR ges) { return nullptr; }
 
 private:
-    inline Bool treeCompress(z3::context& ctx, ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid, ChangeView& change_view, std::hash_map<ULong, Vns>& change_map, std::hash_map<UShort, Vns>& regs_change_map);
+    inline Bool treeCompress(TRcontext& ctx, ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid, ChangeView& change_view, std::hash_map<ULong, Vns>& change_map, std::hash_map<UShort, Vns>& regs_change_map);
 
 }; 
 
@@ -284,9 +291,9 @@ static inline std::ostream& operator<<(std::ostream& out, State const& n) {
 template <class TC>
 class StatePrinter : public TC {
 public:
-    StatePrinter(const char* filename, Addr64 gse, Bool _need_record) : TC(filename, gse, _need_record){};
+    StatePrinter(const char* filename, ADDR gse, Bool _need_record) : TC(filename, gse, _need_record){};
 
-    StatePrinter(StatePrinter* father_state, Addr64 gse) : TC(father_state, gse) {};
+    StatePrinter(StatePrinter* father_state, ADDR gse) : TC(father_state, gse) {};
 
 
     void spIRExpr(const IRExpr* e);

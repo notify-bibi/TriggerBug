@@ -53,5 +53,13 @@
 #include "Engine/Thread_Pool/ThreadPool_CD.hpp"
 
 
+class TRcontext :public z3::context {
+    friend class State;
+    std::mutex translate_mutex;
+public:
+    inline TRcontext() :z3::context() { }
+    inline std::mutex& getLock() { return translate_mutex; };
+    inline operator std::mutex& () { return translate_mutex; };
+};
 
 #endif _TR_head

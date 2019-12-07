@@ -22,9 +22,6 @@ using namespace z3;
 extern UInt global_user;
 extern std::mutex global_user_mutex;
 
-//#define CLOSECNW
-#define USECNWNOAST
-
 #ifdef _DEBUG
 #define NEED_VERIFY 
 #define TRACE_AM
@@ -108,7 +105,7 @@ private:
                 nb = 1;
 
                 for (; ; ) {
-                    if (_BitScanForward64(&N, m_sym_mask & fastMaskReverseI1[_pcur])) {
+                    if (_BitScanForward64(&N, m_sym_mask & fastMaskReverseI1(_pcur))) {
                         if (N = _pcur + 1) {
                             m_sym_ml[m_sym_ml_n - 1].mask |= ((ADDR)1) << N;
                         }
@@ -621,9 +618,9 @@ public:
     };
 private:
     std::hash_map<ADDR, Register<0x1000>*> mem_change_map;
-    Bool need_record;
-    Int user;
-    PML4T** CR3;
+    Bool            need_record;
+    Int             user;
+    PML4T**         CR3;
 
 private:
     void CheckSelf(PAGE*& P, ADDR address);
@@ -631,10 +628,10 @@ private:
     void write_bytes(ULong address, ULong length, UChar* data);
 
 public:
-    Z3_context m_ctx;
+    TRcontext& m_ctx;
     State& m_state;
-    MEM(State& so, context* ctx, Bool _need_record);
-    MEM(State& so, MEM& father_mem, context* ctx, Bool _need_record);
+    MEM(State& so, TRcontext& ctx, Bool _need_record);
+    MEM(State& so, MEM& father_mem, TRcontext& ctx, Bool _need_record);
     ~MEM();
 
     ULong map(ULong address, ULong length);
@@ -698,42 +695,8 @@ public:
 
 
     inline PAGE* getMemPage(ADDR address) {
-        if (sizeof(address) == 4) {
-            UShort PDPT_ind = (address >> 30 & 0x3);
-            UShort PDT_ind = (address >> 21 & 0x1ff);
-            UShort PT_ind = (address >> 12 & 0x1ff);
-            if (!(*CR3)->size) {
-                PDPT* pdpt = (*CR3)->pt[0];
-                if (pdpt && PDPT_ind < pdpt->size) {
-                    PDT* pdt = pdpt->pt[PDPT_ind];
-                    if (pdt && PDT_ind < pdt->size) {
-                        PT* pt = pdt->pt[PDT_ind];
-                        if (pt && PT_ind < pt->size) {
-                            return pt->pt[PT_ind];
-                        }
-                    }
-                }
-            }
-        }
-        else {
-            UShort PML4T_ind = (address >> 39 & 0x1ff);
-            UShort PDPT_ind = (address >> 30 & 0x1ff);
-            UShort PDT_ind = (address >> 21 & 0x1ff);
-            UShort PT_ind = (address >> 12 & 0x1ff);
-            if (PML4T_ind < (*CR3)->size) {
-                PDPT* pdpt = (*CR3)->pt[PML4T_ind];
-                if (pdpt && PDPT_ind < pdpt->size) {
-                    PDT* pdt = pdpt->pt[PDPT_ind];
-                    if (pdt && PDT_ind < pdt->size) {
-                        PT* pt = pdt->pt[PDT_ind];
-                        if (pt && PT_ind < pt->size) {
-                            return pt->pt[PT_ind];
-                        }
-                    }
-                }
-            }
-        }
-        return nullptr;
+        PAGE** r = get_pointer_of_mem_page(address);
+        return (r) ? r[0] : nullptr;
     }
 
 
