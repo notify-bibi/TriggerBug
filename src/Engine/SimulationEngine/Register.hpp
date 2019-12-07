@@ -166,6 +166,7 @@ public:
             if (_BitScanReverse64(&N, ((DWORD64*)(m_fastindex))[_pcur >> 3] & fastMaskBI1[_pcur % 8])) {
                 _pcur = ALIGN(_pcur, 8) + (N >> 3);
                 _pcur = _pcur - m_fastindex[_pcur] + 1;
+                std::unique_lock<std::mutex> lock(global_user_mutex);
                 m_ast[_pcur] = Z3_translate(father->m_ctx, father->m_ast[_pcur], m_ctx);
                 vassert(m_ast[_pcur] != NULL);
                 Z3_inc_ref(m_ctx, m_ast[_pcur]);
@@ -202,7 +203,13 @@ class Record {
 public:
     UChar m_flag[(maxlength >> 6) + 1];
     Record() {
-        memset(m_flag, 0, sizeof(m_flag)); m_flag[maxlength >> 6] = 0x1;
+        memset(m_flag, 0, sizeof(m_flag));
+        m_flag[maxlength >> 6] = 0x1;
+    };
+
+    void clearRecord() {
+        memset(m_flag, 0, sizeof(m_flag));
+        m_flag[maxlength >> 6] = 0x1;
     };
 
     template<int length>
@@ -332,6 +339,8 @@ public:
         if (symbolic) delete symbolic;
         if (record) delete record;
     };
+
+    void clearRecord() { if (record) record->clearRecord(); };
 
 #define m_fastindex symbolic->m_fastindex
 #define m_ast symbolic->m_ast

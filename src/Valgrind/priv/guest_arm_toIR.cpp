@@ -103,6 +103,7 @@
 
 /* Translates ARM(v5) code to IR. */
 
+extern "C" {
 #include "libvex_basictypes.h"
 #include "libvex_ir.h"
 #include "libvex.h"
@@ -112,7 +113,10 @@
 #include "main_globals.h"
 #include "guest_generic_bb_to_IR.h"
 #include "guest_arm_defs.h"
+}
 
+#undef NULL
+#define NULL nullptr
 
 /*------------------------------------------------------------*/
 /*--- Globals                                              ---*/
@@ -126,19 +130,19 @@
 /* CONST: what is the host's endianness?  This has to do with float vs
    double register accesses on VFP, but it's complex and not properly
    thought out. */
-static VexEndness host_endness;
+thread_local static VexEndness host_endness;
 
 /* CONST: The guest address for the instruction currently being
    translated.  This is the real, "decoded" address (not subject
    to the CPSR.T kludge). */
-static Addr32 guest_R15_curr_instr_notENC;
+thread_local static Addr32 guest_R15_curr_instr_notENC;
 
 /* CONST, FOR ASSERTIONS ONLY.  Indicates whether currently processed
    insn is Thumb (True) or ARM (False). */
-static Bool __curr_is_Thumb;
+thread_local static Bool __curr_is_Thumb;
 
 /* MOD: The IRSB* into which we're generating code. */
-static IRSB* irsb[MAX_THREADS];
+thread_local static IRSB* irsb;
 
 /* These are to do with handling writes to r15.  They are initially
    set at the start of disInstr_ARM_WRK to indicate no update,
@@ -151,22 +155,18 @@ static IRSB* irsb[MAX_THREADS];
 
 /* MOD.  Initially False; set to True iff abovementioned handling is
    required. */
-static Bool r15written[MAX_THREADS];
+thread_local static Bool r15written;
 
 /* MOD.  Initially IRTemp_INVALID.  If the r15 branch to be generated
    is conditional, this holds the gating IRTemp :: Ity_I32.  If the
    branch to be generated is unconditional, this remains
    IRTemp_INVALID. */
-static IRTemp r15guard[MAX_THREADS]; /* :: Ity_I32, 0 or 1 */
+thread_local static IRTemp r15guard; /* :: Ity_I32, 0 or 1 */
 
 /* MOD.  Initially Ijk_Boring.  If an r15 branch is to be generated,
    this holds the jump kind. */
-static IRTemp r15kind[MAX_THREADS];
+thread_local static IRTemp r15kind;
 
-#define irsb irsb[temp_index()]
-#define r15written r15written[temp_index()]
-#define r15guard r15guard[temp_index()]
-#define r15kind r15kind[temp_index()]
 
 /*------------------------------------------------------------*/
 /*--- Debugging output                                     ---*/
@@ -1147,7 +1147,9 @@ static const HChar* name_ARMCondcode ( ARMCondcode cond )
 static const HChar* nCC ( ARMCondcode cond ) {
    return name_ARMCondcode(cond);
 }
-
+static const HChar* nCC(UInt cond) {
+    return name_ARMCondcode((ARMCondcode)cond);
+}
 
 /* Build IR to calculate some particular condition from stored
    CC_OP/CC_DEP1/CC_DEP2/CC_NDEP.  Returns an expression of type
@@ -13576,7 +13578,7 @@ static Bool decode_V8_instruction (
          In either case we can create unconditional IR. */
 
       IRTemp guard = newTemp(Ity_I32);
-      assign(guard, mk_armg_calculate_condition(cond));
+      assign(guard, mk_armg_calculate_condition((ARMCondcode)cond));
       IRExpr* srcN = (isF64 ? llGetDReg : llGetFReg)(nn);
       IRExpr* srcM = (isF64 ? llGetDReg : llGetFReg)(mm);
       IRExpr* res  = IRExpr_ITE(unop(Iop_32to1, mkexpr(guard)), srcN, srcM);
@@ -13584,7 +13586,7 @@ static Bool decode_V8_instruction (
 
       UChar rch = isF64 ? 'd' : 'f';
       DIP("vsel%s.%s %c%u, %c%u, %c%u\n",
-          nCC(cond), isF64 ? "f64" : "f32", rch, dd, rch, nn, rch, mm);
+          nCC((ARMCondcode)cond), isF64 ? "f64" : "f32", rch, dd, rch, nn, rch, mm);
       return True;
    }
 
@@ -14256,7 +14258,7 @@ static void mk_ldm_stm ( Bool arm,     /* True: ARM, False: Thumb */
                             binop(opADDorSUB, mkexpr(anchorT),
                                   mkU32(xOff[i])));
          if (arm) {
-            putIRegA( r, e, IRTemp_INVALID, jk );
+            putIRegA( r, e, IRTemp_INVALID, (IRJumpKind)jk );
          } else {
             // no: putIRegT( r, e, IRTemp_INVALID );
             // putIRegT refuses to write to R15.  But that might happen.
@@ -16276,7 +16278,7 @@ DisResult disInstr_ARM_WRK (
       case ARMCondHI: case ARMCondLS: case ARMCondGE: case ARMCondLT:
       case ARMCondGT: case ARMCondLE:
          condT = newTemp(Ity_I32);
-         assign( condT, mk_armg_calculate_condition( INSN_COND ));
+         assign( condT, mk_armg_calculate_condition( (ARMCondcode)INSN_COND ));
          break;
    }
 
@@ -16425,7 +16427,7 @@ DisResult disInstr_ARM_WRK (
               jk = Ijk_Ret;
             }
             // can't safely read guest state after here
-            putIRegA( rD, mkexpr(res), condT, jk );
+            putIRegA( rD, mkexpr(res), condT, (IRJumpKind)jk );
             /* Update the flags thunk if necessary */
             if (bitS) {
                setFlags_D1_D2_ND( ARMG_CC_OP_LOGIC, 
@@ -16742,7 +16744,7 @@ DisResult disInstr_ARM_WRK (
               write is conditional.  Hence in this particular case we
               let it "see" the guard condition. */
            putIRegA( rD, mkexpr(tD),
-                     rD == 15 ? condT : IRTemp_INVALID, jk );
+                     rD == 15 ? condT : IRTemp_INVALID, (IRJumpKind)jk );
         } else { // byte load
            vassert(bB == 1);
            IRTemp tD = newTemp(Ity_I32);
@@ -18871,7 +18873,7 @@ DisResult disInstr_ARM_WRK (
 
    if (INSN_COND != ARMCondNV) {
       Bool ok_vfp = decode_CP10_CP11_instruction (
-                       &dres, INSN(27,0), condT, INSN_COND,
+                       &dres, INSN(27,0), condT, (ARMCondcode)INSN_COND,
                        False/*!isT*/
                     );
       if (ok_vfp)
@@ -18891,7 +18893,7 @@ DisResult disInstr_ARM_WRK (
    /* ----------------------------------------------------------- */
 
    { Bool ok_v6m = decode_V6MEDIA_instruction(
-                       &dres, INSN(27,0), condT, INSN_COND,
+                       &dres, INSN(27,0), condT, (ARMCondcode)INSN_COND,
                        False/*!isT*/
                    );
      if (ok_v6m)
@@ -18987,7 +18989,7 @@ DisResult disInstr_ARM_WRK (
                   unop(Iop_32to1,
                        binop(Iop_Xor32,
                              mkexpr(r15guard), mkU32(1))),
-                  r15kind,
+                  (IRJumpKind)r15kind,
                   IRConst_U32(guest_R15_curr_instr_notENC + 4),
                   OFFB_R15T
          ));
@@ -18997,7 +18999,7 @@ DisResult disInstr_ARM_WRK (
          up later. */
       llPutIReg(15, llGetIReg(15));
       dres.whatNext    = Dis_StopHere;
-      dres.jk_StopHere = r15kind;
+      dres.jk_StopHere = (IRJumpKind)r15kind;
    } else {
       /* Set up the end-state in the normal way. */
       switch (dres.whatNext) {
@@ -19026,7 +19028,25 @@ DisResult disInstr_ARM_WRK (
 /*--- Disassemble a single Thumb2 instruction              ---*/
 /*------------------------------------------------------------*/
 
-static const UChar it_length_table[256]; /* fwds */
+//static const UChar it_length_table[256]; /* fwds */
+static const UChar it_length_table[256]
+= { 0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+    0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+    0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+    0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+    0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+    0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+    0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+    0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+    0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+    0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+    0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+    0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+    0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+    0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+    0, 4, 3, 4, 2, 4, 4, 4, 1, 4, 4, 4, 4, 4, 4, 4,
+    0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4
+};
 
 /* NB: in Thumb mode we do fetches of regs with getIRegT, which
    automagically adds 4 to fetches of r15.  However, writes to regs
@@ -20742,7 +20762,7 @@ DisResult disInstr_THUMB_WRK (
          gen_SIGILL_T_if_in_ITBlock(old_itstate, new_itstate);
 
          IRTemp kondT = newTemp(Ity_I32);
-         assign( kondT, mk_armg_calculate_condition(cond) );
+         assign( kondT, mk_armg_calculate_condition((ARMCondcode)cond) );
          stmt( IRStmt_Exit( unop(Iop_32to1, mkexpr(kondT)),
                             Ijk_Boring,
                             IRConst_U32(dst | 1/*CPSR.T*/),
@@ -22272,7 +22292,7 @@ DisResult disInstr_THUMB_WRK (
          gen_SIGILL_T_if_in_ITBlock(old_itstate, new_itstate);
 
          IRTemp kondT = newTemp(Ity_I32);
-         assign( kondT, mk_armg_calculate_condition(cond) );
+         assign( kondT, mk_armg_calculate_condition((ARMCondcode)cond) );
          stmt( IRStmt_Exit( unop(Iop_32to1, mkexpr(kondT)),
                             Ijk_Boring,
                             IRConst_U32(dst | 1/*CPSR.T*/),
@@ -23673,24 +23693,24 @@ DisResult disInstr_THUMB_WRK (
         | 0 4 3 4 2 4 4 4 1 4 4 4 4 4 4 4 
    15)  | 0 4 4 4 4 4 4 4 4 4 4 4 4 4 4 4 
 */
-static const UChar it_length_table[256]
-   = { 0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
-       0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
-       0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
-       0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
-       0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
-       0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
-       0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
-       0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4, 
-       0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
-       0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
-       0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
-       0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
-       0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
-       0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
-       0, 4, 3, 4, 2, 4, 4, 4, 1, 4, 4, 4, 4, 4, 4, 4,
-       0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4
-     };
+//static const UChar it_length_table[256]
+//   = { 0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+//       0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+//       0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+//       0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+//       0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+//       0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+//       0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+//       0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4, 
+//       0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+//       0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+//       0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+//       0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+//       0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+//       0, 4, 3, 4, 2, 4, 3, 4, 1, 4, 3, 4, 2, 4, 3, 4,
+//       0, 4, 3, 4, 2, 4, 4, 4, 1, 4, 4, 4, 4, 4, 4, 4,
+//       0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4
+//     };
 
 
 /*------------------------------------------------------------*/

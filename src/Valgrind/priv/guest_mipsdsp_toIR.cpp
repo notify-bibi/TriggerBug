@@ -1,3 +1,5 @@
+
+extern "C" {
 #include "libvex_basictypes.h"
 #include "libvex_ir.h"
 #include "libvex.h"
@@ -9,8 +11,8 @@
 #include "guest_generic_bb_to_IR.h"
 #include "guest_mips_defs.h"
 #include "mips_defs.h"
+}
 
-#define irsb irsb[temp_index()]
 
 /* Put value to DSPControl register. Expression e is written to DSPControl as
    is. If only certain bits of DSPControl need to be changed, it should be done

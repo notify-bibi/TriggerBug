@@ -37,12 +37,8 @@ extern "C"
 {
 #include "../Valgrind/pub/libvex.h";
 }
+
 extern "C" Bool vex_initdone;
-//extern "C" unsigned char tid2temp[0x10000];
-extern "C" tid_type register_tid(unsigned int);
-extern "C" tid_type unregister_tid(unsigned int);
-extern "C" void tempmeminit();
-extern "C" void init_threads_id();
 extern "C" void vex_assert_fail(const HChar* expr,const HChar* file, Int line, const HChar* fn);
 extern "C" unsigned int vex_printf(const HChar* format, ...);
 extern "C" void vpanic(const HChar* str);
@@ -172,15 +168,6 @@ inline Z3_ast Z3_mk_neq(Z3_context ctx, Z3_ast a, Z3_ast b) {
     Z3_ast args[2] = { a, b };
     return Z3_mk_distinct(ctx, 2, args);;
 }
-
-extern std::string replace(const char *pszSrc, const char *pszOld, const char *pszNew);
-extern unsigned char * _n_page_mem(void *);
-extern LARGE_INTEGER   freq_global;
-extern LARGE_INTEGER   beginPerformanceCount_global;
-extern LARGE_INTEGER   closePerformanceCount_global;
-extern State * _states[MAX_THREADS];
-#define current_state() _states[temp_index()]
-
 
 namespace X86_IR_OFFSET {
 

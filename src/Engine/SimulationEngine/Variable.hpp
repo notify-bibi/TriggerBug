@@ -263,8 +263,8 @@ public:
             break;
         case	Z3_FLOATING_POINT_SORT:
             m_ast = Z3_mk_fpa_to_ieee_bv(m_ctx, m_ast);
-            bitn = Z3_get_bv_sort_size(m_ctx, Z3_get_sort(m_ctx, m_ast));
             Z3_inc_ref(m_ctx, m_ast);
+            bitn = Z3_get_bv_sort_size(m_ctx, Z3_get_sort(m_ctx, m_ast));
             break;
         default: vpanic("un know");
         }
@@ -288,8 +288,8 @@ public:
             break;
         case	Z3_FLOATING_POINT_SORT:
             m_ast = Z3_mk_fpa_to_ieee_bv(m_ctx, m_ast);
-            bitn = Z3_get_bv_sort_size(m_ctx, Z3_get_sort(m_ctx, m_ast));
             Z3_inc_ref(m_ctx, m_ast);
+            bitn = Z3_get_bv_sort_size(m_ctx, Z3_get_sort(m_ctx, m_ast));
             break;
         default: vpanic("un know");
         }
@@ -298,6 +298,7 @@ public:
 
     template<typename T>
     inline operator T() const {
+        vassert(real());
         return *(T*)(&this->pack);
     }
 
@@ -333,7 +334,7 @@ public:
         return m_ast;
     }
 
-    inline operator Z3_sort() const { return Z3_get_sort(m_ctx, *this); }
+    inline operator Z3_sort() const { vassert(m_kind != REAL); return Z3_get_sort(m_ctx, *this); }
 
     operator std::string() const {
         std::string str;
@@ -390,18 +391,20 @@ public:
             return *this;
         Z3_ast simp = Z3_simplify(m_ctx, m_ast);
         Z3_inc_ref(m_ctx, simp);
-        if (Z3_get_ast_kind(m_ctx, simp) == Z3_NUMERAL_AST) {
-            if (bitn <= 64) {
-                uint64_t TMP;
-                Z3_get_numeral_uint64(m_ctx, simp, &TMP);
-                Z3_dec_ref(m_ctx, simp);
-                return Vns(m_ctx, TMP, bitn);
-            }
-            else {
-                __m256i buff;
-                vassert(Z3_get_numeral_bytes(m_ctx, simp, (ULong*)&buff));
-                Z3_dec_ref(m_ctx, simp);
-                return Vns(m_ctx, buff, bitn);
+        if (sort_kind() == Z3_BV_SORT) {
+            if (Z3_get_ast_kind(m_ctx, simp) == Z3_NUMERAL_AST) {
+                if (bitn <= 64) {
+                    uint64_t TMP;
+                    Z3_get_numeral_uint64(m_ctx, simp, &TMP);
+                    Z3_dec_ref(m_ctx, simp);
+                    return Vns(m_ctx, TMP, bitn);
+                }
+                else {
+                    __m256i buff;
+                    vassert(Z3_get_numeral_bytes(m_ctx, simp, (ULong*)&buff));
+                    Z3_dec_ref(m_ctx, simp);
+                    return Vns(m_ctx, buff, bitn);
+                }
             }
         }
         return Vns(m_ctx, simp, bitn, no_inc{});
@@ -680,7 +683,7 @@ public:
     inline Bool is_bool() const
     {
         vassert(bitn == 1);
-        if (m_kind == SYMB) {
+        if (m_kind != REAL) {
             return sort_kind() == Z3_BOOL_SORT;
         }
         return True;
@@ -949,6 +952,7 @@ inline Vns operator!(Vns const &a) {
     if (a.real()) {
         return Vns(a, !(UChar)(a));
     }
+    vassert(a.is_bool());
     return Vns(a, Z3_mk_not(a, a), 1);
 }
 

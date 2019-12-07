@@ -36,8 +36,8 @@ static inline Z3_ast bv2bool(Z3_context ctx, Z3_ast ast) {
 #include "./AMD64/CCall.hpp"
 #include "./X86/CCall.hpp"
 
-static void * old_fuc[MAX_THREADS];
-static void * old_z3_fuc[MAX_THREADS];
+thread_local static void* old_fuc = NULL;
+thread_local static void* old_z3_fuc = NULL;
 std::hash_map<void*, void*> fuc_2_Z3_Func_Map;
 
 
@@ -54,10 +54,8 @@ void Func_Map_Init() {
     Func_Map_Add(x86g_calculate_eflags_c, z3_x86g_calculate_eflags_c);
     Func_Map_Add(x86g_calculate_condition, z3_x86g_calculate_condition);
     Func_Map_Add(x86g_calculate_eflags_all, z3_x86g_calculate_eflags_all);
-    
-    for (int i = 0; i < MAX_THREADS; i++) {
-        old_fuc[i] = NULL; old_z3_fuc[i] = NULL;
-    }
+    vassert(old_fuc == NULL && old_z3_fuc == NULL);
+        
 }
 
 
@@ -69,12 +67,11 @@ void* funcDict(void* irfunc) {
         return NULL;
     }
     else {
-        auto idx = temp_index();
-        if (old_fuc[idx] != irfunc) {
-            old_fuc[idx] = irfunc;
-            old_z3_fuc[idx] = where->second;
+        if (old_fuc != irfunc) {
+            old_fuc = irfunc;
+            old_z3_fuc = where->second;
             return where->second;
         }
-        return old_z3_fuc[idx];
+        return old_z3_fuc;
     }
 }

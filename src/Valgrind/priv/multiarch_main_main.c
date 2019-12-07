@@ -66,7 +66,7 @@
 */
 
 #define VEXMULTIARCH 1
-#include "main_main.c"
+//#include "main_main.c"
 
 /*---------------------------------------------------------------*/
 /*--- end                               multiarch_main_main.c ---*/

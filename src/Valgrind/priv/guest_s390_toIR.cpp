@@ -35,6 +35,7 @@
 
 /* Translates s390 code to IR. */
 
+extern "C" {
 #include "libvex_basictypes.h"
 #include "libvex_ir.h"
 #include "libvex_emnote.h"
@@ -46,6 +47,10 @@
 #include "s390_disasm.h"
 #include "s390_defs.h"               /* S390_BFP_ROUND_xyzzy */
 #include "host_s390_defs.h"          /* s390_host_has_xyzzy */
+}
+
+#undef NULL
+#define NULL nullptr
 
 
 /*------------------------------------------------------------*/
@@ -61,34 +66,27 @@ static void s390_irgen_CLC_EX(IRTemp, IRTemp, IRTemp);
 /*------------------------------------------------------------*/
 
 /* The IRSB* into which we're generating code. */
-static IRSB *irsb[MAX_THREADS];
+thread_local static IRSB *irsb;
 
 /* The guest address for the instruction currently being
    translated. */
-static Addr64 guest_IA_curr_instr[MAX_THREADS];
+thread_local static Addr64 guest_IA_curr_instr;
 
 /* The guest address for the instruction following the current instruction. */
-static Addr64 guest_IA_next_instr[MAX_THREADS];
+thread_local static Addr64 guest_IA_next_instr;
 
 /* Result of disassembly step. */
-static DisResult *dis_res[MAX_THREADS];
+thread_local static DisResult *dis_res;
 
 /* Resteer function and callback data */
-static Bool (*resteer_fn)(void *, Addr);
-static void *resteer_data[MAX_THREADS];
+thread_local static Bool (*resteer_fn)(void *, Addr);
+thread_local static void *resteer_data;
 
 /* Whether to print diagnostics for illegal instructions. */
-static Bool sigill_diag[MAX_THREADS];
+thread_local static Bool sigill_diag;
 
 /* The last seen execute target instruction */
-ULong last_execute_target;
-
-#define irsb irsb[temp_index()]
-#define guest_IA_curr_instr guest_IA_curr_instr[temp_index()]
-#define guest_IA_next_instr guest_IA_next_instr[temp_index()]
-#define dis_res dis_res[temp_index()]
-#define resteer_data resteer_data[temp_index()]
-#define sigill_diag sigill_diag[temp_index()]
+thread_local ULong last_execute_target;
 
 /* The possible outcomes of a decoding operation */
 typedef enum {
@@ -2422,7 +2420,7 @@ get_bfp_rounding_mode_from_fpc(void)
    Irrm_NEAREST refers to IEEE 754's roundTiesToEven which the standard
    considers the default rounding mode (4.3.3). */
 static IRTemp
-encode_bfp_rounding_mode(UChar mode)
+encode_bfp_rounding_mode(s390_bfp_round_t mode)
 {
    IRExpr *rm;
 
@@ -2442,7 +2440,10 @@ encode_bfp_rounding_mode(UChar mode)
 
    return mktemp(Ity_I32, rm);
 }
-
+static IRTemp
+encode_bfp_rounding_mode(UChar mode) {
+    return encode_bfp_rounding_mode((s390_bfp_round_t)mode);
+}
 /* Extract the DFP rounding mode from the guest FPC reg and encode it as an
    IRRoundingMode:
 
@@ -11264,7 +11265,7 @@ s390_irgen_MEEBR(UChar r1, UChar r2)
    IRTemp op1 = newTemp(Ity_F32);
    IRTemp op2 = newTemp(Ity_F32);
    IRTemp result = newTemp(Ity_F32);
-   IRRoundingMode rounding_mode =
+   IRRoundingMode rounding_mode =(IRRoundingMode)
       encode_bfp_rounding_mode(S390_BFP_ROUND_PER_FPC);
 
    assign(op1, get_fpr_w0(r1));
@@ -16369,7 +16370,7 @@ s390_irgen_VPKS(UChar v1, UChar v2, UChar v3, UChar m4, UChar m5)
       IRDirty* d;
       IRTemp cc = newTemp(Ity_I64);
 
-      s390x_vec_op_details_t details = { .serialized = 0ULL };
+      s390x_vec_op_details_t details = { details.serialized = 0ULL };
       details.op = S390_VEC_OP_VPKS;
       details.v1 = v1;
       details.v2 = v2;
@@ -16415,7 +16416,7 @@ s390_irgen_VPKLS(UChar v1, UChar v2, UChar v3, UChar m4, UChar m5)
       IRDirty* d;
       IRTemp cc = newTemp(Ity_I64);
 
-      s390x_vec_op_details_t details = { .serialized = 0ULL };
+      s390x_vec_op_details_t details = { details.serialized = 0ULL };
       details.op = S390_VEC_OP_VPKLS;
       details.v1 = v1;
       details.v2 = v2;
@@ -16840,7 +16841,7 @@ s390_irgen_VFAE(UChar v1, UChar v2, UChar v3, UChar m4, UChar m5)
    /* Check for specification exception */
    vassert(m4 < 3);
 
-   s390x_vec_op_details_t details = { .serialized = 0ULL };
+   s390x_vec_op_details_t details = { details.serialized = 0ULL };
    details.op = S390_VEC_OP_VFAE;
    details.v1 = v1;
    details.v2 = v2;
@@ -16884,7 +16885,7 @@ s390_irgen_VFEE(UChar v1, UChar v2, UChar v3, UChar m4, UChar m5)
    vassert(m4 < 3);
    vassert((m5 & 0b1100) == 0);
 
-   s390x_vec_op_details_t details = { .serialized = 0ULL };
+   s390x_vec_op_details_t details = { details.serialized = 0ULL };
    details.op = S390_VEC_OP_VFEE;
    details.v1 = v1;
    details.v2 = v2;
@@ -17048,7 +17049,7 @@ s390_irgen_VISTR(UChar v1, UChar v2, UChar m3, UChar m5)
    vassert(m3 < 3);
    vassert((m5 & 0b1110) == 0);
 
-   s390x_vec_op_details_t details = { .serialized = 0ULL };
+   s390x_vec_op_details_t details = { details.serialized = 0ULL };
    details.op = S390_VEC_OP_VISTR;
    details.v1 = v1;
    details.v2 = v2;
@@ -17087,7 +17088,7 @@ s390_irgen_VSTRC(UChar v1, UChar v2, UChar v3, UChar v4, UChar m5, UChar m6)
    /* Check for specification exception */
    vassert(m5 < 3);
 
-   s390x_vec_op_details_t details = { .serialized = 0ULL };
+   s390x_vec_op_details_t details = { details.serialized = 0ULL };
    details.op = S390_VEC_OP_VSTRC;
    details.v1 = v1;
    details.v2 = v2;
@@ -17249,7 +17250,7 @@ s390_irgen_VCH(UChar v1, UChar v2, UChar v3, UChar m4, UChar m5)
       IRDirty* d;
       IRTemp cc = newTemp(Ity_I64);
 
-      s390x_vec_op_details_t details = { .serialized = 0ULL };
+      s390x_vec_op_details_t details = { details.serialized = 0ULL };
       details.op = S390_VEC_OP_VCH;
       details.v1 = v1;
       details.v2 = v2;
@@ -17294,7 +17295,7 @@ s390_irgen_VCHL(UChar v1, UChar v2, UChar v3, UChar m4, UChar m5)
       IRDirty* d;
       IRTemp cc = newTemp(Ity_I64);
 
-      s390x_vec_op_details_t details = { .serialized = 0ULL };
+      s390x_vec_op_details_t details = { details.serialized = 0ULL };
       details.op = S390_VEC_OP_VCHL;
       details.v1 = v1;
       details.v2 = v2;
@@ -17623,7 +17624,7 @@ s390_irgen_VCEQ(UChar v1, UChar v2, UChar v3, UChar m4, UChar m5)
       IRDirty* d;
       IRTemp cc = newTemp(Ity_I64);
 
-      s390x_vec_op_details_t details = { .serialized = 0ULL };
+      s390x_vec_op_details_t details = { details.serialized = 0ULL };
       details.op = S390_VEC_OP_VCEQ;
       details.v1 = v1;
       details.v2 = v2;
@@ -17904,7 +17905,7 @@ s390_irgen_VTM(UChar v1, UChar v2)
    IRDirty* d;
    IRTemp cc = newTemp(Ity_I64);
 
-   s390x_vec_op_details_t details = { .serialized = 0ULL };
+   s390x_vec_op_details_t details = { details.serialized = 0ULL };
    details.op = S390_VEC_OP_VTM;
    details.v2 = v1;
    details.v3 = v2;
@@ -17991,7 +17992,7 @@ s390_irgen_VGFM(UChar v1, UChar v2, UChar v3, UChar m4)
    IRDirty* d;
    IRTemp cc = newTemp(Ity_I64);
 
-   s390x_vec_op_details_t details = { .serialized = 0ULL };
+   s390x_vec_op_details_t details = { details.serialized = 0ULL };
    details.op = S390_VEC_OP_VGFM;
    details.v1 = v1;
    details.v2 = v2;
@@ -18025,7 +18026,7 @@ s390_irgen_VGFMA(UChar v1, UChar v2, UChar v3, UChar v4, UChar m5)
    IRDirty* d;
    IRTemp cc = newTemp(Ity_I64);
 
-   s390x_vec_op_details_t details = { .serialized = 0ULL };
+   s390x_vec_op_details_t details = { details.serialized = 0ULL };
    details.op = S390_VEC_OP_VGFMA;
    details.v1 = v1;
    details.v2 = v2;
@@ -18110,7 +18111,7 @@ s390_irgen_VMAH(UChar v1, UChar v2, UChar v3, UChar v4, UChar m5)
    /* Check for specification exception */
    vassert(m5 < 3);
 
-   s390x_vec_op_details_t details = { .serialized = 0ULL };
+   s390x_vec_op_details_t details = { details.serialized = 0ULL };
    details.op = S390_VEC_OP_VMAH;
    details.v1 = v1;
    details.v2 = v2;
@@ -18152,7 +18153,7 @@ s390_irgen_VMALH(UChar v1, UChar v2, UChar v3, UChar v4, UChar m5)
    /* Check for specification exception */
    vassert(m5 < 3);
 
-   s390x_vec_op_details_t details = { .serialized = 0ULL };
+   s390x_vec_op_details_t details = { details.serialized = 0ULL };
    details.op = S390_VEC_OP_VMALH;
    details.v1 = v1;
    details.v2 = v2;
@@ -18566,7 +18567,7 @@ s390_irgen_VFCE(UChar v1, UChar v2, UChar v3, UChar m4, UChar m5, UChar m6)
       IRDirty* d;
       IRTemp cc = newTemp(Ity_I64);
 
-      s390x_vec_op_details_t details = { .serialized = 0ULL };
+      s390x_vec_op_details_t details = { details.serialized = 0ULL };
       details.op = S390_VEC_OP_VFCE;
       details.v1 = v1;
       details.v2 = v2;
@@ -18623,7 +18624,7 @@ s390_irgen_VFCH(UChar v1, UChar v2, UChar v3, UChar m4, UChar m5, UChar m6)
       IRDirty* d;
       IRTemp cc = newTemp(Ity_I64);
 
-      s390x_vec_op_details_t details = { .serialized = 0ULL };
+      s390x_vec_op_details_t details = { details.serialized = 0ULL };
       details.op = S390_VEC_OP_VFCH;
       details.v1 = v1;
       details.v2 = v2;
@@ -18681,7 +18682,7 @@ s390_irgen_VFCHE(UChar v1, UChar v2, UChar v3, UChar m4, UChar m5, UChar m6)
       IRDirty* d;
       IRTemp cc = newTemp(Ity_I64);
 
-      s390x_vec_op_details_t details = { .serialized = 0ULL };
+      s390x_vec_op_details_t details = { details.serialized = 0ULL };
       details.op = S390_VEC_OP_VFCHE;
       details.v1 = v1;
       details.v2 = v2;
@@ -18725,7 +18726,7 @@ s390_irgen_VFTCI(UChar v1, UChar v2, UShort i3, UChar m4, UChar m5)
    IRDirty* d;
    IRTemp cc = newTemp(Ity_I64);
 
-   s390x_vec_op_details_t details = { .serialized = 0ULL };
+   s390x_vec_op_details_t details = { details.serialized = 0ULL };
    details.op = S390_VEC_OP_VFTCI;
    details.v1 = v1;
    details.v2 = v2;

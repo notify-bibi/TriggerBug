@@ -40,6 +40,9 @@ bool task_explorer(State* top) {
                 }
                 Fork_addr[bc.m_oep] = 0;
             }
+        }
+
+        for (State* s : ForkTree) {
             s->branchGo();
         }
         State::pool->wait();

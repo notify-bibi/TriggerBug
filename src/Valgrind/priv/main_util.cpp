@@ -36,97 +36,12 @@
    without prior written permission.
 */
 
+extern "C" {
 #include "libvex_basictypes.h"
 #include "libvex.h"
-
 #include "main_globals.h"
 #include "main_util.h"
-
-
-
-/*patch start{*/
-#if defined(TEB_OFFSET_CONST)
-static unsigned char tid2temp_used[MAX_THREADS];
-void init_threads_id() {
-    for (int li = 0; li < MAX_THREADS; li++) {
-        tid2temp_used[li] = 0;
-    }
 }
-
-tid_type register_tid(unsigned int tid) {
-    for (int temp_index = 0; temp_index < MAX_THREADS; temp_index++) {
-        if (!tid2temp_used[temp_index]) {
-            __writegsbyte(TEB_OFFSET_CONST, temp_index);
-            tid2temp_used[temp_index] = 1;
-            return regist_ok;
-        }
-    }
-    return have_no_temp;
-}
-
-tid_type unregister_tid(unsigned int tid) {
-    tid &= 0xffff;
-    auto idx = temp_index();
-    if (tid2temp_used[idx]) {
-        tid2temp_used[idx] = 0;
-        return unregist_ok;
-    }
-    else {
-        return unregist_err;
-    }
-}
-
-
-#else
-
-unsigned char tid2temp[0x10000];
-static unsigned char tid2temp_used[MAX_THREADS];
-void init_threads_id() {
-    for (int li = 0; li < MAX_THREADS; li++) {
-        tid2temp_used[li] = 0;
-    }
-    for (unsigned int id = 0; id < 0x10000; id++) {
-        tid2temp[id] = 0xff;
-    }
-}
-
-
-tid_type register_tid(unsigned int tid) {
-    tid &= 0xffff;
-    if (tid2temp[tid] == 0xff) {
-        for (int temp_index = 0; temp_index < MAX_THREADS; temp_index++) {
-            if (!tid2temp_used[temp_index]) {
-                tid2temp[tid] = temp_index;
-                tid2temp_used[temp_index] = 1;
-                return regist_ok;
-            }
-        }
-        return have_no_temp;
-    }
-    else {
-        return tid_is_clash;
-    }
-}
-
-tid_type unregister_tid(unsigned int tid) {
-    tid &= 0xffff;
-    if (tid2temp_used[tid2temp[tid]]) {
-        tid2temp_used[tid2temp[tid]] = 0;
-        tid2temp[tid] = 0xff;
-        return unregist_ok;
-    }
-    else {
-        return unregist_err;
-    }
-}
-
-#endif
-
-/*patched }end*/
-
-
-
-
 /*---------------------------------------------------------*/
 /*--- Storage                                           ---*/
 /*---------------------------------------------------------*/
@@ -147,17 +62,17 @@ static Bool mempools_created = False;
 #else
 #define N_TEMPORARY_BYTES 5000000
 #endif
-
 #ifdef _MSC_VER
-__declspec(align(REQ_ALIGN)) static HChar  temporary[MAX_THREADS][N_TEMPORARY_BYTES];
+__declspec(align(REQ_ALIGN))
+thread_local static HChar  temporary[N_TEMPORARY_BYTES];
 #else
-static HChar  temporary[MAX_THREADS][N_TEMPORARY_BYTES] __attribute__((aligned(REQ_ALIGN)));
+thread_local static HChar  temporary[N_TEMPORARY_BYTES] __attribute__((aligned(REQ_ALIGN)));
 #endif
-static HChar* temporary_first[MAX_THREADS];
-static HChar* temporary_curr[MAX_THREADS];
-static HChar* temporary_last[MAX_THREADS];
+thread_local static HChar* temporary_first = &temporary[0];
+thread_local static HChar* temporary_curr  = &temporary[0];
+thread_local static HChar* temporary_last  = &temporary[N_TEMPORARY_BYTES-1];
 
-static ULong  temporary_bytes_allocd_TOT[MAX_THREADS];
+thread_local static ULong  temporary_bytes_allocd_TOT = 0;
 
 #if defined(ENABLE_INNER)
 /* See N_TEMPORARY_BYTES */
@@ -165,56 +80,22 @@ static ULong  temporary_bytes_allocd_TOT[MAX_THREADS];
 #else
 #define N_PERMANENT_BYTES 10000
 #endif
-
 #ifdef _MSC_VER
-__declspec(align(REQ_ALIGN)) static HChar  permanent[MAX_THREADS][N_PERMANENT_BYTES];
+__declspec(align(REQ_ALIGN)) 
+thread_local static HChar  permanent[N_PERMANENT_BYTES];
 #else
-static HChar  permanent[MAX_THREADS][N_PERMANENT_BYTES] __attribute__((aligned(REQ_ALIGN)));
+thread_local static HChar  permanent[N_PERMANENT_BYTES] __attribute__((aligned(REQ_ALIGN)));
 #endif
-static HChar* permanent_first[MAX_THREADS];
-static HChar* permanent_curr[MAX_THREADS];
-static HChar* permanent_last[MAX_THREADS];
+thread_local static HChar* permanent_first = &permanent[0];
+thread_local static HChar* permanent_curr  = &permanent[0];
+thread_local static HChar* permanent_last  = &permanent[N_PERMANENT_BYTES-1];
 
-HChar* private_LibVEX_alloc_first[MAX_THREADS];
-HChar* private_LibVEX_alloc_curr[MAX_THREADS];
-HChar* private_LibVEX_alloc_last[MAX_THREADS];
-
-
-static VexAllocMode mode = VexAllocModeTEMP;
+thread_local static HChar* private_LibVEX_alloc_first = &temporary[0];
+thread_local static HChar* private_LibVEX_alloc_curr  = &temporary[0];
+thread_local static HChar* private_LibVEX_alloc_last  = &temporary[N_TEMPORARY_BYTES-1];
 
 
-
-/*pached add func*/
-void tempmeminit() {//patch add func
-	for (int li = 0; li < MAX_THREADS; li++) {
-		temporary_first[li] = &temporary[li][0];
-		temporary_curr[li] = &temporary[li][0];
-		temporary_last[li] = &temporary[li][N_TEMPORARY_BYTES - 1];
-
-		permanent_first[li] = &permanent[li][0];
-		permanent_curr[li] = &permanent[li][0];
-		permanent_last[li] = &(permanent[li][N_PERMANENT_BYTES - 1]);
-
-		private_LibVEX_alloc_first[li] = &temporary[li][0];
-		private_LibVEX_alloc_curr[li] = &temporary[li][0];
-		private_LibVEX_alloc_last[li] = &temporary[li][N_TEMPORARY_BYTES - 1];
-
-		temporary_bytes_allocd_TOT[li] = 0;
-	}
-}
-#define temporary temporary[temp_index()]
-#define permanent permanent[temp_index()]
-#define temporary_first temporary_first[temp_index()]
-#define temporary_curr temporary_curr[temp_index()]
-#define temporary_last temporary_last[temp_index()]
-#define permanent_first permanent_first[temp_index()]
-#define permanent_curr permanent_curr[temp_index()]
-#define permanent_last permanent_last[temp_index()]
-#define private_LibVEX_alloc_first   private_LibVEX_alloc_first[temp_index()]
-#define private_LibVEX_alloc_curr    private_LibVEX_alloc_curr[temp_index()]
-#define private_LibVEX_alloc_last    private_LibVEX_alloc_last[temp_index()]
-#define temporary_bytes_allocd_TOT   temporary_bytes_allocd_TOT[temp_index()]
-
+thread_local static VexAllocMode mode = VexAllocModeTEMP;
 
 void vexAllocSanityCheck ( void )
 {
@@ -253,6 +134,52 @@ void vexAllocSanityCheck ( void )
    vassert(IS_WORD_ALIGNED(private_LibVEX_alloc_last+1));
 #  undef IS_WORD_ALIGNED
 }
+
+
+void* LibVEX_Alloc_inline(SizeT nbytes)
+{
+    struct align {
+        char c;
+        union {
+            char c;
+            short s;
+            int i;
+            long long l;
+            long long ll;
+            float f;
+            double d;
+            /* long long double is currently not used and would increase alignment
+               unnecessarily. */
+               /* long long double ld; */
+            void* pto;
+            void (*ptf)(void);
+        } x;
+    };
+
+    /* Make sure the compiler does no surprise us */
+    vassert(offsetof(struct align, x) <= REQ_ALIGN);
+
+#if 0
+    /* Nasty debugging hack, do not use. */
+    return malloc(nbytes);
+#else
+    HChar* curr;
+    HChar* next;
+    SizeT  ALIGN;
+    ALIGN = offsetof(struct align, x) - 1;
+    curr = private_LibVEX_alloc_curr;
+    next = curr + ((nbytes + ALIGN) & ~ALIGN);
+    INNER_REQUEST(next += 2 * VEX_REDZONE_SIZEB);
+    if (next >= private_LibVEX_alloc_last)
+        private_LibVEX_alloc_OOM();
+    private_LibVEX_alloc_curr = next;
+    INNER_REQUEST(curr += VEX_REDZONE_SIZEB);
+    INNER_REQUEST(VALGRIND_MEMPOOL_ALLOC(private_LibVEX_alloc_first,
+        curr, nbytes));
+    return curr;
+#endif
+}
+
 
 /* The current allocation mode. */
 
@@ -417,7 +344,7 @@ void vex_bzero ( void* sV, SizeT n )
 {
 #  define IS_4_ALIGNED(aaa_p) (0 == (((HWord)(aaa_p)) & ((HWord)0x3)))
 
-   UChar* d = sV;
+   UChar* d = (UChar*)sV;
 
    while ((!IS_4_ALIGNED(d)) && n >= 1) {
       d[0] = 0;
@@ -677,8 +604,8 @@ UInt vprintf_wrk ( void(*sink)(HChar),
    debugging info should be sent via here.  The official route is to
    to use vg_message().  This interface is deprecated.
 */
-static HChar myprintf_buf[1000];
-static Int   n_myprintf_buf;
+thread_local static HChar myprintf_buf[1000];
+thread_local static Int   n_myprintf_buf;
 
 static void add_to_myprintf_buf ( HChar c )
 {
@@ -734,7 +661,7 @@ void vfatal ( const HChar* format, ... )
 
 /* A general replacement for sprintf(). */
 
-static HChar *vg_sprintf_ptr;
+thread_local static HChar *vg_sprintf_ptr;
 
 static void add_to_vg_sprintf_buf ( HChar c )
 {

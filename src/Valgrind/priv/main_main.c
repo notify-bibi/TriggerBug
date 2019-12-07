@@ -219,8 +219,8 @@ void LibVEX_Init (
    vassert(debuglevel >= 0);
 
    vassert(vcon->iropt_verbosity >= 0);
+   vassert(vcon->iropt_level >= 0);
    vassert(vcon->iropt_level <= 2);
-   vassert(vcon->iropt_level >= -1);
    vassert(vcon->iropt_unroll_thresh >= 0);
    vassert(vcon->iropt_unroll_thresh <= 400);
    vassert(vcon->guest_max_insns >= 1);
@@ -315,7 +315,8 @@ UInt s390_host_hwcaps;
 
 IRSB* LibVEX_FrontEnd ( /*MOD*/ VexTranslateArgs* vta,
                         /*OUT*/ VexTranslateResult* res,
-                        /*OUT*/ VexRegisterUpdates* pxControl)
+                        /*OUT*/ VexRegisterUpdates* pxControl,
+                        Pap *pap)
 {
    IRExpr*      (*specHelper)   ( const HChar*, IRExpr**, IRStmt**, Int );
    Bool (*preciseMemExnsFn) ( Int, Int, VexRegisterUpdates );
@@ -377,7 +378,7 @@ IRSB* LibVEX_FrontEnd ( /*MOD*/ VexTranslateArgs* vta,
          offB_GUEST_IP           = offsetof(VexGuestX86State,guest_EIP);
          szB_GUEST_IP            = sizeof( ((VexGuestX86State*)0)->guest_EIP );
          vassert(vta->archinfo_guest.endness == VexEndnessLE);
-         //vassert(0 == sizeof(VexGuestX86State) % LibVEX_GUEST_STATE_ALIGN);
+         vassert(0 == sizeof(VexGuestX86State) % LibVEX_GUEST_STATE_ALIGN);
          vassert(sizeof( ((VexGuestX86State*)0)->guest_CMSTART) == 4);
          vassert(sizeof( ((VexGuestX86State*)0)->guest_CMLEN  ) == 4);
          vassert(sizeof( ((VexGuestX86State*)0)->guest_NRADDR ) == 4);
@@ -580,14 +581,10 @@ IRSB* LibVEX_FrontEnd ( /*MOD*/ VexTranslateArgs* vta,
                      offB_CMSTART,
                      offB_CMLEN,
                      offB_GUEST_IP,
-                     szB_GUEST_IP,
-					 vta->pap
-					);
+                     szB_GUEST_IP , 
+                    pap);
 
    vexAllocSanityCheck();
-
-   //return irsb;
-   //ppIRSB(irsb);
 
    if (irsb == NULL) {
       /* Access failure. */
@@ -632,13 +629,10 @@ IRSB* LibVEX_FrontEnd ( /*MOD*/ VexTranslateArgs* vta,
    vexAllocSanityCheck();
 
    /* Clean it up, hopefully a lot. */
-   
    irsb = do_iropt_BB ( irsb, specHelper, preciseMemExnsFn, *pxControl,
                               vta->guest_bytes_addr,
                               vta->arch_guest );
 
-   
-   //ppIRSB(irsb);
    // JRS 2016 Aug 03: Sanity checking is expensive, we already checked
    // the output of the front end, and iropt never screws up the IR by
    // itself, unless it is being hacked on.  So remove this post-iropt
@@ -1188,12 +1182,12 @@ static void libvex_BackEnd ( const VexTranslateArgs *vta,
 
 /* Exported to library client. */
 
-VexTranslateResult LibVEX_Translate ( /*MOD*/ VexTranslateArgs* vta )
+VexTranslateResult LibVEX_Translate ( /*MOD*/ VexTranslateArgs* vta , Pap *pap)
 {
    VexTranslateResult res = { 0 };
    VexRegisterUpdates pxControl = VexRegUpd_INVALID;
 
-   IRSB* irsb = LibVEX_FrontEnd(vta, &res, &pxControl);
+   IRSB* irsb = LibVEX_FrontEnd(vta, &res, &pxControl, pap);
    libvex_BackEnd(vta, &res, irsb, pxControl);
    return res;
 }

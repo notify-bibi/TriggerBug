@@ -29,13 +29,11 @@
 */
 
 /* Contributed by Florian Krohm */
-
 #ifdef _MSC_VER
 #ifndef _HAS_NODISCARD
 #define _HAS_NODISCARD 0
 #endif
 #endif
-
 #include <stdarg.h>
 #include "libvex_basictypes.h"
 #include "main_util.h"        // vassert

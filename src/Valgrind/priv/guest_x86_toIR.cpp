@@ -173,6 +173,7 @@
 */
 
 
+extern "C" {
 #include "libvex_basictypes.h"
 #include "libvex_ir.h"
 #include "libvex.h"
@@ -183,6 +184,10 @@
 #include "guest_generic_bb_to_IR.h"
 #include "guest_generic_x87.h"
 #include "guest_x86_defs.h"
+}
+
+#undef NULL
+#define NULL nullptr
 
 
 /*------------------------------------------------------------*/
@@ -195,25 +200,21 @@
    given insn. */
 
 /* We need to know this to do sub-register accesses correctly. */
-static VexEndness host_endness;
+thread_local static VexEndness host_endness;
 
 /* Pointer to the guest code area (points to start of BB, not to the
    insn being processed). */
-static const UChar* guest_code[MAX_THREADS];
+thread_local static const UChar* guest_code;
 
 /* The guest address corresponding to guest_code[0]. */
-static Addr32 guest_EIP_bbstart[MAX_THREADS];
+thread_local static Addr32 guest_EIP_bbstart;
 
 /* The guest address for the instruction currently being
    translated. */
-static Addr32 guest_EIP_curr_instr[MAX_THREADS];
+thread_local static Addr32 guest_EIP_curr_instr;
 
 /* The IRSB* into which we're generating code. */
-static IRSB* irsb[MAX_THREADS];
-#define guest_code guest_code[temp_index()]
-#define guest_EIP_bbstart guest_EIP_bbstart[temp_index()]
-#define guest_EIP_curr_instr guest_EIP_curr_instr[temp_index()]
-#define irsb irsb[temp_index()]
+thread_local static IRSB* irsb;
 
 
 /*------------------------------------------------------------*/
@@ -719,7 +720,7 @@ static IROp mkSizedOp ( IRType ty, IROp op8 )
            || op8 == Iop_ExpCmpNE8
            || op8 == Iop_Not8);
    adj = ty==Ity_I8 ? 0 : (ty==Ity_I16 ? 1 : 2);
-   return adj + op8;
+   return (IROp)(adj + op8);
 }
 
 static IROp mkWidenOp ( Int szSmall, Int szBig, Bool signd )
@@ -1086,6 +1087,29 @@ static const HChar* name_X86Condcode ( X86Condcode cond )
       default: vpanic("name_X86Condcode");
    }
 }
+static const HChar* name_X86Condcode(Int cond)
+{
+    switch (cond) {
+    case X86CondO:      return "o";
+    case X86CondNO:     return "no";
+    case X86CondB:      return "b";
+    case X86CondNB:     return "nb";
+    case X86CondZ:      return "z";
+    case X86CondNZ:     return "nz";
+    case X86CondBE:     return "be";
+    case X86CondNBE:    return "nbe";
+    case X86CondS:      return "s";
+    case X86CondNS:     return "ns";
+    case X86CondP:      return "p";
+    case X86CondNP:     return "np";
+    case X86CondL:      return "l";
+    case X86CondNL:     return "nl";
+    case X86CondLE:     return "le";
+    case X86CondNLE:    return "nle";
+    case X86CondAlways: return "ALWAYS";
+    default: vpanic("name_X86Condcode");
+    }
+}
 
 static 
 X86Condcode positiveIse_X86Condcode ( X86Condcode  cond,
@@ -1094,7 +1118,7 @@ X86Condcode positiveIse_X86Condcode ( X86Condcode  cond,
    vassert(cond >= X86CondO && cond <= X86CondNLE);
    if (cond & 1) {
       *needInvert = True;
-      return cond-1;
+      return (X86Condcode)(cond-1);
    } else {
       *needInvert = False;
       return cond;
@@ -1423,7 +1447,7 @@ const HChar* sorbTxt ( UChar sorb )
    linear address by adding any required segment override as indicated
    by sorb. */
 static
-IRExpr* handleSegOverride ( UChar sorb, IRExpr* virtual )
+IRExpr* handleSegOverride ( UChar sorb, IRExpr* _virtual )
 {
    Int    sreg;
    IRType hWordTy;
@@ -1431,7 +1455,7 @@ IRExpr* handleSegOverride ( UChar sorb, IRExpr* virtual )
 
    if (sorb == 0)
       /* the common case - no override */
-      return virtual;
+      return _virtual;
 
    switch (sorb) {
       case 0x3E: sreg = R_DS; break;
@@ -1466,7 +1490,7 @@ IRExpr* handleSegOverride ( UChar sorb, IRExpr* virtual )
          "x86g_use_seg_selector", 
          &x86g_use_seg_selector, 
          mkIRExprVec_4( mkexpr(ldt_ptr), mkexpr(gdt_ptr), 
-                        mkexpr(seg_selector), virtual)
+                        mkexpr(seg_selector), _virtual)
       )
    );
 
@@ -8556,7 +8580,6 @@ DisResult disInstr_X86_WRK (
 
    vassert(guest_EIP_bbstart + delta == guest_EIP_curr_instr);
    DIP("\t0x%x:  ", guest_EIP_bbstart+delta);
-continue_trans:
 
    /* Spot "Special" instructions (see comment at top of file). */
    {
@@ -14754,9 +14777,7 @@ continue_trans:
          break;
 
       default:
-          delta--;
-          goto continue_trans;
-         //goto decode_failure;
+         goto decode_failure;
       }
       break;
    }
@@ -15614,7 +15635,7 @@ continue_trans:
       case 0x9E: /* set-LEb/set-NGb (jump less or equal) */
       case 0x9F: /* set-Gb/set-NLEb (jump greater) */
          t1 = newTemp(Ity_I8);
-         assign( t1, unop(Iop_1Uto8,mk_x86g_calculate_condition(opc-0x90)) );
+         assign( t1, unop(Iop_1Uto8,mk_x86g_calculate_condition((X86Condcode)(opc-0x90))) );
          modrm = getIByte(delta);
          if (epartIsReg(modrm)) {
             delta++;
@@ -15865,9 +15886,7 @@ continue_trans:
   
   default:
   decode_failure:
-
    /* All decode failures end up here. */
-
    if (sigill_diag) {
       vex_printf("vex x86->IR: unhandled instruction bytes: "
                  "0x%x 0x%x 0x%x 0x%x\n",

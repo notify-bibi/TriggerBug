@@ -30,6 +30,7 @@
 
 /* Translates MIPS code to IR. */
 
+extern "C" {
 #include "libvex_basictypes.h"
 #include "libvex_ir.h"
 #include "libvex.h"
@@ -41,6 +42,10 @@
 #include "guest_generic_bb_to_IR.h"
 #include "guest_mips_defs.h"
 #include "mips_defs.h"
+}
+
+#undef NULL
+#define NULL nullptr
 
 /*------------------------------------------------------------*/
 /*---                      Globals                         ---*/
@@ -53,36 +58,34 @@
 /* CONST: what is the host's endianness?  This has to do with float vs
    double register accesses on VFP, but it's complex and not properly
    thought out. */
-static VexEndness host_endness;
+thread_local static VexEndness host_endness;
 
 /* Pointer to the guest code area. */
-const UChar *guest_code[MAX_THREADS];
-#define guest_code guest_code[temp_index()]
+thread_local const UChar *guest_code;
 
 /* CONST: The guest address for the instruction currently being
    translated. */
 #if defined(VGP_mips32_linux)
-static Addr32 guest_PC_curr_instr;
+thread_local static Addr32 guest_PC_curr_instr;
 #else
-static Addr64 guest_PC_curr_instr;
+thread_local static Addr64 guest_PC_curr_instr;
 #endif
 
 /* MOD: The IRSB* into which we're generating code. */
-IRSB *irsb[MAX_THREADS];
-#define irsb irsb[temp_index()]
+thread_local IRSB *irsb;
 
 /* Is our guest binary 32 or 64bit? Set at each call to
    disInstr_MIPS below. */
-Bool mode64 = False;
+thread_local Bool mode64 = False;
 
 /* CPU has FPU and 32 dbl. prec. FP registers. */
- static Bool fp_mode64 = False;
+thread_local static Bool fp_mode64 = False;
 
 /* FPU works in FRE mode */
-static Bool fp_mode64_fre = False;
+thread_local static Bool fp_mode64_fre = False;
 
 /* CPU has MSA unit */
-static Bool has_msa = False;
+thread_local static Bool has_msa = False;
 
 /* Define 1.0 in single and double precision. */
 #define ONE_SINGLE 0x3F800000
@@ -2271,7 +2274,7 @@ static IROp mkSzOp ( IRType ty, IROp op8 )
            || op8 == Iop_Shl8 || op8 == Iop_Shr8 || op8 == Iop_Sar8
            || op8 == Iop_CmpEQ8 || op8 == Iop_CmpNE8 || op8 == Iop_Not8);
    adj = ty == Ity_I8 ? 0 : (ty == Ity_I16 ? 1 : (ty == Ity_I32 ? 2 : 3));
-   return adj + op8;
+   return (IROp)(adj + op8);
 }
 
 /*********************************************************/
@@ -2847,7 +2850,7 @@ static Bool dis_instr_branch ( UInt theInstr, DisResult * dres,
          return False;
    }
 
-   *set = IRStmt_Exit(eCond, jmpKind, mkSzConst(ty, addrTgt), OFFB_PC);
+   *set = IRStmt_Exit(eCond, (IRJumpKind)jmpKind, mkSzConst(ty, addrTgt), OFFB_PC);
    return True;
 }
 

@@ -7,18 +7,23 @@
 #include "Register.hpp"
 #include "memory.hpp"
 #include "tinyxml2/tinyxml2.h"
-#include "libvex_init.hpp"
 #include "../Thread_Pool/ThreadPool.hpp"
 
-
+#define ir_temp ((Vns*)ir_temp_trunk)
 extern void* funcDict(void*);
 extern int eval_all(std::vector<Vns>& result, solver& solv, Z3_ast nia);
+extern std::string replace(const char* pszSrc, const char* pszOld, const char* pszNew);
+extern unsigned char* _n_page_mem(void*);
 extern __m256i  m32_fast[33];
 extern __m256i  m32_mask_reverse[33];
-extern State*	_states[MAX_THREADS];
-extern bool     ret_is_ast[MAX_THREADS];
-extern std::mutex global_state_mutex;
 
+
+extern thread_local State* g_state ;
+extern thread_local bool   ret_is_ast ;
+extern thread_local Pap    pap ;
+extern thread_local ADDR   guest_start_of_block ;
+extern thread_local bool   is_dynamic_block ;
+extern thread_local UChar  ir_temp_trunk[MAX_IRTEMP * sizeof(Vns)];
 
 
 class State;
@@ -90,8 +95,8 @@ public:
     static Int traceflags;
     UInt gRegsIpOffset();
 protected:
-    static VexGuestExtents     vge_chunk[MAX_THREADS];
-    static VexTranslateArgs    vta_chunk[MAX_THREADS];
+    thread_local static VexGuestExtents     vge_chunk;
+    thread_local static VexTranslateArgs    vta_chunk;
 
 protected:
     Vex_Info(const char* filename) :StatetTraceFlag() { init_vex_info(filename); }
@@ -147,17 +152,12 @@ protected:
     static std::hash_map<ADDR, Hook_struct> CallBackDict;
     static std::hash_map<ADDR/*static table base*/, TRtype::TableIdx_CB> TableIdxDict;
 
-    UShort t_index;
     ADDR guest_start_ep;
     ADDR guest_start;
-    ADDR guest_start_of_block;
-    bool is_dynamic_block;
 	void *VexGuestARCHState;
 
 private:
-    Pap pap;
     VexArchInfo *vai_guest,  *vai_host;
-    VexTranslateArgs *vta;
 
     Bool need_record;
     int  replace_const;
@@ -165,7 +165,6 @@ private:
     ADDR delta;
 
 public:
-    static Vns              ir_temp[MAX_THREADS][400];
     static ThreadPool*      pool;
     State*                  m_father_state;
     State_Tag               status;
@@ -182,12 +181,15 @@ public:
 
     State(const char* filename, ADDR gse, Bool _need_record) ;
 	State(State *father_state, ADDR gse) ;
-    void setSolver(z3::tactic const& tactic) { solv = tactic.mk_solver(); };
+    void setSolver(z3::tactic const& tactic) { 
+        solv.reset();
+        solv = tactic.mk_solver(); 
+    };
     void read_mem_dump(const char*);
 
 	~State() ;
-    static void thread_register();
-    static void thread_unregister();
+    static void init_irTemp();
+    static void clear_irTemp();
     void initVexEngine();
 	inline IRSB* BB2IR();
 	void add_assert(Vns &assert, Bool ToF);
@@ -318,7 +320,7 @@ public:
     void   traceIRStmtEnd(IRStmt* s) {
         if (getFlag(CF_ppStmts)) {
             if (s->tag == Ist_WrTmp) {
-                std::cout << ir_temp[temp_index()][s->Ist.WrTmp.tmp] << std::endl;
+                std::cout << ir_temp[s->Ist.WrTmp.tmp] << std::endl;
             }
             else {
                 vex_printf("\n");

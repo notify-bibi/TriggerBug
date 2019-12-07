@@ -80,6 +80,7 @@
 
 /* Translates ARM64 code to IR. */
 
+extern "C" {
 #include "libvex_basictypes.h"
 #include "libvex_ir.h"
 #include "libvex.h"
@@ -89,7 +90,10 @@
 #include "main_globals.h"
 #include "guest_generic_bb_to_IR.h"
 #include "guest_arm64_defs.h"
+}
 
+#undef NULL
+#define NULL nullptr
 
 /*------------------------------------------------------------*/
 /*--- Globals                                              ---*/
@@ -103,16 +107,15 @@
 /* CONST: what is the host's endianness?  We need to know this in
    order to do sub-register accesses to the SIMD/FP registers
    correctly. */
-static VexEndness host_endness;
+thread_local static VexEndness host_endness;
 
 /* CONST: The guest address for the instruction currently being
    translated.  */
-static Addr64 guest_PC_curr_instr;
+thread_local static Addr64 guest_PC_curr_instr;
 
 /* MOD: The IRSB* into which we're generating code. */
-static IRSB* irsb[MAX_THREADS];
+thread_local static IRSB* irsb;
 
-#define irsb irsb[temp_index()]
 
 /*------------------------------------------------------------*/
 /*--- Debugging output                                     ---*/
@@ -1710,7 +1713,9 @@ static const HChar* nameARM64Condcode ( ARM64Condcode cond )
 static const HChar* nameCC ( ARM64Condcode cond ) {
    return nameARM64Condcode(cond);
 }
-
+static const HChar* nameCC(UInt cond) {
+    return nameARM64Condcode((ARM64Condcode)cond);
+}
 
 /* Build IR to calculate some particular condition from stored
    CC_OP/CC_DEP1/CC_DEP2/CC_NDEP.  Returns an expression of type
@@ -1768,7 +1773,14 @@ static IRExpr* mk_arm64g_calculate_condition ( ARM64Condcode cond )
    vassert(cond >= 0 && cond <= 15);
    return mk_arm64g_calculate_condition_dyn( mkU64(cond << 4) );
 }
-
+static IRExpr* mk_arm64g_calculate_condition(UInt cond)
+{
+    /* First arg is "(cond << 4) | condition".  This requires that the
+       ARM64_CC_OP_ values all fit in 4 bits.  Hence we are passing a
+       (COND, OP) pair in the lowest 8 bits of the first argument. */
+    vassert(cond >= 0 && cond <= 15);
+    return mk_arm64g_calculate_condition_dyn(mkU64(cond << 4));
+}
 
 /* Build IR to calculate just the carry flag from stored
    CC_OP/CC_DEP1/CC_DEP2/CC_NDEP.  Returns an expression ::
@@ -8279,19 +8291,19 @@ void math_SQDMULH ( /*OUT*/IRTemp* res,
       IRTemp roundConst = math_VEC_DUP_IMM(size+1, 1ULL << rcShift);
       assign(*sat1n,
              binop(mkVecCATODDLANES(size),
-                   binop(addWide,
-                         binop(addWide, mkexpr(mullsHI), mkexpr(mullsHI)),
+                   binop((IROp)addWide,
+                         binop((IROp)addWide, mkexpr(mullsHI), mkexpr(mullsHI)),
                          mkexpr(roundConst)),
-                   binop(addWide,
-                         binop(addWide, mkexpr(mullsLO), mkexpr(mullsLO)),
+                   binop((IROp)addWide,
+                         binop((IROp)addWide, mkexpr(mullsLO), mkexpr(mullsLO)),
                          mkexpr(roundConst))));
    } else {
       assign(*sat1q, binop(mkVecQDMULHIS(size), mkexpr(vN), mkexpr(vM)));
 
       assign(*sat1n,
              binop(mkVecCATODDLANES(size),
-                   binop(addWide, mkexpr(mullsHI), mkexpr(mullsHI)),
-                   binop(addWide, mkexpr(mullsLO), mkexpr(mullsLO))));
+                   binop((IROp)addWide, mkexpr(mullsHI), mkexpr(mullsHI)),
+                   binop((IROp)addWide, mkexpr(mullsLO), mkexpr(mullsLO))));
    }
 
    assign(*res, mkexpr(*sat1q));
@@ -10418,7 +10430,7 @@ Bool dis_AdvSIMD_scalar_two_reg_misc(/*MB_OUT*/DisResult* dres, UInt insn)
       Bool           isD  = (size & 1) == 1;
       IRType         tyF  = isD ? Ity_F64 : Ity_F32;
       IRType         tyI  = isD ? Ity_I64 : Ity_I32;
-      IRRoundingMode irrm = 8; /*impossible*/
+      IRRoundingMode irrm = (IRRoundingMode)8; /*impossible*/
       HChar          ch   = '?';
       switch (ix) {
          case 1: ch = 'n'; irrm = Irrm_NEAREST; break;
@@ -12733,7 +12745,7 @@ Bool dis_AdvSIMD_two_reg_misc(/*MB_OUT*/DisResult* dres, UInt insn)
       Bool isD = (size & 1) == 1;
       if (bitQ == 0 && isD) return False; // implied 1d case
 
-      IRRoundingMode irrm = 8; /*impossible*/
+      IRRoundingMode irrm = (IRRoundingMode)8; /*impossible*/
       HChar          ch   = '?';
       switch (ix) {
          case 1: ch = 'n'; irrm = Irrm_NEAREST; break;
@@ -14159,7 +14171,7 @@ Bool dis_AdvSIMD_fp_to_from_int_conv(/*MB_OUT*/DisResult* dres, UInt insn)
       Bool isF64 = (ty & 1) == 1;
       Bool isU   = (op & 1) == 1;
       /* Decide on the IR rounding mode to use. */
-      IRRoundingMode irrm = 8; /*impossible*/
+      IRRoundingMode irrm = (IRRoundingMode)8; /*impossible*/
       HChar ch = '?';
       if (op == BITS3(0,0,0) || op == BITS3(0,0,1)) {
          switch (rm) {

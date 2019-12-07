@@ -633,6 +633,8 @@ _returnaddr:
     return max - address + 0x1000;
 }
 
+
+
 void MEM::copy(MEM& mem) {
     PML4T* CR3_point = *(mem.CR3);
     PML4T* lCR3 = *CR3;
@@ -648,10 +650,45 @@ void MEM::copy(MEM& mem) {
                         pt->pt = (PAGE * *)malloc(pt_point->size * 8);
                         memset(pt->pt, 0, pt_point->size * 8);
                     }
+#ifndef CLOSECNW
+#ifdef USECNWNOAST
+                    PAGE* fpage = pt_point->pt[index];
+                    if (!fpage->is_pad) {
+                        if (fpage->unit->symbolic) {
+                            PAGE* page = new PAGE;
+                            pt->pt[index] = page;
+                            page->unit_mutex = true;
+                            page->used_point = 1;
+                            page->user = user;
+                            page->unit = new Register<0x1000>(*(fpage->unit), m_ctx, need_record);
+                            page->is_pad = false;
+                            goto dont_use_father_page;
+                        }
+                    }
                     pt->pt[index] = pt_point->pt[index];//copy
-                    //(pt->pt[index])->used_point += 1;
                     inc_used_ref((pt->pt[index]));
-                        
+                    dont_use_father_page:
+#else
+                    pt->pt[index] = pt_point->pt[index];//copy
+                    inc_used_ref((pt->pt[index]));
+#endif
+#else
+                    PAGE* fpage = pt_point->pt[index];
+                    PAGE *page = new PAGE;
+                    pt->pt[index] = page;
+                    page->unit_mutex = true;
+                    page->used_point = 1;
+                    page->user = user;
+                    if (fpage->is_pad) {
+                        page->unit = NULL;
+                        page->is_pad = true;
+                        page->pad = fpage->pad;
+                    }
+                    else {
+                        page->unit = new Register<0x1000>(*(fpage->unit), m_ctx, need_record);
+                        page->is_pad = false;
+                    }
+#endif
                     {
                         PAGE_link* orignal = (pt)->top;
                         pt->top = page_l;
@@ -750,7 +787,15 @@ ULong MEM::unmap(ULong address, ULong length) {
     vex_printf("free count %x\n", freecount);
 #endif
     return 0;
-};
+}
+void MEM::clearRecord()
+{
+    for (auto p : mem_change_map) {
+        p.second->clearRecord();
+    }
+    mem_change_map.clear();
+}
+;
 
 
 MEM::~MEM() {
@@ -832,7 +877,13 @@ MEM::~MEM() {
 
 void MEM::CheckSelf(PAGE*& P, ADDR address)
 {
-    if (user == P->user) return;
+#ifndef CLOSECNW
+    if (user == P->user) {
+#ifdef USECNWNOAST
+        mem_change_map[ALIGN(address, 0x1000)] = P->unit;
+#endif
+        return; 
+    }
     bool xchgbv = false;
     while (!xchgbv) { __asm__ __volatile("xchgb %b0,%1":"=r"(xchgbv) : "m"(P->unit_mutex), "0"(xchgbv) : "memory"); }
     PAGE** page = get_pointer_of_mem_page(address);
@@ -862,6 +913,10 @@ void MEM::CheckSelf(PAGE*& P, ADDR address)
     P->unit_mutex = true;
     P = np;
     mem_change_map[ALIGN(address, 0x1000)] = np->unit;
+#else
+    vassert(user == P->user);
+    mem_change_map[ALIGN(address, 0x1000)] = P->unit;
+#endif
 }
 
 void MEM::init_page(PAGE*& P, ADDR address)

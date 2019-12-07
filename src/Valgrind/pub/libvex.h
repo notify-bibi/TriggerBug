@@ -42,34 +42,33 @@
 
 #include "libvex_basictypes.h"
 #include "libvex_ir.h"
-
 /*patch start{*/
 
-#ifdef _MSC_VER
-
+#if defined(_MSC_VER)
+#ifndef __cplusplus
 #ifndef _HAS_NODISCARD
 #define _HAS_NODISCARD 0
 #endif
-
+#endif
 #include <intrin.h>
-inline  UInt __builtin_clzll(ULong w64) {
-	unsigned long result = 0;
-	if (_BitScanReverse64(&result, w64)) {
-		return 63 - result;
-	}
-	else {
-		return 64;
-	}
+inline static UInt __builtin_clzll(ULong w64) {
+    unsigned long result = 0;
+    if (_BitScanReverse64(&result, w64)) {
+        return 63 - result;
+    }
+    else {
+        return 64;
+    }
 }
 
-inline  UInt __builtin_ctzll(ULong w64) {
-	unsigned long result = 0;
-	if (_BitScanForward64(&result, w64)) {
-		return result;
-	}
-	else {
-		return 64;
-	}
+inline static UInt __builtin_ctzll(ULong w64) {
+    unsigned long result = 0;
+    if (_BitScanForward64(&result, w64)) {
+        return result;
+    }
+    else {
+        return 64;
+    }
 }
 #endif
 
@@ -842,7 +841,6 @@ typedef
       const void* disp_cp_chain_me_to_fastEP;
       const void* disp_cp_xindir;
       const void* disp_cp_xassisted;
-	  Pap *pap;
    }
    VexTranslateArgs;
 
@@ -856,7 +854,7 @@ VexTranslateResult LibVEX_Translate ( /*MOD*/ VexTranslateArgs* );
 extern
 IRSB* LibVEX_FrontEnd ( /*MOD*/ VexTranslateArgs*,
                         /*OUT*/ VexTranslateResult* res,
-                        /*OUT*/ VexRegisterUpdates* pxControl );
+                        /*OUT*/ VexRegisterUpdates* pxControl , Pap* pap);
 
 
 /* A subtlety re interaction between self-checking translations and

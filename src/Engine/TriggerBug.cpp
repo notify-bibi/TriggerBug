@@ -23,6 +23,9 @@ Revision History:
 #include "engine.hpp"
 #define vpanic(...) printf("%s line %d",__FILE__,__LINE__); vpanic(__VA_ARGS__);
 
+#include "Register.hpp"
+#include "memory.hpp"
+#include "SimulationEngine/State_class.hpp"
 #include "SimulationEngine/State_analyzer.hpp"
 #include "Z3_Target_Call/Guest_Helper.hpp"
 
@@ -303,6 +306,30 @@ State_Tag success_ret3(State* s) {
 }
 
 
+State_Tag success_ret33(State* s) {
+    s->solv.push();
+    UChar bf[] = { 133, 67, 104, 133, 245, 38, 60, 61, 39, 245, 51, 104, 62, 60, 118, 38, 245, 118, 165, 245, 19, 165, 61, 245, 62, 165, 45, 61, 245, 7, 60, 118, 29, 60, 15, 0, 133, 169 };
+
+    auto enc = s->regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::rax);
+    for (int i = 0; i < 38; i++) {
+        Vns e = s->mem.Iex_Load<Ity_I8>(enc + i);
+        s->add_assert(e == (UChar)bf[i], True);
+    }
+    vex_printf("checking\n\n");
+    auto dfdfs = s->solv.check();
+    if (dfdfs == sat) {
+        vex_printf("issat");
+        auto m = s->solv.get_model();
+        std::cout << m << std::endl;
+        exit(0);
+    }
+    else {
+        vex_printf("unsat??????????\n\n%d", dfdfs);
+    }
+    s->solv.pop();
+    return Death;
+}
+
 
 State_Tag whil(State* s) {
     return (State_Tag)0x233;
@@ -311,7 +338,7 @@ State_Tag whil(State* s) {
 State_Tag pp(State* s) {
     auto al = s->regs.Iex_Get<Ity_I32>(AMD64_IR_OFFSET::eax);
     std::cout << Z3_ast_to_string(al, al) << std::endl;
-    s->regs.Ist_Put(AMD64_IR_OFFSET::eax, 38ul);
+    s->regs.Ist_Put(AMD64_IR_OFFSET::rax, 38ull);
     s->hook_pass(5);
     return (State_Tag)Running;
 }
@@ -339,13 +366,123 @@ Vns flag_limit(Vns &flag) {
 
 #include "example.hpp"
  
+//
+//
+//void test_apps() {
+//    Z3_config cfg = Z3_mk_config();
+//    Z3_set_param_value(cfg, "MODEL", "true");
+//    Z3_context ctx = Z3_mk_context(cfg);
+//    Z3_solver s = Z3_mk_solver(ctx);
+//    Z3_solver_inc_ref(ctx, s);
+//    Z3_symbol A = Z3_mk_string_symbol(ctx, "A");
+//    Z3_symbol F = Z3_mk_string_symbol(ctx, "f");
+//    Z3_sort SA = Z3_mk_uninterpreted_sort(ctx, A);
+//    Z3_func_decl f = Z3_mk_func_decl(ctx, F, 1, &SA, SA);
+//    Z3_symbol X = Z3_mk_string_symbol(ctx, "x");
+//    Z3_ast x = Z3_mk_const(ctx, X, SA);
+//    Z3_ast fx = Z3_mk_app(ctx, f, 1, &x);
+//    Z3_ast ffx = Z3_mk_app(ctx, f, 1, &fx);
+//    Z3_ast fffx = Z3_mk_app(ctx, f, 1, &ffx);
+//    Z3_ast ffffx = Z3_mk_app(ctx, f, 1, &fffx);
+//    Z3_ast fffffx = Z3_mk_app(ctx, f, 1, &ffffx);
+//
+//    Z3_ast fml = Z3_mk_not(ctx, Z3_mk_eq(ctx, x, fffffx));
+//
+//    Z3_solver_assert(ctx, s, fml);
+//    Z3_lbool r = Z3_solver_check(ctx, s);
+//    std::cout << r << "\n";
+//    Z3_solver_dec_ref(ctx, s);
+//    Z3_del_config(cfg);
+//    Z3_del_context(ctx);
+//}
+//
+//void test_bvneg() {
+//    Z3_config cfg = Z3_mk_config();
+//    Z3_set_param_value(cfg, "MODEL", "true");
+//    Z3_context ctx = Z3_mk_context(cfg);
+//    Z3_solver s = Z3_mk_solver(ctx);
+//    Z3_solver_inc_ref(ctx, s);
+//
+//    {
+//        Z3_sort bv30 = Z3_mk_bv_sort(ctx, 30);
+//        Z3_ast  x30 = Z3_mk_fresh_const(ctx, "x", bv30);
+//        Z3_ast fml = Z3_mk_eq(ctx, Z3_mk_int(ctx, -1, bv30),
+//            Z3_mk_bvadd(ctx, Z3_mk_int(ctx, 0, bv30),
+//                x30));
+//        Z3_solver_assert(ctx, s, fml);
+//        Z3_lbool r = Z3_solver_check(ctx, s);
+//        std::cout << r << "\n";
+//    }
+//
+//    {
+//        Z3_sort bv31 = Z3_mk_bv_sort(ctx, 31);
+//        Z3_ast  x31 = Z3_mk_fresh_const(ctx, "x", bv31);
+//        Z3_ast fml = Z3_mk_eq(ctx, Z3_mk_int(ctx, -1, bv31),
+//            Z3_mk_bvadd(ctx, Z3_mk_int(ctx, 0, bv31),
+//                x31));
+//        Z3_solver_assert(ctx, s, fml);
+//        Z3_lbool r = Z3_solver_check(ctx, s);
+//        std::cout << r << "\n";
+//    }
+//
+//    {
+//        Z3_sort bv32 = Z3_mk_bv_sort(ctx, 32);
+//        Z3_ast  x32 = Z3_mk_fresh_const(ctx, "x", bv32);
+//        Z3_ast fml = Z3_mk_eq(ctx,
+//            Z3_mk_int(ctx, -1, bv32),
+//            Z3_mk_bvadd(ctx, Z3_mk_int(ctx, 0, bv32),
+//                x32));
+//        Z3_solver_assert(ctx, s, fml);
+//        Z3_lbool r = Z3_solver_check(ctx, s);
+//        std::cout << r << "\n";
+//    }
+//
+//    Z3_solver_dec_ref(ctx, s);
+//    Z3_del_config(cfg);
+//    Z3_del_context(ctx);
+//}
+//
+//static bool cb_called = false;
+//static void my_cb(Z3_context, Z3_error_code) {
+//    cb_called = true;
+//}
+//
+//static void test_mk_distinct() {
+//    Z3_config cfg = Z3_mk_config();
+//    Z3_context ctx = Z3_mk_context(cfg);
+//    Z3_set_error_handler(ctx, my_cb);
+//
+//    Z3_sort bv8 = Z3_mk_bv_sort(ctx, 8);
+//    Z3_sort bv32 = Z3_mk_bv_sort(ctx, 32);
+//    Z3_ast args[] = { Z3_mk_int64(ctx, 0, bv8), Z3_mk_int64(ctx, 0, bv32) };
+//    Z3_ast d = Z3_mk_distinct(ctx, 2, args);
+//    //ENSURE(cb_called);
+//    Z3_del_config(cfg);
+//    Z3_del_context(ctx);
+//
+//}
+
+
+
 
 int main() {
     {
+        /*
+
+        test_apps();
+        test_bvneg();
+        test_mk_distinct();
+*/
+
+
+
         context c,c1,c2;
         solver ss(c);
         solver ss2(ss);
-        expr bv8 = (c.bv_const("j", 8)+445-6767)*676;
+        /*{
+            sort sor = c.bv_sort(63);
+            expr bv8 = (c.constant("j", sor) + 445 - 6767) * 676;
+        }*/
 
         flag_max_count = 1;
         flag_count = 0;
@@ -355,24 +492,24 @@ int main() {
 
 
 
-      /*  State::pool->enqueue(
-            [&c, &c1, &bv8] {
-                for (int i = 0; i < 5000; i++) {
-                    expr(c1, Z3_translate(c, bv8, c1));
-                };
-            }
-        );
+        /*  State::pool->enqueue(
+              [&c, &c1, &bv8] {
+                  for (int i = 0; i < 5000; i++) {
+                      expr(c1, Z3_translate(c, bv8, c1));
+                  };
+              }
+          );
 
-        State::pool->enqueue(
-            [&c, &c2, &bv8] {
-                for (int i = 0; i < 10000; i++) {
-                    expr(c2, Z3_translate(c, bv8, c2));
-                };
-            }
-        );
+          State::pool->enqueue(
+              [&c, &c2, &bv8] {
+                  for (int i = 0; i < 10000; i++) {
+                      expr(c2, Z3_translate(c, bv8, c2));
+                  };
+              }
+          );
 
 
-        State::pool->wait();*/
+          State::pool->wait();*/
 
 
 
@@ -394,22 +531,20 @@ int main() {
         //state.setSolver(m_tactic);
 
 
-        _VexGuestAMD64State reg(state);
+        TRGL::VexGuestAMD64State reg(state);
         for (int i = 0; i < 38; i++) {
             auto flag = state.get_int_const(8);
-            auto ao3 = flag >= 1 && flag <= 122;
+            auto ao3 = flag >= 1 && flag <= 128;
             state.mem.Ist_Store(reg.guest_RDI + i, flag);
-            std::vector<Vns> guard_result;
-
-
             state.add_assert(ao3, 1);
             /*TESTCODE(
                 eval_size = eval_all(guard_result, state.solv, flag);
             );*/
         }
         state.hook_add(0x000400E7A, pp);
+       // state.hook_add(0x00400ED3, success_ret33);
         state.hook_add(0x400CC0, success_ret3);
-
+        
         {
             StatePrinter<StateAMD64> state2(&state, 0x00400F7A);
             auto df = state2.get_int_const(64);

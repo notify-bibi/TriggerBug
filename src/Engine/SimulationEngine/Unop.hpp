@@ -2,7 +2,7 @@
 using namespace z3;
 
 
-static Vns bsf32(Vns &s) {
+static Vns bsf32(Vns const&s) {
     Vns re(s, (UChar)32);
     for (int i = s.bitn - 1; i != -1; i--) {
         re = ite(s.extract(i, i).toZ3Bool(), Vns(s, (UChar)i), re);
@@ -10,7 +10,7 @@ static Vns bsf32(Vns &s) {
     return re.zext(24);
 }
 
-static Vns bsr32(Vns& s) {
+static Vns bsr32(Vns const& s) {
     Vns re(s, (UInt)32);
     for (int i = 0; i < s.bitn; i++) {
         re = ite(s.extract(i, i).toZ3Bool(), Vns(s, (UChar)i), re);
@@ -18,7 +18,7 @@ static Vns bsr32(Vns& s) {
     return re.zext(24);
 }
 
-static Vns bsf64(Vns& s) {
+static Vns bsf64(Vns const& s) {
     Vns re(s, (UChar)64);
     for (int i = s.bitn - 1; i != -1; i--) {
         re = ite(s.extract(i, i).toZ3Bool(), Vns(s, (UChar)i), re);
@@ -26,7 +26,7 @@ static Vns bsf64(Vns& s) {
     return re.zext(56);
 }
 
-static Vns bsr64(Vns& s) {
+static Vns bsr64(Vns const& s) {
     Vns re(s, (UChar)64);
     for (int i = 0; i < s.bitn; i++) {
         re = ite(s.extract(i, i).toZ3Bool(), Vns(s, (UChar)i), re);
@@ -71,9 +71,10 @@ static inline int MostSignificantBit64(uint64_t n) {
     return 64 - CountLeadingZeros64(n);
 }
 
-static inline Z3_ast bool2bv(Z3_context ctx,Z3_ast ast) {
+static inline Z3_ast bool2bv(Z3_context ctx, Z3_ast ast) {
     Z3_inc_ref(ctx, ast);
     Z3_sort sort = Z3_mk_bv_sort(ctx, 1);
+    Z3_inc_ref(ctx, (Z3_ast)sort);
     Z3_ast zero = Z3_mk_int(ctx, 0, sort);
     Z3_inc_ref(ctx, zero);
     Z3_ast one = Z3_mk_int(ctx, 1, sort);
@@ -82,6 +83,7 @@ static inline Z3_ast bool2bv(Z3_context ctx,Z3_ast ast) {
     Z3_dec_ref(ctx, one);
     Z3_dec_ref(ctx, zero);
     Z3_dec_ref(ctx, ast);
+    Z3_dec_ref(ctx, (Z3_ast)sort);
     return result;
 }
 

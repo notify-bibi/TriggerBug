@@ -1373,6 +1373,8 @@ s390_insn_map_regs(HRegRemap *m, s390_insn *insn)
 #ifdef _MSC_VER
 #define __builtin_memcpy memcpy
 #endif
+
+
 static inline UChar *
 emit_2bytes(UChar *p, ULong val)
 {
@@ -1392,7 +1394,9 @@ emit_6bytes(UChar *p, ULong val)
 {
    return (UChar *)__builtin_memcpy(p, ((UChar *)&val) + 2, 6) + 6;
 }
-
+#ifdef _MSC_VER
+#undef __builtin_memcpy
+#endif
 
 /*------------------------------------------------------------*/
 /*--- Functions to emit various instruction formats        ---*/

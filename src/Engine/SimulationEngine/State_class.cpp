@@ -16,7 +16,7 @@ Revision History:
 
 #include "Z3_Target_Call/Z3_Target_Call.hpp"
 #include "Z3_Target_Call/Guest_Helper.hpp"
-
+extern "C" {
 #include "libvex_guest_x86.h"
 #include "libvex_guest_amd64.h"
 #include "libvex_guest_arm.h"
@@ -26,11 +26,13 @@ Revision History:
 #include "libvex_guest_ppc32.h"
 #include "libvex_guest_ppc64.h"
 #include "libvex_guest_s390x.h"
-
-
-State*          _states[MAX_THREADS];
-bool            ret_is_ast[MAX_THREADS];
-std::mutex      global_state_mutex;
+}
+thread_local State* g_state = nullptr;
+thread_local bool   ret_is_ast = false;
+thread_local Pap    pap;
+thread_local ADDR   guest_start_of_block = 0;
+thread_local bool   is_dynamic_block = false;
+thread_local UChar  ir_temp_trunk[MAX_IRTEMP * sizeof(Vns)];
 
 LARGE_INTEGER   freq_global = { 0 };
 LARGE_INTEGER   beginPerformanceCount_global = { 0 };
@@ -75,32 +77,27 @@ typedef Vns (*Z3_Function1)(Vns &);
 __m256i m32_fast[33];
 __m256i m32_mask_reverse[33];
 
+tinyxml2::XMLDocument               Vex_Info::doc = tinyxml2::XMLDocument();
+VexRegisterUpdates                  Vex_Info::iropt_register_updates_default = VexRegUpdSpAtMemAccess;
+Int                                 Vex_Info::iropt_level = 2;
+UInt                                Vex_Info::guest_max_insns = 100;
+tinyxml2::XMLError                  Vex_Info::err = tinyxml2::XML_ERROR_COUNT;
+tinyxml2::XMLElement*               Vex_Info::doc_TriggerBug = nullptr;
+tinyxml2::XMLElement*               Vex_Info::doc_VexControl = nullptr;
+tinyxml2::XMLElement*               Vex_Info::doc_debug = nullptr;
+GuestSystem                         Vex_Info::guest_system = unknowSystem;
+VexArch                             Vex_Info::guest = VexArch_INVALID;
+const char*                         Vex_Info::MemoryDumpPath = "你没有这个文件";
+UInt                                Vex_Info::MaxThreadsNum = 16;
+Int                                 Vex_Info::traceflags = 0;
+thread_local VexTranslateArgs       Vex_Info::vta_chunk;
+thread_local VexGuestExtents        Vex_Info::vge_chunk;
 
 
 
-
-tinyxml2::XMLDocument Vex_Info::doc = tinyxml2::XMLDocument();
-VexRegisterUpdates Vex_Info::iropt_register_updates_default = VexRegUpdSpAtMemAccess;
-Int Vex_Info::iropt_level = 2;
-UInt Vex_Info::guest_max_insns = 100;
-tinyxml2::XMLError Vex_Info::err = tinyxml2::XML_ERROR_COUNT;
-tinyxml2::XMLElement* Vex_Info::doc_TriggerBug = nullptr;
-tinyxml2::XMLElement* Vex_Info::doc_VexControl = nullptr;
-tinyxml2::XMLElement* Vex_Info::doc_debug = nullptr;
-GuestSystem Vex_Info::guest_system = unknowSystem;
-VexArch Vex_Info::guest = VexArch_INVALID;
-const char* Vex_Info::MemoryDumpPath = "你没有这个文件";
-UInt Vex_Info::MaxThreadsNum = 16;
-Int Vex_Info::traceflags = 0;
-
-VexTranslateArgs    Vex_Info::vta_chunk[MAX_THREADS];
-VexGuestExtents     Vex_Info::vge_chunk[MAX_THREADS];
-
-
-std::hash_map<ADDR, Hook_struct> State::CallBackDict;
-std::hash_map<ADDR/*static table base*/, TRtype::TableIdx_CB> State::TableIdxDict;
-ThreadPool* State::pool;
-Vns State::ir_temp[MAX_THREADS][MAX_IRTEMP];
+std::hash_map<ADDR, Hook_struct>                                State::CallBackDict;
+std::hash_map<ADDR/*static table base*/, TRtype::TableIdx_CB>   State::TableIdxDict;
+ThreadPool*                                                     State::pool;
 
 __attribute__((noreturn))
 void failure_exit() {
@@ -256,7 +253,6 @@ void IR_init(VexControl& vc) {
             m32_mask_reverse[i] = _mm256_setzero_si256();
             memset(&m32_mask_reverse[i].m256i_i8[i], -1ul, 32 - i);
         }
-        for (int i = 0; i <= MAX_THREADS; i++)  ret_is_ast[i] = False;
     }
 }
 
@@ -269,6 +265,7 @@ int eval_all(std::vector<Vns>& result, solver& solv, Z3_ast nia) {
     //std::vector<Z3_model> mv;
     //mv.reserve(20);
     Z3_context ctx = solv.ctx();
+    vassert(Z3_get_sort_kind(ctx, Z3_get_sort(ctx, nia)) == Z3_BV_SORT);
     for (int nway = 0; ; nway++) {
         Z3_lbool b = Z3_solver_check(ctx, solv);
         if (b == Z3_L_TRUE) {
@@ -322,24 +319,15 @@ State::State(const char* filename, ADDR gse, Bool _need_record) :
     unit_lock(true),
     replace_const(0),
     m_father_state(nullptr)
-    ,
-    vta(nullptr)
+    
 {
-
-    pap.state = (void*)(this);
-    pap.n_page_mem = _n_page_mem;
-    pap.guest_max_insns = guest_max_insns;
-    assert(MaxThreadsNum <= MAX_THREADS);
     if (pool) 
         delete pool;
     pool = new ThreadPool(MaxThreadsNum);
 
     asserts.resize(5);
     branch.reserve(10);
-    init_threads_id(); 
-    tempmeminit();
 
-    vassert(register_tid(GetCurrentThreadId()) == regist_ok);
     initVexEngine();
     VexControl vc;
     LibVEX_default_VexControl(&vc);
@@ -350,7 +338,6 @@ State::State(const char* filename, ADDR gse, Bool _need_record) :
     vc.guest_chase_thresh = 0;   //不许追赶
     vc.iropt_register_updates_default = iropt_register_updates_default;
     IR_init(vc);
-    vassert(unregister_tid(GetCurrentThreadId()) == unregist_ok);
     
     read_mem_dump(MemoryDumpPath);
     if (gse)
@@ -389,12 +376,7 @@ State::State(State *father_state, ADDR gse) :
     unit_lock(true),
     replace_const(father_state->replace_const),
     m_father_state(father_state)
-    ,
-    vta(nullptr)
 {
-    pap.state = (void*)(this);
-    pap.n_page_mem = _n_page_mem;
-    pap.guest_max_insns = guest_max_insns;
 };
 
 State::~State() { 
@@ -471,14 +453,9 @@ bool State::get_hook(Hook_struct& hs, ADDR addr)
 }
 
 inline void State::initVexEngine() {
-    t_index = temp_index();
     VexArchInfo vai_guest;
     VexArchInfo vai_host;
     VexAbiInfo vbi;
-
-    VexGuestExtents *vge = &vge_chunk[t_index];
-    vta = &vta_chunk[t_index];
-
 
     /*vai_host vai_guest*/
     LibVEX_default_VexArchInfo(&vai_host);
@@ -494,30 +471,31 @@ inline void State::initVexEngine() {
     vbi.guest_amd64_assume_fs_is_const = True;
     vex_prepare_vbi(guest, &vbi);
 
-    vta->callback_opaque = NULL;
-    vta->preamble_function = NULL;
-    vta->instrument1 = NULL;
-    vta->instrument2 = NULL;
-    vta->finaltidy = NULL;
-    vta->preamble_function = NULL;
+    vta_chunk.callback_opaque = NULL;
+    vta_chunk.preamble_function = NULL;
+    vta_chunk.instrument1 = NULL;
+    vta_chunk.instrument2 = NULL;
+    vta_chunk.finaltidy = NULL;
+    vta_chunk.preamble_function = NULL;
 
-    vta->disp_cp_chain_me_to_slowEP = (void*)dispatch;
-    vta->disp_cp_chain_me_to_fastEP = (void*)dispatch;
-    vta->disp_cp_xindir = (void*)dispatch;
-    vta->disp_cp_xassisted = (void*)dispatch;
+    vta_chunk.disp_cp_chain_me_to_slowEP = (void*)dispatch;
+    vta_chunk.disp_cp_chain_me_to_fastEP = (void*)dispatch;
+    vta_chunk.disp_cp_xindir = (void*)dispatch;
+    vta_chunk.disp_cp_xassisted = (void*)dispatch;
 
-    vta->abiinfo_both   = vbi;
-    vta->archinfo_guest = vai_guest;
-    vta->archinfo_host  = vai_host;
-    vta->arch_guest = guest;
-    vta->arch_host = HOSTARCH;
-    vta->guest_extents = vge;
-    vta->chase_into_ok = chase_into_ok;
-    vta->needs_self_check = needs_self_check;
+    vta_chunk.abiinfo_both   = vbi;
+    vta_chunk.archinfo_guest = vai_guest;
+    vta_chunk.archinfo_host  = vai_host;
+    vta_chunk.arch_guest = guest;
+    vta_chunk.arch_host = HOSTARCH;
+    vta_chunk.guest_extents = &vge_chunk;
+    vta_chunk.chase_into_ok = chase_into_ok;
+    vta_chunk.needs_self_check = needs_self_check;
+    vta_chunk.traceflags = traceflags;
 
-
-    vta->traceflags = traceflags;
-    vta->pap = &pap;
+    pap.state = (void*)(this);
+    pap.n_page_mem = _n_page_mem;
+    pap.guest_max_insns = guest_max_insns;
 }
 
 inline Vns State::getassert(z3::context &ctx) {
@@ -610,18 +588,18 @@ Z3_ast State::idx2Value(ADDR base, Z3_ast idx)
 inline IRSB* State::BB2IR() {
     mem.set_double_page(guest_start, pap);
     pap.start_swap       = 0;
-    vta->guest_bytes      = (UChar *)(pap.t_page_addr);
-    vta->guest_bytes_addr = (Addr64)((ADDR)guest_start);
+    vta_chunk.guest_bytes      = (UChar *)(pap.t_page_addr);
+    vta_chunk.guest_bytes_addr = (Addr64)((ADDR)guest_start);
     IRSB *irsb;
     VexRegisterUpdates pxControl;
     VexTranslateResult res;
     if(0){
         TESTCODE(
-            irsb = LibVEX_FrontEnd(vta, &res, &pxControl);
+            irsb = LibVEX_FrontEnd(&vta_chunk, &res, &pxControl, &pap);
         );
     }
     else {
-        return LibVEX_FrontEnd(vta, &res, &pxControl);
+        return LibVEX_FrontEnd(&vta_chunk, &res, &pxControl, &pap);
     }
     return irsb;
 }
@@ -644,7 +622,7 @@ void State::add_assert(Vns & assert,Bool ToF)
         }
     }
     else {
-        auto ass = (assert == (Bool)ToF);
+        auto ass = assert == Vns(m_ctx, (ULong)ToF, assert.bitn);
         Z3_solver_assert(m_ctx, solv, ass);
         asserts.push_back(ass);
     }
@@ -658,9 +636,9 @@ inline void State::add_assert_eq(Vns & eqA, Vns & eqB)
 }
 
 
-inline Vns symbolic_check(UInt idx, Z3_context ctx, ULong ret, UInt bitn) {
-    if (ret_is_ast[idx]) {
-        ret_is_ast[idx] = False;
+inline Vns symbolic_check(Z3_context ctx, ULong ret, UInt bitn) {
+    if (ret_is_ast) {
+        ret_is_ast = False;
         vassert(Z3_get_bv_sort_size(ctx, Z3_get_sort(ctx, (Z3_ast)ret)) == bitn);
         return Vns(ctx, (Z3_ast)ret, bitn, no_inc{});
     }
@@ -679,42 +657,35 @@ Vns State::CCall(IRCallee *cee, IRExpr **exp_args, IRType ty)
     if (!exp_args[0]) return Vns(m_ctx, ((Function_0)(cee->addr))(), bitn);
     Vns arg0 = tIRExpr(exp_args[0]);
     if (arg0.symbolic()) z3_mode = True;
-    if (!exp_args[1]) return (z3_mode) ? ((Z3_Function1)(funcDict(cee->addr)))(arg0) : symbolic_check(t_index, m_ctx, ((Function_1)(cee->addr))(arg0), bitn);
+    if (!exp_args[1]) return (z3_mode) ? ((Z3_Function1)(funcDict(cee->addr)))(arg0) : symbolic_check(m_ctx, ((Function_1)(cee->addr))(arg0), bitn);
     Vns arg1 = tIRExpr(exp_args[1]);
     if (arg1.symbolic()) z3_mode = True;
-    if (!exp_args[2]) return (z3_mode) ? ((Z3_Function2)(funcDict(cee->addr)))(arg0, arg1) : symbolic_check(t_index, m_ctx, ((Function_2)(cee->addr))(arg0, arg1), bitn);
+    if (!exp_args[2]) return (z3_mode) ? ((Z3_Function2)(funcDict(cee->addr)))(arg0, arg1) : symbolic_check(m_ctx, ((Function_2)(cee->addr))(arg0, arg1), bitn);
     Vns arg2 = tIRExpr(exp_args[2]);
     if (arg2.symbolic()) z3_mode = True;
-    if (!exp_args[3]) return (z3_mode) ? ((Z3_Function3)(funcDict(cee->addr)))(arg0, arg1, arg2) : symbolic_check(t_index, m_ctx, ((Function_3)(cee->addr))(arg0, arg1, arg2), bitn);
+    if (!exp_args[3]) return (z3_mode) ? ((Z3_Function3)(funcDict(cee->addr)))(arg0, arg1, arg2) : symbolic_check(m_ctx, ((Function_3)(cee->addr))(arg0, arg1, arg2), bitn);
     Vns arg3 = tIRExpr(exp_args[3]);
     if (arg3.symbolic()) z3_mode = True;
-    if (!exp_args[4]) return (z3_mode) ? ((Z3_Function4)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3) : symbolic_check(t_index, m_ctx, ((Function_4)(cee->addr))(arg0, arg1, arg2, arg3), bitn);
+    if (!exp_args[4]) return (z3_mode) ? ((Z3_Function4)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3) : symbolic_check(m_ctx, ((Function_4)(cee->addr))(arg0, arg1, arg2, arg3), bitn);
     Vns arg4 = tIRExpr(exp_args[4]);
     if (arg4.symbolic()) z3_mode = True;
-    if (!exp_args[5]) return (z3_mode) ? ((Z3_Function5)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3, arg4) : symbolic_check(t_index, m_ctx, ((Function_5)(cee->addr))(arg0, arg1, arg2, arg3, arg4), bitn);
+    if (!exp_args[5]) return (z3_mode) ? ((Z3_Function5)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3, arg4) : symbolic_check(m_ctx, ((Function_5)(cee->addr))(arg0, arg1, arg2, arg3, arg4), bitn);
     Vns arg5 = tIRExpr(exp_args[5]);
     if (arg5.symbolic()) z3_mode = True;
-    if (!exp_args[6]) return (z3_mode) ? ((Z3_Function6)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3, arg4, arg5) : symbolic_check(t_index, m_ctx, ((Function_6)(cee->addr))(arg0, arg1, arg2, arg3, arg4, arg5), bitn);
+    if (!exp_args[6]) return (z3_mode) ? ((Z3_Function6)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3, arg4, arg5) : symbolic_check(m_ctx, ((Function_6)(cee->addr))(arg0, arg1, arg2, arg3, arg4, arg5), bitn);
 
 }
 
-inline void State::thread_register()
+inline void State::init_irTemp()
 {
-    {
-        std::unique_lock<std::mutex> lock(global_state_mutex);
-        vassert(register_tid(GetCurrentThreadId()) == regist_ok);
-    }
-}
-inline void State::thread_unregister()
-{
-    auto i = temp_index();
     for (int j = 0; j < MAX_IRTEMP; j++) {
-        ir_temp[i][j].~Vns();
-        ir_temp[i][j].m_kind = REAL;
+        ir_temp[j].m_kind = REAL;
     }
-    {
-        std::unique_lock<std::mutex> lock(global_state_mutex);
-        vassert(unregister_tid(GetCurrentThreadId()) == unregist_ok);
+}
+inline void State::clear_irTemp()
+{
+    for (int j = 0; j < MAX_IRTEMP; j++) {
+        ir_temp[j].~Vns();
     }
 }
 
@@ -796,7 +767,7 @@ inline Vns State::tIRExpr(IRExpr* e)
 {
     switch (e->tag) {
     case Iex_Get: { return regs.Iex_Get(e->Iex.Get.offset, e->Iex.Get.ty); }
-    case Iex_RdTmp: { return ir_temp[t_index][e->Iex.RdTmp.tmp]; }
+    case Iex_RdTmp: { return ir_temp[e->Iex.RdTmp.tmp]; }
     case Iex_Unop: { return T_Unop(m_ctx, e->Iex.Unop.op, tIRExpr(e->Iex.Unop.arg)); }
     case Iex_Binop: { return T_Binop(m_ctx, e->Iex.Binop.op, tIRExpr(e->Iex.Binop.arg1), tIRExpr(e->Iex.Binop.arg2)); }
     case Iex_Triop: { return T_Triop(m_ctx, e->Iex.Triop.details->op, tIRExpr(e->Iex.Triop.details->arg1), tIRExpr(e->Iex.Triop.details->arg2), tIRExpr(e->Iex.Triop.details->arg3)); }
@@ -819,8 +790,8 @@ inline Vns State::tIRExpr(IRExpr* e)
     case Iex_GSPTR: {
         if (!VexGuestARCHState) {
             switch (guest) {
-            case VexArchX86: VexGuestARCHState = new VexGuestX86State; break;
-            case VexArchAMD64: VexGuestARCHState = new _VexGuestAMD64State(*this); break;
+            case VexArchX86: VexGuestARCHState = new TRGL::VexGuestX86State(*this); break;
+            case VexArchAMD64: VexGuestARCHState = new TRGL::VexGuestAMD64State(*this); break;
             case VexArchARM: VexGuestARCHState = new VexGuestARMState; break;
             case VexArchARM64: VexGuestARCHState = new VexGuestARM64State; break;
             case VexArchMIPS32: VexGuestARCHState = new VexGuestMIPS32State; break;
@@ -850,15 +821,12 @@ void State::start(Bool first_bkp_pass) {
     }
     status = Running;
     traceStart();
-    thread_register();
     initVexEngine();
-    t_index = temp_index();
-    _states[t_index] = this;
-    Vns* irTemp = ir_temp[t_index]; 
-    this->is_dynamic_block = false;
+    g_state = this;
+    is_dynamic_block = false;
     Hook_struct hs;
     IRSB* irsb = nullptr;
-
+    init_irTemp();
 Begin_try:
     try {
         try {
@@ -896,13 +864,13 @@ For_Begin:
                         __m256i m32 = mem.Iex_Load<Ity_V256>(guest_start);
                         m32.m256i_i8[0] = hs.original;
                         pap.start_swap = 2;
-                        vta->guest_bytes = (UChar*)(&m32);
-                        vta->guest_bytes_addr = (Addr64)((ADDR)guest_start);
+                        vta_chunk.guest_bytes = (UChar*)(&m32);
+                        vta_chunk.guest_bytes_addr = (Addr64)((ADDR)guest_start);
                         auto max_insns = pap.guest_max_insns;
                         pap.guest_max_insns = 1;
                         VexRegisterUpdates pxControl;
                         VexTranslateResult res;
-                        irsb = LibVEX_FrontEnd(vta, &res, &pxControl);
+                        irsb = LibVEX_FrontEnd(&vta_chunk, &res, &pxControl, &pap);
                         //ppIRSB(irsb);
                         pap.guest_max_insns = max_insns;
                     }
@@ -915,7 +883,7 @@ For_Begin:
                     switch (s->tag) {
                     case Ist_Put: { regs.Ist_Put(s->Ist.Put.offset, tIRExpr(s->Ist.Put.data)); break; }
                     case Ist_Store: { mem.Ist_Store(tIRExpr(s->Ist.Store.addr), tIRExpr(s->Ist.Store.data)); break; };
-                    case Ist_WrTmp: { irTemp[s->Ist.WrTmp.tmp] = tIRExpr(s->Ist.WrTmp.data); break; };
+                    case Ist_WrTmp: { ir_temp[s->Ist.WrTmp.tmp] = tIRExpr(s->Ist.WrTmp.data); break; };
                     case Ist_CAS /*比较和交换*/: {//xchg    rax, [r10]
                         bool xchgbv = false;
                         while (!xchgbv) { __asm__ __volatile("xchgb %b0,%1":"=r"(xchgbv) : "m"(unit_lock), "0"(xchgbv) : "memory"); }
@@ -926,13 +894,13 @@ For_Begin:
                         if ((cas.oldHi != IRTemp_INVALID) && (cas.expdHi)) {//double
                             Vns expdHi = tIRExpr(cas.expdHi);
                             Vns dataHi = tIRExpr(cas.dataHi);
-                            irTemp[cas.oldHi] = mem.Iex_Load(addr, (IRType)(expdLo.bitn));
-                            irTemp[cas.oldLo] = mem.Iex_Load(addr, (IRType)(expdLo.bitn));
+                            ir_temp[cas.oldHi] = mem.Iex_Load(addr, (IRType)(expdLo.bitn));
+                            ir_temp[cas.oldLo] = mem.Iex_Load(addr, (IRType)(expdLo.bitn));
                             mem.Ist_Store(addr, dataLo);
                             mem.Ist_Store(addr + (dataLo.bitn >> 3), dataHi);
                         }
                         else {//single
-                            irTemp[cas.oldLo] = mem.Iex_Load(addr, (IRType)(expdLo.bitn));
+                            ir_temp[cas.oldLo] = mem.Iex_Load(addr, (IRType)(expdLo.bitn));
                             mem.Ist_Store(addr, dataLo);
                         }
                         unit_lock = true;
@@ -991,8 +959,8 @@ For_Begin:
                             goto EXIT;
                         }
                         guest_start = (ADDR)s->Ist.IMark.addr;
-                        if (this->is_dynamic_block) {
-                            this->is_dynamic_block = false;
+                        if (is_dynamic_block) {
+                            is_dynamic_block = false;
                             goto For_Begin;// fresh changed block
                         }
                         break;
@@ -1024,7 +992,7 @@ For_Begin:
                         if (((UChar)guard) & 1) {
                             auto k = CCall(dirty->cee, dirty->args, Ity_I64);
                             if (dirty->tmp != -1) {
-                                irTemp[dirty->tmp] = k;
+                                ir_temp[dirty->tmp] = k;
                             }
                         }
                         break;
@@ -1033,10 +1001,10 @@ For_Begin:
                         IRLoadG* lg = s->Ist.LoadG.details;
                         auto guard = tIRExpr(lg->guard);
                         if (guard.real()) {
-                            irTemp[lg->dst] = (((UChar)guard)) ? ILGop(lg) : tIRExpr(lg->alt);
+                            ir_temp[lg->dst] = (((UChar)guard)) ? ILGop(lg) : tIRExpr(lg->alt);
                         }
                         else {
-                            irTemp[lg->dst] = ite(guard == 1, ILGop(lg), tIRExpr(lg->alt));
+                            ir_temp[lg->dst] = ite(guard == 1, ILGop(lg), tIRExpr(lg->alt));
                         }
                         break;
                     }
@@ -1163,8 +1131,8 @@ For_Begin:
 EXIT:
     unit_lock = true;
 
-    traceFinish();
-    thread_unregister();
+    traceFinish(); 
+    clear_irTemp();
     return;
 
 }
@@ -1308,7 +1276,7 @@ void StatePrinter<TC>::spIRTemp(IRTemp tmp)
     else
     {
         vex_printf("t%u: ", tmp);
-        std::cout << ir_temp[t_index][tmp];
+        std::cout << ir_temp[tmp];
     }
 }
 
@@ -1538,6 +1506,8 @@ void State::compress(ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_T
         };
         guest_start = Target_Addr;
         branchChunks.clear();
+        mem.clearRecord();
+        regs.clearRecord();
         status = NewState;
     }
     else if (flag == True) {

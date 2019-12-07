@@ -162,7 +162,7 @@
       dis_xadd_G_E     (xadd)
 */
 
-
+extern "C" {
 #include "libvex_basictypes.h"
 #include "libvex_ir.h"
 #include "libvex.h"
@@ -173,8 +173,10 @@
 #include "guest_generic_bb_to_IR.h"
 #include "guest_generic_x87.h"
 #include "guest_amd64_defs.h"
+}
 
-
+#undef NULL
+#define NULL nullptr
 /*------------------------------------------------------------*/
 /*--- Globals                                              ---*/
 /*------------------------------------------------------------*/
@@ -188,21 +190,21 @@
    that we don't have to pass them around endlessly. */
 
 /* We need to know this to do sub-register accesses correctly. */
-static VexEndness host_endness;
+thread_local static VexEndness host_endness;
 
 /* Pointer to the guest code area (points to start of BB, not to the
    insn being processed). */
-static const UChar* guest_code[MAX_THREADS];
+thread_local static const UChar* guest_code;
 
 /* The guest address corresponding to guest_code[0]. */
-static Addr64 guest_RIP_bbstart[MAX_THREADS];
+thread_local static Addr64 guest_RIP_bbstart;
 
 /* The guest address for the instruction currently being
    translated. */
-static Addr64 guest_RIP_curr_instr[MAX_THREADS];
+thread_local static Addr64 guest_RIP_curr_instr;
 
 /* The IRSB* into which we're generating code. */
-static IRSB* irsb[MAX_THREADS];
+thread_local static IRSB* irsb;
 
 /* For ensuring that %rip-relative addressing is done right.  A read
    of %rip generates the address of the next instruction.  It may be
@@ -216,15 +218,9 @@ static IRSB* irsb[MAX_THREADS];
    After the decode, if _mustcheck is now True, _assumed is
    checked. */
 
-static Addr64 guest_RIP_next_assumed[MAX_THREADS];
-static Bool   guest_RIP_next_mustcheck[MAX_THREADS];
+thread_local static Addr64 guest_RIP_next_assumed;
+thread_local static Bool   guest_RIP_next_mustcheck;
 
-#define guest_code guest_code[temp_index()]
-#define guest_RIP_bbstart guest_RIP_bbstart[temp_index()]
-#define guest_RIP_curr_instr guest_RIP_curr_instr[temp_index()]
-#define irsb irsb[temp_index()]
-#define guest_RIP_next_assumed guest_RIP_next_assumed[temp_index()]
-#define guest_RIP_next_mustcheck guest_RIP_next_mustcheck[temp_index()]
 
 /*------------------------------------------------------------*/
 /*--- Helpers for constructing IR.                         ---*/
@@ -323,10 +319,10 @@ static IROp mkSizedOp ( IRType ty, IROp op8 )
            || op8 == Iop_CasCmpNE8
            || op8 == Iop_Not8 );
    switch (ty) {
-      case Ity_I8:  return 0 +op8;
-      case Ity_I16: return 1 +op8;
-      case Ity_I32: return 2 +op8;
-      case Ity_I64: return 3 +op8;
+      case Ity_I8:  return (IROp)(0 +op8);
+      case Ity_I16: return (IROp)(1 +op8);
+      case Ity_I32: return (IROp)(2 +op8);
+      case Ity_I64: return (IROp)(3 +op8);
       default: vpanic("mkSizedOp(amd64)");
    }
 }
@@ -1992,7 +1988,7 @@ AMD64Condcode positiveIse_AMD64Condcode ( AMD64Condcode  cond,
    vassert(cond >= AMD64CondO && cond <= AMD64CondNLE);
    if (cond & 1) {
       *needInvert = True;
-      return cond-1;
+      return (AMD64Condcode)(cond-1);
    } else {
       *needInvert = False;
       return cond;
@@ -2402,11 +2398,11 @@ const HChar* segRegTxt ( Prefix pfx )
    present. */
 static
 IRExpr* handleAddrOverrides ( const VexAbiInfo* vbi, 
-                              Prefix pfx, IRExpr* virtual )
+                              Prefix pfx, IRExpr* _virtual )
 {
    /* --- address size override --- */
    if (haveASO(pfx))
-      virtual = unop(Iop_32Uto64, unop(Iop_64to32, virtual));
+      _virtual = unop(Iop_32Uto64, unop(Iop_64to32, _virtual));
 
    /* Note that the below are hacks that relies on the assumption
       that %fs or %gs are constant.
@@ -2416,7 +2412,7 @@ IRExpr* handleAddrOverrides ( const VexAbiInfo* vbi,
    if (pfx & PFX_FS) {
       if (vbi->guest_amd64_assume_fs_is_const) {
          /* return virtual + guest_FS_CONST. */
-         virtual = binop(Iop_Add64, virtual,
+         _virtual = binop(Iop_Add64, _virtual,
                                     IRExpr_Get(OFFB_FS_CONST, Ity_I64));
       } else {
          unimplemented("amd64 %fs segment override");
@@ -2426,7 +2422,7 @@ IRExpr* handleAddrOverrides ( const VexAbiInfo* vbi,
    if (pfx & PFX_GS) {
       if (vbi->guest_amd64_assume_gs_is_const) {
          /* return virtual + guest_GS_CONST. */
-         virtual = binop(Iop_Add64, virtual,
+         _virtual = binop(Iop_Add64, _virtual,
                                     IRExpr_Get(OFFB_GS_CONST, Ity_I64));
       } else {
          unimplemented("amd64 %gs segment override");
@@ -2435,7 +2431,7 @@ IRExpr* handleAddrOverrides ( const VexAbiInfo* vbi,
 
    /* cs, ds, es and ss are simply ignored in 64-bit mode. */
 
-   return virtual;
+   return _virtual;
 }
 
 //.. {
@@ -12524,7 +12520,6 @@ static Long dis_XSAVEC(const VexAbiInfo* vbi,
     return delta;
 }
 
-
 static Long dis_FXSAVE ( const VexAbiInfo* vbi,
                          Prefix pfx, Long delta, Int sz )
 {
@@ -20961,7 +20956,7 @@ Long dis_ESC_NONE (
                  guest_RIP_bbstart+delta, d64 );
          vassert(dres->whatNext == Dis_StopHere);
       }
-      DIP("j%s-8 0x%llx %s\n", name_AMD64Condcode(opc - 0x70), (ULong)d64,
+      DIP("j%s-8 0x%llx %s\n", name_AMD64Condcode((AMD64Condcode)(opc - 0x70)), (ULong)d64,
           comment);
       return delta;
    }
@@ -22535,7 +22530,7 @@ Long dis_ESC_0F (
                  guest_RIP_bbstart+delta, d64 );
          vassert(dres->whatNext == Dis_StopHere);
       }
-      DIP("j%s-32 0x%llx %s\n", name_AMD64Condcode(opc - 0x80), (ULong)d64,
+      DIP("j%s-32 0x%llx %s\n", name_AMD64Condcode((AMD64Condcode)(opc - 0x80)), (ULong)d64,
           comment);
       return delta;
    }
@@ -22558,18 +22553,18 @@ Long dis_ESC_0F (
    case 0x9F: /* set-Gb/set-NLEb (set if greater) */
       if (haveF2orF3(pfx)) goto decode_failure;
       t1 = newTemp(Ity_I8);
-      assign( t1, unop(Iop_1Uto8,mk_amd64g_calculate_condition(opc-0x90)) );
+      assign( t1, unop(Iop_1Uto8,mk_amd64g_calculate_condition((AMD64Condcode)(opc-0x90))) );
       modrm = getUChar(delta);
       if (epartIsReg(modrm)) {
          delta++;
          putIRegE(1, pfx, modrm, mkexpr(t1));
-         DIP("set%s %s\n", name_AMD64Condcode(opc-0x90), 
+         DIP("set%s %s\n", name_AMD64Condcode((AMD64Condcode)(opc-0x90)),
                            nameIRegE(1,pfx,modrm));
       } else {
          addr = disAMode ( &alen, vbi, pfx, delta, dis_buf, 0 );
          delta += alen;
          storeLE( mkexpr(addr), mkexpr(t1) );
-         DIP("set%s %s\n", name_AMD64Condcode(opc-0x90), dis_buf);
+         DIP("set%s %s\n", name_AMD64Condcode((AMD64Condcode)(opc-0x90)), dis_buf);
       }
       return delta;
 
@@ -23113,7 +23108,7 @@ Long dis_ESC_0F (
          return delta;
       }
 
-      /* 0F C7 /4 = XSAVE mem -- write x87, SSE, AVX state to memory */
+	  /* 0F C7 /4 = XSAVE mem -- write x87, SSE, AVX state to memory */
       if (haveNo66noF2noF3(pfx) && (sz == 4 || sz == 8)
           && !epartIsReg(getUChar(delta))
           && gregOfRexRM(pfx, getUChar(delta)) == 4
@@ -23121,8 +23116,6 @@ Long dis_ESC_0F (
           delta = dis_XSAVEC(vbi, pfx, delta, sz);
           return delta;
       }
-
-
       goto decode_failure;
    }
 
@@ -24696,73 +24689,73 @@ static IRTemp math_VPUNPCK_YMM ( IRTemp tL, IRType tR, IROp op )
 
 static IRTemp math_VPUNPCKLBW_YMM ( IRTemp tL, IRTemp tR )
 {
-   return math_VPUNPCK_YMM( tL, tR, Iop_InterleaveLO8x16 );
+   return math_VPUNPCK_YMM( tL, (IRType)tR, Iop_InterleaveLO8x16 );
 }
 
 
 static IRTemp math_VPUNPCKLWD_YMM ( IRTemp tL, IRTemp tR )
 {
-   return math_VPUNPCK_YMM( tL, tR, Iop_InterleaveLO16x8 );
+   return math_VPUNPCK_YMM( tL, (IRType)tR, Iop_InterleaveLO16x8 );
 }
 
 
 static IRTemp math_VPUNPCKLDQ_YMM ( IRTemp tL, IRTemp tR )
 {
-   return math_VPUNPCK_YMM( tL, tR, Iop_InterleaveLO32x4 );
+   return math_VPUNPCK_YMM( tL, (IRType)tR, Iop_InterleaveLO32x4 );
 }
 
 
 static IRTemp math_VPUNPCKLQDQ_YMM ( IRTemp tL, IRTemp tR )
 {
-   return math_VPUNPCK_YMM( tL, tR, Iop_InterleaveLO64x2 );
+   return math_VPUNPCK_YMM( tL, (IRType)tR, Iop_InterleaveLO64x2 );
 }
 
 
 static IRTemp math_VPUNPCKHBW_YMM ( IRTemp tL, IRTemp tR )
 {
-   return math_VPUNPCK_YMM( tL, tR, Iop_InterleaveHI8x16 );
+   return math_VPUNPCK_YMM( tL, (IRType)tR, Iop_InterleaveHI8x16 );
 }
 
 
 static IRTemp math_VPUNPCKHWD_YMM ( IRTemp tL, IRTemp tR )
 {
-   return math_VPUNPCK_YMM( tL, tR, Iop_InterleaveHI16x8 );
+   return math_VPUNPCK_YMM( tL, (IRType)tR, Iop_InterleaveHI16x8 );
 }
 
 
 static IRTemp math_VPUNPCKHDQ_YMM ( IRTemp tL, IRTemp tR )
 {
-   return math_VPUNPCK_YMM( tL, tR, Iop_InterleaveHI32x4 );
+   return math_VPUNPCK_YMM( tL, (IRType)tR, Iop_InterleaveHI32x4 );
 }
 
 
 static IRTemp math_VPUNPCKHQDQ_YMM ( IRTemp tL, IRTemp tR )
 {
-   return math_VPUNPCK_YMM( tL, tR, Iop_InterleaveHI64x2 );
+   return math_VPUNPCK_YMM( tL, (IRType)tR, Iop_InterleaveHI64x2 );
 }
 
 
 static IRTemp math_VPACKSSWB_YMM ( IRTemp tL, IRTemp tR )
 {
-   return math_VPUNPCK_YMM( tL, tR, Iop_QNarrowBin16Sto8Sx16 );
+   return math_VPUNPCK_YMM( tL, (IRType)tR, Iop_QNarrowBin16Sto8Sx16 );
 }
 
 
 static IRTemp math_VPACKUSWB_YMM ( IRTemp tL, IRTemp tR )
 {
-   return math_VPUNPCK_YMM( tL, tR, Iop_QNarrowBin16Sto8Ux16 );
+   return math_VPUNPCK_YMM( tL, (IRType)tR, Iop_QNarrowBin16Sto8Ux16 );
 }
 
 
 static IRTemp math_VPACKSSDW_YMM ( IRTemp tL, IRTemp tR )
 {
-   return math_VPUNPCK_YMM( tL, tR, Iop_QNarrowBin32Sto16Sx8 );
+   return math_VPUNPCK_YMM( tL, (IRType)tR, Iop_QNarrowBin32Sto16Sx8 );
 }
 
 
 static IRTemp math_VPACKUSDW_YMM ( IRTemp tL, IRTemp tR )
 {
-   return math_VPUNPCK_YMM( tL, tR, Iop_QNarrowBin32Sto16Ux8 );
+   return math_VPUNPCK_YMM( tL, (IRType)tR, Iop_QNarrowBin32Sto16Ux8 );
 }
 
 
@@ -32874,6 +32867,7 @@ DisResult disInstr_AMD64_WRK (
 
    /* The running delta */
    Long delta = delta64;
+
    /* Holds eip at the start of the insn, so that we can print
       consistent error messages for unimplemented insns. */
    Long delta_start = delta;

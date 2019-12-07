@@ -2,11 +2,13 @@
 #include "../State_class.hpp"
 #include "Z3_Target_Call.hpp"
 
+
 static inline ULong resultsr(Vns const & retv) {
     Z3_inc_ref(retv, retv);
-    ret_is_ast[temp_index()] = True;
+    ret_is_ast = True;
     return (ULong)(Z3_ast)retv;
 }
+
 #define TRRET(retv) (retv.real()? (ULong)(retv):resultsr(retv))
 #define ISUNSIGNED_TYPE(type) ((type)-1 > 0)
 
@@ -434,8 +436,9 @@ using V128P = GMP<V128>;
 
 
 
+namespace TRGL {
 
-class _VexGuestAMD64State {
+class VexGuestAMD64State {
 public:
     /*0  */GR<ULong >  host_EvC_FAILADDR;
     /*8  */GR<UInt >   host_EvC_COUNTER;
@@ -499,7 +502,8 @@ public:
     /*912*/GR<ULong>   guest_IP_AT_SYSCALL;
     State& m_state;
 public:
-	_VexGuestAMD64State(State &s):
+    VexGuestAMD64State() :VexGuestAMD64State(*g_state){}
+	VexGuestAMD64State(State &s):
         m_state(s),
         host_EvC_FAILADDR   (s,0  ),
         host_EvC_COUNTER    (s,8  ),
@@ -579,7 +583,7 @@ public:
 };
 
 
-class _VexGuestX86State {
+class VexGuestX86State {
 public:
 
     /*0  */GR<UInt>      host_EvC_FAILADDR;
@@ -632,7 +636,8 @@ public:
     /*348*/GR<UInt>      padding2;
     /*352*/GR<UInt>      padding3;
 public:
-    _VexGuestX86State(State& s):
+    VexGuestX86State() :VexGuestX86State(*g_state) {}
+    VexGuestX86State(State& s):
         host_EvC_FAILADDR   (s, 0  ),
         host_EvC_COUNTER    (s, 4  ),
         guest_EAX           (s, 8  ),
@@ -688,7 +693,7 @@ public:
 
 };
 
-namespace _X86SegDescr {
+namespace X86SegDescr {
     using LimitLow =    GMW<UShort>;
     using BaseLow =     GMW<UShort>;
     using BaseMid =     GMW<UInt, 0, 8>;
@@ -704,72 +709,80 @@ namespace _X86SegDescr {
     using word1 =       GMW<UInt>;
     using word2 =       GMW<UInt>;
 }
+//TriggerBug Guest Layout
 
-class _VexGuestX86SegDescr {
-public:
-    class _Bits {
+    class VexGuestX86SegDescr {
     public:
-        _X86SegDescr::LimitLow LimitLow;
-        _X86SegDescr::BaseLow BaseLow;
-        _X86SegDescr::BaseMid BaseMid;
-        _X86SegDescr::Type Type;
-        _X86SegDescr::Dpl Dpl;
-        _X86SegDescr::Pres Pres;
-        _X86SegDescr::LimitHi LimitHi;
-        _X86SegDescr::Sys Sys;
-        _X86SegDescr::Reserved_0 Reserved_0;
-        _X86SegDescr::Default_Big Default_Big;
-        _X86SegDescr::Granularity Granularity;
-        _X86SegDescr::BaseHi BaseHi;
-        _Bits(State &state, ADDR base):
-            LimitLow(state.mem, base + 0),
-            BaseLow(state.mem, base + 2),
-            BaseMid(state.mem, base + 4),
-            Type(state.mem, base + 4),
-            Dpl(state.mem, base + 4),
-            Pres(state.mem, base + 4),
-            LimitHi(state.mem, base + 4),
-            Sys(state.mem, base + 4),
-            Reserved_0(state.mem, base + 4),
-            Default_Big(state.mem, base + 4),
-            Granularity(state.mem, base + 4),
-            BaseHi(state.mem, base + 4)
-        {
-        }
-    };
-    class _Words {
-    public:
-        _X86SegDescr::word1 word1;
-        _X86SegDescr::word2 word2;
-        _Words(State& state, ADDR base) :
-            word1(state.mem, base),
-            word2(state.mem, base + 4)
-        {
-        }
-    };
+        class Bits {
+        public:
+            X86SegDescr::LimitLow LimitLow;
+            X86SegDescr::BaseLow BaseLow;
+            X86SegDescr::BaseMid BaseMid;
+            X86SegDescr::Type Type;
+            X86SegDescr::Dpl Dpl;
+            X86SegDescr::Pres Pres;
+            X86SegDescr::LimitHi LimitHi;
+            X86SegDescr::Sys Sys;
+            X86SegDescr::Reserved_0 Reserved_0;
+            X86SegDescr::Default_Big Default_Big;
+            X86SegDescr::Granularity Granularity;
+            X86SegDescr::BaseHi BaseHi;
+            Bits(State& state, ADDR base) :
+                LimitLow(state.mem, base + 0),
+                BaseLow(state.mem, base + 2),
+                BaseMid(state.mem, base + 4),
+                Type(state.mem, base + 4),
+                Dpl(state.mem, base + 4),
+                Pres(state.mem, base + 4),
+                LimitHi(state.mem, base + 4),
+                Sys(state.mem, base + 4),
+                Reserved_0(state.mem, base + 4),
+                Default_Big(state.mem, base + 4),
+                Granularity(state.mem, base + 4),
+                BaseHi(state.mem, base + 4)
+            {
+            }
+        };
+        class Words {
+        public:
+            X86SegDescr::word1 word1;
+            X86SegDescr::word2 word2;
+            Words(State& state, ADDR base) :
+                word1(state.mem, base),
+                word2(state.mem, base + 4)
+            {
+            }
+        };
 
-    class _LdtEnt {
-    public:
-        _Words Words;
-        _Bits Bits;
-        _LdtEnt(State &state, ADDR base) :
-            Words(state, base),
-            Bits(state, base)
+        class LdtEnt {
+        public:
+            Words Words;
+            Bits Bits;
+            LdtEnt(State& state, ADDR base) :
+                Words(state, base),
+                Bits(state, base)
+            {
+            }
+        };
+
+        LdtEnt LdtEnt;
+        VexGuestX86SegDescr(State& state, ADDR base) :
+            LdtEnt(state, (ADDR)base)
         {
+
         }
+        VexGuestX86SegDescr(ADDR base) :
+            LdtEnt(*g_state, (ADDR)base)
+        {
+
+        }
+
     };
-
-    _LdtEnt LdtEnt;
-    _VexGuestX86SegDescr(State &state, ADDR base) :
-        LdtEnt(state, (ADDR)base)
-    {
-
-    }
 };
 
 namespace Regs {
-	using AMD64 = _VexGuestAMD64State;
-    using X86 = _VexGuestX86State;
+	using AMD64 = TRGL::VexGuestAMD64State;
+    using X86 = TRGL::VexGuestX86State;
     //using X86SegDescr = _VexGuestX86SegDescr;
 }
 

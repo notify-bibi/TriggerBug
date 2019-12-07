@@ -130,16 +130,10 @@ extern void vexSetAllocModeTEMP_and_clear ( void );
    LibVEX_Translate.  The storage allocated will only stay alive until
    translation of the current basic block is complete.
  */
-extern HChar* private_LibVEX_alloc_first[MAX_THREADS];
-extern HChar* private_LibVEX_alloc_curr[MAX_THREADS];
-extern HChar* private_LibVEX_alloc_last[MAX_THREADS];
+//extern HChar* private_LibVEX_alloc_first;
+//extern HChar* private_LibVEX_alloc_curr;
+//extern HChar* private_LibVEX_alloc_last;
 extern void   private_LibVEX_alloc_OOM(void) __attribute__((noreturn));
-
-#define private_LibVEX_alloc_first   private_LibVEX_alloc_first[temp_index()]
-#define private_LibVEX_alloc_curr    private_LibVEX_alloc_curr[temp_index()]
-#define private_LibVEX_alloc_last    private_LibVEX_alloc_last[temp_index()]
-
-
 
 /* Allocated memory as returned by LibVEX_Alloc will be aligned on this
    boundary. */
@@ -148,51 +142,7 @@ extern void   private_LibVEX_alloc_OOM(void) __attribute__((noreturn));
 #if defined(ENABLE_INNER)
 #define VEX_REDZONE_SIZEB (2*REQ_ALIGN)
 #endif
-
-static inline void* LibVEX_Alloc_inline ( SizeT nbytes )
-{
-   struct align {
-      char c;
-      union {
-         char c;
-         short s;
-         int i;
-         long long l;
-         long long ll;
-         float f;
-         double d;
-         /* long long double is currently not used and would increase alignment
-            unnecessarily. */
-         /* long long double ld; */
-         void *pto;
-         void (*ptf)(void);
-      } x;
-   };
-
-   /* Make sure the compiler does no surprise us */
-   vassert(offsetof(struct align,x) <= REQ_ALIGN);
-
-#if 0
-  /* Nasty debugging hack, do not use. */
-  return malloc(nbytes);
-#else
-   HChar* curr;
-   HChar* next;
-   SizeT  ALIGN;
-   ALIGN  = offsetof(struct align,x) - 1;
-   curr   = private_LibVEX_alloc_curr;
-   next   = curr + ((nbytes + ALIGN) & ~ALIGN);
-   INNER_REQUEST(next += 2 * VEX_REDZONE_SIZEB);
-   if (next >= private_LibVEX_alloc_last)
-      private_LibVEX_alloc_OOM();
-   private_LibVEX_alloc_curr = next;
-   INNER_REQUEST(curr += VEX_REDZONE_SIZEB);
-   INNER_REQUEST(VALGRIND_MEMPOOL_ALLOC(private_LibVEX_alloc_first,
-                                        curr, nbytes));
-   return curr;
-#endif
-}
-
+extern void* LibVEX_Alloc_inline(SizeT nbytes);
 /* Misaligned memory access support. */
 
 extern UInt  read_misaligned_UInt_LE  ( void* addr );
@@ -200,10 +150,6 @@ extern ULong read_misaligned_ULong_LE ( void* addr );
 
 extern void  write_misaligned_UInt_LE  ( void* addr, UInt  w );
 extern void  write_misaligned_ULong_LE ( void* addr, ULong w );
-
-#undef private_LibVEX_alloc_first
-#undef private_LibVEX_alloc_curr 
-#undef private_LibVEX_alloc_last 
 
 #endif /* ndef __VEX_MAIN_UTIL_H */
 

@@ -58,7 +58,7 @@ typedef enum {
 static inline s390_cc_t
 s390_cc_invert(s390_cc_t cond)
 {
-   return (s390_cc_t)(((int)S390_CC_ALWAYS) - ((int)cond));
+   return (s390_cc_t)(S390_CC_ALWAYS - cond);
 }
 
 

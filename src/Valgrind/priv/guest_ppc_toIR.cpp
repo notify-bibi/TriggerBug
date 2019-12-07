@@ -179,6 +179,7 @@
    http://www-3.ibm.com/chips/techlib/techlib.nsf/techdocs/FBFA164F824370F987256D6A006F424D
 */
 
+extern "C" {
 #include "libvex_basictypes.h"
 #include "libvex_ir.h"
 #include "libvex.h"
@@ -190,6 +191,10 @@
 #include "main_globals.h"
 #include "guest_generic_bb_to_IR.h"
 #include "guest_ppc_defs.h"
+}
+
+#undef NULL
+#define NULL nullptr
 
 /*------------------------------------------------------------*/
 /*--- Globals                                              ---*/
@@ -201,28 +206,24 @@
    given insn. */
 
 /* We need to know this to do sub-register accesses correctly. */
-static VexEndness host_endness;
+thread_local static VexEndness host_endness;
 
 /* Pointer to the guest code area. */
-static const UChar* guest_code[MAX_THREADS];
+thread_local static const UChar* guest_code;
 
 /* The guest address corresponding to guest_code[0]. */
-static Addr64 guest_CIA_bbstart[MAX_THREADS];
+thread_local static Addr64 guest_CIA_bbstart;
 
 /* The guest address for the instruction currently being
    translated. */
-static Addr64 guest_CIA_curr_instr[MAX_THREADS];
+thread_local static Addr64 guest_CIA_curr_instr;
 
 /* The IRSB* into which we're generating code. */
-static IRSB* irsb[MAX_THREADS];
-#define irsb irsb[temp_index()]
-#define guest_code guest_code[temp_index()]
-#define guest_CIA_bbstart guest_CIA_bbstart[temp_index()]
-#define guest_CIA_curr_instr guest_CIA_curr_instr[temp_index()]
+thread_local static IRSB* irsb;
 
 /* Is our guest binary 32 or 64bit?  Set at each call to
    disInstr_PPC below. */
-static Bool mode64 = False;
+thread_local static Bool mode64 = False;
 
 // Given a pointer to a function as obtained by "& functionname" in C,
 // produce a pointer to the actual entry point for the function.  For
@@ -244,7 +245,7 @@ static void* fnptr_to_fnentry( const VexAbiInfo* vbi, void* f )
 }
 
 /* The OV32 and CA32 bits were added with ISA3.0 */
-static Bool OV32_CA32_supported = False;
+thread_local static Bool OV32_CA32_supported = False;
 
 #define SIGN_BIT  0x8000000000000000ULL
 #define SIGN_MASK 0x7fffffffffffffffULL
@@ -1093,7 +1094,7 @@ static IROp mkSzOp ( IRType ty, IROp op8 )
            op8 == Iop_CmpEQ8 || op8 == Iop_CmpNE8 ||
            op8 == Iop_Not8 );
    adj = ty==Ity_I8 ? 0 : (ty==Ity_I16 ? 1 : (ty==Ity_I32 ? 2 : 3));
-   return adj + op8;
+   return (IROp)(adj + op8);
 }
 
 /* Make sure we get valid 32 and 64bit addresses */
@@ -1609,7 +1610,8 @@ static IRTemp gen_POPCOUNT ( IRType ty, IRTemp src,
      double word: data_type = 6  (not supported for 32-bit type)
     */
    Int shift[6];
-   _popcount_data_type idx, i;
+   //_popcount_data_type idx, i;
+   Int idx, i;
    IRTemp mask[6];
    IRTemp old = IRTemp_INVALID;
    IRTemp nyu = IRTemp_INVALID;

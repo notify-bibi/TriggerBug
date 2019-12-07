@@ -899,6 +899,7 @@ static void redundant_put_removal_BB (
    vassert(pxControl < VexRegUpdAllregsAtEachInsn);
 
    HashHW* env = newHHW();
+
    /* Initialise the running env with the fact that the final exit
       writes the IP (or, whatever it claims to write.  We don't
       care.) */
@@ -6475,7 +6476,6 @@ IRSB* cheap_transformations (
    if (pxControl < VexRegUpdAllregsAtEachInsn) {
       redundant_put_removal_BB ( bb, preciseMemExnsFn, pxControl );
    }
-
    if (iropt_verbose) {
       vex_printf("\n========= REDUNDANT PUT\n\n" );
       ppIRSB(bb);
@@ -6659,8 +6659,6 @@ IRSB* do_iropt_BB(
    /* First flatten the block out, since all other
       phases assume flat code. */
 
-      /* If at level 0, stop now. */
-   if (vex_control.iropt_level < 0) return bb0;
    bb = flatten_BB ( bb0 );
 
    if (iropt_verbose) {
@@ -6668,6 +6666,7 @@ IRSB* do_iropt_BB(
       ppIRSB(bb);
    }
 
+   /* If at level 0, stop now. */
    if (vex_control.iropt_level <= 0) return bb;
 
    /* Now do a preliminary cleanup pass, and figure out if we also

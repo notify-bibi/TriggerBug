@@ -1,4 +1,4 @@
-﻿# CMakeList.txt: Valgrind 的 CMake 项目，在此处包括源代码并定义
+# CMakeList.txt: Valgrind 的 CMake 项目，在此处包括源代码并定义
 # 项目特定的逻辑。
 #
 cmake_minimum_required (VERSION 3.9)
@@ -23,12 +23,11 @@ INCLUDE_DIRECTORIES("${CMAKE_SOURCE_DIR}/src/z3/src/api/c++")
 
 add_library(Valgrind    "priv/main_main.c"
                         "priv/main_globals.c"
-                        "priv/main_util.c"
                         "priv/multiarch_main_main.c"
 						"priv/guest_generic_x87.c"
 						"priv/guest_generic_bb_to_IR.c"
+                        "priv/main_util.cpp"
                         )
-
 add_library(ir_match "priv/ir_match.c"
                      "priv/ir_opt.c"
                      "priv/ir_inject.c"
@@ -49,45 +48,45 @@ add_library(host_generic_regs   "priv/host_generic_regs.c"
 
 add_library(host_x86_defs   "priv/host_x86_defs.c"
                             "priv/host_x86_isel.c"
-                            "priv/guest_x86_toIR.c"
+                            "priv/guest_x86_toIR.cpp"
                             )
 add_library(guest_x86_helpers "priv/guest_x86_helpers.cpp")
 
 add_library(host_amd64_defs "priv/host_amd64_defs.c"
                             "priv/host_amd64_isel.c"
-                            "priv/guest_amd64_toIR.c"
+                            "priv/guest_amd64_toIR.cpp"
                             )
 add_library(guest_amd64_helpers "priv/guest_amd64_helpers.cpp")
 
 add_library(host_arm_defs   "priv/host_arm_defs.c"
                             "priv/host_arm_isel.c"
-                            "priv/guest_arm_toIR.c"
+                            "priv/guest_arm_toIR.cpp"
                             )
 add_library(guest_arm_helpers "priv/guest_arm_helpers.cpp")
 							
 add_library(host_arm64_defs "priv/host_arm64_defs.c"
                             "priv/host_arm64_isel.c"
-                            "priv/guest_arm64_toIR.c"
+                            "priv/guest_arm64_toIR.cpp"
                             )
 add_library(guest_arm64_helpers "priv/guest_arm64_helpers.cpp")
 
 add_library(host_ppc_defs   "priv/host_ppc_defs.c"
                             "priv/host_ppc_isel.c"
-                            "priv/guest_ppc_toIR.c"
+                            "priv/guest_ppc_toIR.cpp"
                             )
 add_library(guest_ppc_helpers "priv/guest_ppc_helpers.cpp")
 
 add_library(host_mips_defs  "priv/host_mips_defs.c"
                             "priv/host_mips_isel.c"
-                            "priv/guest_mips_toIR.c"
-                            "priv/guest_mipsdsp_toIR.c"
+                            "priv/guest_mips_toIR.cpp"
+                            "priv/guest_mipsdsp_toIR.cpp"
                             )	 
 add_library(guest_mips_helpers "priv/guest_mips_helpers.cpp")  
 
 add_library(host_s390_defs  "priv/s390_disasm.c"
-                            "priv/host_s390_defs.c"
                             "priv/host_s390_isel.c"
-                            "priv/guest_s390_toIR.c"
+                            "priv/host_s390_defs.c"
+                            "priv/guest_s390_toIR.cpp"
                             )
 add_library(guest_s390_helpers "priv/guest_s390_helpers.cpp")
 

@@ -22,6 +22,9 @@ using namespace z3;
 extern UInt global_user;
 extern std::mutex global_user_mutex;
 
+//#define CLOSECNW
+#define USECNWNOAST
+
 #ifdef _DEBUG
 #define NEED_VERIFY 
 #define TRACE_AM
@@ -31,11 +34,15 @@ extern std::mutex global_user_mutex;
 
 
 #define LINETOSTR(A) #A
-#define CONCATSTR(A, B) " ACCESS MEM ERR UNMAPPED" A " AT Line: " LINETOSTR(B)
+#define CONCATSTR(A, B) " ACCESS MEM ERR UNMAPPED; " A " AT Line: " LINETOSTR(B)
 #define MEMACCESSASSERT(CODE, ADDRESS) if (!(CODE)) throw TRMem::MEMexception(CONCATSTR(__FILE__, __LINE__), ADDRESS);
 
-
-
+#define CODEBLOCKISWRITECHECK(address){                                                  \
+ADDR delta = (address) - guest_start_of_block;                                           \
+if (delta > 0 && delta < pap.delta) {                                                    \
+    vex_printf("\n********* code: %p has been patched!! *********\n", (address));        \
+    is_dynamic_block = true;                                                             \
+}}                                                                                       
 
 class addressingMode
 {
@@ -625,7 +632,7 @@ private:
 
 public:
     Z3_context m_ctx;
-    State &m_state;
+    State& m_state;
     MEM(State& so, context* ctx, Bool _need_record);
     MEM(State& so, MEM& father_mem, context* ctx, Bool _need_record);
     ~MEM();
@@ -634,6 +641,7 @@ public:
     void copy(MEM& mem);
     ULong unmap(ULong address, ULong length);
     Int getUser() { return user; }
+    void clearRecord();
 
     inline void set_double_page(ADDR address, Pap &addrlst) {
         addrlst.guest_addr = address;
@@ -935,16 +943,11 @@ public:
 
     template<typename DataTy>
     void Ist_Store(ADDR address, DataTy data) {
-        ADDR delta = address - m_state.guest_start_of_block;
-        if (delta > 0 && delta < m_state.pap.delta) {
-            if (m_state.status == Running) {
-                vex_printf("\n********* code: %p has been patched!! *********\n", address);
-            }
-            m_state.is_dynamic_block = true;
-        }
+        CODEBLOCKISWRITECHECK(address);
         PAGE* P = getMemPage(address);
         MEMACCESSASSERT(P, address);
         CheckSelf(P, address);
+        vassert(P->used_point == 1);
         UShort offset = address & 0xfff;
         if (fastalignD1[sizeof(data) << 3] > 0xFFF - offset) {
             PAGE* nP = getMemPage(address + 0x1000);
@@ -961,16 +964,11 @@ public:
 
     template<unsigned int bitn>
     void Ist_Store(ADDR address, Z3_ast data) {
-        ADDR delta = address - m_state.guest_start_of_block;
-        if (delta > 0 && delta < m_state.pap.delta) {
-            if (m_state.status == Running) {
-                vex_printf("\n********* code: %p has been patched!! refresh the block *********\n", address);
-            }
-            m_state.is_dynamic_block = true;
-        }
+        CODEBLOCKISWRITECHECK(address);
         PAGE* P = getMemPage(address);
         MEMACCESSASSERT(P, address);
         CheckSelf(P, address);
+        vassert(P->used_point == 1);
         UShort offset = address & 0xfff;
         if (fastalignD1[bitn] > 0xFFF - offset) {
             PAGE* nP = getMemPage(address + 0x1000);

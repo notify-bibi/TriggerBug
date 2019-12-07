@@ -9,12 +9,11 @@ The engine was developed to solve some of angr's more intractable problems.
 	python前端准备重写，结构太复杂。
 	很幸运解决了并提供求解DES等一些列现代加密算法的方案。（原理层方案，非自己实现deDes）。demo example有，某些隐式加密在原理上是解不开的，只能爆破，故准备写一个常见现代加密算法的crypto ANAlyzer, 方便构建exp，不需要hook table_base进行显式转换。
 	符号地址读写策略变更，之前是求解子集再读写，速度极慢，现在实现了超集求解算法，快速极快一毫秒不到。再根据求得的超集读写。
-	实现了xsave指令的微操作，修复xrstor指令（延迟绑定函数存在该两条指令）
-	努力构想 自动合并路径的算法。。。。。。（难肝） (目前只能全手动exp写合并)
+	自动合并路径的算法雏形已经构造出来了，正在完善。。。。。。 (可以全自动合并分支)
 	计划写反ollvm控制流平坦化的算法。
 	
 	tips:  不浪费你的时间
-	examples的exp很旧了，前端也没更新用不了，也不推荐查看，接口还在更新。 
+	examples的exp很旧了，前端也没更新，用不了，也不推荐查看（因为改动较大，人力有限 ）
 	对于使用者 目前不建议您深入了解该工具，变更较大。
 
 ing.....。
@@ -28,7 +27,7 @@ ing.....。
 |language| -----c/c++ ----\|  \| -python(slowly)-| c++/c(Fast) |
 |translator| -----qemu ----\|  \| -valgrind(Single)-|  valgrind(Multi) |
 |solve thread|Single thread|Multi-threaded|
-|compress state method|semi-automatic|manual|
+|compress state|support|support(全自动)|
 |guest arch|Common arch|AMD64/X86|
 |binary load|python module:cle(Incomplete loading)slowly|(python)memdump from ida(1:1 Fully symbolic loading)fast|
 |speed| |like qemu|

@@ -128,7 +128,7 @@ State_Tag   TB_state_status(State* s) { return s->status; }
 //    });
 //}
 //void        TB_thread_wait() { pool->wait(); }
-void        TB_state_delta(State* s, Long length) { s->delta = length; }
+void        TB_state_delta(State* s, Long length) { s->hook_pass(length); }
 void        TB_state_compress(State* s, Addr64 Target_Addr, State_Tag tag, PyObject* avoid) {
     std::vector<State_Tag> ds;
     list2cvector_Long<std::vector<State_Tag>, State_Tag>(ds, avoid);

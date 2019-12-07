@@ -27,8 +27,9 @@
 
    The GNU General Public License is contained in the file COPYING.
 */
-extern "C" {
 
+#include "Engine/SimulationEngine/Z3_Target_Call/Guest_Helper.hpp"
+extern "C" {
 #include "libvex_basictypes.h"
 #include "libvex_emnote.h"
 #include "libvex_guest_mips32.h"
@@ -40,8 +41,10 @@ extern "C" {
 #include "main_globals.h"
 #include "guest_generic_bb_to_IR.h"
 #include "guest_mips_defs.h"
-
 }
+#undef NULL
+#define NULL nullptr
+
 #if defined (__GNUC__)
 #define GCC_VERSION (__GNUC__ * 100 + __GNUC_MINOR__)
 #else
@@ -63,14 +66,14 @@ extern "C" {
 IRExpr *guest_mips32_spechelper(const HChar * function_name, IRExpr ** args,
                                 IRStmt ** precedingStmts, Int n_precedingStmts)
 {
-   return (IRExpr *)NULL;
+   return NULL;
 }
 
 IRExpr *guest_mips64_spechelper ( const HChar * function_name, IRExpr ** args,
                                   IRStmt ** precedingStmts,
                                   Int n_precedingStmts )
 {
-   return (IRExpr *)NULL;
+   return NULL;
 }
 
 /* VISIBLE TO LIBVEX CLIENT */
@@ -403,7 +406,8 @@ VexGuestLayout mips32Guest_layout = {
       'always-defined'. */
    mips32Guest_layout.n_alwaysDefd = 8,
    /* ? :(  */
-    {
+   //.alwaysDefd = 
+            {
              /* 0 */ ALWAYSDEFD32(guest_r0),
              /* 1 */ ALWAYSDEFD32(guest_r1),
              /* 2 */ ALWAYSDEFD32(guest_EMNOTE),
@@ -412,7 +416,7 @@ VexGuestLayout mips32Guest_layout = {
              /* 5 */ ALWAYSDEFD32(guest_r29),
              /* 6 */ ALWAYSDEFD32(guest_r31),
              /* 7 */ ALWAYSDEFD32(guest_ULR)
-     }
+             }
 };
 
 VexGuestLayout mips64Guest_layout = {
@@ -431,7 +435,8 @@ VexGuestLayout mips64Guest_layout = {
       'always-defined'. */
    mips64Guest_layout.n_alwaysDefd = 7,
    /* ? :(  */
-    {
+   //.alwaysDefd = 
+                  {
                   /* 0 */ ALWAYSDEFD64 (guest_r0),
                   /* 1 */ ALWAYSDEFD64 (guest_EMNOTE),
                   /* 2 */ ALWAYSDEFD64 (guest_CMSTART),

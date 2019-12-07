@@ -558,8 +558,7 @@ class Dump:
             for ea, bptype, hwtype_hwsize, code in bpt_l:
                 if va <= ea and ea < va + length:
                     if bptype == BPNORMAL:
-                        return (code, ea - va)
-            return (None, None)
+                        yield (code, ea - va)
 
         bpt_list = [i for i in Breakpoints()]
         for name in segm:
@@ -567,11 +566,12 @@ class Dump:
             ab_name = (name + '\x00').encode('utf-8')
             all_ab_name += len(ab_name)
             # 将软件断点pass掉
-            code, offset = find_segm(address, length, bpt_list)
-            if not offset == None:
-                dD = db_data[:offset] + struct.pack(up("<H"), code) + db_data[offset + 2:]
-                segm[name] = [address, length, dD]
-                assert (len(dD) == len(db_data))
+            len_db_data = len(db_data)
+            for code, offset in find_segm(address, length, bpt_list):
+                db_data = db_data[:offset] + struct.pack(up("<H"), code) + db_data[offset + 2:]
+                segm[name] = [address, length, db_data]
+                assert (len(db_data) == len_db_data)
+                print ("bkp found: address: %x code: %s"%(address+offset, base64.b16encode(struct.pack(up("<H"), code))))
 
 
         for name in segm:

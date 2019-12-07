@@ -48,28 +48,28 @@
 # define ROUNDTOZERO(env) \
    do {							\
       unsigned int mxcsr;				\
-      __asm __volatile__ ("stmxcsr %0" : "=m" (mxcsr));	\
+      __asm__ __volatile__ ("stmxcsr %0" : "=m" (mxcsr));	\
       (env) = mxcsr;					\
       mxcsr = (mxcsr | 0x7f80) & ~0x3f;			\
-      __asm __volatile__ ("ldmxcsr %0" : : "m" (mxcsr));\
+      __asm__ __volatile__ ("ldmxcsr %0" : : "m" (mxcsr));\
    } while (0)
 /* Restore exceptions from ENV, return if inexact exception has been raised
    since ROUNDTOZERO.  */
-# define RESET_TESTINEXACT(zuozhi,env) \
+# define RESET_TESTINEXACT(env, v) \
    {							\
       unsigned int mxcsr, ret;				\
-      __asm __volatile__ ("stmxcsr %0" : "=m" (mxcsr));	\
+      __asm__ __volatile__ ("stmxcsr %0" : "=m" (mxcsr));	\
       ret = (mxcsr >> 5) & 1;				\
       mxcsr = (mxcsr & 0x3d) | (env);			\
       __asm__ __volatile__ ("ldmxcsr %0" : : "m" (mxcsr));\
-     (zuozhi)= ret;						\
+      v=ret;						\
    }
 /* Return if inexact exception has been raised since ROUNDTOZERO.  */
-# define TESTINEXACT(zuozhi) \
+# define TESTINEXACT(v) \
    {							\
       unsigned int mxcsr;				\
       __asm__ __volatile__ ("stmxcsr %0" : "=m" (mxcsr));	\
-      (zuozhi)=(mxcsr >> 5) & 1;					\
+      v=(mxcsr >> 5) & 1;					\
    }
 #endif
 
@@ -99,7 +99,7 @@ void VEX_REGPARM(3)
      h_generic_calc_MAddF32 ( /*OUT*/Float* res,
                                Float* argX, Float* argY, Float* argZ )
 {
-#ifndef ENV_TYPE
+#if !defined(ENV_TYPE)
    /* Lame fallback implementation.  */
    *res = *argX * *argY + *argZ;
 #else
@@ -116,7 +116,8 @@ void VEX_REGPARM(3)
    FORCE_EVAL (u.d);
 
    /* Reset rounding mode and test for inexact simultaneously.  */
-   int j;  RESET_TESTINEXACT(j, env);
+   int j;
+   RESET_TESTINEXACT(env, j);
 
    if ((u.ieee.mantissa1 & 1) == 0 && u.ieee.exponent != 0x7ff)
       u.ieee.mantissa1 |= j;
@@ -251,20 +252,20 @@ void VEX_REGPARM(3)
    u.d = a2 + m2;
 
    if (UNLIKELY (adjust < 0)) {
-	   if ((u.ieee.mantissa1 & 1) == 0) {
-		   unsigned int _tm;
-		   TESTINEXACT(_tm );
-		   u.ieee.mantissa1 |= _tm;
-	  }
-          
+       if ((u.ieee.mantissa1 & 1) == 0) {
+           unsigned int rrv;
+           TESTINEXACT(rrv);
+           u.ieee.mantissa1 |= rrv;
+       }
       v.d = a1 + u.d;
       /* Ensure the addition is not scheduled after fetestexcept call.  */
       FORCE_EVAL (v.d);
    }
 
    /* Reset rounding mode and test for inexact simultaneously.  */
-   int j; RESET_TESTINEXACT(j,env) ;
-   j != 0;
+   int j;
+   RESET_TESTINEXACT(env, j);
+   j = j != 0;
 
    if (LIKELY (adjust == 0)) {
       if ((u.ieee.mantissa1 & 1) == 0 && u.ieee.exponent != 0x7ff)

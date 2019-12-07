@@ -29,8 +29,9 @@
 */
 
 /* Contributed by Florian Krohm */
-extern "C" {
 
+#include "Engine/SimulationEngine/Z3_Target_Call/Guest_Helper.hpp"
+extern "C" {
 #include "libvex_basictypes.h"
 #include "libvex_emnote.h"
 #include "libvex_guest_s390x.h"
@@ -43,12 +44,11 @@ extern "C" {
 #include "guest_generic_bb_to_IR.h"
 #include "guest_s390_defs.h"
 #include "s390_defs.h"               /* S390_BFP_ROUND_xyzzy */
-
 }
+#undef NULL
+#define NULL nullptr
 
-#include <string.h>
-
-
+extern thread_local ULong last_execute_target;
 
 void
 LibVEX_GuestS390X_initialise(VexGuestS390XState *state)
@@ -255,7 +255,8 @@ VexGuestLayout s390xGuest_layout = {
    /* Flags thunk: OP and NDEP are always defined, whereas DEP1
       and DEP2 have to be tracked.  See detailed comment in
       gdefs.h on meaning of thunk fields. */
-    {
+   //s390xGuest_layout.alwaysDefd = 
+   {
       /*  0 */ ALWAYSDEFD(guest_CC_OP),     /* generic */
       /*  1 */ ALWAYSDEFD(guest_CC_NDEP),   /* generic */
       /*  2 */ ALWAYSDEFD(guest_EMNOTE),    /* generic */
@@ -1894,8 +1895,8 @@ guest_s390x_spechelper(const HChar *function_name, IRExpr **args,
 
       /* The necessary requirement for all optimizations here is that the
          condition and the cc_op are constant. So check that upfront. */
-      if (! isC64(cond_expr))  return (IRExpr *)NULL;
-      if (! isC64(cc_op_expr)) return (IRExpr *)NULL;
+      if (! isC64(cond_expr))  return NULL;
+      if (! isC64(cc_op_expr)) return NULL;
 
       cond    = cond_expr->Iex.Const.con->Ico.U64;
       cc_op   = cc_op_expr->Iex.Const.con->Ico.U64;
@@ -2454,7 +2455,7 @@ guest_s390x_spechelper(const HChar *function_name, IRExpr **args,
 
       /* The necessary requirement for all optimizations here is that
          cc_op is constant. So check that upfront. */
-      if (! isC64(cc_op_expr)) return (IRExpr *)NULL;
+      if (! isC64(cc_op_expr)) return NULL;
 
       cc_op   = cc_op_expr->Iex.Const.con->Ico.U64;
       cc_dep1 = args[1];
@@ -2472,7 +2473,7 @@ guest_s390x_spechelper(const HChar *function_name, IRExpr **args,
    }
 
 missed:
-   return (IRExpr *)NULL;
+   return NULL;
 }
 
 /*------------------------------------------------------------*/

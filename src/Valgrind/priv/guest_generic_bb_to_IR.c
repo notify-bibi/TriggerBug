@@ -531,8 +531,8 @@ IRSB* bb_to_IR (
    }
    /*NOTREACHED*/
    vassert(0);
-done:
 
+  done:
    /* We're done.  The only thing that might need attending to is that
       a self-checking preamble may need to be created.  If so it gets
       placed in the 15 slots reserved above.

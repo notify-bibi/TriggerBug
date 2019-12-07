@@ -39,63 +39,22 @@
 #ifndef __LIBVEX_BASICTYPES_H
 #define __LIBVEX_BASICTYPES_H
 
-
-
 /*patch start{*/
 
 typedef struct {
-	unsigned short Surplus;
-	unsigned char swap[32];
-	unsigned char *t_page_addr;
+    unsigned short Surplus;
+    unsigned char swap[32];
+    unsigned char* t_page_addr;
     unsigned long long guest_addr;
-    unsigned char * (*n_page_mem)(void *);
-	char start_swap;
+    unsigned char* (*n_page_mem)(void*);
+    char start_swap;
     unsigned int guest_max_insns;
-    void *state;
+    void* state;
     unsigned int  delta;
 } Pap;
 
-#define MAX_THREADS 16
-#define TEB_OFFSET_CONST 0x27
-typedef enum
-{
-	regist_ok,
-	unregist_ok,
-	unregist_err,
-	have_no_temp,
-	tid_is_clash
-}tid_type;
-
-#if defined(TEB_OFFSET_CONST)
-#define temp_index() __readgsbyte(TEB_OFFSET_CONST)
-#else
-
-extern unsigned char tid2temp[0x10000];
-extern unsigned short mscv_tid2temp();
-static inline unsigned short temp_index() {
-	unsigned char index;
-#if defined(_MSC_VER)&& !defined(__INTEL_COMPILER)
-	return mscv_tid2temp();
-#else
-
-	__asm__(\
-		"movq %%gs:0x30, %%rax ;\n\t"\
-		"movl 0x48(%%rax),%%eax;\n\t"\
-		"movq %[list],%%rdx;\n\t"\
-		"movb (%%rdx,%%rax,1),%%al;\n\t"\
-		"movl %%al,%[out];\n\t"\
-		:[out]"=r"(index) : [list]"r"(tid2temp) : "rax", "rdx");
-
-#endif
-	return index;
-
-}
-
-#endif
 
 /*patched }end*/
-
-
 
 /* It is important that the sizes of the following data types (on the
    host) are as stated.  LibVEX_Init therefore checks these at
@@ -120,9 +79,9 @@ typedef    signed int    Int;
 typedef    signed int    SInt;
 
 /* Always 64 bits. */
-typedef  unsigned long long int   ULong;
-typedef    signed long long int   Long;
-typedef    signed long long   SLong;
+typedef  unsigned long long int  ULong;
+typedef    signed long long int  Long;
+typedef    signed long long      SLong;
 
 /* Equivalent of C's size_t type. The type is unsigned and has this
    storage requirement:

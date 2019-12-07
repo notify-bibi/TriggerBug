@@ -551,8 +551,8 @@ HInstrArray* doRegisterAllocation_v3(
 /* Finds an rreg of the correct class.
    If a free rreg is not found, then spills a vreg not used by the current
    instruction and makes free the corresponding rreg. */
-#  define FIND_OR_MAKE_FREE_RREG(zuozhi,_ii, _v_idx, _reg_class, _reserve_phase)      \
-   {                                                                          \
+#  define FIND_OR_MAKE_FREE_RREG(_ii, _v_idx, _reg_class, _reserve_phase, _out)\
+   {                                                                           \
       Int _r_free_idx = find_free_rreg(                                        \
                       vreg_state, n_vregs, rreg_state, n_rregs, rreg_lr_state, \
                       (_v_idx), (_ii), (_reg_class), (_reserve_phase), con);   \
@@ -570,7 +570,7 @@ HInstrArray* doRegisterAllocation_v3(
                                                                                \
       vassert(IS_VALID_RREGNO(_r_free_idx));                                   \
                                                                                \
-     (zuozhi) = _r_free_idx;                                                   \
+      _out=_r_free_idx;                                                        \
    }
 
 
@@ -1141,9 +1141,9 @@ HInstrArray* doRegisterAllocation_v3(
                      }
                   } else {
                      /* Find or make a free rreg where to move this vreg to. */
-					  UInt r_free_idx;
-						FIND_OR_MAKE_FREE_RREG(r_free_idx,
-                                  ii, v_idx, vreg_state[v_idx].reg_class, True);
+                      UInt r_free_idx;
+                      FIND_OR_MAKE_FREE_RREG(
+                                  ii, v_idx, vreg_state[v_idx].reg_class, True, r_free_idx);
 
                      /* Generate "move" between real registers. */
                      HInstr* move = con->genMove(con->univ->regs[r_idx],
@@ -1280,8 +1280,8 @@ HInstrArray* doRegisterAllocation_v3(
             vassert(hregIsInvalid(rreg));
 
             /* Find or make a free rreg of the correct class. */
-              FIND_OR_MAKE_FREE_RREG(r_idx,
-                                 ii, v_idx, vreg_state[v_idx].reg_class, False);
+            FIND_OR_MAKE_FREE_RREG(
+                                 ii, v_idx, vreg_state[v_idx].reg_class, False, r_idx);
             rreg = con->univ->regs[r_idx];
 
             /* Generate reload only if the vreg is spilled and is about to being
