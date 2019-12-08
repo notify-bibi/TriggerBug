@@ -154,9 +154,9 @@ public:
             vpanic(Z3_get_error_msg(ctx, Z3_get_error_code(ctx)));
         }
         vassert(ast);
-        /*if (sort_kind() == Z3_BV_SORT) {
+        if (sort_kind() == Z3_BV_SORT) {
             vassert(Z3_get_bv_sort_size(ctx, Z3_get_sort(ctx, m_ast)) == n);
-        }*/
+        }
     }
     
 

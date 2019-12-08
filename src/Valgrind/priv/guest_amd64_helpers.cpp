@@ -2386,9 +2386,9 @@ VexEmNote amd64g_dirtyhelper_XRSTOR_COMPONENT_0
 /* CALLED FROM GENERATED CODE */
 /* DIRTY HELPER (writes guest state, reads guest mem) */
 VexEmNote amd64g_dirtyhelper_XRSTOR_COMPONENT_1_EXCLUDING_XMMREGS
-             ( VexGuestAMD64State* gst, HWord addr )
+             ( VexGuestAMD64State* _gst, HWord addr )
 {
-   UShort* addrS = (UShort*)addr;
+   /*UShort* addrS = (UShort*)addr;
    UInt    w32   = (((UInt)addrS[12]) & 0xFFFF)
                    | ((((UInt)addrS[13]) & 0xFFFF) << 16);
    ULong   w64   = amd64g_check_ldmxcsr( (ULong)w32 );
@@ -2396,7 +2396,20 @@ VexEmNote amd64g_dirtyhelper_XRSTOR_COMPONENT_1_EXCLUDING_XMMREGS
    VexEmNote warnXMM = (VexEmNote)(w64 >> 32);
 
    gst->guest_SSEROUND = w64 & 0xFFFFFFFFULL;
-   return warnXMM;
+   return warnXMM;*/
+    TRGL::VexGuestAMD64State* gst = (TRGL::VexGuestAMD64State*)(_gst);
+
+    GMP<UInt> addrS(*gst, addr);
+    Vns w32 = addrS[6];
+    if (w32.real()) {
+        ULong   w64 = amd64g_check_ldmxcsr((ULong)(UInt)w32);
+        VexEmNote warnXMM = (VexEmNote)(w64 >> 32);
+        gst->guest_SSEROUND = w64 & 0xFFFFFFFF;
+        return warnXMM;
+    }
+    else {
+        vassert(0);
+    }
 }
 
 

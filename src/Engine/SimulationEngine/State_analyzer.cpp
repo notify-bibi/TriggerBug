@@ -23,13 +23,13 @@ bool check_has_loop(State *s, ADDR oep) {
 
 bool task_explorer(State* top) {
     {
-        printf("++++1++++\n");
+        printf("++++1++++{\n");
         State* s = top;
         State::pool->enqueue([s] {
             s->start(True);
             });
         State::pool->wait();
-        printf("----1-----\n");
+        printf("}----1-----\n");
     }
     std::vector<State*> ForkTree;
     ForkTree.emplace_back(top);
@@ -37,7 +37,7 @@ bool task_explorer(State* top) {
     std::hash_map<ADDR, UInt> CompStates;
     while (true)
     {
-        printf("++++2++++\n");
+        printf("++++2++++ {\n");
         bool has_task = False;
         for (State* s : ForkTree) {
             for (BranchChunk& bc : s->branchChunks) {
@@ -54,20 +54,16 @@ bool task_explorer(State* top) {
             s->branchGo();
         }
         State::pool->wait();
-        printf("----2-----\n");
+        std::cout << *top << std::endl;
+        printf("}----2-----\n");
 
 
         std::vector<State*> _ForkTree;
         for (State* bs : ForkTree) {
             if (!bs->branch.size()) {
+                if (bs->status != Fork) continue;
                 ADDR end_addr = bs->get_cpu_ip();
-                auto _where = CompStates.lower_bound(end_addr);
-                if (_where == CompStates.end()) {
-                    CompStates[end_addr] = 0;
-                }
-                else {
-                    CompStates[end_addr] = 1;
-                }
+                CompStates[end_addr] = 1;
             }
             for (State* s : bs->branch) {
                 _ForkTree.emplace_back(s);

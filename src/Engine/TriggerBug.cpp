@@ -82,7 +82,7 @@ public:
 
 
 class StateAMD64 : public State {
-    ULong g_brk = ALIGN(0x000000000060A000, 32);
+    ULong g_brk = ALIGN(0x0000000000603000, 32);
 public:
     StateAMD64(const char* filename, ADDR gse, Bool _need_record) :
         State(filename, gse, _need_record)
@@ -141,7 +141,7 @@ public:
                             auto ao1 = FLAG >= 'A' && FLAG <= 'Z';
                             auto ao2 = FLAG >= 'a' && FLAG <= 'z';
                             auto ao3 = FLAG >= '0' && FLAG <= '9';
-                            add_assert(ao1 || ao2 || ao3, True);
+                            add_assert(ao1 || ao2 || ao3 || FLAG == '_' || FLAG == '{' || FLAG == '}', True);
                         }
                     }
                     regs.Ist_Put(AMD64_IR_OFFSET::rax, rdx);
@@ -465,35 +465,11 @@ Vns flag_limit(Vns &flag) {
 
 int main() {
     {
-        /*
 
-        test_apps();
-        test_bvneg();
-        test_mk_distinct();
-*/
-
-
-
-        context c,c1,c2;
-        solver ss(c);
-        solver ss2(ss);
-        /*{
-            sort sor = c.bv_sort(63);
-            expr bv8 = (c.constant("j", sor) + 445 - 6767) * 676;
-        }*/
-
-        flag_max_count = 1;
+        flag_max_count = 38+6;
         flag_count = 0;
 
         StatePrinter<StateAMD64> state(INIFILENAME, 0, True);
-        TRGL::VexGuestAMD64State reg(state);
-        for (int i = 0; i < 38; i++) {
-            auto flag = state.get_int_const(8);
-            auto ao3 = flag >= 1 && flag <= 128;
-            state.mem.Ist_Store(reg.guest_RDI + i, flag);
-            state.add_assert(ao3, 1);
-        }
-        state.hook_add(0x000400E7A, pp);
         state.hook_add(0x400CC0, success_ret3);
         StateAnalyzer gv(state);
         gv.Run();

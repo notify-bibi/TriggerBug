@@ -332,7 +332,7 @@ inline Vns State::T_Binop(context &m_ctx, IROp op, Vns const& a, Vns const& b) {
         }
 
 #define BNxN(type,op, N, Mask)\
-{\
+{   \
     Vns re(m_ctx, 0, 0);\
     for (UInt i = 0; i < N; i++) {\
         re = ite(a.extract((i+1) * (sizeof(type)<<3)-1, i * (sizeof(type)<<3)) op b.extract((i+1) * (sizeof(type)<<3) -1, i * (sizeof(type)<<3)),\

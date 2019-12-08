@@ -54,11 +54,11 @@
 	<DEBUG>
 		<ppStmts>0</ppStmts>
 		<TraceIrAddrress>
-            <!--static addr = "0x400957" cflag = "1"/-->
+            <!--static addr = "0x07FFFF7B5AEB0" cflag = "1"/-->
             <!--static addr = "0x0401B04" cflag = "1"/-->
         </TraceIrAddrress>
 		<TraceState>0</TraceState>
-		<TraceJmp>0</TraceJmp>
+		<TraceJmp>1</TraceJmp>
         <TraceSymbolic>0</TraceSymbolic>
 	</DEBUG>
 

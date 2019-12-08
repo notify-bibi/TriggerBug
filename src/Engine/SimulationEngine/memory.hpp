@@ -210,34 +210,36 @@ private:
         m_offset = _ast2base(base, m_symbolic, 0, 6);
         //std::cout << idx << std::endl;
         ULong _m_base;
-        if (base.simplify().is_numeral_u64(_m_base)) {
-            m_base = _m_base;
+        if ((Z3_ast)base) {
+            if (base.simplify().is_numeral_u64(_m_base)) {
+                m_base = _m_base;
 #if defined(NEED_VERIFY)
-            if (m_base > 100) {
-                Int is_right;
-                expr eval = base + m_offset == m_symbolic;
-                if (ite(eval, m_ctx.bv_val(1, 8), m_ctx.bv_val(0, 8)).simplify().is_numeral_i(is_right)) {
-                    if (is_right) {
-                        return true;
+                if (m_base > 100) {
+                    Int is_right;
+                    expr eval = base + m_offset == m_symbolic;
+                    if (ite(eval, m_ctx.bv_val(1, 8), m_ctx.bv_val(0, 8)).simplify().is_numeral_i(is_right)) {
+                        if (is_right) {
+                            return true;
+                        }
+                        else {
+                            goto faild;
+                        }
                     }
                     else {
-                        goto faild;
+                        vex_printf("cant determine base %p try solver:\n", m_base);
                     }
+                    solver s(m_ctx);
+                    s.add(!eval);
+                    if (s.check() == unsat) {
+                        return true;
+                    }
+                    std::cout << "unsat model:\n" << s.get_model() << std::endl;
+                    goto faild;
                 }
-                else {
-                    vex_printf("cant determine base %p try solver:\n", m_base);
-                }
-                solver s(m_ctx);
-                s.add(!eval);
-                if (s.check() == unsat) {
-                    return true;
-                }
-                std::cout << "unsat model:\n" << s.get_model() << std::endl;
-                goto faild;
-            }
 #else
                 return true;
 #endif
+                }
         }
         return false;
 faild:
@@ -633,7 +635,7 @@ private:
 private:
     void CheckSelf(PAGE*& P, ADDR address);
     void init_page(PAGE*& P, ADDR address);
-    void write_bytes(ULong address, ULong length, UChar* data);
+    UInt write_bytes(ULong address, ULong length, UChar* data);
 
 public:
     TRcontext& m_ctx;

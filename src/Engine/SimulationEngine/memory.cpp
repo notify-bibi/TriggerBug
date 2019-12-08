@@ -613,7 +613,8 @@ ULong MEM::map(ULong address, ULong length) {
             (*page)->used_point = 1;
             (*page)->user = user;
             (*page)->unit = NULL;
-            (*page)->is_pad = false;
+            (*page)->is_pad = true;
+            (*page)->pad = 0xCC;
             //Over
 
             PAGE_link* orignal = (*pt)->top;
@@ -882,7 +883,19 @@ void MEM::CheckSelf(PAGE*& P, ADDR address)
 #ifdef USECNWNOAST
         mem_change_map[ALIGN(address, 0x1000)] = P->unit;
 #endif
-        return; 
+        if (P->is_pad) {// 该页是填充区，则开始分配该页
+            vassert(P->unit == NULL);
+            bool xchgbv = false;
+            while (!xchgbv) { __asm__ __volatile("xchgb %b0,%1":"=r"(xchgbv) : "m"(P->unit_mutex), "0"(xchgbv) : "memory"); }
+            if (!P->is_pad) {
+                return;
+            }
+            P->unit = new Register<0x1000>(m_ctx, need_record);
+            memset(P->unit->m_bytes, P->pad, 0x1000);
+            P->is_pad = false;
+            P->unit_mutex = true;
+        }
+        return;
     }
     bool xchgbv = false;
     while (!xchgbv) { __asm__ __volatile("xchgb %b0,%1":"=r"(xchgbv) : "m"(P->unit_mutex), "0"(xchgbv) : "memory"); }
@@ -921,7 +934,6 @@ void MEM::CheckSelf(PAGE*& P, ADDR address)
 
 void MEM::init_page(PAGE*& P, ADDR address)
 {
-    //WNC
     if (user == P->user) return;
     bool xchgbv = false;
     while (!xchgbv) { __asm__ __volatile("xchgb %b0,%1":"=r"(xchgbv) : "m"(P->unit_mutex), "0"(xchgbv) : "memory"); }
@@ -934,27 +946,38 @@ void MEM::init_page(PAGE*& P, ADDR address)
     vassert(P->used_point);
     --P->used_point;
     PAGE* np = new PAGE;
-    np->unit = nullptr;
     np->user = user;
     np->used_point = 1;
-    np->is_pad = false;
+    np->is_pad = true;
+    np->pad = 0xCC;
+    np->unit = nullptr;
     np->unit_mutex = true;
     *page = np;
     P->unit_mutex = true;
     P = np;
-    
 }
 
-//very fast
-void MEM::write_bytes(ULong address, ULong length, UChar* data) {
-    if (length < 8) {
+static bool sse_cmp(__m256i& pad, void* data, unsigned long size) {
+    unsigned long index;
+    if (!size) return true;
+    if (_BitScanForward(&index, _mm256_movemask_epi8(_mm256_cmpeq_epi8(pad, _mm256_loadu_si256((__m256i*)data))))) {
+        return index == size - 1;
+    }
+    return false;
+}
+
+//very fast this api have no record
+UInt MEM::write_bytes(ULong address, ULong length, UChar* data) {
+    UInt write_count = 0;
+    if (length < 32) {
         {
             ULong max = address + length;
             PAGE* p_page = getMemPage(address);
             MEMACCESSASSERT(p_page, address);
             init_page(p_page, address);
-            if (!p_page->unit) {
+            if (p_page->is_pad) {
                 p_page->unit = new Register<0x1000>(m_ctx, need_record);
+                p_page->is_pad = false;
             }
             UInt count = 0;
             while (address < max) {
@@ -962,39 +985,44 @@ void MEM::write_bytes(ULong address, ULong length, UChar* data) {
                     p_page = getMemPage(address);
                     MEMACCESSASSERT(p_page, address);
                     init_page(p_page, address);
-                    if (!p_page->unit) {
+                    if (p_page->is_pad) {
                         p_page->unit = new Register<0x1000>(m_ctx, need_record);
+                        p_page->is_pad = false;
                     }
                 }
                 p_page->unit->m_bytes[address & 0xfff] = data[count];
                 address += 1;
                 count += 1;
             };
-            return;
+            return count;
         }
     }
     bool first_flag = false;
-    UInt align_l = 8 - (address - ALIGN(address, 8));
-    UInt align_r = (address + length - ALIGN(address + length, 8));
-    if (align_l == 8) {
+    UInt align_l = 32 - (address - ALIGN(address, 32));
+    UInt align_r = (address + length - ALIGN(address + length, 32));
+    __m256i pad;
+    if (align_l == 32) {
     }
     else {
         PAGE* p_page = getMemPage(address);
         MEMACCESSASSERT(p_page, address);
         init_page(p_page, address);
-        if ((((ULong*)data)[0] & (~(-1ull << (align_l << 3)))) || p_page->unit) {
-            if (!p_page->unit) {
+        pad = _mm256_set1_epi8(data[0]);
+        if (!sse_cmp(pad, data, align_l) || !p_page->is_pad) {
+            if (p_page->is_pad) {
                 p_page->unit = new Register<0x1000>(m_ctx, need_record);
+                p_page->is_pad = false;
             }
             first_flag = true;
             memcpy(&p_page->unit->m_bytes[address & 0xfff], data, align_l);
+            write_count += align_l;
         }
         data += align_l;
         address += align_l;
         length -= align_l;
     }
     UInt count = 0;
-    ULong max = (ALIGN(address + length, 8) - address);
+    ULong max = (ALIGN(address + length, 32) - address);
     PAGE* p_page = nullptr;
 
     bool need_mem = false;
@@ -1006,9 +1034,12 @@ void MEM::write_bytes(ULong address, ULong length, UChar* data) {
             init_page(p_page, address + count);
             ULong smax = (count + 0x1000 <= max) ? 0x1000 : max - count;
             need_mem = false;
-            if (!p_page->unit) {
-                for (ADDR idx = 0; idx < smax; idx += 8) {
-                    if (*(ULong*)(&data[count + idx])) {
+            if (p_page->is_pad) {
+                if (!need_check) {
+                    pad = _mm256_set1_epi8(data[count]);
+                }
+                for (ADDR idx = 0; idx < smax; idx += 32) {
+                    if (!sse_cmp(pad, &data[count + idx], 32)) {
                         need_mem = true;
                         break;
                     }
@@ -1021,33 +1052,40 @@ void MEM::write_bytes(ULong address, ULong length, UChar* data) {
                 }
                 if (need_mem) {
                     p_page->unit = new Register<0x1000>(m_ctx, need_record);
+                    p_page->is_pad = false;
                 }
                 else {
                     count = ALIGN(address + count + 0x1000, 0x1000) - address;
                     p_page->is_pad = True;
-                    p_page->pad = 0;
+                    p_page->pad = pad.m256i_u8[0];
                     continue;
                 }
             }
         }
-        *(ULong*)(&p_page->unit->m_bytes[(address + count) & 0xfff]) = *(ULong*)(data + count);
-        count += 8;
+        SET32((&p_page->unit->m_bytes[(address + count) & 0xfff]), *(__m256i*)(data + count));
+        count += 32;
+        write_count += 32;
     };
     if (align_r) {
         if ((!((address + count) & 0xfff)) || !p_page) {
             p_page = getMemPage(address + count);
             MEMACCESSASSERT(p_page, address + count);
             init_page(p_page, address + count);
+            pad = _mm256_set1_epi8(data[count]);
         }
-        if (((*(ULong*)(data + count)) & ((1ull << (align_r << 3)) - 1)) || need_mem || p_page->unit) {
-            if (!p_page->unit) {
+        if ((!sse_cmp(pad, data + count, align_r)) || need_mem || !p_page->is_pad) {
+            if (p_page->is_pad) {
                 p_page->unit = new Register<0x1000>(m_ctx, need_record);
+                p_page->is_pad = false;
             }
             memcpy(&p_page->unit->m_bytes[(address + count) & 0xfff], &data[count], align_r);
+            write_count += align_r;
         }
         else {
             p_page->is_pad = True;
-            p_page->pad = 0;
+            p_page->pad = pad.m256i_u8[0];
         }
     }
+
+    return write_count;
 }

@@ -156,7 +156,7 @@ inline Vns State::T_Unop(context &m_ctx, IROp op, Vns const& a) {
         }
 
         case Iop_Clz32:vassert(a.bitn == 32); return 31 - bsr32(a);
-        case Iop_Clz64:vassert(a.bitn == 64); return 63 - bsr64(a);
+        case Iop_Clz64:vassert(a.bitn == 64); return (ULong)63 - bsr64(a);
         case Iop_Ctz32:vassert(a.bitn == 32); return bsf32(a);//ok
         case Iop_Ctz64:vassert(a.bitn == 64); return bsf64(a);//ok
         };
@@ -230,11 +230,11 @@ inline Vns State::T_Unop(context &m_ctx, IROp op, Vns const& a) {
         case Iop_Ctz64: {
             vassert(a.bitn == 64);
             unsigned long result = 0;
-            if (_BitScanForward64(&result, (ULong)a)) {
+            if (!_BitScanForward64(&result, (ULong)a)) {
                 result = 64;
             }
             return Vns(a, (ULong)result);
-        };//ok
+        };//ok bsf
         case Iop_Abs64Fx2:
         case Iop_Neg64Fx2:
         case Iop_RSqrtEst64Fx2:

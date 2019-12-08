@@ -351,7 +351,7 @@ State::operator std::string() const{
             strContent.assign(hex);
             str.append(strContent); break;
         }
-        snprintf(hex, sizeof(hex),  "%llx    \n}\n ", guest_start_ep);
+        snprintf(hex, sizeof(hex),  "%llx    \n}\n ", guest_start);
         strContent.assign(hex);
         str.append(strContent);
         return str;
@@ -725,7 +725,7 @@ void State::read_mem_dump(const char  *filename)
         getchar();
         exit(1);
     }
-    unsigned long long length, fp, err, name_start_offset, name_end_offset;
+    unsigned long long length, fp, err, name_start_offset, name_end_offset, need_write_size = 0, write_count = 0;
     fread(&length, 8, 1, infile);
     fseek(infile, 24, SEEK_SET);
     name_start_offset = length;
@@ -736,9 +736,15 @@ void State::read_mem_dump(const char  *filename)
     fread(name_buff, 1, name_end_offset - name_start_offset, infile);
     fseek(infile, 0, SEEK_SET);
     char *name;
-    printf("/------------------------------+--------------------+--------------------+------------\\\n");
+    printf("Initializing Virtual Memory\n/------------------------------+--------------------+--------------------+------------\\\n");
     printf("|              SN              |         VA         |         FOA        |     LEN    |\n");
     printf("+------------------------------+--------------------+--------------------+------------+\n");
+                                               \
+    LARGE_INTEGER   freq = { 0 };                                                                                    
+    LARGE_INTEGER   beginPerformanceCount = { 0 };                                                                   
+    LARGE_INTEGER   closePerformanceCount = { 0 };                                                                   
+    QueryPerformanceFrequency(&freq);                                                                                
+    QueryPerformanceCounter(&beginPerformanceCount);
     for (unsigned int segnum = 0; segnum < length; segnum++) {
         fread(&buf, 32, 1, infile);
         unsigned char *data = (unsigned char *)malloc(buf.length);
@@ -755,12 +761,18 @@ void State::read_mem_dump(const char  *filename)
             printf("| %-28s |  %16llx  |  %16llx  | %10llx |\n", name, buf.address, buf.dataoffset, buf.length);
             if (err = mem.map(buf.address, buf.length))
                 printf("warning %s had maped before length: %llx\n", name, err);
-            mem.write_bytes(buf.address, buf.length, data);
+            need_write_size += buf.length;
+            write_count += mem.write_bytes(buf.address, buf.length, data);
         }
         fseek(infile, fp, SEEK_SET);
         free(data);
     }
     printf("\\-------------------------------------------------------------------------------------/\n");
+    QueryPerformanceCounter(&closePerformanceCount);
+    printf(
+        "Spend time in:   %16lf s.\n"
+        "Need to write    %16lf MByte.\n"
+        "Actually written %16lf MByte\n", (double)(closePerformanceCount.QuadPart - beginPerformanceCount.QuadPart) / freq.QuadPart, ((double)need_write_size) / 0x100000,((double)write_count)/0x100000);
     free(name_buff);
     fclose(infile);
 }
