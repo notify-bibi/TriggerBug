@@ -21,8 +21,10 @@ Revision History:
 
 
 #include "engine.hpp"
+#include "Variable.hpp"
 #include "Register.hpp"
 #include "memory.hpp"
+#include "../Thread_Pool/ThreadPool.hpp"
 #include "SimulationEngine/State_class.hpp"
 #include "SimulationEngine/State_analyzer.hpp"
 #include "Z3_Target_Call/Guest_Helper.hpp"
@@ -136,7 +138,7 @@ public:
                             mem.Ist_Store(rsi + n, '\n');
                         }
                         else {
-                            Vns FLAG = get_int_const(8);
+                            Vns FLAG = mk_int_const(8);
                             mem.Ist_Store(rsi + n, FLAG);
                             auto ao1 = FLAG >= 'A' && FLAG <= 'Z';
                             auto ao2 = FLAG >= 'a' && FLAG <= 'z';
@@ -465,7 +467,6 @@ Vns flag_limit(Vns &flag) {
 
 int main() {
     {
-
         flag_max_count = 38+6;
         flag_count = 0;
 

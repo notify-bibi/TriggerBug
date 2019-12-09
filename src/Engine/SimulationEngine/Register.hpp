@@ -21,8 +21,10 @@ extern __m256i m32_mask_reverse[33];
 #ifdef USE_HASH_AST_MANAGER
 class AstManager {
     friend class AstManagerX;
-    std::hash_map<Int, Z3_ast> m_mem;
+    template <int maxlength>
+    friend class Register;
 public:
+    std::hash_map<Int, Z3_ast> m_mem;
     class AstManagerX {
         std::hash_map<Int, Z3_ast>& m_mem;
         Int m_offset;
@@ -163,6 +165,7 @@ public:
     inline Symbolic(TRcontext& ctx, Symbolic<maxlength> *father) : m_ctx(ctx) {
         memcpy(m_fastindex, father->m_fastindex, maxlength);
         memset(m_fastindex + maxlength, 0, 32);
+#ifndef USE_HASH_AST_MANAGER
         Int _pcur = maxlength - 1;
         DWORD N;
         for (; _pcur > 0; ) {
@@ -178,7 +181,18 @@ public:
                 _pcur = ALIGN(_pcur - 8, 8) + 7;
             }
         };
-
+#else
+        std::hash_map<Int, Z3_ast>& fast = father->m_ast.m_mem;
+        auto it_end = fast.end();
+        for (auto it = fast.begin(); it != it_end; it++) {
+            if (m_fastindex[it->first] == 1) {
+                Z3_ast translate_ast = Z3_translate(father->m_ctx, it->second, m_ctx);
+                m_ast[it->first] = translate_ast;
+                vassert(translate_ast != NULL);
+                Z3_inc_ref(m_ctx, translate_ast);
+            }
+        }
+#endif
     }
     inline ~Symbolic<maxlength>() {
         int _pcur = maxlength - 1;
@@ -225,13 +239,13 @@ public:
                 (
                 (offset + length) < ALIGN(offset, 8) + 8
                     ?
-                    (maxlength <= 8) ? 0x01ull :
-                    (maxlength == 16) ? 0b11ull :
-                    0b1111ull
+                    (maxlength <= 8) ? 0x01u :
+                    (maxlength == 16) ? 0b11u :
+                    0b1111u
                     :
-                    (maxlength <= 8) ? 0x11ull :
-                    (maxlength == 16) ? 0b111ull :
-                    0b11111ull
+                    (maxlength <= 8) ? 0b11u :
+                    (maxlength == 16) ? 0b111u :
+                    0b11111u
                     ) << ((offset >> 3) % 8);
         }
     }
@@ -489,7 +503,7 @@ public:
 
  //simd数据不会使用扩展寄存器传递。使用地址传递速度快点。
 #define B16_Ist_Put(DataTy)                                                                                     \
-inline void Ist_Put(UInt offset, DataTy  data) {                                                                \
+inline void Ist_Put(UInt offset, DataTy const& data) {                                                                \
     if (symbolic) {                                                                                             \
         auto fastindex = m_fastindex + offset;                                                                  \
         if ((GET8(fastindex )) || (GET8(fastindex + 8)))                                                        \
@@ -504,7 +518,7 @@ inline void Ist_Put(UInt offset, DataTy  data) {                                
 
 //simd数据不会使用扩展寄存器传递。使用地址传递速度快点。
 #define B32_Ist_Put(DataTy)                                                                                     \
-inline void Ist_Put(UInt offset, DataTy & data) {                                                               \
+inline void Ist_Put(UInt offset, DataTy const& data) {                                                               \
     if (symbolic) {                                                                                             \
         if (sse_check_zero_X256(m_fastindex + offset))                                                          \
         {                                                                                                       \

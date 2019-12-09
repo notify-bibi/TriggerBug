@@ -66,21 +66,9 @@ typedef struct _Hook {
 }Hook_struct;
 
 
-class StatetTraceFlag {
-    friend GraphView;
-    TRControlFlags trtraceflags;
-
-public:
-    StatetTraceFlag():trtraceflags(CF_None) {}
-    StatetTraceFlag(StatetTraceFlag& f): trtraceflags(f.trtraceflags) { }
-    inline bool getFlag(TRControlFlags t) const { return trtraceflags & t;}
-    inline void setFlag(TRControlFlags t) { *(ULong*)&trtraceflags |= t; }
-    inline void unsetFlag(TRControlFlags t) { *(ULong*)&trtraceflags &= ~t; };
-    inline TRControlFlags gtrtraceflags() { return trtraceflags; }
-};
 
 
-class Vex_Info :public StatetTraceFlag {
+class Vex_Info {
     friend GraphView;
 private:
     static tinyxml2::XMLDocument doc;
@@ -103,8 +91,8 @@ protected:
     thread_local static VexTranslateArgs    vta_chunk;
 
 protected:
-    Vex_Info(const char* filename) :StatetTraceFlag() { init_vex_info(filename); }
-    Vex_Info(Vex_Info& f) :StatetTraceFlag(f) {}
+    Vex_Info(const char* filename) { init_vex_info(filename); }
+    Vex_Info(Vex_Info& f) {}
 
 private:
 
@@ -159,28 +147,56 @@ class TRsolver :public z3::solver{
         bool is_snapshot() { return m_solver_snapshot; }
 };
 
+//Functional programming
+class InvocationStack {
+    std::queue<ADDR> guest_call_stack;
+    std::queue<ADDR> guest_stack;
+public:
+    inline InvocationStack(){}
+    inline InvocationStack(InvocationStack const& fsk) {
+        guest_call_stack = fsk.guest_call_stack;
+        guest_stack = fsk.guest_stack;
+    }
+    inline void push(ADDR call_ptr, ADDR bp/*栈底*/) {
+        guest_call_stack.push(call_ptr); 
+        guest_stack.push(bp);
+    }
+    inline void pop() {
+        guest_call_stack.pop();
+        guest_stack.pop();
+    }
+    friend bool operator==(InvocationStack const& a, InvocationStack const& b);
+};
+
+static inline bool operator==(InvocationStack const& a, InvocationStack const& b) { 
+    return (a.guest_call_stack == b.guest_call_stack) && (a.guest_stack == b.guest_stack);
+}
+
 
 class StateAnalyzer;
 class State:public Vex_Info {
     friend MEM;
     friend GraphView;
     friend StateAnalyzer;
+    friend InvocationStack;
 
 protected:
+    //模拟软件断点 software backpoint callback
     static std::hash_map<ADDR, Hook_struct> CallBackDict;
     static std::hash_map<ADDR/*static table base*/, TRtype::TableIdx_CB> TableIdxDict;
-
+    //当前state的入口点
     ADDR guest_start_ep;
+    //客户机state的eip（计数器eip）
     ADDR guest_start;
 	void *VexGuestARCHState;
 
 private:
     VexArchInfo *vai_guest,  *vai_host;
 
-    Bool need_record;
-    int  replace_const;
-    bool unit_lock;
-    ADDR delta;
+    Bool        need_record;
+    UInt        m_z3_bv_const_n;
+    std::mutex  m_state_lock;
+    ADDR        m_delta;
 
 public:
     static ThreadPool*      pool;
@@ -188,6 +204,7 @@ public:
     State_Tag               status;
     TRcontext               m_ctx;
     TRsolver                solv;
+    InvocationStack         m_InvokStack;
 public:
     //客户机寄存器
 	Register<REGISTER_LEN>  regs;
@@ -216,7 +233,7 @@ public:
     void start(Bool first_bkp_pass);
     void branchGo();
     //ip = ip + offset
-    inline void hook_pass(ADDR offset) { delta = offset; };
+    inline void hook_pass(ADDR offset) { m_delta = offset; };
 
 
 	void compress(ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag> &avoid);//最大化缩合状态 
@@ -229,15 +246,37 @@ public:
     static Vns T_Qop(context & m_ctx, IROp, Vns const&, Vns const&, Vns const&, Vns const&);
 	inline Vns ILGop(IRLoadG *lg);
 
-    Vns get_int_const(UShort nbit);
-    Vns get_int_const(UShort n, UShort nbit);
+    Vns mk_int_const(UShort nbit);
+    Vns mk_int_const(UShort n, UShort nbit);
     UInt getStr(std::stringstream& st, ADDR addr);
-    //read static_table from symbolic address  定义 index 和 该常量数组 之间的关系 不然z3只能逐一爆破 如DES的4个静态表
+    /*read static_table from symbolic address  定义 index 和 该常量数组 之间的关系 不然只能逐一爆破 如DES的4个静态表
+    表映射 callback
+    
+        模拟程序有静态的数组
+            UInt staticMagic[256]（bss）;
+
+        隐含关系为：
+            For i in 0-255
+                staticMagic[i] = unknownFx()
+
+        假如有如下加密方式：
+            const UInt staticMagic[256]={xx,xx,xx,...,xx};
+
+            UChar passwd[4] = input(4);
+            UInt enc = staticMagic[passwd[0]]^staticMagic[passwd[1]]^staticMagic[passwd[2]]^staticMagic[passwd[3]]
+            IF enc == encStatic:
+                print("ok")
+            ELSE:
+                print("faild")
+        当求解这种表达式时在原理上是解不开的，需要您显式进行定义staticMagic的index与staticMagic[index]的转换关系（否则需要爆破255^4）
+        所以请使用idx2Value_Decl_add添加回调函数，当模拟执行时访问staticMagic，回调函数被调用
+    */
     static inline void idx2Value_Decl_add(Addr64 addr, TRtype::TableIdx_CB func) { TableIdxDict[addr] = func; };
     static inline void idx2Value_Decl_del(Addr64 addr, TRtype::TableIdx_CB func) { TableIdxDict.erase(TableIdxDict.find(addr)); };
     Z3_ast idx2Value(ADDR base, Z3_ast idx);
 
     inline operator context& () { return m_ctx; }
+    inline operator TRcontext& () { return m_ctx; }
     inline operator Z3_context() const { return m_ctx; }
     inline operator MEM& () { return mem; }
     inline operator Register<REGISTER_LEN>&() { return regs; }
@@ -279,18 +318,20 @@ public:
     void hook_del(ADDR addr, TRtype::Hook_CB func);
     //interface :
 
-    virtual inline void   traceStart() { return; };
-    virtual inline void   traceFinish() { return; };
-    virtual inline void   traceIRSB(IRSB*) { return; };
-    virtual inline void   traceIRStmtBegin(IRStmt*) { return; };
-    virtual inline void   traceIRStmtEnd(IRStmt*) { return; };
+    virtual inline void traceStart() { return; };
+    virtual inline void traceFinish() { return; };
+    virtual inline void traceIRSB(IRSB*) { return; };
+    virtual inline void traceIrsbEnd(IRSB*) { return; };
+    virtual inline void traceIRStmtEnd(IRStmt*) { return; };
 
-    virtual inline State_Tag Ijk_call(IRJumpKind) { return Death; };
-    virtual inline void   cpu_exception() { status = Death; }
-    virtual inline State* ForkState(ADDR ges) { return nullptr; }
-
+    virtual State_Tag   Ijk_call(IRJumpKind){ VPANIC("need to implement the method"); status = Death; };
+    virtual void        cpu_exception()     { VPANIC("need to implement the method"); status = Death; }
+    virtual State*      ForkState(ADDR ges) { VPANIC("need to implement the method"); return nullptr; }
+    virtual bool        StateCompression(State const& next) { return m_InvokStack == next.m_InvokStack; }
+    //State::delta maybe changed by callback
+    virtual inline State_Tag call_back_hook(Hook_struct const &hs) { return (hs.cb) ? (hs.cb)(this) : Running; }
 private:
-    inline Bool treeCompress(TRcontext& ctx, ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid, ChangeView& change_view, std::hash_map<ULong, Vns>& change_map, std::hash_map<UShort, Vns>& regs_change_map);
+    inline UInt treeCompress(State& target_state, ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid, ChangeView& change_view, std::hash_map<ULong, Vns>& change_map, std::hash_map<UShort, Vns>& regs_change_map);
 
 }; 
 
@@ -299,12 +340,41 @@ static inline std::ostream& operator<<(std::ostream& out, State const& n) {
     return out << (std::string)n;
 }
 
+
+
 template <class TC>
 class StatePrinter : public TC {
-public:
-    StatePrinter(const char* filename, ADDR gse, Bool _need_record) : TC(filename, gse, _need_record){};
+    friend GraphView;
+    TRControlFlags trtraceflags;
 
-    StatePrinter(StatePrinter* father_state, ADDR gse) : TC(father_state, gse) {};
+public:
+    inline bool getFlag(TRControlFlags t) const { return trtraceflags & t; }
+    inline void setFlag(TRControlFlags t) { *(ULong*)&trtraceflags |= t; }
+    inline void unsetFlag(TRControlFlags t) { *(ULong*)&trtraceflags &= ~t; };
+    inline TRControlFlags gtrtraceflags() { return trtraceflags; }
+public:
+    StatePrinter(const char* filename, ADDR gse, Bool _need_record) : 
+        TC(filename, gse, _need_record),
+        trtraceflags(CF_None) {
+        if (doc_debug) {
+            bool traceState = false, traceJmp = false, ppStmts = false, TraceSymbolic = false;
+            auto _ppStmts = doc_debug->FirstChildElement("ppStmts");
+            auto _TraceState = doc_debug->FirstChildElement("TraceState");
+            auto _TraceJmp = doc_debug->FirstChildElement("TraceJmp");
+            auto _TraceSymbolic = doc_debug->FirstChildElement("TraceSymbolic");
+
+            if (_TraceState) _TraceState->QueryBoolText(&traceState);
+            if (_TraceJmp) _TraceJmp->QueryBoolText(&traceJmp);
+            if (_ppStmts) _ppStmts->QueryBoolText(&ppStmts);
+            if (_TraceSymbolic) _TraceSymbolic->QueryBoolText(&TraceSymbolic);
+            if (traceState) setFlag(CF_traceState);
+            if (traceJmp) setFlag(CF_traceJmp);
+            if (ppStmts) setFlag(CF_ppStmts);
+            if (TraceSymbolic) setFlag(CF_TraceSymbolic);
+        }
+    };
+
+    StatePrinter(StatePrinter* father_state, ADDR gse) : TC(father_state, gse) , trtraceflags(father_state->trtraceflags) {};
 
 
     void spIRExpr(const IRExpr* e);
@@ -330,19 +400,19 @@ public:
         }
     }
     
-    void   traceIRStmtBegin(IRStmt* s) {
-        if (getFlag(CF_ppStmts)) {
-            ppIRStmt(s);
-        }
-    };
     void   traceIRStmtEnd(IRStmt* s) {
         if (getFlag(CF_ppStmts)) {
             if (s->tag == Ist_WrTmp) {
-                std::cout << ir_temp[s->Ist.WrTmp.tmp] << std::endl;
+                UInt tmp = s->Ist.WrTmp.tmp;
+                vex_printf("t%u = ", tmp);
+                std::cout << ir_temp[tmp] ;
+                vex_printf(" = ");
+                ppIRExpr(s->Ist.WrTmp.data);
             }
             else {
-                vex_printf("\n");
+                ppIRStmt(s);
             }
+            vex_printf("\n");
         }
     };
 
@@ -353,10 +423,8 @@ public:
     };
 
 
-    virtual State* ForkState(ADDR ges) {
-        return new StatePrinter<TC>(this, ges);
-    };
-
+    virtual State* ForkState(ADDR ges) { return new StatePrinter<TC>(this, ges); };
+    virtual State_Tag call_back_hook(Hook_struct const& hs) { setFlag(hs.cflag); return (hs.cb) ? (hs.cb)(this) : Running; }
 };
 
 

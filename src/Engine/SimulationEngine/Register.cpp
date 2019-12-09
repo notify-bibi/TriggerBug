@@ -18,12 +18,12 @@ Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstM
 #else
 Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, TRcontext & ctx) {
 #endif
-    ULong fast_index = GET8(m_fastindex);
+    vassert(nbytes <= 8);
+    ULong scan = GET8(m_fastindex);
     Z3_ast result;
     DWORD index;
     Z3_ast reast;
-    auto scan = fast_index & fastMask[nbytes << 3];
-    if (_BitScanReverse64(&index, scan)) {
+    if (_BitScanReverse64(&index, scan & fastMask[nbytes << 3])) {
         auto offset = (index >> 3);
         Char relen = nbytes - offset - 1;
         auto fast = m_fastindex[offset];
@@ -81,8 +81,7 @@ Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, T
         return reast;
     }
     while (nbytes > 0) {
-        scan = fast_index & fastMask[nbytes << 3];
-        if (_BitScanReverse64(&index, scan)) {
+        if (_BitScanReverse64(&index, scan & fastMask[nbytes << 3])) {
             auto offset = index >> 3;
             Char relen = nbytes - offset - 1;
             auto fast = m_fastindex[offset];
@@ -179,12 +178,12 @@ Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstM
 #else
 Z3_ast Reg2Ast(Char nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_ast, TRcontext & ctx, TRcontext & toctx) {
 #endif
-    ULong fast_index = GET8(m_fastindex);
+    vassert(nbytes <= 8);
+    ULong scan = GET8(m_fastindex);
     Z3_ast result;
     DWORD index;
     Z3_ast reast;
-    auto scan = fast_index & fastMask[nbytes << 3];
-    if (_BitScanReverse64(&index, scan)) {
+    if (_BitScanReverse64(&index, scan & fastMask[nbytes << 3])) {
         auto offset = (index >> 3);
         Char relen = nbytes - offset - 1;
         auto fast = m_fastindex[offset];
@@ -246,8 +245,7 @@ Z3_ast Reg2Ast(Char nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_ast
         return reast;
     }
     while (nbytes > 0) {
-        scan = fast_index & fastMask[nbytes << 3];
-        if (_BitScanReverse64(&index, scan)) {
+        if (_BitScanReverse64(&index, scan & fastMask[nbytes << 3])) {
             auto offset = index >> 3;
             Char relen = nbytes - offset - 1;
             auto fast = m_fastindex[offset];
@@ -315,6 +313,31 @@ Z3_ast Reg2Ast(Char nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_ast
 }
 
 
+static inline Z3_ast mk_large_int(Z3_context ctx, void* data, UInt nbit) {
+    Z3_ast reast;
+    if (nbit <= 64) {
+        auto zsort = Z3_mk_bv_sort(ctx, nbit);
+        Z3_inc_ref(ctx, reinterpret_cast<Z3_ast>(zsort));
+        reast = Z3_mk_unsigned_int64(ctx, GET8(data), zsort);
+        Z3_dec_ref(ctx, reinterpret_cast<Z3_ast>(zsort));
+        Z3_inc_ref(ctx, reast);
+    }
+    else if (nbit <= 128) {
+        Vns re(ctx, _mm_loadu_si128((__m128i*)data), nbit);
+        reast = re;
+        Z3_inc_ref(ctx, reast);
+    }
+    else if (nbit <= 256) {
+        Vns re(ctx, _mm256_loadu_si256((__m256i*)data), nbit);
+        reast = re;
+        Z3_inc_ref(ctx, reast);
+    }
+    else {
+        return nullptr;
+    }
+    //vassert(Z3_get_bv_sort_size(ctx, Z3_get_sort(ctx, reast)) == nbit);
+    return reast;
+}
 
 //取值函数。将多个ast和真值组合为一个ast
 #ifdef USE_HASH_AST_MANAGER
@@ -332,10 +355,7 @@ Z3_ast Reg2AstSSE(Char nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_
         auto fast = m_fastindex[index];
         if (relen) {
             nbytes -= relen;
-            auto zsort = Z3_mk_bv_sort(ctx, relen << 3);
-            Z3_inc_ref(ctx, reinterpret_cast<Z3_ast>(zsort));
-            reast = Z3_mk_unsigned_int64(ctx, GET8(m_bytes + nbytes), zsort);
-            Z3_inc_ref(ctx, reast);
+            reast = mk_large_int(ctx, m_bytes + nbytes, relen << 3);
             if (fast > nbytes) {
                 Z3_ast need_extract = Z3_mk_extract(ctx, (fast << 3) - 1, (fast - nbytes) << 3, m_ast[nbytes - fast]);
                 Z3_inc_ref(ctx, need_extract);
@@ -350,7 +370,6 @@ Z3_ast Reg2AstSSE(Char nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_
                 Z3_inc_ref(ctx, result);
             }
             Z3_dec_ref(ctx, reast);
-            Z3_dec_ref(ctx, reinterpret_cast<Z3_ast>(zsort));
         }
         else {
             if (nbytes < fast) {
@@ -376,12 +395,7 @@ Z3_ast Reg2AstSSE(Char nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_
         }
     }
     else {
-        auto zsort = Z3_mk_bv_sort(ctx, nbytes << 3);
-        Z3_inc_ref(ctx, reinterpret_cast<Z3_ast>(zsort));
-        reast = Z3_mk_unsigned_int64(ctx, GET8(m_bytes), zsort);
-        Z3_inc_ref(ctx, reast);
-        Z3_dec_ref(ctx, reinterpret_cast<Z3_ast>(zsort));
-        return reast;
+        return mk_large_int(ctx, m_bytes, nbytes << 3);
     }
     while (nbytes > 0) {
         if (_BitScanReverse64(&index, scan & fastMask[nbytes])) {
@@ -389,11 +403,7 @@ Z3_ast Reg2AstSSE(Char nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_
             auto fast = m_fastindex[index];
             if (relen) {
                 nbytes -= relen;
-                auto zsort = Z3_mk_bv_sort(ctx, relen << 3);
-                Z3_inc_ref(ctx, reinterpret_cast<Z3_ast>(zsort));
-                reast = Z3_mk_unsigned_int64(ctx, GET8(m_bytes + nbytes), zsort);
-                Z3_inc_ref(ctx, reast);
-                Z3_dec_ref(ctx, reinterpret_cast<Z3_ast>(zsort));
+                reast = mk_large_int(ctx, m_bytes + nbytes, relen << 3);
                 Z3_ast newresult = Z3_mk_concat(ctx, result, reast);
                 Z3_inc_ref(ctx, newresult);
                 Z3_dec_ref(ctx, result);
@@ -435,11 +445,7 @@ Z3_ast Reg2AstSSE(Char nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_
 
         }
         else {
-            auto zsort = Z3_mk_bv_sort(ctx, nbytes << 3);
-            Z3_inc_ref(ctx, reinterpret_cast<Z3_ast>(zsort));
-            reast = Z3_mk_unsigned_int64(ctx, GET8(m_bytes), zsort);
-            Z3_inc_ref(ctx, reast);
-            Z3_dec_ref(ctx, reinterpret_cast<Z3_ast>(zsort));
+            reast = mk_large_int(ctx, m_bytes, nbytes << 3);
             Z3_ast newresult = Z3_mk_concat(ctx, result, reast);
             Z3_inc_ref(ctx, newresult);
             Z3_dec_ref(ctx, reast);
@@ -465,10 +471,7 @@ Z3_ast Reg2AstSSE(Char nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_
         auto fast = m_fastindex[index];
         if (relen) {
             nbytes -= relen;
-            auto zsort = Z3_mk_bv_sort(toctx, relen << 3);
-            Z3_inc_ref(toctx, reinterpret_cast<Z3_ast>(zsort));
-            reast = Z3_mk_unsigned_int64(toctx, GET8(m_bytes + nbytes), zsort);
-            Z3_inc_ref(toctx, reast);
+            reast = mk_large_int(toctx, m_bytes + nbytes, relen << 3);
             if (fast > nbytes) {
                 Z3_ast need_extract = Z3_mk_extract(toctx, (fast << 3) - 1, (fast - nbytes) << 3, Translate(ctx, toctx, m_ast[nbytes - fast]));
                 Z3_inc_ref(toctx, need_extract);
@@ -483,7 +486,6 @@ Z3_ast Reg2AstSSE(Char nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_
                 Z3_inc_ref(toctx, result);
             }
             Z3_dec_ref(toctx, reast);
-            Z3_dec_ref(toctx, reinterpret_cast<Z3_ast>(zsort));
         }
         else {
             if (nbytes < fast) {
@@ -513,12 +515,7 @@ Z3_ast Reg2AstSSE(Char nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_
         }
     }
     else {
-        auto zsort = Z3_mk_bv_sort(toctx, nbytes << 3);
-        Z3_inc_ref(toctx, reinterpret_cast<Z3_ast>(zsort));
-        reast = Z3_mk_unsigned_int64(toctx, GET8(m_bytes), zsort);
-        Z3_inc_ref(toctx, reast);
-        Z3_dec_ref(toctx, reinterpret_cast<Z3_ast>(zsort));
-        return reast;
+        return mk_large_int(toctx, m_bytes, nbytes << 3);
     }
     while (nbytes > 0) {
         if (_BitScanReverse64(&index, scan & fastMask[nbytes])) {
@@ -526,11 +523,7 @@ Z3_ast Reg2AstSSE(Char nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_
             auto fast = m_fastindex[index];
             if (relen) {
                 nbytes -= relen;
-                auto zsort = Z3_mk_bv_sort(toctx, relen << 3);
-                Z3_inc_ref(toctx, reinterpret_cast<Z3_ast>(zsort));
-                reast = Z3_mk_unsigned_int64(toctx, GET8(m_bytes + nbytes), zsort);
-                Z3_inc_ref(toctx, reast);
-                Z3_dec_ref(toctx, reinterpret_cast<Z3_ast>(zsort));
+                reast = mk_large_int(toctx, m_bytes + nbytes, relen << 3);
                 Z3_ast newresult = Z3_mk_concat(toctx, result, reast);
                 Z3_inc_ref(toctx, newresult);
                 Z3_dec_ref(toctx, result);
@@ -572,11 +565,7 @@ Z3_ast Reg2AstSSE(Char nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_
 
         }
         else {
-            auto zsort = Z3_mk_bv_sort(toctx, nbytes << 3);
-            Z3_inc_ref(toctx, reinterpret_cast<Z3_ast>(zsort));
-            reast = Z3_mk_unsigned_int64(toctx, GET8(m_bytes), zsort);
-            Z3_inc_ref(toctx, reast);
-            Z3_dec_ref(toctx, reinterpret_cast<Z3_ast>(zsort));
+            reast = mk_large_int(toctx, m_bytes, nbytes << 3);
             Z3_ast newresult = Z3_mk_concat(toctx, result, reast);
             Z3_inc_ref(toctx, newresult);
             Z3_dec_ref(toctx, reast);

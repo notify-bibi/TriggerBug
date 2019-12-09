@@ -242,11 +242,10 @@ State::State(const char* filename, ADDR gse, Bool _need_record) :
     need_record(_need_record),
     status(NewState),
     VexGuestARCHState(NULL),
-    delta(0),
-    unit_lock(true),
-    replace_const(0),
-    m_father_state(nullptr)
-    
+    m_delta(0),
+    m_z3_bv_const_n(0),
+    m_father_state(nullptr),
+    m_InvokStack()
 {
     if (pool) 
         delete pool;
@@ -297,10 +296,10 @@ State::State(State *father_state, ADDR gse) :
     need_record(father_state->need_record),
     status(NewState),
     VexGuestARCHState(NULL),
-    delta(0),
-    unit_lock(true),
-    replace_const(father_state->replace_const),
-    m_father_state(father_state)
+    m_delta(0),
+    m_z3_bv_const_n(father_state->m_z3_bv_const_n),
+    m_father_state(father_state),
+    m_InvokStack(father_state->m_InvokStack)
 {
 };
 
@@ -529,19 +528,15 @@ inline Vns State::getassert(z3::context &ctx) {
 }
 
 
-Vns State::get_int_const(UShort nbit) {
-    bool xchgbv = false;
-    while (!xchgbv) {
-        __asm__ __volatile("xchgb %b0,%1":"=r"(xchgbv) : "m"(unit_lock), "0"(xchgbv) : "memory");
-    };
-    auto res = replace_const++;
-    unit_lock = true;
+Vns State::mk_int_const(UShort nbit) {
+    std::unique_lock<std::mutex> lock(m_state_lock);
+    auto res = m_z3_bv_const_n++;
     char buff[20];
     sprintf_s(buff, sizeof(buff), "p_%d", res);
-    return  Vns(m_ctx.bv_const(buff, nbit), nbit);
+    return Vns(m_ctx.bv_const(buff, nbit), nbit);
 }
 
-Vns State::get_int_const(UShort n, UShort nbit) {
+Vns State::mk_int_const(UShort n, UShort nbit) {
     char buff[20];
     sprintf_s(buff, sizeof(buff), "p_%d", n);
     return  Vns(m_ctx.bv_const(buff, nbit), nbit);
@@ -866,7 +861,6 @@ Begin_try:
             if(first_bkp_pass)
                 if ((UChar)mem.Iex_Load<Ity_I8>(guest_start) == 0xCC) {
                     if (get_hook(hs, guest_start)) {
-                        setFlag(hs.cflag);
                         goto bkp_pass;
                     }
                     else {
@@ -881,15 +875,13 @@ For_Begin:
                 goto For_Begin_NO_Trans;
             deal_bkp:
                 {
-                    if (hs.cb) {
-                        status = (hs.cb)(this);//State::delta maybe changed by callback
-                    }
+                    status = call_back_hook(hs);
                     if (status != Running) {
                         goto EXIT;
                     }
-                    if (delta) {
-                        guest_start = guest_start + delta;
-                        delta = 0;
+                    if (m_delta) {
+                        guest_start = guest_start + m_delta;
+                        m_delta = 0;
                         goto For_Begin;
                     }
                     else {
@@ -910,16 +902,17 @@ For_Begin:
                 }
             For_Begin_NO_Trans:
                 guest_start_of_block = guest_start;
-                for (UInt stmtn = 0; stmtn < irsb->stmts_used; stmtn++) {
-                    IRStmt *s = irsb->stmts[stmtn];
-                    traceIRStmtBegin(s);
+                IRStmt* s = irsb->stmts[0];
+                for (UInt stmtn = 0; stmtn < irsb->stmts_used;
+                    traceIRStmtEnd(s),
+                    s = irsb->stmts[++stmtn]) 
+                {
                     switch (s->tag) {
                     case Ist_Put: { regs.Ist_Put(s->Ist.Put.offset, tIRExpr(s->Ist.Put.data)); break; }
                     case Ist_Store: { mem.Ist_Store(tIRExpr(s->Ist.Store.addr), tIRExpr(s->Ist.Store.data)); break; };
                     case Ist_WrTmp: { ir_temp[s->Ist.WrTmp.tmp] = tIRExpr(s->Ist.WrTmp.data); break; };
                     case Ist_CAS /*比较和交换*/: {//xchg    rax, [r10]
-                        bool xchgbv = false;
-                        while (!xchgbv) { __asm__ __volatile("xchgb %b0,%1":"=r"(xchgbv) : "m"(unit_lock), "0"(xchgbv) : "memory"); }
+                        std::unique_lock<std::mutex> lock(m_state_lock);
                         IRCAS cas = *(s->Ist.CAS.details);
                         Vns addr = tIRExpr(cas.addr);//r10.value
                         Vns expdLo = tIRExpr(cas.expdLo);
@@ -936,7 +929,6 @@ For_Begin:
                             ir_temp[cas.oldLo] = mem.Iex_Load(addr, (IRType)(expdLo.bitn));
                             mem.Ist_Store(addr, dataLo);
                         }
-                        unit_lock = true;
                         break;
                     }
                     case Ist_Exit: {
@@ -952,9 +944,9 @@ For_Begin:
                                     if (status != Running) {
                                         goto EXIT;
                                     }
-                                    if (delta) {
-                                        guest_start = guest_start + delta;
-                                        delta = 0;
+                                    if (m_delta) {
+                                        guest_start = guest_start + m_delta;
+                                        m_delta = 0;
                                         goto For_Begin;
                                     }
                                     guest_start = s->Ist.Exit.dst->Ico.U64;
@@ -998,8 +990,10 @@ For_Begin:
                         }
                         break;
                     };
-                    case Ist_AbiHint: //====== AbiHint(t4, 128, 0x400936:I64) ====== call 0xxxxxxx
+                    case Ist_AbiHint: { //====== AbiHint(t4, 128, 0x400936:I64) ====== call 0xxxxxxx
+                        m_InvokStack.push(tIRExpr(s->Ist.AbiHint.nia), tIRExpr(s->Ist.AbiHint.base));
                         break;
+                    }
                     case Ist_PutI: {
                         // PutI(840:8xI8)[t10,-1]
                         // 840:arr->base
@@ -1067,20 +1061,19 @@ For_Begin:
                         VPANIC("what ppIRStmt");
                     }
                     }
-
-                    traceIRStmtEnd(s);
                 }
 
+                traceIrsbEnd(irsb);
                 switch (irsb->jumpkind) {
                 case Ijk_Boring:        break;
-                case Ijk_Call:          break;
-                case Ijk_Ret:           break;
+                case Ijk_Call: {break; }
+                case Ijk_Ret:{
+                    m_InvokStack.pop();
+                    break;
+                }
                 case Ijk_SigTRAP: {
                 SigTRAP:
-                    if (get_hook(hs, guest_start)) {
-                        setFlag(hs.cflag);
-                        goto deal_bkp;
-                    }
+                    if (get_hook(hs, guest_start)) { goto deal_bkp; }
                     status = Death;
                     vex_printf("Ijk_SigTRAP: %p", guest_start);
                     goto EXIT;
@@ -1090,9 +1083,9 @@ For_Begin:
                     if (status != Running) {
                         goto EXIT;
                     }
-                    if (delta) {
-                        guest_start = guest_start + delta;
-                        delta = 0;
+                    if (m_delta) {
+                        guest_start = guest_start + m_delta;
+                        m_delta = 0;
                         goto For_Begin;
                     }
                 }
@@ -1162,8 +1155,6 @@ For_Begin:
         goto Begin_try;
     }
 EXIT:
-    unit_lock = true;
-
     traceFinish(); 
     clear_irTemp();
     return;
@@ -1415,8 +1406,12 @@ void StatePrinter<TC>::spIRStmt(const IRStmt* s)
 }
 
 
-
-inline Bool State::treeCompress(TRcontext& ctx, ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid, ChangeView& change_view, std::hash_map<ULong, Vns>& change_map, std::hash_map<UShort, Vns>& regs_change_map) {
+inline UInt State::treeCompress(State &target_state, ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid,
+    ChangeView& change_view,
+    std::hash_map<ULong, Vns>& change_map, 
+    std::hash_map<UShort, Vns>& regs_change_map)
+{
+    TRcontext& ctx = target_state;
     ChangeView _change_view = { this, &change_view };
     if (branch.empty()) {
         for (auto av : avoid) {
@@ -1462,7 +1457,7 @@ inline Bool State::treeCompress(TRcontext& ctx, ADDR Target_Addr, State_Tag Targ
         _change_map.reserve(20);
         std::hash_map<UShort, Vns> _regs_change_map;
         _change_map.reserve(20);
-        Bool _has_branch = (*it)->treeCompress(ctx, Target_Addr, Target_Tag, avoid, _change_view, _change_map, _regs_change_map);
+        Bool _has_branch = (*it)->treeCompress(target_state, Target_Addr, Target_Tag, avoid, _change_view, _change_map, _regs_change_map);
         if (!has_branch) {
             has_branch = _has_branch;
         }
@@ -1523,7 +1518,7 @@ void State::compress(ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_T
     change_map.reserve(20);
     std::hash_map<UShort, Vns> regs_change_map;
     regs_change_map.reserve(30);
-    auto flag = treeCompress(m_ctx, Target_Addr, Target_Tag, avoid, change_view, change_map, regs_change_map);
+    auto flag = treeCompress(*this, Target_Addr, Target_Tag, avoid, change_view, change_map, regs_change_map);
     if (flag != True) {
         for (auto map_it : change_map) {
 #ifdef  _DEBUG
@@ -1595,22 +1590,6 @@ void Vex_Info::init_vex_info(const char* filename) {
         _giropt_register_updates_default();
         _giropt_level();
         _gguest_max_insns();
-    }
-    if (doc_debug) {
-        bool traceState = false, traceJmp = false, ppStmts = false, TraceSymbolic = false;
-        auto _ppStmts = doc_debug->FirstChildElement("ppStmts");
-        auto _TraceState = doc_debug->FirstChildElement("TraceState");
-        auto _TraceJmp = doc_debug->FirstChildElement("TraceJmp");
-        auto _TraceSymbolic = doc_debug->FirstChildElement("TraceSymbolic");
-
-        if (_TraceState) _TraceState->QueryBoolText(&traceState);
-        if (_TraceJmp) _TraceJmp->QueryBoolText(&traceJmp);
-        if (_ppStmts) _ppStmts->QueryBoolText(&ppStmts);
-        if (_TraceSymbolic) _TraceSymbolic->QueryBoolText(&TraceSymbolic);
-        if (traceState) setFlag(CF_traceState);
-        if (traceJmp) setFlag(CF_traceJmp);
-        if (ppStmts) setFlag(CF_ppStmts);
-        if (TraceSymbolic) setFlag(CF_TraceSymbolic);
     }
 }
 

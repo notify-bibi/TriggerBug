@@ -729,24 +729,25 @@ public:
             UInt plength = 0x1000 - ((UShort)address & 0xfff);
             return nP->unit->Iex_Get(0, size - plength).translate(m_ctx).Concat(P->unit->Iex_Get(((UShort)address & 0xfff), plength, m_ctx));
         }
+
     template<IRType ty>
-    Vns ReZero() {
+    inline Vns Pad2Value(UChar pad) {
         switch (ty) {
         case 8:
-        case Ity_I8:  return Vns(m_ctx, (UChar)0);
+        case Ity_I8:  return Vns(m_ctx, (UChar)pad);
         case 16:
-        case Ity_I16: {return Vns(m_ctx, (UShort)0);}
+        case Ity_I16: {return Vns(m_ctx, (UShort)((((UShort)pad) << 8) | pad)); }
         case 32:
         case Ity_F32:
-        case Ity_I32: {return Vns(m_ctx, (UInt)0); }
+        case Ity_I32: {return Vns(m_ctx, _mm_set1_epi8(pad).m128i_u32[0]); }
         case 64:
         case Ity_F64:
-        case Ity_I64: {return Vns(m_ctx, (ULong)0); }
+        case Ity_I64: {return Vns(m_ctx, _mm_set1_epi8(pad).m128i_u64[0]); }
         case 128:
         case Ity_I128:
-        case Ity_V128: {return Vns(m_ctx,  _mm_setzero_si128()); }
+        case Ity_V128: {return Vns(m_ctx,  _mm_set1_epi8(pad)); }
         case 256:
-        case Ity_V256: {return Vns(m_ctx, _mm256_setzero_si256()); }
+        case Ity_V256: {return Vns(m_ctx, _mm256_set1_epi8(pad)); }
         default:vpanic("error IRType");
         }
     }
@@ -760,7 +761,7 @@ public:
         MEMACCESSASSERT(P, address);
         UShort offset = (UShort)address & 0xfff;
         if (P->is_pad) {
-            return ReZero<ty>();
+            return Pad2Value<ty>(P->pad);
         };
         if (user == P->user) {//WNC
             switch (ty) {
@@ -923,6 +924,7 @@ public:
         PAGE* P = getMemPage(address);
         MEMACCESSASSERT(P, address);
         CheckSelf(P, address);
+        vassert(P->user == user);
         vassert(P->used_point == 1);
         UShort offset = address & 0xfff;
         if (fastalignD1[sizeof(data) << 3] > 0xFFF - offset) {
@@ -944,6 +946,7 @@ public:
         PAGE* P = getMemPage(address);
         MEMACCESSASSERT(P, address);
         CheckSelf(P, address);
+        vassert(P->user == user);
         vassert(P->used_point == 1);
         UShort offset = address & 0xfff;
         if (fastalignD1[bitn] > 0xFFF - offset) {
