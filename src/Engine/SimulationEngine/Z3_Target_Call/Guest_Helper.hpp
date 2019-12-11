@@ -12,6 +12,14 @@ static inline ULong resultsr(Vns const & retv) {
 #define TRRET(retv) (retv.real()? (ULong)(retv):resultsr(retv))
 #define ISUNSIGNED_TYPE(type) ((type)-1 > 0)
 
+namespace TRGL{
+class VexGuestAMD64State;
+class Fpu_State;
+class VexGuestX86SegDescr;
+class VexGuestX86State;
+}
+
+
 namespace hp{
 
     template<typename Type>
@@ -20,6 +28,10 @@ namespace hp{
         MEM& m_obj;
         template <typename T> friend class GMP;
         template <typename T, UInt shift, UInt bits> friend class GMW;
+        friend class TRGL::VexGuestAMD64State;
+        friend class TRGL::Fpu_State;
+        friend class TRGL::VexGuestX86SegDescr;
+        friend class TRGL::VexGuestX86State;
 
         GM(MEM& obj, Vns const& base) :
             m_obj(obj),
@@ -42,12 +54,13 @@ namespace hp{
             m_base(obj, (ADDR)base)
         {}
 
+
         MEM& obj() const {
             return static_cast<MEM&>(m_obj);
         }
 
-    public:
 
+    public:
         /*Read{*/
         template<typename T>
         inline operator T () const {
@@ -62,11 +75,12 @@ namespace hp{
 
         /*Write{*/
         template<typename T>
-        inline void operator=(T const data) {
+        inline T operator=(T const data) {
             obj().Ist_Store(m_base, (Type)data);
+            return data;
         }
 
-        void operator=(Vns const& data) {
+        inline Vns const&  operator=(Vns const& data) {
             if ((sizeof(Type) << 3) == data.bitn) {
                 obj().Ist_Store(m_base, data);
             }
@@ -81,6 +95,7 @@ namespace hp{
             else {
                 obj().Ist_Store(m_base, data.extract<(int)((sizeof(Type) << 3) - 1), 0>());
             }
+            return data;
         }
         /*}Write*/
 
@@ -110,6 +125,8 @@ namespace hp{
 
     private:
         template<typename T>
+        inline GM(GMP<T> const&) = delete;
+        template<typename T>
         T operator &() = delete;
         template<typename T>
         T operator &() const = delete;
@@ -122,7 +139,10 @@ namespace hp{
         operator const z3::expr& () const = delete;
     };
 
-
+    /*
+        GMP<UChar> ps = &x87_state.reg[0];  ok
+        UChar* p = &x87_state.reg[0];       err
+    */
     template<typename Type>
     class GMP:private GM<Type> {
     public:
@@ -140,21 +160,22 @@ namespace hp{
         {}
 
         template<typename T>
-        GMP(GMP<T> const &C) : GM<Type>(C.obj(), C.operator Vns())
+        GMP(GMP<T> const &C) : GM<Type>(C.obj(), ((GM<T>&)C).m_base)
         {}
+
+        /*template<typename T>
+        GMP(GM<T> const& C) : GM<Type>(C)
+        {}*/
 
         MEM& obj() const {
             return static_cast<MEM &>(m_obj);
         }
 
-        template<typename T>
+        /*template<typename T>
         inline operator T () const {
             return (T)m_base;
-        }
+        }*/
 
-        inline operator Vns () const {
-            return m_base;
-        }
 
         /*convert{*/
         template <typename T>
@@ -186,8 +207,8 @@ namespace hp{
 
     #define REG_OPERATOR(op)					\
 		    template<typename _dataType>		\
-		    Vns operator op(_dataType data) const{\
-			    return operator Vns() op data;	\
+		    inline GMP<Type> operator op(_dataType data) const{\
+			    return GMP<Type>(obj(), m_base + data * (sizeof(Type)));	\
 		    }
 
         REG_OPERATOR(+);
@@ -204,6 +225,15 @@ namespace hp{
 
     private:
         template<typename T>
+        inline GMP(GM<T> const&) = delete;
+
+        /*Read{*/
+        template<typename T>
+        inline operator T () const = delete;
+        inline operator Vns () const = delete;
+        /*}Read*/
+
+        template<typename T>
         T operator &() = delete;
         template<typename T>
         T operator &() const = delete;
@@ -219,16 +249,19 @@ namespace hp{
 
     template<typename Type>
     class GR {
+        template <typename T> friend class GRP;
+        friend class TRGL::VexGuestAMD64State;
+        friend class TRGL::Fpu_State;
+        friend class TRGL::VexGuestX86SegDescr;
+        friend class TRGL::VexGuestX86State;
         Register<REGISTER_LEN>& m_obj;
         UInt ir_o;
-        template <typename T> friend class GRP;
-
-    public:
         GR(Register<REGISTER_LEN>& obj, UInt iro) :
             m_obj(obj),
             ir_o(iro)
         {}
 
+    public:
         Register<REGISTER_LEN>& obj() const {
             return static_cast<Register<REGISTER_LEN>&>(m_obj);
         }
@@ -249,8 +282,9 @@ namespace hp{
 
         /*Write{*/
         template<typename T>
-        inline void operator=(T const data) {
+        inline T operator=(T const data) {
             obj().Ist_Put(ir_o, (Type)data);
+            return data;
         }
 
         void operator=(Vns const& data) {
@@ -297,6 +331,9 @@ namespace hp{
 
     private:
         template<typename T>
+        inline GR(GR<T> const &) = delete;
+
+        template<typename T>
         T operator &() = delete;
         template<typename T>
         T operator &() const = delete;
@@ -317,7 +354,7 @@ namespace hp{
         {}
 
         template<typename T>
-        GRP(GRP<T> const& C) : GR<Type>(C.obj(), C.ir_o)
+        GRP(GRP<T> const& C) : GR<Type>(C.obj(), ((GR<T>&)C).ir_o)
         {}
 
         Register<REGISTER_LEN>& obj() const {
@@ -337,13 +374,13 @@ namespace hp{
 
 
         inline GR<Type> operator [](UInt idx) {
-            return GR<Type>(obj(), m_base + idx * (sizeof(Type)));
+            return GR<Type>(obj(), ir_o + idx * (sizeof(Type)));
         }
 
     #define REG_OPERATOR(op)					\
 		    template<typename _dataType>		\
-		    Vns operator op(_dataType data) const{\
-			    return operator Vns() op data;	\
+		    inline GR<Type> operator op(_dataType offset) const{\
+			    return GR<Type>(obj(), ir_o + offset * (sizeof(Type)));	\
 		    }
 
         REG_OPERATOR(+);
@@ -359,6 +396,12 @@ namespace hp{
     #undef REG_OPERATOR
 
     private:
+        template<typename T>
+        inline GRP(GR<T> const&) = delete;
+
+        template<typename T>
+        inline operator T () const = delete;
+
         template<typename T>
         T operator &() = delete;
         template<typename T>
@@ -410,33 +453,26 @@ namespace hp{
 };
 
 using namespace hp;
-using FloatP = GMP<Float>;
-using DoubleP = GMP<Double>;
-
-using BoolP = GMP<Bool>;
-using UCharP = GMP<UChar>;
-using SCharP = GMP<SChar>;
-using CharP = GMP<SChar>;
-using UShortP = GMP<UShort>;
-using ShortP = GMP<SShort>;
-using SShortP = GMP<SShort>;
-using UIntP = GMP<UInt>;
-using IntP = GMP<Int>;
-using SIntP = GMP<Int>;
-using ULongP = GMP<ULong>;
-using SLongP = GMP<SLong>;
-using LongP = GMP<SLong>;
-using m128P = GMP<__m128i>;
-using m256P = GMP<__m256i>;
-using V256P = GMP<V256>;
-using V128P = GMP<V128>;
-
-
-
 
 
 
 namespace TRGL {
+class Fpu_State{
+    State& m_state;
+   /* UShort env[14];
+    UChar  reg[80];*/
+public:
+    GMP<UShort> env;
+    GMP<UChar>  reg;
+    Fpu_State(State& state, ADDR base) :
+        m_state(state),
+        env(state, base),
+        reg(state, base + sizeof(UShort) * 14)
+    {}
+    Fpu_State(ADDR base) :
+        Fpu_State(*g_state, (ADDR)base)
+    { }
+};
 
 class VexGuestAMD64State {
 public:

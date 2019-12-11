@@ -811,7 +811,9 @@ MEM::~MEM() {
 
                     PAGE* pt = pt_point->pt[index];
                     if (pt->user == user) {
-                        vassert(pt->used_point == 1);
+                        if (pt->used_point != 1) {
+                            throw TRMem::MEMexception("memory leak!!!", engine_memory_leak);
+                        }
                         if (pt->unit) {
                             delete pt->unit;
                         }

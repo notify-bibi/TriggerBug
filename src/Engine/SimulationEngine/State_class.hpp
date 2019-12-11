@@ -129,12 +129,6 @@ public:
 };
 
 
-typedef struct ChangeView {
-    State* elders;
-    ChangeView* front;
-}ChangeView;
-
-
 class TRsolver :public z3::solver{
     friend class State;
     bool                    m_solver_snapshot = false;
@@ -145,6 +139,7 @@ class TRsolver :public z3::solver{
         void push() { m_solver_snapshot = true; z3::solver::push(); }
         void pop() { z3::solver::pop(); m_solver_snapshot = false; }
         bool is_snapshot() { return m_solver_snapshot; }
+        Vns getassert(z3::context& ctx);
 };
 
 //Functional programming
@@ -166,12 +161,24 @@ public:
         guest_stack.pop();
     }
     friend bool operator==(InvocationStack const& a, InvocationStack const& b);
+    void operator=(InvocationStack const& b) {
+        guest_call_stack = b.guest_call_stack;
+        guest_stack = b.guest_stack;
+    }
 };
 
 static inline bool operator==(InvocationStack const& a, InvocationStack const& b) { 
     return (a.guest_call_stack == b.guest_call_stack) && (a.guest_stack == b.guest_stack);
 }
 
+class StateCompressNode {
+public:
+    State* state;
+    UInt compress_group;
+    UInt State_flag;//0:delete 1:compress 2:Fork State
+    std::vector<StateCompressNode*> child_nodes;
+    StateCompressNode(){}
+};
 
 class StateAnalyzer;
 class State:public Vex_Info {
@@ -185,10 +192,10 @@ protected:
     static std::hash_map<ADDR, Hook_struct> CallBackDict;
     static std::hash_map<ADDR/*static table base*/, TRtype::TableIdx_CB> TableIdxDict;
     //当前state的入口点
-    ADDR guest_start_ep;
+    ADDR        guest_start_ep;
     //客户机state的eip（计数器eip）
-    ADDR guest_start;
-	void *VexGuestARCHState;
+    ADDR        guest_start;
+	void*       VexGuestARCHState;
 
 private:
     VexArchInfo *vai_guest,  *vai_host;
@@ -237,7 +244,6 @@ public:
 
 
 	void compress(ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag> &avoid);//最大化缩合状态 
-    Vns getassert(z3::context &ctx);
 	inline Vns tIRExpr(IRExpr*); 
     Vns CCall(IRCallee *cee, IRExpr **exp_args, IRType ty);
     static Vns T_Unop(context & m_ctx, IROp, Vns const&);
@@ -328,11 +334,25 @@ public:
     virtual void        cpu_exception()     { VPANIC("need to implement the method"); status = Death; }
     virtual State*      ForkState(ADDR ges) { VPANIC("need to implement the method"); return nullptr; }
     virtual bool        StateCompression(State const& next) { return m_InvokStack == next.m_InvokStack; }
+    virtual void        StateCompressMkSymbol(State const& newState) { m_InvokStack = newState.m_InvokStack; }
     //State::delta maybe changed by callback
     virtual inline State_Tag call_back_hook(Hook_struct const &hs) { return (hs.cb) ? (hs.cb)(this) : Running; }
 private:
-    inline UInt treeCompress(State& target_state, ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid, ChangeView& change_view, std::hash_map<ULong, Vns>& change_map, std::hash_map<UShort, Vns>& regs_change_map);
+    bool treeCompress(std::vector <Vns>& avoid_asserts_ret, bool &has_branch,
+        std::hash_map<ADDR, Vns>& change_map_ret,
+        StateCompressNode* SCNode, UInt group, TRcontext& ctx, UInt deep);
 
+    void get_write_map(
+        std::hash_map<ADDR, Vns>& change_map_ret, TRcontext& ctx
+    );
+
+    StateCompressNode* mkCompressTree(
+        std::vector<State*>& group,
+        ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid
+    );
+
+    void set_changes(std::hash_map<ADDR, Vns>& change_map_ret);
+    void set_changes(std::hash_map<ADDR, Vns>& change_map_ret, z3::solver::translate);
 }; 
 
 

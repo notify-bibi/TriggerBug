@@ -510,24 +510,6 @@ inline void State::initVexEngine() {
     pap.guest_max_insns = guest_max_insns;
 }
 
-inline Vns State::getassert(z3::context &ctx) {
-    if (solv.m_asserts.empty()) {
-        VPANIC("impossible assertions num is zero");
-    }
-    auto it = solv.m_asserts.begin();
-    auto end = solv.m_asserts.end();
-    Z3_ast* args = (Z3_ast*)malloc(sizeof(Z3_ast) * solv.m_asserts.size());
-    UInt i = 0;
-    while (it != end) {
-        args[i++] = it->operator Z3_ast();
-        it++;
-    }
-    Vns re = Vns(m_ctx, Z3_mk_and(m_ctx, solv.m_asserts.size(), args), 1).translate(ctx);
-    free(args);
-    return re;
-}
-
-
 Vns State::mk_int_const(UShort nbit) {
     std::unique_lock<std::mutex> lock(m_state_lock);
     auto res = m_z3_bv_const_n++;
@@ -1404,161 +1386,438 @@ void StatePrinter<TC>::spIRStmt(const IRStmt* s)
         VPANIC("ppIRStmt");
     }
 }
+//
+//
+//inline UInt State::treeCompress(State &target_state, ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid,
+//    ChangeView& change_view,
+//    std::hash_map<ULong, Vns>& change_map, 
+//    std::hash_map<UShort, Vns>& regs_change_map)
+//{
+//    TRcontext& ctx = target_state;
+//    ChangeView _change_view = { this, &change_view };
+//    if (branch.empty()) {
+//        for (auto av : avoid) {
+//            if (av == status) {
+//                return 2;
+//            }
+//        }
+//        if (guest_start == Target_Addr && status == Target_Tag) {
+//            ChangeView* _cv = &_change_view;
+//            do {
+//                auto state = _cv->elders;
+//                if (state->regs.record) {
+//                    for (auto offset : *state->regs.record) {
+//                        auto _Where = regs_change_map.lower_bound(offset);
+//                        if (_Where == regs_change_map.end()) {
+//                            regs_change_map[offset] = state->regs.Iex_Get(offset, Ity_I64, ctx);
+//                        }
+//                    }
+//                }
+//                for (auto mcm : state->mem.mem_change_map) {
+//                    vassert(mcm.second->record != NULL);
+//                    for (auto offset : *(mcm.second->record)) {
+//                        auto _Where = change_map.lower_bound(offset);
+//                        if (_Where == change_map.end()) {
+//                            auto Address = mcm.first + offset;
+//                            auto p = state->mem.getMemPage(Address);
+//                            vassert(p);
+//                            vassert(p->user == state->mem.user);
+//                            change_map[Address] = p->unit->Iex_Get(offset, Ity_I64, ctx);
+//                        }
+//                    }
+//                }
+//                _cv = _cv->front;
+//            } while (_cv->front && _cv->front->elders);
+//            return False;
+//        }
+//        return True;
+//    }
+//    Bool has_branch = False;
+//    std::vector<State*> ::iterator it = branch.begin();
+//    while (it != branch.end()) {
+//        std::hash_map<ULong, Vns> _change_map;
+//        _change_map.reserve(20);
+//        std::hash_map<UShort, Vns> _regs_change_map;
+//        _change_map.reserve(20);
+//        Bool _has_branch = (*it)->treeCompress(target_state, Target_Addr, Target_Tag, avoid, _change_view, _change_map, _regs_change_map);
+//        if (!has_branch) {
+//            has_branch = _has_branch;
+//        }
+//        for (auto map_it : _change_map) {
+//            auto _Where = change_map.lower_bound(map_it.first);
+//            if (_Where == change_map.end()) {
+//                change_map[map_it.first] = map_it.second;
+//            }
+//            else {
+//                if (map_it.second.real() && (_Where->second.real()) && ((ULong)(map_it.second) == (ULong)(_Where->second))) {
+//
+//                }
+//                else {
+//                    _Where->second = Vns(ctx, Z3_mk_ite(ctx, (*it)->getassert(ctx), map_it.second, _Where->second), 64);
+//                }
+//            }
+//        }
+//        for (auto map_it : _regs_change_map) {
+//            auto _Where = regs_change_map.lower_bound(map_it.first);
+//            if (_Where == regs_change_map.end()) {
+//                regs_change_map[map_it.first] = map_it.second;
+//            }
+//            else {
+//                if (((map_it.second.real()) && (_Where->second.real())) && ((ULong)(map_it.second) == (ULong)(_Where->second))) {
+//
+//                }
+//                else {
+//                    _Where->second = Vns(ctx, Z3_mk_ite(ctx, (*it)->getassert(ctx), map_it.second, _Where->second), 64);
+//                }
+//            }
+//        }
+//        if (_has_branch == False) {
+//            State* ds = *it;
+//            delete ds;
+//            it = branch.erase(it);
+//            continue;
+//        }
+//        else if (_has_branch == 2) {
+//            State* ds = *it;
+//            delete ds;
+//            it = branch.erase(it);
+//            continue;
+//        }
+//        it++;
+//    }
+//    if (branch.empty() && status == Fork) {
+//        return 2;
+//    }
+//    else {
+//        return has_branch;
+//    }
+//}
 
+static bool is_avoid(std::vector<State_Tag>& avoid, State_Tag tag) { return (find(avoid.begin(), avoid.end(), tag) != avoid.end()); }
 
-inline UInt State::treeCompress(State &target_state, ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid,
-    ChangeView& change_view,
-    std::hash_map<ULong, Vns>& change_map, 
-    std::hash_map<UShort, Vns>& regs_change_map)
-{
-    TRcontext& ctx = target_state;
-    ChangeView _change_view = { this, &change_view };
-    if (branch.empty()) {
-        for (auto av : avoid) {
-            if (av == status) {
-                return 2;
-            }
+void State::get_write_map(
+    std::hash_map<ADDR, Vns>& change_map_ret, TRcontext& ctx
+) {
+    if (regs.record) {
+        for (auto offset : *regs.record) {
+            change_map_ret[offset] = regs.Iex_Get<Ity_I64>(offset, ctx);
         }
-        if (guest_start == Target_Addr && status == Target_Tag) {
-            ChangeView* _cv = &_change_view;
-            do {
-                auto state = _cv->elders;
-                if (state->regs.record) {
-                    for (auto offset : *state->regs.record) {
-                        auto _Where = regs_change_map.lower_bound(offset);
-                        if (_Where == regs_change_map.end()) {
-                            regs_change_map[offset] = state->regs.Iex_Get(offset, Ity_I64, ctx);
-                        }
-                    }
-                }
-                for (auto mcm : state->mem.mem_change_map) {
-                    vassert(mcm.second->record != NULL);
-                    for (auto offset : *(mcm.second->record)) {
-                        auto _Where = change_map.lower_bound(offset);
-                        if (_Where == change_map.end()) {
-                            auto Address = mcm.first + offset;
-                            auto p = state->mem.getMemPage(Address);
-                            vassert(p);
-                            vassert(p->user == state->mem.user);
-                            change_map[Address] = p->unit->Iex_Get(offset, Ity_I64, ctx);
-                        }
-                    }
-                }
-                _cv = _cv->front;
-            } while (_cv->front && _cv->front->elders);
-            return False;
-        }
-        return True;
     }
-    Bool has_branch = False;
-    std::vector<State*> ::iterator it = branch.begin();
-    while (it != branch.end()) {
-        std::hash_map<ULong, Vns> _change_map;
-        _change_map.reserve(20);
-        std::hash_map<UShort, Vns> _regs_change_map;
-        _change_map.reserve(20);
-        Bool _has_branch = (*it)->treeCompress(target_state, Target_Addr, Target_Tag, avoid, _change_view, _change_map, _regs_change_map);
-        if (!has_branch) {
-            has_branch = _has_branch;
+    for (auto mcm : mem.mem_change_map) {
+        vassert(mcm.second->record != NULL);
+        for (auto offset : *(mcm.second->record)) {
+            auto Address = mcm.first + offset;
+            auto p = mem.getMemPage(Address);
+            vassert(p);
+            vassert(p->user == mem.user);
+            vassert(Address > REGISTER_LEN);
+            change_map_ret[Address] = p->unit->Iex_Get<Ity_I64>(offset, ctx);
         }
-        for (auto map_it : _change_map) {
-            auto _Where = change_map.lower_bound(map_it.first);
-            if (_Where == change_map.end()) {
-                change_map[map_it.first] = map_it.second;
-            }
-            else {
-                if (map_it.second.real() && (_Where->second.real()) && ((ULong)(map_it.second) == (ULong)(_Where->second))) {
-
-                }
-                else {
-                    _Where->second = Vns(ctx, Z3_mk_ite(ctx, (*it)->getassert(ctx), map_it.second, _Where->second), 64);
-                }
-            }
-        }
-        for (auto map_it : _regs_change_map) {
-            auto _Where = regs_change_map.lower_bound(map_it.first);
-            if (_Where == regs_change_map.end()) {
-                regs_change_map[map_it.first] = map_it.second;
-            }
-            else {
-                if (((map_it.second.real()) && (_Where->second.real())) && ((ULong)(map_it.second) == (ULong)(_Where->second))) {
-
-                }
-                else {
-                    _Where->second = Vns(ctx, Z3_mk_ite(ctx, (*it)->getassert(ctx), map_it.second, _Where->second), 64);
-                }
-            }
-        }
-        if (_has_branch == False) {
-            State* ds = *it;
-            delete ds;
-            it = branch.erase(it);
-            continue;
-        }
-        else if (_has_branch == 2) {
-            State* ds = *it;
-            delete ds;
-            it = branch.erase(it);
-            continue;
-        }
-        it++;
-    }
-    if (branch.empty() && status == Fork) {
-        return 2;
-    }
-    else {
-        return has_branch;
     }
 }
 
-void State::compress(ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid)
-{
-    ChangeView change_view = { NULL, NULL };
-    std::hash_map<ULong, Vns> change_map;
-    change_map.reserve(20);
-    std::hash_map<UShort, Vns> regs_change_map;
-    regs_change_map.reserve(30);
-    auto flag = treeCompress(*this, Target_Addr, Target_Tag, avoid, change_view, change_map, regs_change_map);
-    if (flag != True) {
-        for (auto map_it : change_map) {
-#ifdef  _DEBUG
-            std::cout << std::hex << map_it.first << map_it.second << std::endl;
-#endif //  _DEBUG
-            mem.Ist_Store(map_it.first, map_it.second);
-        };
-        for (auto map_it : regs_change_map) {
+
+static UInt divide_into_groups(std::vector<State*>& group, State* s) {
+    UInt group_count = 0;
+    for (auto gs : group) {
+        if (gs->StateCompression(*s)) {
+            return group_count;
+        }
+        group_count++;
+    }
+    group.emplace_back(s);
+    return group_count;
+}
+
+
+StateCompressNode* State::mkCompressTree(
+    std::vector<State*>& group, ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid
+) {
+    if (branch.empty()) {
+        if (status == Target_Tag) {
+            if (guest_start == Target_Addr) {
+                StateCompressNode* delnode = new StateCompressNode;
+                delnode->state = this;
+                delnode->State_flag = 1;
+                delnode->compress_group = divide_into_groups(group, this);
+                return delnode;
+            }
+            else {
+                return nullptr;
+            }
+        }
+        else {
+            if (is_avoid(avoid, status)) {
+                StateCompressNode* delnode = new StateCompressNode;
+                delnode->state = this;
+                delnode->State_flag = 0;
+                return delnode;
+            }
+            else {
+                return nullptr;
+            }
+        }
+    }
+    else {
+        vassert(status == Fork);
+        StateCompressNode* delnode = new StateCompressNode;
+        delnode->state = this;
+        delnode->State_flag = 2;
+        std::vector<State*>::iterator b_end = branch.end();
+        for (auto it = branch.begin(); it != b_end;) {
+            State* child_state = *it;
+            StateCompressNode* ret_del_node = child_state->mkCompressTree(group, Target_Addr, Target_Tag, avoid);
+            if (ret_del_node) {
+                delnode->child_nodes.emplace_back(ret_del_node);
+            }
+            it++;
+        }
+        if (delnode->child_nodes.empty()) {
+            delete delnode;
+            return nullptr;
+        }
+        else {
+            return delnode;
+        }
+    }
+}
+
+
+bool State::treeCompress(
+    std::vector <Vns>& avoid_asserts_ret, bool &has_branch,
+    std::hash_map<ADDR, Vns>& change_map_ret,
+    StateCompressNode* SCNode, UInt group, TRcontext& ctx, UInt deep
+    ) {
+    vassert(SCNode->state == this);
+    if (SCNode->State_flag == 1) {
+        vassert(branch.empty());
+        has_branch = false;
+        if (SCNode->compress_group == group) {
+            SCNode->state->get_write_map(change_map_ret, ctx);
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+    else {
+        std::vector <Vns> avoid_asserts_temp;
+        std::vector <std::hash_map<ADDR, Vns>> change_map_temp;
+        std::hash_map<ADDR, bool> change_address;
+        change_map_temp.emplace_back(std::hash_map<ADDR, Vns>());
+        for (auto child_node_it = SCNode->child_nodes.begin(); child_node_it != SCNode->child_nodes.end();) {
+            StateCompressNode* child_node = *child_node_it;
+            bool child_has_branch = false;
+            if (child_node->state->treeCompress(avoid_asserts_temp, child_has_branch, change_map_temp.front(), child_node, group, ctx, deep + 1)) {
+                for (auto tmp_it : change_map_temp.front()){
+                    change_address[tmp_it.first] = true;
+                }
+                change_map_temp.emplace_back(std::hash_map<ADDR, Vns>());
+                if (child_has_branch) {
+                    has_branch = true;
+                }
+            }
+            else {
+                change_map_temp.front().clear();
+            }
+            child_node_it++;
+        }
+        if (!has_branch) {
+            has_branch = branch.size() != SCNode->child_nodes.size();
+        }
+        if (change_map_temp.size() == 1) {
+            return false;
+        }
+        else {
+            std::vector<std::hash_map<ADDR, Vns>>::iterator cmt_it = change_map_temp.begin();
+           
+            for (UInt idx = 0; idx < change_map_temp.size() - 1; idx++) {
+                for (auto ca : change_address) {
+                    {
+                        auto _Where = (*cmt_it).lower_bound(ca.first);
+                        if (_Where == (*cmt_it).end()) {
+                            if (ca.first < REGISTER_LEN) {
+                                if ((Z3_context)ctx == (Z3_context)SCNode->child_nodes[idx]->state->m_ctx) {
+                                    (*cmt_it)[ca.first] = SCNode->child_nodes[idx]->state->regs.Iex_Get<Ity_I64>(ca.first);
+                                }
+                                else {
+                                    (*cmt_it)[ca.first] = SCNode->child_nodes[idx]->state->regs.Iex_Get<Ity_I64>(ca.first, ctx);
+                                }
+                            }
+                            else {
+                                auto p = SCNode->child_nodes[idx]->state->mem.getMemPage(ca.first);
+                                if ((Z3_context)ctx == (Z3_context)p->unit->m_ctx) {
+                                    (*cmt_it)[ca.first] = p->unit->Iex_Get<Ity_I64>(ca.first & 0xfff);
+                                }else{
+                                    (*cmt_it)[ca.first] = p->unit->Iex_Get<Ity_I64>(ca.first & 0xfff, ctx);
+                                }
+                            }
+                        }
+                    };
+                    {
+                        auto _Where = change_map_ret.lower_bound(ca.first);
+                        if (_Where == change_map_ret.end()) {
+                            change_map_ret[ca.first] = (*cmt_it)[ca.first];
+                        }
+                        else {
+                            if ((((*cmt_it)[ca.first].real()) && (_Where->second.real())) && ((ULong)((*cmt_it)[ca.first]) == (ULong)(_Where->second))) {
+                            }
+                            else {
+                                _Where->second = Vns(ctx, Z3_mk_ite(ctx, SCNode->child_nodes[idx]->state->solv.getassert(ctx), (*cmt_it)[ca.first], _Where->second), 64);
+                            }
+                        }
+                    };
+                }
+                cmt_it++;
+            }
+            if(deep){
+                std::hash_map<ADDR, Vns> change_map_fork_state;
+                SCNode->state->get_write_map(change_map_fork_state, ctx);
+                for (auto ca : change_map_fork_state) {
+                    auto _Where = change_map_ret.lower_bound(ca.first);
+                    if (_Where == change_map_ret.end()) {
+                        change_map_ret[ca.first] = ca.second;
+                    }
+                }
+            }
+            return true;
+        }
+    }
+}
+
+static bool delete_avoid_state(StateCompressNode* node, UInt id) {
+    if (node->child_nodes.empty()) {
+        if (node->State_flag == id) {
+            return true;
+        }
+        return false;
+    }
+    for (auto child_node = node->child_nodes.begin(); child_node != node->child_nodes.end();) {
+        if (delete_avoid_state(*child_node, id)) {
+            auto fd = find(node->state->branch.begin(), node->state->branch.end(), (*child_node)->state);
+            if (fd != node->state->branch.end()) {
+                node->state->branch.erase(fd);
+                delete (*child_node)->state;
+                delete *child_node;
+                child_node = node->child_nodes.erase(child_node);
+                continue;
+            }
+            else {
+                VPANIC("impossible");
+            }
+        }
+        child_node++;
+    }
+    if (node->state->branch.empty()) {
+        return true;
+    }
+    else {
+        return false;
+    }
+}
+
+
+
+void State::set_changes(std::hash_map<ADDR, Vns>& change_map) {
+    for (auto map_it : change_map) {
+        if (map_it.first < REGISTER_LEN) {
 #ifdef  _DEBUG
             std::cout << std::hex << map_it.first << map_it.second << std::endl;
 #endif //  _DEBUG
             regs.Ist_Put(map_it.first, map_it.second);
-        };
-        guest_start = Target_Addr;
-        branchChunks.clear();
-        mem.clearRecord();
-        regs.clearRecord();
-        status = NewState;
-    }
-    else if (flag == True) {
-        State* one_state = new State(this, Target_Addr);
-        for (auto map_it : change_map) {
+
+        }
+        else {
 #ifdef  _DEBUG
             std::cout << std::hex << map_it.first << map_it.second << std::endl;
 #endif //  _DEBUG
-            one_state->mem.Ist_Store(map_it.first, map_it.second.translate(*one_state));
-        };
+            mem.Ist_Store(map_it.first, map_it.second);
+        }
+    };
+}
 
-        for (auto map_it : regs_change_map) {
+
+void State::set_changes(std::hash_map<ADDR, Vns>& change_map, z3::solver::translate) {
+    for (auto map_it : change_map) {
+        if (map_it.first < REGISTER_LEN) {
 #ifdef  _DEBUG
             std::cout << std::hex << map_it.first << map_it.second << std::endl;
 #endif //  _DEBUG
-            one_state->regs.Ist_Put(map_it.first, map_it.second.translate(*one_state));
-        };
+            regs.Ist_Put(map_it.first, map_it.second.translate(m_ctx));
+
+        }
+        else {
+#ifdef  _DEBUG
+            std::cout << std::hex << map_it.first << map_it.second << std::endl;
+#endif //  _DEBUG
+            mem.Ist_Store(map_it.first, map_it.second.translate(m_ctx));
+        }
+    };
+}
+
+
+void State::compress(ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid)
+{
+    // State& root_compress_state,
+    std::vector<State*> group;
+    StateCompressNode* stateCompressNode = mkCompressTree(group, Target_Addr, Target_Tag, avoid);
+    if (delete_avoid_state(stateCompressNode, 0)) {
+        delete stateCompressNode;
         branchChunks.clear();
-        branch.emplace_back(one_state);
+        status = Death;
     }
+    else {
+         branchChunks.clear();
+         if (group.size() == 1){
+            std::vector <Vns> avoid_asserts;
+            std::hash_map<ADDR, Vns> change_map;
+            bool child_has_branch = false;
+            if (treeCompress(avoid_asserts, child_has_branch, change_map, stateCompressNode, 0, m_ctx, 0)) {
+                if (child_has_branch) {
+                    State* compress_state = new State(this, Target_Addr);
+                    compress_state->set_changes(change_map, z3::solver::translate{});
+                    compress_state->StateCompressMkSymbol(*group[0]);
+                    if (!compress_state->StateCompression(*group[0])) {
+                        VPANIC("State::StateCompressMkSymbol that you implement error");
+                    }
+                    branch.emplace_back(compress_state);
+                }
+                else {
+                    mem.clearRecord();
+                    regs.clearRecord();
+                    StateCompressMkSymbol(*group[0]);
+                    delete_avoid_state(stateCompressNode, 1);
+                    set_changes(change_map);
+                    guest_start = Target_Addr;
+                    status = NewState;
+                }
+            }
+            else {
+                VPANIC("no compress");
+            }
 
+         }else {
+             for (UInt gp = 0; gp < group.size(); gp++) {
+                 std::vector <Vns> avoid_asserts;
+                 std::hash_map<ADDR, Vns> change_map;
+                 State* compress_state = new State(this, Target_Addr);
+                 bool child_has_branch = false;
+                 if (treeCompress(avoid_asserts, child_has_branch, change_map, stateCompressNode, gp, compress_state->m_ctx, 0)) {
+                     compress_state->set_changes(change_map);
+                     compress_state->StateCompressMkSymbol(*group[gp]);
+                     if (!compress_state->StateCompression(*group[gp])) {
+                         VPANIC("State::StateCompressMkSymbol that you implement error");
+                     }
+                     branch.emplace_back(compress_state);
 
-
+                 }
+                 else {
+                     VPANIC("no compress");
+                 }
+             }
+             delete_avoid_state(stateCompressNode, 1);
+         }
+    }
 }
 
 
@@ -1671,4 +1930,22 @@ UInt Vex_Info::gRegsIpOffset() {
         std::cout << "Invalid arch in vex_prepare_vai.\n" << std::endl;
         vassert(0);
     }
+}
+
+inline Vns  TRsolver::getassert(z3::context& ctx) {
+    Z3_context m_ctx = this->ctx();
+    if (m_asserts.empty()) {
+        VPANIC("impossible assertions num is zero");
+    }
+    auto it = m_asserts.begin();
+    auto end = m_asserts.end();
+    Z3_ast* args = (Z3_ast*)malloc(sizeof(Z3_ast) * m_asserts.size());
+    UInt i = 0;
+    while (it != end) {
+        args[i++] = it->operator Z3_ast();
+        it++;
+    }
+    Vns re = Vns(m_ctx, Z3_mk_and(m_ctx, m_asserts.size(), args), 1).translate(ctx);
+    free(args);
+    return re;
 }

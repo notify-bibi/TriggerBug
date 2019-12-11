@@ -488,24 +488,33 @@ for (UInt i1 = 0; i1 < CR3_point->used; i1++) {																				\
 #define LSTRUCT4 PT
 #define LSTRUCT5 PAGE
 
+typedef enum {
+    guest_mem_accesss_err,
+    engine_memory_leak
+}MEMexceptionTag;
 
 namespace TRMem {
-
-
     class MEMexception {
         std::string m_msg;
         ADDR m_gaddr;
+        MEMexceptionTag m_errorID;
     public:
-        MEMexception(char const* msg, ADDR gaddr) :m_msg(msg), m_gaddr(gaddr){}
+        MEMexception(char const* msg, ADDR gaddr = 0) :m_msg(msg), m_gaddr(gaddr), m_errorID(guest_mem_accesss_err){ }
+        MEMexception(char const* msg, MEMexceptionTag id) :m_msg(msg), m_gaddr(0), m_errorID(id) { }
         std::string msg() const {
-            char buffer[50];
-            snprintf(buffer, 50, "Gest mem access addr: %p { ", m_gaddr);
-            std::string ret;
-            return ret.assign(buffer) + m_msg;
+            if (m_errorID == guest_mem_accesss_err) {
+                char buffer[50];
+                snprintf(buffer, 50, "Gest mem access addr: %p { ", m_gaddr);
+                std::string ret;
+                return ret.assign(buffer) + m_msg + "}";
+            }
+            else {
+                return m_msg;
+            }
         }
         friend std::ostream& operator<<(std::ostream& out, MEMexception const& e);
     };
-    inline std::ostream& operator<<(std::ostream& out, MEMexception const& e) { out << e.msg() << " }" ; return out; }
+    inline std::ostream& operator<<(std::ostream& out, MEMexception const& e) { out << e.msg() ; return out; }
 
 
 
