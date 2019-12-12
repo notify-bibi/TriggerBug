@@ -1385,8 +1385,9 @@ void StatePrinter<TC>::spIRStmt(const IRStmt* s)
         VPANIC("ppIRStmt");
     }
 }
-//
-//
+
+//old
+
 //inline UInt State::treeCompress(State &target_state, ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid,
 //    ChangeView& change_view,
 //    std::hash_map<ULong, Vns>& change_map, 
@@ -1808,7 +1809,6 @@ void State::set_changes(std::hash_map<ADDR, Vns>& change_map, z3::solver::transl
 
 void State::compress(ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid)
 {
-    // State& root_compress_state,
     std::vector<State*> group;
     StateCompressNode* stateCompressNode = mkCompressTree(group, Target_Addr, Target_Tag, avoid);
    /* if (delete_avoid_state(stateCompressNode, 0)) {
@@ -1869,6 +1869,7 @@ void State::compress(ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_T
         }
         delete_avoid_state(stateCompressNode);
     }
+    delete stateCompressNode;
    /* }*/
 }
 
