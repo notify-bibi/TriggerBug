@@ -597,39 +597,38 @@ inline IRSB* State::BB2IR() {
 
 
 
-void State::add_assert(Vns & assert,Bool ToF)
+void TRsolver::add_assert(Vns const& assert, Bool ToF)
 {
-    assert = assert;
     if(assert.is_bool()){
         if (ToF) {
-            Z3_solver_assert(m_ctx, solv, assert);
-            if (!solv.is_snapshot()) {
-                solv.m_asserts.push_back(assert);
+            Z3_solver_assert(*this, *this, assert);
+            if (!is_snapshot()) {
+                m_asserts.push_back(assert);
             }
         }
         else {
             auto not = !  assert;
-            Z3_solver_assert(m_ctx, solv, not);
-            if (!solv.is_snapshot()) {
-                solv.m_asserts.push_back(not);
+            Z3_solver_assert(*this, *this, not);
+            if (!is_snapshot()) {
+                m_asserts.push_back(not);
             }
         }
     }
     else {
-        auto ass = assert == Vns(m_ctx, (ULong)ToF, assert.bitn);
-        Z3_solver_assert(m_ctx, solv, ass);
-        if (!solv.is_snapshot()) {
-            solv.m_asserts.push_back(ass);
+        auto ass = assert == Vns(operator Z3_context(), (ULong)ToF, assert.bitn);
+        Z3_solver_assert(*this, *this, ass);
+        if (!is_snapshot()) {
+            m_asserts.push_back(ass);
         }
     }
 }
 
-inline void State::add_assert_eq(Vns & eqA, Vns & eqB)
+inline void TRsolver::add_assert_eq(Vns const& eqA, Vns const& eqB)
 {
     Vns ass = (eqA == eqB);
-    Z3_solver_assert(m_ctx, solv, ass);
-    if (!solv.is_snapshot()) {
-        solv.m_asserts.push_back(ass);
+    Z3_solver_assert(*this, *this, ass);
+    if (!is_snapshot()) {
+        m_asserts.push_back(ass);
     }
 }
 
@@ -857,7 +856,7 @@ For_Begin:
                 goto For_Begin_NO_Trans;
             deal_bkp:
                 {
-                    status = call_back_hook(hs);
+                    status = _call_back_hook(hs);
                     if (status != Running) {
                         goto EXIT;
                     }
@@ -949,7 +948,7 @@ For_Begin:
                             }
                             if (eval_size == 2) {
                                 if (s->Ist.Exit.jk > Ijk_Ret){
-                                    add_assert(guard, False);
+                                    solv.add_assert(guard, False);
                                 }
                                 else {
                                     branchChunks.emplace_back(BranchChunk(s->Ist.Exit.dst->Ico.U64, Vns(m_ctx, 0), guard, True));
@@ -1148,10 +1147,10 @@ State* BranchChunk::getState(State& fstate)
 {
     State* ns = fstate.ForkState(m_oep);
     if (m_guard.symbolic()) {
-        ns->add_assert(m_guard.translate(ns->m_ctx), m_tof);
+        ns->solv.add_assert(m_guard.translate(ns->m_ctx), m_tof);
     }
     if (m_sym_addr.symbolic()) {
-        ns->add_assert_eq(m_sym_addr.translate(ns->m_ctx), Vns(ns->m_ctx, m_oep));
+        ns->solv.add_assert_eq(m_sym_addr.translate(ns->m_ctx), Vns(ns->m_ctx, m_oep));
     }
     return ns;
 }
@@ -1563,12 +1562,16 @@ StateCompressNode* State::mkCompressTree(
         StateCompressNode* delnode = new StateCompressNode;
         delnode->state = this;
         delnode->State_flag = 2;
+        std::vector<State*> avoid_assert;
         std::vector<State*>::iterator b_end = branch.end();
         for (auto it = branch.begin(); it != b_end;) {
             State* child_state = *it;
             StateCompressNode* ret_del_node = child_state->mkCompressTree(group, Target_Addr, Target_Tag, avoid);
             if (ret_del_node) {
                 delnode->child_nodes.emplace_back(ret_del_node);
+            }
+            else {
+                avoid_assert.emplace_back(child_state);
             }
             it++;
         }
@@ -1577,6 +1580,7 @@ StateCompressNode* State::mkCompressTree(
             return nullptr;
         }
         else {
+            delnode->avoid_assert_state = avoid_assert;
             return delnode;
         }
     }
@@ -1584,46 +1588,90 @@ StateCompressNode* State::mkCompressTree(
 
 
 bool State::treeCompress(
-    std::vector <Vns>& avoid_asserts_ret, bool &has_branch,
+    Vns& avoid_asserts_ret, bool &has_branch,
     std::hash_map<ADDR, Vns>& change_map_ret,
     StateCompressNode* SCNode, UInt group, TRcontext& ctx, UInt deep
     ) {
     vassert(SCNode->state == this);
+    /*if (guest_start_ep == 0x4009d6) {
+        printf("??");
+    }*/
     if (SCNode->State_flag == 1) {
         vassert(branch.empty());
         has_branch = false;
         if (SCNode->compress_group == group) {
             SCNode->state->get_write_map(change_map_ret, ctx);
+            auto op = SCNode->state->regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::cc_op);
             return true;
         }
         else {
+            avoid_asserts_ret = solv.getassert(ctx);
             return false;
         }
     }
+    else if (SCNode->State_flag == 0) {
+        has_branch = false;
+        avoid_asserts_ret = solv.getassert(ctx);
+        return false;
+    }
     else {
-        std::vector <Vns> avoid_asserts_temp;
-        std::vector <std::hash_map<ADDR, Vns>> change_map_temp;
+        Vns avoid_asserts(ctx,1,1);
+        bool first = true;
         std::hash_map<ADDR, bool> change_address;
+
+        std::vector <std::hash_map<ADDR, Vns>> change_map_temp;
+        std::vector <State*> change_map_states;
         change_map_temp.emplace_back(std::hash_map<ADDR, Vns>());
         for (auto child_node_it = SCNode->child_nodes.begin(); child_node_it != SCNode->child_nodes.end();) {
             StateCompressNode* child_node = *child_node_it;
             bool child_has_branch = false;
-            if (child_node->state->treeCompress(avoid_asserts_temp, child_has_branch, change_map_temp.front(), child_node, group, ctx, deep + 1)) {
-                for (auto tmp_it : change_map_temp.front()){
+            Vns avoid_asserts_temp(ctx, 1, 1);
+            if (child_node->state->treeCompress(avoid_asserts_temp, child_has_branch, change_map_temp.back(), child_node, group, ctx, deep + 1)) {
+                for (auto tmp_it : change_map_temp.back()){
                     change_address[tmp_it.first] = true;
                 }
+                change_map_states.emplace_back(child_node->state);
                 change_map_temp.emplace_back(std::hash_map<ADDR, Vns>());
                 if (child_has_branch) {
                     has_branch = true;
                 }
             }
             else {
-                change_map_temp.front().clear();
+                change_map_temp.back().clear();
+            }
+            if (first&&avoid_asserts_temp.symbolic()) {
+                first = false;
+                avoid_asserts = avoid_asserts_temp;
+            }
+            else if(avoid_asserts_temp.symbolic()) {
+                avoid_asserts = avoid_asserts || avoid_asserts_temp;
             }
             child_node_it++;
         }
+        for (auto cs : SCNode->avoid_assert_state) {
+            if (first) {
+                first = false;
+                avoid_asserts = cs->solv.getassert(ctx);
+            }
+            else {
+                avoid_asserts = avoid_asserts || cs->solv.getassert(ctx);
+            }
+        }
+        if(deep){
+            if (avoid_asserts.symbolic()) {
+                if ((Z3_context)ctx == (Z3_context)m_ctx) {
+                    avoid_asserts_ret = solv.getassert() && avoid_asserts;
+                }
+                else {
+                    avoid_asserts_ret = solv.getassert(ctx) && avoid_asserts;
+                }
+            }
+        }
+        else {
+            avoid_asserts_ret = avoid_asserts;
+        }
         if (!has_branch) {
-            has_branch = branch.size() != SCNode->child_nodes.size();
+            has_branch = SCNode->avoid_assert_state.size() != 0;
         }
         if (change_map_temp.size() == 1) {
             return false;
@@ -1632,20 +1680,21 @@ bool State::treeCompress(
             std::vector<std::hash_map<ADDR, Vns>>::iterator cmt_it = change_map_temp.begin();
            
             for (UInt idx = 0; idx < change_map_temp.size() - 1; idx++) {
+                State* cld_state = change_map_states[idx];
                 for (auto ca : change_address) {
                     {
                         auto _Where = (*cmt_it).lower_bound(ca.first);
                         if (_Where == (*cmt_it).end()) {
                             if (ca.first < REGISTER_LEN) {
-                                if ((Z3_context)ctx == (Z3_context)SCNode->child_nodes[idx]->state->m_ctx) {
-                                    (*cmt_it)[ca.first] = SCNode->child_nodes[idx]->state->regs.Iex_Get<Ity_I64>(ca.first);
+                                if ((Z3_context)ctx == (Z3_context)cld_state->m_ctx) {
+                                    (*cmt_it)[ca.first] = cld_state->regs.Iex_Get<Ity_I64>(ca.first);
                                 }
                                 else {
-                                    (*cmt_it)[ca.first] = SCNode->child_nodes[idx]->state->regs.Iex_Get<Ity_I64>(ca.first, ctx);
+                                    (*cmt_it)[ca.first] = cld_state->regs.Iex_Get<Ity_I64>(ca.first, ctx);
                                 }
                             }
                             else {
-                                auto p = SCNode->child_nodes[idx]->state->mem.getMemPage(ca.first);
+                                auto p = cld_state->mem.getMemPage(ca.first);
                                 if ((Z3_context)ctx == (Z3_context)p->unit->m_ctx) {
                                     (*cmt_it)[ca.first] = p->unit->Iex_Get<Ity_I64>(ca.first & 0xfff);
                                 }else{
@@ -1656,6 +1705,9 @@ bool State::treeCompress(
                     };
                     {
                         auto _Where = change_map_ret.lower_bound(ca.first);
+                        /*if (ca.first == 0x90) {
+                            printf("??");
+                        }*/
                         if (_Where == change_map_ret.end()) {
                             change_map_ret[ca.first] = (*cmt_it)[ca.first];
                         }
@@ -1663,7 +1715,7 @@ bool State::treeCompress(
                             if ((((*cmt_it)[ca.first].real()) && (_Where->second.real())) && ((ULong)((*cmt_it)[ca.first]) == (ULong)(_Where->second))) {
                             }
                             else {
-                                _Where->second = Vns(ctx, Z3_mk_ite(ctx, SCNode->child_nodes[idx]->state->solv.getassert(ctx), (*cmt_it)[ca.first], _Where->second), 64);
+                                _Where->second = Vns(ctx, Z3_mk_ite(ctx, cld_state->solv.getassert(ctx), (*cmt_it)[ca.first], _Where->second), 64);
                             }
                         }
                     };
@@ -1685,15 +1737,12 @@ bool State::treeCompress(
     }
 }
 
-static bool delete_avoid_state(StateCompressNode* node, UInt id) {
+static bool delete_avoid_state(StateCompressNode* node) {
     if (node->child_nodes.empty()) {
-        if (node->State_flag == id) {
-            return true;
-        }
-        return false;
+        return true;
     }
     for (auto child_node = node->child_nodes.begin(); child_node != node->child_nodes.end();) {
-        if (delete_avoid_state(*child_node, id)) {
+        if (delete_avoid_state(*child_node)) {
             auto fd = find(node->state->branch.begin(), node->state->branch.end(), (*child_node)->state);
             if (fd != node->state->branch.end()) {
                 node->state->branch.erase(fd);
@@ -1712,6 +1761,7 @@ static bool delete_avoid_state(StateCompressNode* node, UInt id) {
         return true;
     }
     else {
+        delete node;
         return false;
     }
 }
@@ -1761,63 +1811,65 @@ void State::compress(ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_T
     // State& root_compress_state,
     std::vector<State*> group;
     StateCompressNode* stateCompressNode = mkCompressTree(group, Target_Addr, Target_Tag, avoid);
-    if (delete_avoid_state(stateCompressNode, 0)) {
+   /* if (delete_avoid_state(stateCompressNode, 0)) {
         delete stateCompressNode;
         branchChunks.clear();
         status = Death;
     }
-    else {
-         branchChunks.clear();
-         if (group.size() == 1){
-            std::vector <Vns> avoid_asserts;
+    else {*/
+    branchChunks.clear();
+    if (group.size() == 1){
+        Vns avoid_asserts(m_ctx, 1, 1);
+        std::hash_map<ADDR, Vns> change_map;
+        bool child_has_branch = false;
+        if (treeCompress(avoid_asserts, child_has_branch, change_map, stateCompressNode, 0, m_ctx, 0)) {
+            if (child_has_branch) {
+                State* compress_state = new State(this, Target_Addr);
+                compress_state->set_changes(change_map, z3::solver::translate{});
+                compress_state->StateCompressMkSymbol(*group[0]);
+                compress_state->solv.add_assert(avoid_asserts, false);
+                if (!compress_state->StateCompression(*group[0])) {
+                    VPANIC("State::StateCompressMkSymbol that you implement error");
+                }
+                branch.emplace_back(compress_state);
+            }
+            else {
+                mem.clearRecord();
+                regs.clearRecord();
+                solv.add_assert(avoid_asserts, false);
+                StateCompressMkSymbol(*group[0]);
+                delete_avoid_state(stateCompressNode);
+                set_changes(change_map);
+                guest_start = Target_Addr;
+                status = NewState;
+            }
+        }
+        else {
+            VPANIC("no compress");
+        }
+
+    }else {
+        for (UInt gp = 0; gp < group.size(); gp++) {
+            State* compress_state = new State(this, Target_Addr);
             std::hash_map<ADDR, Vns> change_map;
+            Vns avoid_asserts(compress_state->m_ctx, 1, 1);
             bool child_has_branch = false;
-            if (treeCompress(avoid_asserts, child_has_branch, change_map, stateCompressNode, 0, m_ctx, 0)) {
-                if (child_has_branch) {
-                    State* compress_state = new State(this, Target_Addr);
-                    compress_state->set_changes(change_map, z3::solver::translate{});
-                    compress_state->StateCompressMkSymbol(*group[0]);
-                    if (!compress_state->StateCompression(*group[0])) {
-                        VPANIC("State::StateCompressMkSymbol that you implement error");
-                    }
-                    branch.emplace_back(compress_state);
+            if (treeCompress(avoid_asserts, child_has_branch, change_map, stateCompressNode, gp, compress_state->m_ctx, 0)) {
+                compress_state->set_changes(change_map);
+                compress_state->StateCompressMkSymbol(*group[gp]);
+                compress_state->solv.add_assert(avoid_asserts, false);
+                if (!compress_state->StateCompression(*group[gp])) {
+                    VPANIC("State::StateCompressMkSymbol that you implement error");
                 }
-                else {
-                    mem.clearRecord();
-                    regs.clearRecord();
-                    StateCompressMkSymbol(*group[0]);
-                    delete_avoid_state(stateCompressNode, 1);
-                    set_changes(change_map);
-                    guest_start = Target_Addr;
-                    status = NewState;
-                }
+                branch.emplace_back(compress_state);
             }
             else {
                 VPANIC("no compress");
             }
-
-         }else {
-             for (UInt gp = 0; gp < group.size(); gp++) {
-                 std::vector <Vns> avoid_asserts;
-                 std::hash_map<ADDR, Vns> change_map;
-                 State* compress_state = new State(this, Target_Addr);
-                 bool child_has_branch = false;
-                 if (treeCompress(avoid_asserts, child_has_branch, change_map, stateCompressNode, gp, compress_state->m_ctx, 0)) {
-                     compress_state->set_changes(change_map);
-                     compress_state->StateCompressMkSymbol(*group[gp]);
-                     if (!compress_state->StateCompression(*group[gp])) {
-                         VPANIC("State::StateCompressMkSymbol that you implement error");
-                     }
-                     branch.emplace_back(compress_state);
-
-                 }
-                 else {
-                     VPANIC("no compress");
-                 }
-             }
-             delete_avoid_state(stateCompressNode, 1);
-         }
+        }
+        delete_avoid_state(stateCompressNode);
     }
+   /* }*/
 }
 
 
@@ -1933,6 +1985,10 @@ UInt Vex_Info::gRegsIpOffset() {
 }
 
 inline Vns  TRsolver::getassert(z3::context& ctx) {
+    return getassert().translate(ctx);
+}
+
+inline Vns  TRsolver::getassert() {
     Z3_context m_ctx = this->ctx();
     if (m_asserts.empty()) {
         VPANIC("impossible assertions num is zero");
@@ -1945,7 +2001,7 @@ inline Vns  TRsolver::getassert(z3::context& ctx) {
         args[i++] = it->operator Z3_ast();
         it++;
     }
-    Vns re = Vns(m_ctx, Z3_mk_and(m_ctx, m_asserts.size(), args), 1).translate(ctx);
+    Vns re = Vns(m_ctx, Z3_mk_and(m_ctx, m_asserts.size(), args), 1);
     free(args);
     return re;
 }

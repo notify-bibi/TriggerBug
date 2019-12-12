@@ -143,7 +143,7 @@ public:
                             auto ao1 = FLAG >= 'A' && FLAG <= 'Z';
                             auto ao2 = FLAG >= 'a' && FLAG <= 'z';
                             auto ao3 = FLAG >= '0' && FLAG <= '9';
-                            add_assert(ao1 || ao2 || ao3 || FLAG == '_' || FLAG == '{' || FLAG == '}', True);
+                            solv.add_assert(ao1 || ao2 || ao3 || FLAG == '_' || FLAG == '{' || FLAG == '}', True);
                         }
                     }
                     regs.Ist_Put(AMD64_IR_OFFSET::rax, rdx);
@@ -245,7 +245,7 @@ State_Tag success_ret(State* s) {
     for (int i = 0; i < 44; i++) {
         auto al = s->mem.Iex_Load<Ity_I8>(ecx + i);
         auto bl = s->mem.Iex_Load<Ity_I8>(edi + i);
-        s->add_assert_eq(al, bl);
+        s->solv.add(al == bl);
     }
     vex_printf("checking\n\n");
     auto dfdfs = s->solv.check();
@@ -288,7 +288,7 @@ State_Tag success_ret3(State* s) {
     auto enc = s->regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::rdi);
     for (int i = 0; i < 38; i++) {
         Vns e = s->mem.Iex_Load<Ity_I8>(enc + i);
-        s->add_assert(e == (UChar)bf[i], True);
+        s->solv.add(e == (UChar)bf[i]);
     }
     vex_printf("checking\n\n");
     auto dfdfs = s->solv.check();
@@ -313,7 +313,7 @@ State_Tag success_ret33(State* s) {
     auto enc = s->regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::rax);
     for (int i = 0; i < 38; i++) {
         Vns e = s->mem.Iex_Load<Ity_I8>(enc + i);
-        s->add_assert(e == (UChar)bf[i], True);
+        s->solv.add(e == (UChar)bf[i]);
     }
     vex_printf("checking\n\n");
     auto dfdfs = s->solv.check();
@@ -374,9 +374,8 @@ int main() {
         auto flag = state.mk_int_const(8);
         auto ao3 = flag >= 1 && flag <= 128;
         state.mem.Ist_Store(reg.guest_RDI + i, flag);
-        state.add_assert(ao3, 1);
+        state.solv.add_assert(ao3);
     }
-    state.hook_add(0x000400E7A, pp);
     state.hook_add(0x400CC0, success_ret3);
     StateAnalyzer gv(state);
     gv.Run();

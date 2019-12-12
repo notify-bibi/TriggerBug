@@ -131,7 +131,10 @@ public:
 
 class TRsolver :public z3::solver{
     friend class State;
-    bool                    m_solver_snapshot = false;
+    friend class BranchChunk;
+    friend class StateX86;
+    friend class StateAMD64;
+    bool                    m_solver_snapshot = false;//if solver::push() m_solver_snapshot = true
     std::vector<Vns>        m_asserts;
     public:
         TRsolver(context& c) :z3::solver(c) { m_asserts.reserve(2); }
@@ -140,6 +143,37 @@ class TRsolver :public z3::solver{
         void pop() { z3::solver::pop(); m_solver_snapshot = false; }
         bool is_snapshot() { return m_solver_snapshot; }
         Vns getassert(z3::context& ctx);
+        Vns getassert();
+        //不会保存assert到solver,因为在push之前会进行push
+        void add(expr const &e){
+            if (!m_solver_snapshot) {
+                m_solver_snapshot = true;
+                push();
+            }
+            add_assert(Vns(e, 1), True);
+        }
+        //不会保存assert到solver,因为在push之前会进行push
+        void add(Vns const& e) {
+            if (!m_solver_snapshot) {
+                m_solver_snapshot = true;
+                push();
+            }
+            add_assert(e, True);
+        }
+        void check_if_forget_pop() {
+            if (m_solver_snapshot) {
+                m_solver_snapshot = false;
+                pop();
+            }
+        }
+        void add_assert(Vns const& assert, Bool ToF);
+        inline void add_assert(Vns const& assert) { add_assert(assert, True); };
+        inline void add_assert_eq(Vns const& eqA, Vns const& eqB);
+        void add_assert(expr const& assert, Bool ToF) { add_assert(assert, ToF); }
+        inline void add_assert(expr const& assert) { add_assert(assert, True); };
+        inline void add_assert_eq(expr const& eqA, expr const& eqB) { add_assert_eq(Vns(eqA.ctx(), (Z3_ast)eqA), Vns(eqB.ctx(), (Z3_ast)eqB)); }
+        inline operator Z3_context() { return ctx(); }
+private:
 };
 
 //Functional programming
@@ -177,6 +211,7 @@ public:
     UInt compress_group;
     UInt State_flag;//0:delete 1:compress 2:Fork State
     std::vector<StateCompressNode*> child_nodes;
+    std::vector<State*> avoid_assert_state;
     StateCompressNode(){}
 };
 
@@ -234,9 +269,6 @@ public:
     static void clear_irTemp();
     void initVexEngine();
 	inline IRSB* BB2IR();
-	void add_assert(Vns &assert, Bool ToF);
-    inline void add_assert(Vns& assert) { add_assert(assert, True); };
-	inline void add_assert_eq(Vns &eqA, Vns &eqB);
     void start(Bool first_bkp_pass);
     void branchGo();
     //ip = ip + offset
@@ -337,8 +369,14 @@ public:
     virtual void        StateCompressMkSymbol(State const& newState) { m_InvokStack = newState.m_InvokStack; }
     //State::delta maybe changed by callback
     virtual inline State_Tag call_back_hook(Hook_struct const &hs) { return (hs.cb) ? (hs.cb)(this) : Running; }
+    
 private:
-    bool treeCompress(std::vector <Vns>& avoid_asserts_ret, bool &has_branch,
+    inline State_Tag _call_back_hook(Hook_struct const& hs) {
+        auto ret = call_back_hook(hs);
+        solv.check_if_forget_pop();
+        return ret;
+    }
+    bool treeCompress(Vns& avoid_asserts_ret, bool &has_branch,
         std::hash_map<ADDR, Vns>& change_map_ret,
         StateCompressNode* SCNode, UInt group, TRcontext& ctx, UInt deep);
 

@@ -1,4 +1,5 @@
 
+
 State_Tag success_ret3(State* s) {
     s->solv.push();
     UChar bf[] = { 0xEC, 0x29, 0xE3, 0x41, 0xE1, 0xF7, 0xAA, 0x1D, 0x29, 0xED, 0x29, 0x99, 0x39, 0xF3, 0xB7, 0xA9, 0xE7, 0xAC, 0x2B, 0xB7, 0xAB, 0x40, 0x9F, 0xA9, 0x31, 0x35, 0x2C, 0x29, 0xEF, 0xA8, 0x3D, 0x4B, 0xB0, 0xE9, 0xE1, 0x68, 0x7B, 0x41 };
@@ -6,7 +7,7 @@ State_Tag success_ret3(State* s) {
     auto enc = s->regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::rdi);
     for (int i = 0; i < 38; i++) {
         Vns e = s->mem.Iex_Load<Ity_I8>(enc + i);
-        s->add_assert(e == (UChar)bf[i], True);
+        s->solv.add(e == (UChar)bf[i]);
     }
     vex_printf("checking\n\n");
     auto dfdfs = s->solv.check();
@@ -23,16 +24,16 @@ State_Tag success_ret3(State* s) {
     return Death;
 }
 
+
 int main() {
     StatePrinter<StateAMD64> state(INIFILENAME, 0, True);
     TRGL::VexGuestAMD64State reg(state);
     for (int i = 0; i < 38; i++) {
-        auto flag = state.get_int_const(8);
+        auto flag = state.mk_int_const(8);
         auto ao3 = flag >= 1 && flag <= 128;
         state.mem.Ist_Store(reg.guest_RDI + i, flag);
-        state.add_assert(ao3, 1);
+        state.solv.add_assert(ao3);
     }
-    state.hook_add(0x000400E7A, pp);
     state.hook_add(0x400CC0, success_ret3);
     StateAnalyzer gv(state);
     gv.Run();
@@ -124,9 +125,6 @@ namespace: <p_>       len: 38{
 
 }
 [patch_byte(addr+i, ord(v)) for i,v in enumerate(base64.b16decode(hexstring))]
-PS C:\Users\bibi\Desktop\TriggerBug\PythonFrontEnd\examples>
-
-
 
 
 
