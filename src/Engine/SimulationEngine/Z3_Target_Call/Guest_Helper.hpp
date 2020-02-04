@@ -14,7 +14,6 @@ static inline ULong resultsr(Vns const & retv) {
 
 namespace TRGL{
 class VexGuestAMD64State;
-class Fpu_State;
 class VexGuestX86SegDescr;
 class VexGuestX86State;
 }
@@ -22,40 +21,38 @@ class VexGuestX86State;
 
 namespace hp{
 
-    template<typename Type>
+    template<typename ADDR, typename Type>
     class GM {
         Vns m_base;
-        MEM& m_obj;
-        template <typename T> friend class GMP;
-        template <typename T, UInt shift, UInt bits> friend class GMW;
+        MEM<ADDR>& m_obj;
+        template <typename ADDR, typename T> friend class GMP;
+        template <typename ADDR, typename T, UInt shift, UInt bits> friend class GMW;
         friend class TRGL::VexGuestAMD64State;
-        friend class TRGL::Fpu_State;
         friend class TRGL::VexGuestX86SegDescr;
         friend class TRGL::VexGuestX86State;
 
-        GM(MEM& obj, Vns const& base) :
+        GM(MEM<ADDR>& obj, Vns const& base) :
             m_obj(obj),
             m_base(base)
         {}
 
-        GM(MEM& obj) :
+        GM(MEM<ADDR>& obj) :
             m_obj(obj),
             m_base(obj, (ADDR)0)
         {}
 
-        GM(MEM& obj, ADDR base) :
+        GM(MEM<ADDR>& obj, ADDR base) :
             m_obj(obj),
             m_base(obj, base)
         {}
 
         template<typename T>
-        GM(MEM& obj, T base) :
+        GM(MEM<ADDR>& obj, T base) :
             m_obj(obj),
             m_base(obj, (ADDR)base)
         {}
 
-
-        MEM& obj() const {
+        MEM<ADDR>& obj() const {
             return static_cast<MEM&>(m_obj);
         }
 
@@ -99,7 +96,7 @@ namespace hp{
         }
         /*}Write*/
 
-        GMP<Type>& operator &() const {
+        GMP<ADDR, Type>& operator &() const {
             return *(GMP<Type>*)this;;
         }
 
@@ -125,7 +122,7 @@ namespace hp{
 
     private:
         template<typename T>
-        inline GM(GMP<T> const&) = delete;
+        inline GM(GMP<ADDR, T> const&) = delete;
         template<typename T>
         T operator &() = delete;
         template<typename T>
@@ -143,32 +140,32 @@ namespace hp{
         GMP<UChar> ps = &x87_state.reg[0];  ok
         UChar* p = &x87_state.reg[0];       err
     */
-    template<typename Type>
-    class GMP:private GM<Type> {
+    template<typename ADDR, typename Type>
+    class GMP:private GM<ADDR, Type> {
     public:
-        GMP(MEM& obj, Vns const& base): GM<Type>(obj, base)
+        GMP(MEM<ADDR>& obj, Vns const& base): GM<ADDR, Type>(obj, base)
         {}
 
-        GMP(MEM& obj) :GM<Type>(obj)
+        GMP(MEM<ADDR>& obj) :GM<ADDR, Type>(obj)
         {}
 
-        GMP(MEM& obj, ADDR base) : GM<Type>(obj, base)
-        {}
-
-        template<typename T>
-        GMP(MEM& obj, T base) :GM<Type>(obj, base)
+        GMP(MEM<ADDR>& obj, ADDR base) : GM<ADDR, Type>(obj, base)
         {}
 
         template<typename T>
-        GMP(GMP<T> const &C) : GM<Type>(C.obj(), ((GM<T>&)C).m_base)
+        GMP(MEM<ADDR>& obj, T base) :GM<ADDR, Type>(obj, base)
+        {}
+
+        template<typename T>
+        GMP(GMP<ADDR, T> const &C) : GM<ADDR, Type>(C.obj(), ((GM<ADDR, T>&)C).m_base)
         {}
 
         /*template<typename T>
         GMP(GM<T> const& C) : GM<Type>(C)
         {}*/
 
-        MEM& obj() const {
-            return static_cast<MEM &>(m_obj);
+        MEM<ADDR>& obj() const {
+            return static_cast<MEM<ADDR>&>(m_obj);
         }
 
         /*template<typename T>
@@ -179,8 +176,8 @@ namespace hp{
 
         /*convert{*/
         template <typename T>
-        inline operator GMP<T>& () {
-            return static_cast<GMP<T>&>(*this);
+        inline operator GMP<ADDR, T>& () {
+            return static_cast<GMP<ADDR, T>&>(*this);
         }
         /*}convert*/
 
@@ -194,21 +191,21 @@ namespace hp{
         }
 
 
-        inline GM<Type>& operator*() const {
-            return *(GM<Type>*)this;
+        inline GM<ADDR, Type>& operator*() const {
+            return *(GM<ADDR, Type>*)this;
         }
 
 
-        inline GM<Type> operator [](UInt idx) {
-            return GM<Type>(obj(), m_base + idx * (sizeof(Type)));
+        inline GM<ADDR, Type> operator [](UInt idx) {
+            return GM<ADDR, Type>(obj(), m_base + idx * (sizeof(Type)));
         }
 
 
 
     #define REG_OPERATOR(op)					\
 		    template<typename _dataType>		\
-		    inline GMP<Type> operator op(_dataType data) const{\
-			    return GMP<Type>(obj(), m_base + data * (sizeof(Type)));	\
+		    inline GMP<ADDR, ype> operator op(_dataType data) const{\
+			    return GMP<ADDR, Type>(obj(), m_base + data * (sizeof(Type)));	\
 		    }
 
         REG_OPERATOR(+);
@@ -225,7 +222,7 @@ namespace hp{
 
     private:
         template<typename T>
-        inline GMP(GM<T> const&) = delete;
+        inline GMP(GM<ADDR, T> const&) = delete;
 
         /*Read{*/
         template<typename T>
@@ -247,11 +244,10 @@ namespace hp{
     };
 
 
-    template<typename Type>
+    template<typename ADDR, typename Type>
     class GR {
-        template <typename T> friend class GRP;
+        template <typename ADDR, typename T> friend class GRP;
         friend class TRGL::VexGuestAMD64State;
-        friend class TRGL::Fpu_State;
         friend class TRGL::VexGuestX86SegDescr;
         friend class TRGL::VexGuestX86State;
         Register<REGISTER_LEN>& m_obj;
@@ -305,8 +301,8 @@ namespace hp{
         }
         /*}Write*/
 
-        GRP<Type>& operator &() const {
-            return *(GRP<Type>*)this;;
+        GRP<ADDR, Type>& operator &() const {
+            return *(GRP<ADDR, Type>*)this;;
         }
 
 
@@ -331,7 +327,7 @@ namespace hp{
 
     private:
         template<typename T>
-        inline GR(GR<T> const &) = delete;
+        inline GR(GR<ADDR, T> const &) = delete;
 
         template<typename T>
         T operator &() = delete;
@@ -347,14 +343,14 @@ namespace hp{
     };
 
 
-    template<typename Type>
-    class GRP :private GR<Type> {
+    template<typename ADDR, typename Type>
+    class GRP :private GR<ADDR, Type> {
     public:
-        GRP(Register<REGISTER_LEN>& obj, UInt iro) : GR<Type>(obj, iro)
+        GRP(Register<REGISTER_LEN>& obj, UInt iro) : GR<ADDR, Type>(obj, iro)
         {}
 
         template<typename T>
-        GRP(GRP<T> const& C) : GR<Type>(C.obj(), ((GR<T>&)C).ir_o)
+        GRP(GRP<ADDR, T> const& C) : GR<ADDR, Type>(C.obj(), ((GR<ADDR, T>&)C).ir_o)
         {}
 
         Register<REGISTER_LEN>& obj() const {
@@ -363,24 +359,24 @@ namespace hp{
 
         /*convert{*/
         template <typename T>
-        inline operator GRP<T>& () {
-            return static_cast<GRP<T>&>(*this);
+        inline operator GRP<ADDR, T>& () {
+            return static_cast<GRP<ADDR, T>&>(*this);
         }
         /*}convert*/
 
-        inline GR<Type>& operator*() const {
-            return *(GR<Type>*)this;
+        inline GR<ADDR, Type>& operator*() const {
+            return *(GR<ADDR, Type>*)this;
         }
 
 
-        inline GR<Type> operator [](UInt idx) {
-            return GR<Type>(obj(), ir_o + idx * (sizeof(Type)));
+        inline GR<ADDR, Type> operator [](UInt idx) {
+            return GR<ADDR, Type>(obj(), ir_o + idx * (sizeof(Type)));
         }
 
     #define REG_OPERATOR(op)					\
 		    template<typename _dataType>		\
-		    inline GR<Type> operator op(_dataType offset) const{\
-			    return GR<Type>(obj(), ir_o + offset * (sizeof(Type)));	\
+		    inline GR<ADDR, Type> operator op(_dataType offset) const{\
+			    return GR<ADDR, Type>(obj(), ir_o + offset * (sizeof(Type)));	\
 		    }
 
         REG_OPERATOR(+);
@@ -397,7 +393,7 @@ namespace hp{
 
     private:
         template<typename T>
-        inline GRP(GR<T> const&) = delete;
+        inline GRP(GR<ADDR, T> const&) = delete;
 
         template<typename T>
         inline operator T () const = delete;
@@ -416,20 +412,20 @@ namespace hp{
     };
 
 
-    template<typename Type, UInt shift = 0, UInt bits = (sizeof(Type) << 3)>
-    class GMW :private GM<Type> {
+    template<typename ADDR, typename Type, UInt shift = 0, UInt bits = (sizeof(Type) << 3)>
+    class GMW :private GM<ADDR, Type> {
     public:
-        GMW(MEM& obj, Vns const& base) :GM(obj, base)
+        GMW(MEM<ADDR>& obj, Vns const& base) :GM(obj, base)
         {}
 
-        GMW(MEM& obj) :GM(obj)
+        GMW(MEM<ADDR>& obj) :GM(obj)
         {}
 
-        GMW(MEM& obj, ADDR base) :GM(obj, base)
+        GMW(MEM<ADDR>& obj, ADDR base) :GM(obj, base)
         {}
 
         template<typename T>
-        GMW(MEM& obj, T base) : GM(obj, base)
+        GMW(MEM<ADDR>& obj, T base) : GM(obj, base)
         {}
 
         operator Vns() const {
@@ -457,89 +453,73 @@ using namespace hp;
 
 
 namespace TRGL {
-class Fpu_State{
-    State& m_state;
-   /* UShort env[14];
-    UChar  reg[80];*/
-public:
-    GMP<UShort> env;
-    GMP<UChar>  reg;
-    Fpu_State(State& state, ADDR base) :
-        m_state(state),
-        env(state, base),
-        reg(state, base + sizeof(UShort) * 14)
-    {}
-    Fpu_State(ADDR base) :
-        Fpu_State(*g_state, (ADDR)base)
-    { }
-};
 
 class VexGuestAMD64State {
 public:
-    /*0  */GR<ULong >  host_EvC_FAILADDR;
-    /*8  */GR<UInt >   host_EvC_COUNTER;
-    /*12 */GR<UInt >   pad0;
-    /*16 */GR<ULong>   guest_RAX;
-    /*24 */GR<ULong>   guest_RCX;
-    /*32 */GR<ULong>   guest_RDX;
-    /*40 */GR<ULong>   guest_RBX;
-    /*48 */GR<ULong>   guest_RSP;
-    /*56 */GR<ULong>   guest_RBP;
-    /*64 */GR<ULong>   guest_RSI;
-    /*72 */GR<ULong>   guest_RDI;
-    /*80 */GR<ULong>   guest_R8;
-    /*88 */GR<ULong>   guest_R9;
-    /*96 */GR<ULong>   guest_R10;
-    /*104*/GR<ULong>   guest_R11;
-    /*112*/GR<ULong>   guest_R12;
-    /*120*/GR<ULong>   guest_R13;
-    /*128*/GR<ULong>   guest_R14;
-    /*136*/GR<ULong>   guest_R15;
-    /*144*/GR<ULong>   guest_CC_OP;
-    /*152*/GR<ULong>   guest_CC_DEP1;
-    /*160*/GR<ULong>   guest_CC_DEP2;
-    /*168*/GR<ULong>   guest_CC_NDEP;
-    /*176*/GR<ULong>   guest_DFLAG;
-    /*184*/GR<ULong>   guest_RIP;
-    /*192*/GR<ULong>   guest_ACFLAG;
-    /*200*/GR<ULong>   guest_IDFLAG;
-    /*208*/GR<ULong>   guest_FS_CONST;
-    /*216*/GR<ULong>   guest_SSEROUND;
-    /*224*/GR<__m256i> guest_YMM0;
-    /*256*/GR<__m256i> guest_YMM1;
-    /*288*/GR<__m256i> guest_YMM2;
-    /*320*/GR<__m256i> guest_YMM3;
-    /*352*/GR<__m256i> guest_YMM4;
-    /*384*/GR<__m256i> guest_YMM5;
-    /*416*/GR<__m256i> guest_YMM6;
-    /*448*/GR<__m256i> guest_YMM7;
-    /*480*/GR<__m256i> guest_YMM8;
-    /*512*/GR<__m256i> guest_YMM9;
-    /*544*/GR<__m256i> guest_YMM10;
-    /*576*/GR<__m256i> guest_YMM11;
-    /*608*/GR<__m256i> guest_YMM12;
-    /*640*/GR<__m256i> guest_YMM13;
-    /*672*/GR<__m256i> guest_YMM14;
-    /*704*/GR<__m256i> guest_YMM15;
-    /*736*/GR<__m256i> guest_YMM16;
-    /*768*/GR<UInt>    guest_FTOP;
-    /*772*/GR<UInt>    pad1;
-    /*776*/GRP<ULong>  guest_FPREG;
-    /*840*/GRP<UChar>  guest_FPTAG;
-    /*848*/GR<ULong>   guest_FPROUND;
-    /*856*/GR<ULong>   guest_FC3210;
-    /*864*/GR<UInt>    guest_EMNOTE;
-    /*868*/GR<UInt>    pad2;
-    /*872*/GR<ULong>   guest_CMSTART;
-    /*880*/GR<ULong>   guest_CMLEN;
-    /*888*/GR<ULong>   guest_NRADDR;
-    /*896*/GR<ULong>   guest_SC_CLASS;
-    /*904*/GR<ULong>   guest_GS_CONST;
-    /*912*/GR<ULong>   guest_IP_AT_SYSCALL;
-    State& m_state;
+    /*0  */GR<Addr64, ULong >  host_EvC_FAILADDR;
+    /*8  */GR<Addr64, UInt >   host_EvC_COUNTER;
+    /*12 */GR<Addr64, UInt >   pad0;
+    /*16 */GR<Addr64, ULong>   guest_RAX;
+    /*24 */GR<Addr64, ULong>   guest_RCX;
+    /*32 */GR<Addr64, ULong>   guest_RDX;
+    /*40 */GR<Addr64, ULong>   guest_RBX;
+    /*48 */GR<Addr64, ULong>   guest_RSP;
+    /*56 */GR<Addr64, ULong>   guest_RBP;
+    /*64 */GR<Addr64, ULong>   guest_RSI;
+    /*72 */GR<Addr64, ULong>   guest_RDI;
+    /*80 */GR<Addr64, ULong>   guest_R8;
+    /*88 */GR<Addr64, ULong>   guest_R9;
+    /*96 */GR<Addr64, ULong>   guest_R10;
+    /*104*/GR<Addr64, ULong>   guest_R11;
+    /*112*/GR<Addr64, ULong>   guest_R12;
+    /*120*/GR<Addr64, ULong>   guest_R13;
+    /*128*/GR<Addr64, ULong>   guest_R14;
+    /*136*/GR<Addr64, ULong>   guest_R15;
+    /*144*/GR<Addr64, ULong>   guest_CC_OP;
+    /*152*/GR<Addr64, ULong>   guest_CC_DEP1;
+    /*160*/GR<Addr64, ULong>   guest_CC_DEP2;
+    /*168*/GR<Addr64, ULong>   guest_CC_NDEP;
+    /*176*/GR<Addr64, ULong>   guest_DFLAG;
+    /*184*/GR<Addr64, ULong>   guest_RIP;
+    /*192*/GR<Addr64, ULong>   guest_ACFLAG;
+    /*200*/GR<Addr64, ULong>   guest_IDFLAG;
+    /*208*/GR<Addr64, ULong>   guest_FS_CONST;
+    /*216*/GR<Addr64, ULong>   guest_SSEROUND;
+    /*224*/GR<Addr64, __m256i> guest_YMM0;
+    /*256*/GR<Addr64, __m256i> guest_YMM1;
+    /*288*/GR<Addr64, __m256i> guest_YMM2;
+    /*320*/GR<Addr64, __m256i> guest_YMM3;
+    /*352*/GR<Addr64, __m256i> guest_YMM4;
+    /*384*/GR<Addr64, __m256i> guest_YMM5;
+    /*416*/GR<Addr64, __m256i> guest_YMM6;
+    /*448*/GR<Addr64, __m256i> guest_YMM7;
+    /*480*/GR<Addr64, __m256i> guest_YMM8;
+    /*512*/GR<Addr64, __m256i> guest_YMM9;
+    /*544*/GR<Addr64, __m256i> guest_YMM10;
+    /*576*/GR<Addr64, __m256i> guest_YMM11;
+    /*608*/GR<Addr64, __m256i> guest_YMM12;
+    /*640*/GR<Addr64, __m256i> guest_YMM13;
+    /*672*/GR<Addr64, __m256i> guest_YMM14;
+    /*704*/GR<Addr64, __m256i> guest_YMM15;
+    /*736*/GR<Addr64, __m256i> guest_YMM16;
+    /*768*/GR<Addr64, UInt>    guest_FTOP;
+    /*772*/GR<Addr64, UInt>    pad1;
+    /*776*/GRP<Addr64, ULong>  guest_FPREG;
+    /*840*/GRP<Addr64, UChar>  guest_FPTAG;
+    /*848*/GR<Addr64, ULong>   guest_FPROUND;
+    /*856*/GR<Addr64, ULong>   guest_FC3210;
+    /*864*/GR<Addr64, UInt>    guest_EMNOTE;
+    /*868*/GR<Addr64, UInt>    pad2;
+    /*872*/GR<Addr64, ULong>   guest_CMSTART;
+    /*880*/GR<Addr64, ULong>   guest_CMLEN;
+    /*888*/GR<Addr64, ULong>   guest_NRADDR;
+    /*896*/GR<Addr64, ULong>   guest_SC_CLASS;
+    /*904*/GR<Addr64, ULong>   guest_GS_CONST;
+    /*912*/GR<Addr64, ULong>   guest_IP_AT_SYSCALL;
+    State<Addr64>& m_state;
 public:
-    VexGuestAMD64State() :VexGuestAMD64State(*g_state){}
-	VexGuestAMD64State(State &s):
+    VexGuestAMD64State() :VexGuestAMD64State(*(State<Addr64>*)g_state){}
+	VexGuestAMD64State(State<Addr64>&s):
         m_state(s),
         host_EvC_FAILADDR   (s,0  ),
         host_EvC_COUNTER    (s,8  ),
@@ -613,7 +593,7 @@ public:
         return m_state.regs;
     }
 
-    inline operator MEM&() {
+    inline operator MEM<Addr64>&() {
         return m_state.mem;
     }
 };
@@ -622,58 +602,58 @@ public:
 class VexGuestX86State {
 public:
 
-    /*0  */GR<UInt>      host_EvC_FAILADDR;
-    /*4  */GR<UInt>      host_EvC_COUNTER;
-    /*8  */GR<UInt>      guest_EAX;
-    /*12 */GR<UInt>      guest_ECX;
-    /*16 */GR<UInt>      guest_EDX;
-    /*20 */GR<UInt>      guest_EBX;
-    /*24 */GR<UInt>      guest_ESP;
-    /*28 */GR<UInt>      guest_EBP;
-    /*32 */GR<UInt>      guest_ESI;
-    /*36 */GR<UInt>      guest_EDI;
-    /*40 */GR<UInt>      guest_CC_OP;
-    /*44 */GR<UInt>      guest_CC_DEP1;
-    /*48 */GR<UInt>      guest_CC_DEP2;
-    /*52 */GR<UInt>      guest_CC_NDEP;
-    /*56 */GR<UInt>      guest_DFLAG;
-    /*60 */GR<UInt>      guest_IDFLAG;
-    /*64 */GR<UInt>      guest_ACFLAG;
-    /*68 */GR<UInt>      guest_EIP;
-    /*72 */GRP<ULong>    guest_FPREG;
-    /*136*/GRP<UChar>    guest_FPTAG;
-    /*144*/GR<UInt>      guest_FPROUND;
-    /*148*/GR<UInt>      guest_FC3210;
-    /*152*/GR<UInt>      guest_FTOP;
-    /*156*/GR<UInt>      guest_SSEROUND;
-    /*160*/GR<U128>      guest_XMM0;
-    /*176*/GR<U128>      guest_XMM1;
-    /*192*/GR<U128>      guest_XMM2;
-    /*208*/GR<U128>      guest_XMM3;
-    /*224*/GR<U128>      guest_XMM4;
-    /*240*/GR<U128>      guest_XMM5;
-    /*256*/GR<U128>      guest_XMM6;
-    /*272*/GR<U128>      guest_XMM7;
-    /*288*/GR<UShort>    guest_CS;
-    /*290*/GR<UShort>    guest_DS;
-    /*292*/GR<UShort>    guest_ES;
-    /*294*/GR<UShort>    guest_FS;
-    /*296*/GR<UShort>    guest_GS;
-    /*298*/GR<UShort>    guest_SS;
-    /*304*/GR<ULong>     guest_LDT;
-    /*312*/GR<ULong>     guest_GDT;
-    /*320*/GR<UInt>      guest_EMNOTE;
-    /*324*/GR<UInt>      guest_CMSTART;
-    /*328*/GR<UInt>      guest_CMLEN;
-    /*332*/GR<UInt>      guest_NRADDR;
-    /*336*/GR<UInt>      guest_SC_CLASS;
-    /*340*/GR<UInt>      guest_IP_AT_SYSCALL;
-    /*344*/GR<UInt>      padding1;
-    /*348*/GR<UInt>      padding2;
-    /*352*/GR<UInt>      padding3;
+    /*0  */GR<Addr32, UInt>      host_EvC_FAILADDR;
+    /*4  */GR<Addr32, UInt>      host_EvC_COUNTER;
+    /*8  */GR<Addr32, UInt>      guest_EAX;
+    /*12 */GR<Addr32, UInt>      guest_ECX;
+    /*16 */GR<Addr32, UInt>      guest_EDX;
+    /*20 */GR<Addr32, UInt>      guest_EBX;
+    /*24 */GR<Addr32, UInt>      guest_ESP;
+    /*28 */GR<Addr32, UInt>      guest_EBP;
+    /*32 */GR<Addr32, UInt>      guest_ESI;
+    /*36 */GR<Addr32, UInt>      guest_EDI;
+    /*40 */GR<Addr32, UInt>      guest_CC_OP;
+    /*44 */GR<Addr32, UInt>      guest_CC_DEP1;
+    /*48 */GR<Addr32, UInt>      guest_CC_DEP2;
+    /*52 */GR<Addr32, UInt>      guest_CC_NDEP;
+    /*56 */GR<Addr32, UInt>      guest_DFLAG;
+    /*60 */GR<Addr32, UInt>      guest_IDFLAG;
+    /*64 */GR<Addr32, UInt>      guest_ACFLAG;
+    /*68 */GR<Addr32, UInt>      guest_EIP;
+    /*72 */GRP<Addr32, ULong>    guest_FPREG;
+    /*136*/GRP<Addr32, UChar>    guest_FPTAG;
+    /*144*/GR<Addr32, UInt>      guest_FPROUND;
+    /*148*/GR<Addr32, UInt>      guest_FC3210;
+    /*152*/GR<Addr32, UInt>      guest_FTOP;
+    /*156*/GR<Addr32, UInt>      guest_SSEROUND;
+    /*160*/GR<Addr32, U128>      guest_XMM0;
+    /*176*/GR<Addr32, U128>      guest_XMM1;
+    /*192*/GR<Addr32, U128>      guest_XMM2;
+    /*208*/GR<Addr32, U128>      guest_XMM3;
+    /*224*/GR<Addr32, U128>      guest_XMM4;
+    /*240*/GR<Addr32, U128>      guest_XMM5;
+    /*256*/GR<Addr32, U128>      guest_XMM6;
+    /*272*/GR<Addr32, U128>      guest_XMM7;
+    /*288*/GR<Addr32, UShort>    guest_CS;
+    /*290*/GR<Addr32, UShort>    guest_DS;
+    /*292*/GR<Addr32, UShort>    guest_ES;
+    /*294*/GR<Addr32, UShort>    guest_FS;
+    /*296*/GR<Addr32, UShort>    guest_GS;
+    /*298*/GR<Addr32, UShort>    guest_SS;
+    /*304*/GR<Addr32, ULong>     guest_LDT;
+    /*312*/GR<Addr32, ULong>     guest_GDT;
+    /*320*/GR<Addr32, UInt>      guest_EMNOTE;
+    /*324*/GR<Addr32, UInt>      guest_CMSTART;
+    /*328*/GR<Addr32, UInt>      guest_CMLEN;
+    /*332*/GR<Addr32, UInt>      guest_NRADDR;
+    /*336*/GR<Addr32, UInt>      guest_SC_CLASS;
+    /*340*/GR<Addr32, UInt>      guest_IP_AT_SYSCALL;
+    /*344*/GR<Addr32, UInt>      padding1;
+    /*348*/GR<Addr32, UInt>      padding2;
+    /*352*/GR<Addr32, UInt>      padding3;
 public:
-    VexGuestX86State() :VexGuestX86State(*g_state) {}
-    VexGuestX86State(State& s):
+    VexGuestX86State() :VexGuestX86State(*(State<Addr32>*)g_state) {}
+    VexGuestX86State(State<Addr32>& s):
         host_EvC_FAILADDR   (s, 0  ),
         host_EvC_COUNTER    (s, 4  ),
         guest_EAX           (s, 8  ),
@@ -730,20 +710,20 @@ public:
 };
 
 namespace X86SegDescr {
-    using LimitLow =    GMW<UShort>;
-    using BaseLow =     GMW<UShort>;
-    using BaseMid =     GMW<UInt, 0, 8>;
-    using Type =        GMW<UInt, 8, 5>;
-    using Dpl =         GMW<UInt, 13, 2>;
-    using Pres =        GMW<UInt, 15, 1>;
-    using LimitHi =     GMW<UInt, 16, 4>;
-    using Sys =         GMW<UInt, 20, 1>;
-    using Reserved_0 =  GMW<UInt, 21, 1>;
-    using Default_Big = GMW<UInt, 22, 1>;
-    using Granularity = GMW<UInt, 23, 1>;
-    using BaseHi =      GMW<UInt, 24, 8>;
-    using word1 =       GMW<UInt>;
-    using word2 =       GMW<UInt>;
+    using LimitLow =    GMW<Addr32, UShort>;
+    using BaseLow =     GMW<Addr32, UShort>;
+    using BaseMid =     GMW<Addr32, UInt, 0, 8>;
+    using Type =        GMW<Addr32, UInt, 8, 5>;
+    using Dpl =         GMW<Addr32, UInt, 13, 2>;
+    using Pres =        GMW<Addr32, UInt, 15, 1>;
+    using LimitHi =     GMW<Addr32, UInt, 16, 4>;
+    using Sys =         GMW<Addr32, UInt, 20, 1>;
+    using Reserved_0 =  GMW<Addr32, UInt, 21, 1>;
+    using Default_Big = GMW<Addr32, UInt, 22, 1>;
+    using Granularity = GMW<Addr32, UInt, 23, 1>;
+    using BaseHi =      GMW<Addr32, UInt, 24, 8>;
+    using word1 =       GMW<Addr32, UInt>;
+    using word2 =       GMW<Addr32, UInt>;
 }
 //TriggerBug Guest Layout
 
@@ -763,7 +743,7 @@ namespace X86SegDescr {
             X86SegDescr::Default_Big Default_Big;
             X86SegDescr::Granularity Granularity;
             X86SegDescr::BaseHi BaseHi;
-            Bits(State& state, ADDR base) :
+            Bits(State<Addr32>& state, Addr32 base) :
                 LimitLow(state.mem, base + 0),
                 BaseLow(state.mem, base + 2),
                 BaseMid(state.mem, base + 4),
@@ -783,7 +763,7 @@ namespace X86SegDescr {
         public:
             X86SegDescr::word1 word1;
             X86SegDescr::word2 word2;
-            Words(State& state, ADDR base) :
+            Words(State<Addr32>& state, Addr32 base) :
                 word1(state.mem, base),
                 word2(state.mem, base + 4)
             {
@@ -794,7 +774,7 @@ namespace X86SegDescr {
         public:
             Words Words;
             Bits Bits;
-            LdtEnt(State& state, ADDR base) :
+            LdtEnt(State<Addr32>& state, Addr32 base) :
                 Words(state, base),
                 Bits(state, base)
             {
@@ -802,13 +782,13 @@ namespace X86SegDescr {
         };
 
         LdtEnt LdtEnt;
-        VexGuestX86SegDescr(State& state, ADDR base) :
-            LdtEnt(state, (ADDR)base)
+        VexGuestX86SegDescr(State<Addr32>& state, Addr32 base) :
+            LdtEnt(state, base)
         {
 
         }
-        VexGuestX86SegDescr(ADDR base) :
-            LdtEnt(*g_state, (ADDR)base)
+        VexGuestX86SegDescr(Addr32 base) :
+            LdtEnt(*(State<Addr32>*)g_state, base)
         {
 
         }

@@ -2073,75 +2073,15 @@ ULong amd64g_calculate_FXAM ( ULong tag, ULong dbl )
 /* This is used to implement both 'frstor' and 'fldenv'.  The latter
    appears to differ from the former only in that the 8 FP registers
    themselves are not transferred into the guest state. */
-//static
-//VexEmNote do_put_x87 ( Bool moveRegs,
-//                       /*IN*/Fpu_State* x87_state,
-//                       /*OUT*/VexGuestAMD64State* vex_state )
-//{
-//   Int        stno, preg;
-//   UInt       tag;
-//   ULong*     vexRegs = (ULong*)(&vex_state->guest_FPREG[0]);
-//   UChar*     vexTags = (UChar*)(&vex_state->guest_FPTAG[0]);
-//   UInt       ftop    = (x87_state->env[FP_ENV_STAT] >> 11) & 7;
-//   UInt       tagw    = x87_state->env[FP_ENV_TAG];
-//   UInt       fpucw   = x87_state->env[FP_ENV_CTRL];
-//   UInt       c3210   = x87_state->env[FP_ENV_STAT] & 0x4700;
-//   VexEmNote  ew;
-//   UInt       fpround;
-//   ULong      pair;
-//
-//   /* Copy registers and tags */
-//   for (stno = 0; stno < 8; stno++) {
-//      preg = (stno + ftop) & 7;
-//      tag = (tagw >> (2*preg)) & 3;
-//      if (tag == 3) {
-//         /* register is empty */
-//         /* hmm, if it's empty, does it still get written?  Probably
-//            safer to say it does.  If we don't, memcheck could get out
-//            of sync, in that it thinks all FP registers are defined by
-//            this helper, but in reality some have not been updated. */
-//         if (moveRegs)
-//            vexRegs[preg] = 0; /* IEEE754 64-bit zero */
-//         vexTags[preg] = 0;
-//      } else {
-//         /* register is non-empty */
-//         if (moveRegs)
-//            convert_f80le_to_f64le( &x87_state->reg[10*stno], 
-//                                    (UChar*)&vexRegs[preg] );
-//         vexTags[preg] = 1;
-//      }
-//   }
-//
-//   /* stack pointer */
-//   vex_state->guest_FTOP = ftop;
-//
-//   /* status word */
-//   vex_state->guest_FC3210 = c3210;
-//
-//   /* handle the control word, setting FPROUND and detecting any
-//      emulation warnings. */
-//   pair    = amd64g_check_fldcw ( (ULong)fpucw );
-//   fpround = (UInt)pair & 0xFFFFFFFFULL;
-//   ew      = (VexEmNote)(pair >> 32);
-//   
-//   vex_state->guest_FPROUND = fpround & 3;
-//
-//   /* emulation warnings --> caller */
-//   return ew;
-//}
 static
 VexEmNote do_put_x87 ( Bool moveRegs,
-                       /*IN*/Fpu_State* _x87_state,
-                       /*OUT*/VexGuestAMD64State* _vex_state )
+                       /*IN*/Fpu_State* x87_state,
+                       /*OUT*/VexGuestAMD64State* vex_state )
 {
-
-    TRGL::VexGuestAMD64State* vex_state = (TRGL::VexGuestAMD64State*)(_vex_state);
-    TRGL::Fpu_State* x87_state = (TRGL::Fpu_State*)(_x87_state);
-
    Int        stno, preg;
    UInt       tag;
-   GRP<ULong>     vexRegs = (&vex_state->guest_FPREG[0]);
-   GRP<UChar>     vexTags = (&vex_state->guest_FPTAG[0]);
+   ULong*     vexRegs = (ULong*)(&vex_state->guest_FPREG[0]);
+   UChar*     vexTags = (UChar*)(&vex_state->guest_FPTAG[0]);
    UInt       ftop    = (x87_state->env[FP_ENV_STAT] >> 11) & 7;
    UInt       tagw    = x87_state->env[FP_ENV_TAG];
    UInt       fpucw   = x87_state->env[FP_ENV_CTRL];
@@ -2164,10 +2104,10 @@ VexEmNote do_put_x87 ( Bool moveRegs,
             vexRegs[preg] = 0; /* IEEE754 64-bit zero */
          vexTags[preg] = 0;
       } else {
-         /* register is non-empty *//*
+         /* register is non-empty */
          if (moveRegs)
-            convert_f80le_to_f64le( & x87_state->reg[10*stno], 
-                                    (UChar*)&vexRegs[preg] );*/
+            convert_f80le_to_f64le( &x87_state->reg[10*stno], 
+                                    (UChar*)&vexRegs[preg] );
          vexTags[preg] = 1;
       }
    }
@@ -2320,27 +2260,21 @@ void amd64g_dirtyhelper_XSAVE_COMPONENT_0
 /* CALLED FROM GENERATED CODE */
 /* DIRTY HELPER (reads guest state, writes guest mem) */
 /* XSAVE component 1 is the SSE state. */
-void amd64g_dirtyhelper_XSAVE_COMPONENT_1_EXCLUDING_XMMREGS
-(VexGuestAMD64State* _gst, HWord addr)
+void amd64g_dirtyhelper_XSAVE_COMPONENT_1_EXCLUDING_XMMREGS 
+        ( VexGuestAMD64State* gst, HWord addr )
 {
-    TRGL::VexGuestAMD64State* gst = (TRGL::VexGuestAMD64State*)(_gst);
+   UShort* addrS = (UShort*)addr;
+   UInt    mxcsr;
 
-    //UShort* addrS = (UShort*)addr;
-    GMP<UInt>  addrS(*gst, (ADDR)addr);
+   /* The only non-register parts of the SSE state are MXCSR and
+      MXCSR_MASK. */
+   mxcsr = amd64g_create_mxcsr( gst->guest_SSEROUND );
 
-    /* The only non-register parts of the SSE state are MXCSR and
-       MXCSR_MASK. */
-    Vns sseround = gst->guest_SSEROUND;
-    sseround &= 3;
-    Vns mxcsr = 0x1F80 | (sseround << 13);
+   addrS[12] = toUShort(mxcsr);  /* MXCSR */
+   addrS[13] = toUShort(mxcsr >> 16);
 
-    //mxcsr = amd64g_create_mxcsr(gst->guest_SSEROUND);
-    
-    addrS[6] = mxcsr;  /* MXCSR */
-
-    addrS[7] = 0x0000FFFF; 
-    /* MXCSR mask (lo16) */
-    /* MXCSR mask (hi16) */
+   addrS[14] = 0xFFFF; /* MXCSR mask (lo16) */
+   addrS[15] = 0x0000; /* MXCSR mask (hi16) */
 }
 
 
@@ -2446,9 +2380,9 @@ VexEmNote amd64g_dirtyhelper_XRSTOR_COMPONENT_0
 /* CALLED FROM GENERATED CODE */
 /* DIRTY HELPER (writes guest state, reads guest mem) */
 VexEmNote amd64g_dirtyhelper_XRSTOR_COMPONENT_1_EXCLUDING_XMMREGS
-             ( VexGuestAMD64State* _gst, HWord addr )
+             ( VexGuestAMD64State* gst, HWord addr )
 {
-   /*UShort* addrS = (UShort*)addr;
+   UShort* addrS = (UShort*)addr;
    UInt    w32   = (((UInt)addrS[12]) & 0xFFFF)
                    | ((((UInt)addrS[13]) & 0xFFFF) << 16);
    ULong   w64   = amd64g_check_ldmxcsr( (ULong)w32 );
@@ -2456,20 +2390,7 @@ VexEmNote amd64g_dirtyhelper_XRSTOR_COMPONENT_1_EXCLUDING_XMMREGS
    VexEmNote warnXMM = (VexEmNote)(w64 >> 32);
 
    gst->guest_SSEROUND = w64 & 0xFFFFFFFFULL;
-   return warnXMM;*/
-    TRGL::VexGuestAMD64State* gst = (TRGL::VexGuestAMD64State*)(_gst);
-
-    GMP<UInt> addrS(*gst, addr);
-    Vns w32 = addrS[6];
-    if (w32.real()) {
-        ULong   w64 = amd64g_check_ldmxcsr((ULong)(UInt)w32);
-        VexEmNote warnXMM = (VexEmNote)(w64 >> 32);
-        gst->guest_SSEROUND = w64 & 0xFFFFFFFF;
-        return warnXMM;
-    }
-    else {
-        vassert(0);
-    }
+   return warnXMM;
 }
 
 

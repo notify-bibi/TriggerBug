@@ -2279,10 +2279,9 @@ UInt x86g_calculate_aad_aam ( UInt flags_and_AX, UInt opcode )
 ULong x86g_dirtyhelper_RDTSC ( void )
 {
 #  if defined(__i386__)
-       UInt LO;
-       UInt HI;
-       __asm__ __volatile__("rdtsc" : "=A" (LO) "=d" (HI));//fix it by wxc
-       return (((ULong)HI)<<32)|LO;
+   ULong res;
+   __asm__ __volatile__("rdtsc" : "=A" (res));
+   return res;
 #  else
    return 1ULL;
 #  endif
@@ -2736,8 +2735,8 @@ ULong x86g_calculate_mmx_psadbw ( ULong xx, ULong yy )
 /*--- Helpers for dealing with segment overrides.             ---*/
 /*---------------------------------------------------------------*/
 
-static inline
-UInt get_segdescr_base(TRGL::VexGuestX86SegDescr* ent)
+static inline 
+UInt get_segdescr_base ( VexGuestX86SegDescr* ent )
 {
    UInt lo  = 0xFFFF & (UInt)ent->LdtEnt.Bits.BaseLow;
    UInt mid =   0xFF & (UInt)ent->LdtEnt.Bits.BaseMid;
@@ -2746,7 +2745,7 @@ UInt get_segdescr_base(TRGL::VexGuestX86SegDescr* ent)
 }
 
 static inline
-UInt get_segdescr_limit(TRGL::VexGuestX86SegDescr* ent)
+UInt get_segdescr_limit ( VexGuestX86SegDescr* ent )
 {
     UInt lo    = 0xFFFF & (UInt)ent->LdtEnt.Bits.LimitLow;
     UInt hi    =    0xF & (UInt)ent->LdtEnt.Bits.LimitHi;
@@ -2802,10 +2801,9 @@ ULong x86g_use_seg_selector ( HWord ldt, HWord gdt,
       if (seg_selector >= VEX_GUEST_X86_GDT_NENT)
          goto bad;
 
-        the_descrs = (VexGuestX86SegDescr*)gdt;
-        TRGL::VexGuestX86SegDescr ent((ADDR)(size_t)&the_descrs[seg_selector]);
-        base = get_segdescr_base(&ent);
-        limit = get_segdescr_limit(&ent);
+      the_descrs = (VexGuestX86SegDescr*)gdt;
+      base  = get_segdescr_base (&the_descrs[seg_selector]);
+      limit = get_segdescr_limit(&the_descrs[seg_selector]);
 
    } else {
 
@@ -2816,10 +2814,9 @@ ULong x86g_use_seg_selector ( HWord ldt, HWord gdt,
       if (seg_selector >= VEX_GUEST_X86_LDT_NENT)
          goto bad;
 
-        the_descrs = (VexGuestX86SegDescr*)ldt;
-        TRGL::VexGuestX86SegDescr ent((ADDR)(size_t)&the_descrs[seg_selector]);
-        base = get_segdescr_base(&ent);
-        limit = get_segdescr_limit(&ent);
+      the_descrs = (VexGuestX86SegDescr*)ldt;
+      base  = get_segdescr_base (&the_descrs[seg_selector]);
+      limit = get_segdescr_limit(&the_descrs[seg_selector]);
 
    }
 

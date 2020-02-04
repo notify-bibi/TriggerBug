@@ -50,9 +50,6 @@
 //觉得引擎没bug了就取消注释，加快速度
 //#define RELEASE_OFFICIALLY
 
-//客户机为的位宽
-#define GUEST_IS_64
-
 //所有客户机寄存器的ir层的最大长度。建议>=100
 #define REGISTER_LEN 1000
 
@@ -71,28 +68,21 @@
 //宿主机的平台架构
 #define HOSTARCH VexArchAMD64
 
-#if defined(GUEST_IS_64)
-//客户机的地址类型（size_t）
-#define ADDR unsigned long long
-#else
-//客户机的地址类型（size_t）
-#define ADDR unsigned int
-#endif
-
-
 #include "Engine/header.hpp"
 #include "Engine/functions/functions.hpp"
 #include "Engine/Thread_Pool/ThreadPool_CD.hpp"
 
 
 class TRcontext :public z3::context {
-    friend class State;
     //z3_translate并不是线程安全的，target_ctx不同，ctx相同进行多线程并发也会bug。为了写时复制添加一个锁
     std::mutex translate_mutex;
 public:
     inline TRcontext() :z3::context() { }
     inline std::mutex& getLock() { return translate_mutex; };
     inline operator std::mutex& () { return translate_mutex; };
+    inline bool operator == (Z3_context b) const { return this->operator Z3_context() == b; };
+    inline bool operator == (z3::context const& b) const { return this->operator Z3_context() == (Z3_context)b; };
+    inline bool operator == (TRcontext const &b) const{ return this->operator Z3_context() == (Z3_context)b; };
 };
 
 //注：intel编译器对四个及四个一下的switch case会自动使用if else结构。

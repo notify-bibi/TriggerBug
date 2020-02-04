@@ -12,11 +12,6 @@ Revision History:
 
 //#undef _DEBUG
 #define DLL_EXPORTS
-//#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\TriggerBug-asong.xml"
-#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.xml"
-//#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\Roads\\Roads.xml"
-//#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\puzzle\\puzzle.xml"
-//#define INIFILENAME "C:\\Users\\bibi\\Desktop\\reverse\\c++symbol\\childRE.xml"
 
 
 
@@ -36,10 +31,10 @@ UInt flag_max_count = 0;
 extern "C" void dfd();
 
 
-class StateX86 : public State {
+class StateX86 : public State<Addr32> {
 public:
-    StateX86(const char* filename, ADDR gse, Bool _need_record) :State(filename, gse, _need_record) {};
-    StateX86(StateX86* father_state, ADDR gse) :State(father_state, gse) {};
+    StateX86(const char* filename, Addr32 gse, Bool _need_record) :State(filename, gse, _need_record) {};
+    StateX86(StateX86* father_state, Addr32 gse) :State(father_state, gse) {};
 
     void cpu_exception() {
         UInt seh_addr = x86g_use_seg_selector(regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::ldt), regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::gdt), regs.Iex_Get<Ity_I16>(X86_IR_OFFSET::fs).zext(16), 0);
@@ -61,7 +56,7 @@ public:
         case Ijk_Sys_syscall:
             return Sys_syscall();
         default:
-            vex_printf("guest address: %p . error jmp kind: ", guest_start);
+            vex_printf("guest address: %p jmp kind: ", guest_start);
             ppIRJumpKind(kd);
             vex_printf("\n");
         }
@@ -76,39 +71,41 @@ public:
         return Death;
     }
 
-    virtual State* ForkState(ADDR ges) {
+    virtual State<Addr32>* ForkState(Addr32 ges) {
         return new StateX86(this, ges);
     };
 
 };
 
 
-class StateAMD64 : public State {
+class StateAMD64 : public State<Addr64> {
     ULong g_brk = ALIGN(0x0000000000603000, 32);
 public:
-    StateAMD64(const char* filename, ADDR gse, Bool _need_record) :
+    StateAMD64(const char* filename, Addr64 gse, Bool _need_record) :
+
         State(filename, gse, _need_record)
     {
     };
 
-    StateAMD64(StateAMD64* father_state, ADDR gse) :
+    StateAMD64(StateAMD64* father_state, Addr64 gse) :
         State(father_state, gse)
     {
     };
 
     void cpu_exception() {
-        UInt seh_addr = x86g_use_seg_selector(regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::ldt), regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::gdt), regs.Iex_Get<Ity_I16>(X86_IR_OFFSET::fs).zext(16), 0);
-        Vns seh = mem.Iex_Load<Ity_I32>(seh_addr);
-        Vns next = mem.Iex_Load<Ity_I32>(seh);
-        Vns seh_exception_method = mem.Iex_Load<Ity_I32>(seh + 4);
-        status = Exception;
-        std::cout << " SEH Exceptions at:" << std::hex << guest_start << " \nGoto handel:" << seh_exception_method << std::endl;
-        guest_start = seh_exception_method;
+        status = Death;
+        //UInt seh_addr = x86g_use_seg_selector(regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::ldt), regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::gdt), regs.Iex_Get<Ity_I16>(X86_IR_OFFSET::fs).zext(16), 0);
+        //Vns seh = mem.Iex_Load<Ity_I32>(seh_addr);
+        //Vns next = mem.Iex_Load<Ity_I32>(seh);
+        //Vns seh_exception_method = mem.Iex_Load<Ity_I32>(seh + 4);
+        //status = Exception;
+        //std::cout << " SEH Exceptions at:" << std::hex << guest_start << " \nGoto handel:" << seh_exception_method << std::endl;
+        //guest_start = seh_exception_method;
 
-        /*  esp & ebp  不正确的esp*/
-        regs.Ist_Put(X86_IR_OFFSET::esp, seh);
+        ///*  esp & ebp  不正确的esp*/
+        //regs.Ist_Put(X86_IR_OFFSET::esp, seh);
 
-        exit(2);
+        //exit(2);
     }
 
     State_Tag Ijk_call(IRJumpKind kd) {
@@ -221,7 +218,7 @@ public:
         return Death;
     }
 
-    State* ForkState(ADDR ges) {
+    State<Addr64>* ForkState(Addr64 ges) {
         return new StateAMD64(this, ges);
     };
 };
@@ -231,121 +228,125 @@ public:
 
 
 
+//#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\TriggerBug-asong.xml"
+//#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\Roads\\Roads.xml"
+//#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\puzzle\\puzzle.xml"
+//#define INIFILENAME "C:\\Users\\bibi\\Desktop\\reverse\\c++symbol\\childRE.xml"
 
 
-
-State_Tag success_ret(State* s) {
-    vex_printf("success_ret  ??????????\n\n%d");
-    return (State_Tag)0x999;
-
-    s->solv.push();
-    auto ecx = s->regs.Iex_Get<Ity_I32>(12);
-    auto edi = s->regs.Iex_Get<Ity_I32>(36);
-
-    for (int i = 0; i < 44; i++) {
-        auto al = s->mem.Iex_Load<Ity_I8>(ecx + i);
-        auto bl = s->mem.Iex_Load<Ity_I8>(edi + i);
-        s->solv.add(al == bl);
-    }
-    vex_printf("checking\n\n");
-    auto dfdfs = s->solv.check();
-    if (dfdfs == sat) {
-        vex_printf("sat");
-        auto m = s->solv.get_model();
-        std::cout << m << std::endl;
-    }
-    else {
-        vex_printf("unsat??????????\n\n%d", dfdfs);
-    }
-    s->solv.pop();
-    return Death;
-}
-
-
-State_Tag success_ret2(State* s) {
-
-    s->solv.push();
-    vex_printf("checking\n\n");
-    auto dfdfs = s->solv.check();
-    if (dfdfs == sat) {
-        vex_printf("sat");
-        auto m = s->solv.get_model();
-        std::cout << m << std::endl;
-    }
-    else {
-        vex_printf("unsat??????????\n\n%d", dfdfs);
-    }
-    s->solv.pop();
-    exit(1);
-    return Death;
-}
-
-
-State_Tag success_ret3(State* s) {
-    s->solv.push();
-    UChar bf[] = { 0xEC, 0x29, 0xE3, 0x41, 0xE1, 0xF7, 0xAA, 0x1D, 0x29, 0xED, 0x29, 0x99, 0x39, 0xF3, 0xB7, 0xA9, 0xE7, 0xAC, 0x2B, 0xB7, 0xAB, 0x40, 0x9F, 0xA9, 0x31, 0x35, 0x2C, 0x29, 0xEF, 0xA8, 0x3D, 0x4B, 0xB0, 0xE9, 0xE1, 0x68, 0x7B, 0x41 };
-
-    auto enc = s->regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::rdi);
-    for (int i = 0; i < 38; i++) {
-        Vns e = s->mem.Iex_Load<Ity_I8>(enc + i);
-        s->solv.add(e == (UChar)bf[i]);
-    }
-    vex_printf("checking\n\n");
-    auto dfdfs = s->solv.check();
-    if (dfdfs == sat) {
-        vex_printf("issat");
-        auto m = s->solv.get_model();
-        std::cout << m << std::endl;
-        exit(0);
-    }
-    else {
-        vex_printf("unsat??????????\n\n%d", dfdfs);
-    }
-    s->solv.pop();
-    return Death;
-}
-
-
-State_Tag success_ret33(State* s) {
-    s->solv.push();
-    UChar bf[] = { 133, 67, 104, 133, 245, 38, 60, 61, 39, 245, 51, 104, 62, 60, 118, 38, 245, 118, 165, 245, 19, 165, 61, 245, 62, 165, 45, 61, 245, 7, 60, 118, 29, 60, 15, 0, 133, 169 };
-
-    auto enc = s->regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::rax);
-    for (int i = 0; i < 38; i++) {
-        Vns e = s->mem.Iex_Load<Ity_I8>(enc + i);
-        s->solv.add(e == (UChar)bf[i]);
-    }
-    vex_printf("checking\n\n");
-    auto dfdfs = s->solv.check();
-    if (dfdfs == sat) {
-        vex_printf("issat");
-        auto m = s->solv.get_model();
-        std::cout << m << std::endl;
-        exit(0);
-    }
-    else {
-        vex_printf("unsat??????????\n\n%d", dfdfs);
-    }
-    s->solv.pop();
-    return Death;
-}
-
-
-State_Tag whil(State* s) {
-    return (State_Tag)0x233;
-}
-
-State_Tag pp(State* s) {
-    auto al = s->regs.Iex_Get<Ity_I32>(AMD64_IR_OFFSET::eax);
-    std::cout << Z3_ast_to_string(al, al) << std::endl;
-    s->regs.Ist_Put(AMD64_IR_OFFSET::rax, 38ull);
-    s->hook_pass(5);
-    return (State_Tag)Running;
-}
-
-State_Tag Dea(State* s) {
-    return (State_Tag)Death;
-}
+//
+//State_Tag success_ret(Kernel* _s) {
+//    vex_printf("success_ret  ??????????\n\n%d");
+//    return (State_Tag)0x999;
+//
+//    s->solv.push();
+//    auto ecx = s->regs.Iex_Get<Ity_I32>(12);
+//    auto edi = s->regs.Iex_Get<Ity_I32>(36);
+//
+//    for (int i = 0; i < 44; i++) {
+//        auto al = s->mem.Iex_Load<Ity_I8>(ecx + i);
+//        auto bl = s->mem.Iex_Load<Ity_I8>(edi + i);
+//        s->solv.add(al == bl);
+//    }
+//    vex_printf("checking\n\n");
+//    auto dfdfs = s->solv.check();
+//    if (dfdfs == sat) {
+//        vex_printf("sat");
+//        auto m = s->solv.get_model();
+//        std::cout << m << std::endl;
+//    }
+//    else {
+//        vex_printf("unsat??????????\n\n%d", dfdfs);
+//    }
+//    s->solv.pop();
+//    return Death;
+//}
+//
+//
+//State_Tag success_ret2(State* s) {
+//
+//    s->solv.push();
+//    vex_printf("checking\n\n");
+//    auto dfdfs = s->solv.check();
+//    if (dfdfs == sat) {
+//        vex_printf("sat");
+//        auto m = s->solv.get_model();
+//        std::cout << m << std::endl;
+//    }
+//    else {
+//        vex_printf("unsat??????????\n\n%d", dfdfs);
+//    }
+//    s->solv.pop();
+//    exit(1);
+//    return Death;
+//}
+//
+//
+//State_Tag success_ret3(State* s) {
+//    s->solv.push();
+//    UChar bf[] = { 0xEC, 0x29, 0xE3, 0x41, 0xE1, 0xF7, 0xAA, 0x1D, 0x29, 0xED, 0x29, 0x99, 0x39, 0xF3, 0xB7, 0xA9, 0xE7, 0xAC, 0x2B, 0xB7, 0xAB, 0x40, 0x9F, 0xA9, 0x31, 0x35, 0x2C, 0x29, 0xEF, 0xA8, 0x3D, 0x4B, 0xB0, 0xE9, 0xE1, 0x68, 0x7B, 0x41 };
+//
+//    auto enc = s->regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::rdi);
+//    for (int i = 0; i < 38; i++) {
+//        Vns e = s->mem.Iex_Load<Ity_I8>(enc + i);
+//        s->solv.add(e == (UChar)bf[i]);
+//    }
+//    vex_printf("checking\n\n");
+//    auto dfdfs = s->solv.check();
+//    if (dfdfs == sat) {
+//        vex_printf("issat");
+//        auto m = s->solv.get_model();
+//        std::cout << m << std::endl;
+//        exit(0);
+//    }
+//    else {
+//        vex_printf("unsat??????????\n\n%d", dfdfs);
+//    }
+//    s->solv.pop();
+//    return Death;
+//}
+//
+//
+//State_Tag success_ret33(State* s) {
+//    s->solv.push();
+//    UChar bf[] = { 133, 67, 104, 133, 245, 38, 60, 61, 39, 245, 51, 104, 62, 60, 118, 38, 245, 118, 165, 245, 19, 165, 61, 245, 62, 165, 45, 61, 245, 7, 60, 118, 29, 60, 15, 0, 133, 169 };
+//
+//    auto enc = s->regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::rax);
+//    for (int i = 0; i < 38; i++) {
+//        Vns e = s->mem.Iex_Load<Ity_I8>(enc + i);
+//        s->solv.add(e == (UChar)bf[i]);
+//    }
+//    vex_printf("checking\n\n");
+//    auto dfdfs = s->solv.check();
+//    if (dfdfs == sat) {
+//        vex_printf("issat");
+//        auto m = s->solv.get_model();
+//        std::cout << m << std::endl;
+//        exit(0);
+//    }
+//    else {
+//        vex_printf("unsat??????????\n\n%d", dfdfs);
+//    }
+//    s->solv.pop();
+//    return Death;
+//}
+//
+//
+//State_Tag whil(State* s) {
+//    return (State_Tag)0x233;
+//}
+//
+//State_Tag pp(State* s) {
+//    auto al = s->regs.Iex_Get<Ity_I32>(AMD64_IR_OFFSET::eax);
+//    std::cout << Z3_ast_to_string(al, al) << std::endl;
+//    s->regs.Ist_Put(AMD64_IR_OFFSET::rax, 38ull);
+//    s->hook_pass(5);
+//    return (State_Tag)Running;
+//}
+//
+//State_Tag Dea(State* s) {
+//    return (State_Tag)Death;
+//}
 
 
 
@@ -368,16 +369,16 @@ Vns flag_limit(Vns &flag) {
  
 
 int main() {
-    StatePrinter<StateAMD64> state(INIFILENAME, 0, True);
-    TRGL::VexGuestAMD64State reg(state);
+    StatePrinter<Addr64, StateAMD64> state("C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.xml", 0, True);
+    /*TRGL::VexGuestAMD64State reg(state);
     for (int i = 0; i < 38; i++) {
         auto flag = state.mk_int_const(8);
         auto ao3 = flag >= 1 && flag <= 128;
         state.mem.Ist_Store(reg.guest_RDI + i, flag);
         state.solv.add_assert(ao3);
     }
-    state.hook_add(0x400CC0, success_ret3);
-    StateAnalyzer gv(state);
+    state.hook_add(0x400CC0, success_ret3);*/
+    StateAnalyzer<Addr64> gv(state);
     gv.Run();
 }
 

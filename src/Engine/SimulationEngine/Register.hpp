@@ -218,7 +218,7 @@ template<int maxlength>
 class Record {
 public:
     UChar m_flag[(maxlength >> 6) + 1];
-    Record() {
+    Record(){
         memset(m_flag, 0, sizeof(m_flag));
         m_flag[maxlength >> 6] = 0x1;
     };
@@ -228,27 +228,36 @@ public:
         m_flag[maxlength >> 6] = 0x1;
     };
 
-    template<int length>
+    template<int nbytes>
     inline void write(int offset) {
-        if (length == 1) {
-            m_flag[offset >> 6] |= 1 << ((offset >> 3) % 8);
+        if (nbytes == 1) {
+            m_flag[offset >> 6] |= 1 << ((offset >> 3) & 7);
         }
         else {
             *(UShort*)(m_flag + (offset >> 6)) |=
                 (UShort)
                 (
-                (offset + length) < ALIGN(offset, 8) + 8
+                (offset + nbytes) < ALIGN(offset, 8) + 8
                     ?
-                    (maxlength <= 8) ? 0x01u :
-                    (maxlength == 16) ? 0b11u :
+                    (nbytes <= 8) ? 0x01u :
+                    (nbytes == 16) ? 0b11u :
                     0b1111u
                     :
-                    (maxlength <= 8) ? 0b11u :
-                    (maxlength == 16) ? 0b111u :
+                    (nbytes <= 8) ? 0b11u :
+                    (nbytes == 16) ? 0b111u :
                     0b11111u
-                    ) << ((offset >> 3) % 8);
+                    ) << ((offset >> 3) & 7);
         }
     }
+
+    inline UInt get_count() {
+        UInt write_count = 0;
+        for (auto offset : *this) {
+            write_count += 1;
+        }
+        return write_count; 
+    }
+
     //Ğ´Èë±éÀúÆ÷
     class iterator
     {

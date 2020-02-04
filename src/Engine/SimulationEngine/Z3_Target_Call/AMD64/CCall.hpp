@@ -708,7 +708,7 @@ Vns z3_amd64g_calculate_condition(Vns/*AMD64Condcode*/ &cond,
         flag = !  flag;
     }
     if (flag.real()) {
-        return ((UChar)flag) ? Vns(cond, 1ull) : Vns(cond, 0ull);
+        return ((UInt)flag & 1) ? Vns(cond, 1ull) : Vns(cond, 0ull);
     }
     else {
         return Vns(cond, Z3_mk_ite(cond, flag, Vns(cond, 1ull), Vns(cond, 0ull)), 64);
@@ -735,10 +735,10 @@ inline Vns z3_amd64g_calculate_rflags_c(Vns &cc_op,
 
     auto flag = z3_amd64g_calculate_rflags_cf(cc_op, cc_dep1, cc_dep2, cc_ndep);
     if (flag.real()) {
-        return ((UChar)flag) ? Vns(cc_op, 1ull) : Vns(cc_op, 0ull);
+        return ((UInt)flag & 1) ? Vns(cc_op, 1ull) : Vns(cc_op, 0ull);
     }
     else {
-        return Vns(cc_op, Z3_mk_ite(cc_op, flag, Vns(cc_op, 1ull, 64), Vns(cc_op, 0ull, 64)), 64);
+        return Vns(cc_op, Z3_mk_ite(cc_op, flag, Vns(cc_op, 1ull, 64), Vns(cc_op, 0ull)), 64);
     }
 }
 

@@ -75,7 +75,8 @@ extern __m256i  m32_mask_reverse[33];
 
 
 template <int maxlength> class Register;
-class State;
+template <typename ADDR> class State;
+class Kernel;
 
 #ifdef _MSC_VER
 #define NORETURN __declspec(noreturn)
@@ -90,16 +91,6 @@ typedef enum :unsigned int {
     NoDecode,
     Exception
 }State_Tag;
-
-
-
-namespace TRtype {
-typedef State_Tag   (*Hook_CB)         (State *);
-//得到的ast无需Z3_inc_ref
-typedef Z3_ast      (*TableIdx_CB) (State*, ADDR /*base*/, Z3_ast /*idx*/);
-}
-
-
 
 #if defined(_DEBUG)
 #undef dassert
@@ -168,6 +159,35 @@ typedef enum:unsigned char {
     numreal
 }memTAG;
 
+
+typedef enum :UChar {
+    unknowSystem = 0b00,
+    linux,
+    windows
+}GuestSystem;
+
+
+typedef enum :ULong {
+    CF_None = 0,
+    CF_ppStmts = 1ull,
+    CF_traceJmp = 1ull << 1,
+    CF_traceState = 1ull << 2,
+    CF_TraceSymbolic = 1ull << 3,
+    CF_PassSigSEGV = 1ull << 4,
+}TRControlFlags;
+
+
+namespace TRtype {
+    typedef State_Tag(*Hook_CB)         (Kernel*);
+    //得到的ast无需Z3_inc_ref
+    typedef Z3_ast(*TableIdx_CB) (Kernel*, Addr64 /*base*/, Z3_ast /*idx*/);
+};
+
+typedef struct _Hook_ {
+    TRtype::Hook_CB cb;
+    UChar original;
+    TRControlFlags cflag;
+}Hook_struct;
 
 
 inline __m128i _mm_not_si128(__m128i a) {

@@ -1,4 +1,4 @@
-inline Vns State::T_Qop(context &m_ctx, IROp op, Vns const& a, Vns const& b, Vns const& c, Vns const& d){
+Vns Kernel::T_Qop(context &m_ctx, IROp op, Vns const& a, Vns const& b, Vns const& c, Vns const& d){
     if (a.symbolic() || b.symbolic() || c.symbolic() || d.symbolic()) {
         switch (op) {
         case Iop_64x4toV256: {

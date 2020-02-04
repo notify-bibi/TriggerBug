@@ -13,47 +13,20 @@ Revision History:
 
 #include "Z3_Target_Call/Z3_Target_Call.hpp"
 #include "Z3_Target_Call/Guest_Helper.hpp"
-extern "C" {
-#include "libvex_guest_x86.h"
-#include "libvex_guest_amd64.h"
-#include "libvex_guest_arm.h"
-#include "libvex_guest_arm64.h"
-#include "libvex_guest_mips32.h"
-#include "libvex_guest_mips64.h"
-#include "libvex_guest_ppc32.h"
-#include "libvex_guest_ppc64.h"
-#include "libvex_guest_s390x.h"
-}
 
-thread_local State* g_state = nullptr;
+
+thread_local void* g_state = nullptr;
 thread_local bool   ret_is_ast = false;
 thread_local Pap    pap;
-thread_local ADDR   guest_start_of_block = 0;
-thread_local bool   is_dynamic_block = false;
+thread_local Addr64   guest_start_of_block = 0;
+thread_local bool   is_dynamic_block = false;//Need to refresh IRSB memory?
 thread_local UChar  ir_temp_trunk[MAX_IRTEMP * sizeof(Vns)];
+thread_local VexTranslateArgs       vta_chunk;
+thread_local VexGuestExtents        vge_chunk;
 
 LARGE_INTEGER   freq_global = { 0 };
 LARGE_INTEGER   beginPerformanceCount_global = { 0 };
 LARGE_INTEGER   closePerformanceCount_global = { 0 };
-
-
-#if defined(GUEST_IS_64)
-typedef ULong(*Function_6)(ULong, ULong, ULong, ULong, ULong, ULong);
-typedef ULong(*Function_5)(ULong, ULong, ULong, ULong, ULong);
-typedef ULong(*Function_4)(ULong, ULong, ULong, ULong);
-typedef ULong(*Function_3)(ULong, ULong, ULong);
-typedef ULong(*Function_2)(ULong, ULong);
-typedef ULong(*Function_1)(ULong);
-typedef ULong(*Function_0)();
-#else
-typedef ULong(*Function_6)(UInt, UInt, UInt, UInt, UInt, UInt);
-typedef ULong(*Function_5)(UInt, UInt, UInt, UInt, UInt);
-typedef ULong(*Function_4)(UInt, UInt, UInt, UInt);
-typedef ULong(*Function_3)(UInt, UInt, UInt);
-typedef ULong(*Function_2)(UInt, UInt);
-typedef ULong(*Function_1)(UInt);
-typedef ULong(*Function_0)();
-#endif
 
 typedef Vns (*Z3_Function6)(Vns &, Vns &, Vns &, Vns &, Vns &, Vns &);
 typedef Vns (*Z3_Function5)(Vns &, Vns &, Vns &, Vns &, Vns &);
@@ -67,33 +40,12 @@ typedef Vns (*Z3_Function1)(Vns &);
 __m256i m32_fast[33];
 __m256i m32_mask_reverse[33];
 
-tinyxml2::XMLDocument               Vex_Info::doc = tinyxml2::XMLDocument();
-VexRegisterUpdates                  Vex_Info::iropt_register_updates_default = VexRegUpdSpAtMemAccess;
-Int                                 Vex_Info::iropt_level = 2;
-UInt                                Vex_Info::guest_max_insns = 100;
-tinyxml2::XMLError                  Vex_Info::err = tinyxml2::XML_ERROR_COUNT;
-tinyxml2::XMLElement*               Vex_Info::doc_TriggerBug = nullptr;
-tinyxml2::XMLElement*               Vex_Info::doc_VexControl = nullptr;
-tinyxml2::XMLElement*               Vex_Info::doc_debug = nullptr;
-GuestSystem                         Vex_Info::guest_system = unknowSystem;
-VexArch                             Vex_Info::guest = VexArch_INVALID;
-const char*                         Vex_Info::MemoryDumpPath = "你没有这个文件";
-UInt                                Vex_Info::MaxThreadsNum = 16;
-Int                                 Vex_Info::traceflags = 0;
-thread_local VexTranslateArgs       Vex_Info::vta_chunk;
-thread_local VexGuestExtents        Vex_Info::vge_chunk;
-
-
-
-std::hash_map<ADDR, Hook_struct>                                State::CallBackDict;
-std::hash_map<ADDR/*static table base*/, TRtype::TableIdx_CB>   State::TableIdxDict;
-ThreadPool*                                                     State::pool;
+std::hash_map<Addr64, Hook_struct>                                Kernel::CallBackDict;
+std::hash_map<Addr64/*static table base*/, TRtype::TableIdx_CB>   Kernel::TableIdxDict;
+ThreadPool* Kernel::pool;
 
 __attribute__((noreturn))
 static void failure_exit() {
-    QueryPerformanceCounter(&closePerformanceCount_global);
-    double delta_seconds = (double)(closePerformanceCount_global.QuadPart - beginPerformanceCount_global.QuadPart) / freq_global.QuadPart;
-    printf("failure_exit  %s line:%d spend %f \n", __FILE__, __LINE__, delta_seconds);
     throw (z3::exception("failure_exit exception  "));
 }
 
@@ -102,25 +54,17 @@ static void _vex_log_bytes(const HChar* bytes, SizeT nbytes) {
 }
 
 
-static unsigned char* _n_page_mem(void* pap) {
-    return ((State*)(((Pap*)(pap))->state))->mem.get_next_page(((Pap*)(pap))->guest_addr);
+unsigned char* _n_page_mem(void* pap) {
+    if (((Kernel*)((Pap*)(pap))->state)->is_mode_64()) {
+        return ((State<Addr64>*)(((Pap*)(pap))->state))->mem.get_next_page(((Pap*)(pap))->guest_addr);
+    }
+    else {
+        return ((State<Addr32>*)(((Pap*)(pap))->state))->mem.get_next_page(((Pap*)(pap))->guest_addr);
+    };
+    
 }
 
 
-static UInt needs_self_check(void* callback_opaque, VexRegisterUpdates* pxControl, const VexGuestExtents* guest_extents) {
-    //std::cout << "needs_self_check\n" << std::endl;
-    return 0;
-}
-
-static void* dispatch(void) {
-    std::cout << "dispatch\n" << std::endl;
-    return NULL;
-}
-
-Bool chase_into_ok(void* value, Addr addr) {
-    std::cout << value << addr << std::endl;
-    return True;
-}
 
 std::string replace(const char* pszSrc, const char* pszOld, const char* pszNew)
 {
@@ -233,26 +177,25 @@ int eval_all(std::vector<Vns>& result, solver& solv, Z3_ast nia) {
 //    tactic(m_ctx, "symmetry-reduce")/**/
 //);
 //state.setSolver(m_tactic);
-State::State(const char* filename, ADDR gse, Bool _need_record) :
-    Vex_Info(filename),
-    m_ctx(),
+template <typename ADDR> State<ADDR>::State(const char* filename, ADDR gse, Bool _need_record) :
+    Kernel((void*)this),
+    solv(m_ctx),
     mem(*this, m_ctx,need_record),
     regs(m_ctx, need_record), 
-    solv(m_ctx),
     need_record(_need_record),
     status(NewState),
-    VexGuestARCHState(NULL),
     m_delta(0),
     m_z3_bv_const_n(0),
     m_father_state(nullptr),
     m_InvokStack()
 {
+    vex_info_init(filename);
     if (pool) 
         delete pool;
     pool = new ThreadPool(MaxThreadsNum);
 
     branch.reserve(5);
-    initVexEngine();
+
     VexControl vc;
     LibVEX_default_VexControl(&vc);
     vc.iropt_verbosity = 0;
@@ -285,9 +228,8 @@ State::State(const char* filename, ADDR gse, Bool _need_record) :
 };
 
 
-State::State(State *father_state, ADDR gse) :
-    Vex_Info(*father_state),
-    m_ctx(),
+template <typename ADDR> State<ADDR>::State(State<ADDR>*father_state, ADDR gse) :
+    Kernel(*father_state, (void*)this),
     mem(*this, father_state->mem, m_ctx, father_state->need_record),
     guest_start_ep(gse),
     guest_start(guest_start_ep), 
@@ -295,24 +237,29 @@ State::State(State *father_state, ADDR gse) :
     regs(father_state->regs, m_ctx, father_state->need_record),
     need_record(father_state->need_record),
     status(NewState),
-    VexGuestARCHState(NULL),
     m_delta(0),
     m_z3_bv_const_n(father_state->m_z3_bv_const_n),
     m_father_state(father_state),
     m_InvokStack(father_state->m_InvokStack)
 {
+
 };
 
-State::~State() { 
-    if (VexGuestARCHState) delete VexGuestARCHState;
-    if(branch.size())
-        for (auto s : branch){
+
+
+template <typename ADDR> State<ADDR>::~State() {
+    if (branch.size()) {
+        for (auto s : branch) {
             delete s;
         }
+    }
+    if (m_dirty_vex_mode) {
+        dirty_context_del<ADDR>(m_dctx);
+    }
 }
 
 
-State::operator std::string() const{
+template <typename ADDR> State<ADDR>::operator std::string() const{
     std::string str;
     char hex[30];
     std::string strContent;
@@ -365,8 +312,8 @@ State::operator std::string() const{
     return str;
 }
 
-
-bool State::get_hook(Hook_struct& hs, ADDR addr)
+template <typename ADDR>
+bool State<ADDR>::get_hook(Hook_struct& hs, ADDR addr)
 {
     auto _where = CallBackDict.lower_bound((ADDR)guest_start);
     if (_where == CallBackDict.end()) {
@@ -376,141 +323,8 @@ bool State::get_hook(Hook_struct& hs, ADDR addr)
     return true;
 }
 
-
-
-
-
-static void vex_hwcaps_vai(VexArch arch, VexArchInfo* vai) {
-    switch (arch) {
-    case VexArchX86:
-        vai->hwcaps = VEX_HWCAPS_X86_MMXEXT |
-            VEX_HWCAPS_X86_SSE1 |
-            VEX_HWCAPS_X86_SSE2 |
-            VEX_HWCAPS_X86_SSE3 |
-            VEX_HWCAPS_X86_LZCNT;
-        break;
-    case VexArchAMD64:
-        vai->hwcaps =
-            VEX_HWCAPS_AMD64_SSE3 |
-            VEX_HWCAPS_AMD64_SSSE3 |
-            VEX_HWCAPS_AMD64_CX16 |
-            VEX_HWCAPS_AMD64_LZCNT |
-            VEX_HWCAPS_AMD64_AVX |
-            VEX_HWCAPS_AMD64_RDTSCP |
-            VEX_HWCAPS_AMD64_BMI |
-            VEX_HWCAPS_AMD64_AVX2;
-        break;
-    case VexArchARM:
-        vai->hwcaps = VEX_ARM_ARCHLEVEL(8) |
-            VEX_HWCAPS_ARM_NEON |
-            VEX_HWCAPS_ARM_VFP3;
-        break;
-    case VexArchARM64:
-        vai->hwcaps = 0;
-        vai->arm64_dMinLine_lg2_szB = 6;
-        vai->arm64_iMinLine_lg2_szB = 6;
-        break;
-    case VexArchPPC32:
-        vai->hwcaps = VEX_HWCAPS_PPC32_F |
-            VEX_HWCAPS_PPC32_V |
-            VEX_HWCAPS_PPC32_FX |
-            VEX_HWCAPS_PPC32_GX |
-            VEX_HWCAPS_PPC32_VX |
-            VEX_HWCAPS_PPC32_DFP |
-            VEX_HWCAPS_PPC32_ISA2_07;
-        vai->ppc_icache_line_szB = 32;
-        break;
-    case VexArchPPC64:
-        vai->hwcaps = VEX_HWCAPS_PPC64_V |
-            VEX_HWCAPS_PPC64_FX |
-            VEX_HWCAPS_PPC64_GX |
-            VEX_HWCAPS_PPC64_VX |
-            VEX_HWCAPS_PPC64_DFP |
-            VEX_HWCAPS_PPC64_ISA2_07;
-        vai->ppc_icache_line_szB = 64;
-        break;
-    case VexArchS390X:
-        vai->hwcaps = 0;
-        break;
-    case VexArchMIPS32:
-    case VexArchMIPS64:
-        vai->hwcaps = VEX_PRID_COMP_CAVIUM;
-        break;
-    default:
-        std::cout << "Invalid arch in vex_prepare_vai.\n" << std::endl;
-        break;
-    }
-}
-
-static void vex_prepare_vbi(VexArch arch, VexAbiInfo* vbi) {
-    // only setting the guest_stack_redzone_size for now
-    // this attribute is only specified by the X86, AMD64 and PPC64 ABIs
-
-    switch (arch) {
-    case VexArchX86:
-        vbi->guest_stack_redzone_size = 0;
-        break;
-    case VexArchAMD64:
-        vbi->guest_stack_redzone_size = 128;
-        break;
-    case VexArchPPC64:
-        vbi->guest_stack_redzone_size = 288;
-        break;
-    default:
-        break;
-    }
-}
-
-
-
-
-inline void State::initVexEngine() {
-    VexArchInfo vai_guest;
-    VexArchInfo vai_host;
-    VexAbiInfo vbi;
-
-    /*vai_host vai_guest*/
-    LibVEX_default_VexArchInfo(&vai_host);
-    LibVEX_default_VexArchInfo(&vai_guest);
-    vex_hwcaps_vai(HOSTARCH, &vai_host);
-    vex_hwcaps_vai(guest, &vai_guest);
-    vai_host.endness = VexEndnessLE;//VexEndnessBE
-    vai_guest.endness = VexEndnessLE;//VexEndnessBE
-
-    /*vbi*/
-    LibVEX_default_VexAbiInfo(&vbi);
-    vbi.guest_amd64_assume_gs_is_const = True;
-    vbi.guest_amd64_assume_fs_is_const = True;
-    vex_prepare_vbi(guest, &vbi);
-
-    vta_chunk.callback_opaque = NULL;
-    vta_chunk.preamble_function = NULL;
-    vta_chunk.instrument1 = NULL;
-    vta_chunk.instrument2 = NULL;
-    vta_chunk.finaltidy = NULL;
-    vta_chunk.preamble_function = NULL;
-
-    vta_chunk.disp_cp_chain_me_to_slowEP = (void*)dispatch;
-    vta_chunk.disp_cp_chain_me_to_fastEP = (void*)dispatch;
-    vta_chunk.disp_cp_xindir = (void*)dispatch;
-    vta_chunk.disp_cp_xassisted = (void*)dispatch;
-
-    vta_chunk.abiinfo_both   = vbi;
-    vta_chunk.archinfo_guest = vai_guest;
-    vta_chunk.archinfo_host  = vai_host;
-    vta_chunk.arch_guest = guest;
-    vta_chunk.arch_host = HOSTARCH;
-    vta_chunk.guest_extents = &vge_chunk;
-    vta_chunk.chase_into_ok = chase_into_ok;
-    vta_chunk.needs_self_check = needs_self_check;
-    vta_chunk.traceflags = traceflags;
-
-    pap.state = (void*)(this);
-    pap.n_page_mem = _n_page_mem;
-    pap.guest_max_insns = guest_max_insns;
-}
-
-Vns State::mk_int_const(UShort nbit) {
+template <typename ADDR>
+Vns State<ADDR>::mk_int_const(UShort nbit) {
     std::unique_lock<std::mutex> lock(m_state_lock);
     auto res = m_z3_bv_const_n++;
     char buff[20];
@@ -518,14 +332,15 @@ Vns State::mk_int_const(UShort nbit) {
     return Vns(m_ctx.bv_const(buff, nbit), nbit);
 }
 
-Vns State::mk_int_const(UShort n, UShort nbit) {
+template <typename ADDR>
+Vns State<ADDR>::mk_int_const(UShort n, UShort nbit) {
     char buff[20];
     sprintf_s(buff, sizeof(buff), "p_%d", n);
     return  Vns(m_ctx.bv_const(buff, nbit), nbit);
 }
 
-
-UInt State::getStr(std::stringstream& st, ADDR addr)
+template <typename ADDR>
+UInt State<ADDR>::getStr(std::stringstream& st, ADDR addr)
 {
     UInt p = 0;
     while (True) {
@@ -542,9 +357,8 @@ UInt State::getStr(std::stringstream& st, ADDR addr)
     return -1;
 }
 
-
-
-void State::hook_del(ADDR addr, TRtype::Hook_CB func)
+template <typename ADDR>
+void State<ADDR>::hook_del(ADDR addr, TRtype::Hook_CB func)
 {
     if (CallBackDict.find(addr) == CallBackDict.end()) {
     }
@@ -561,21 +375,8 @@ void State::hook_del(ADDR addr, TRtype::Hook_CB func)
     }
 }
 
-Z3_ast State::idx2Value(ADDR base, Z3_ast idx)
-{
-    auto _where = State::TableIdxDict.lower_bound((ADDR)base);
-    if (_where != State::TableIdxDict.end()) {
-        //vex_printf("pycfun: %p \n", _where->second);
-        return _where->second(this, (Addr64)base, (Z3_ast)idx);
-    }
-    else
-    {
-        return (Z3_ast)NULL;
-    }
-}
-
-
-inline IRSB* State::BB2IR() {
+template <typename ADDR>
+inline IRSB* State<ADDR>::BB2IR() {
     mem.set_double_page(guest_start, pap);
     pap.start_swap       = 0;
     vta_chunk.guest_bytes      = (UChar *)(pap.t_page_addr);
@@ -595,19 +396,21 @@ inline IRSB* State::BB2IR() {
 }
 
 
-
-
-void TRsolver::add_assert(Vns const& assert, Bool ToF)
+void TRsolver::add_assert(Vns const& t_assert, Bool ToF)
 {
-    if(assert.is_bool()){
+    if ((Z3_context)t_assert != (Z3_context)(*this)) {
+        add_assert(t_assert.translate(*this), ToF);
+        return;
+    }
+    if(t_assert.is_bool()){
         if (ToF) {
-            Z3_solver_assert(*this, *this, assert);
+            Z3_solver_assert(*this, *this, t_assert);
             if (!is_snapshot()) {
-                m_asserts.push_back(assert);
+                m_asserts.push_back(t_assert);
             }
         }
         else {
-            auto not = !  assert;
+            auto not = !t_assert;
             Z3_solver_assert(*this, *this, not);
             if (!is_snapshot()) {
                 m_asserts.push_back(not);
@@ -615,7 +418,7 @@ void TRsolver::add_assert(Vns const& assert, Bool ToF)
         }
     }
     else {
-        auto ass = assert == Vns(operator Z3_context(), (ULong)ToF, assert.bitn);
+        auto ass = t_assert == Vns(operator Z3_context(), (ULong)ToF, t_assert.bitn);
         Z3_solver_assert(*this, *this, ass);
         if (!is_snapshot()) {
             m_asserts.push_back(ass);
@@ -636,7 +439,7 @@ inline void TRsolver::add_assert_eq(Vns const& eqA, Vns const& eqB)
 inline Vns symbolic_check(Z3_context ctx, ULong ret, UInt bitn) {
     if (ret_is_ast) {
         ret_is_ast = False;
-        vassert(Z3_get_bv_sort_size(ctx, Z3_get_sort(ctx, (Z3_ast)ret)) == bitn);
+        dassert(Z3_get_bv_sort_size(ctx, Z3_get_sort(ctx, (Z3_ast)ret)) == bitn);
         return Vns(ctx, (Z3_ast)ret, bitn, no_inc{});
     }
     else {
@@ -645,48 +448,118 @@ inline Vns symbolic_check(Z3_context ctx, ULong ret, UInt bitn) {
 }
 
 
-Vns State::CCall(IRCallee *cee, IRExpr **exp_args, IRType ty)
+typedef ULong(*Function_32_6)(UInt, UInt, UInt, UInt, UInt, UInt);
+typedef ULong(*Function_32_5)(UInt, UInt, UInt, UInt, UInt);
+typedef ULong(*Function_32_4)(UInt, UInt, UInt, UInt);
+typedef ULong(*Function_32_3)(UInt, UInt, UInt);
+typedef ULong(*Function_32_2)(UInt, UInt);
+typedef ULong(*Function_32_1)(UInt);
+typedef ULong(*Function_32_0)();
+
+typedef ULong(*Function_64_6)(ULong, ULong, ULong, ULong, ULong, ULong);
+typedef ULong(*Function_64_5)(ULong, ULong, ULong, ULong, ULong);
+typedef ULong(*Function_64_4)(ULong, ULong, ULong, ULong);
+typedef ULong(*Function_64_3)(ULong, ULong, ULong);
+typedef ULong(*Function_64_2)(ULong, ULong);
+typedef ULong(*Function_64_1)(ULong);
+typedef ULong(*Function_64_0)();
+
+template<>
+Vns State<Addr32>::CCall(IRCallee *cee, IRExpr **exp_args, IRType ty)
 {
     Int regparms = cee->regparms;
     UInt mcx_mask = cee->mcx_mask;
     UShort bitn = ty2bit(ty);
     Bool z3_mode = False;
-    if (!exp_args[0]) return Vns(m_ctx, ((Function_0)(cee->addr))(), bitn);
+    if (!exp_args[0]) return Vns(m_ctx, ((Function_32_0)(cee->addr))(), bitn);
     Vns arg0 = tIRExpr(exp_args[0]);
     if (arg0.symbolic()) z3_mode = True;
-    if (!exp_args[1]) return (z3_mode) ? ((Z3_Function1)(funcDict(cee->addr)))(arg0) : symbolic_check(m_ctx, ((Function_1)(cee->addr))(arg0), bitn);
+
+    void* cptr = funcDict(cee->addr);
+    if (!m_dirty_vex_mode) {
+        m_dirty_vex_mode = true;
+        m_dctx = dirty_context(this);
+    }
+    if (!cptr) {
+        return dirty_ccall<Addr32>(m_dctx, ty, cee, exp_args);
+    };
+
+    if (!exp_args[1]) return (z3_mode) ? ((Z3_Function1)(cptr))(arg0) : symbolic_check(m_ctx, ((Function_32_1)(cee->addr))(arg0), bitn);
     Vns arg1 = tIRExpr(exp_args[1]);
     if (arg1.symbolic()) z3_mode = True;
-    if (!exp_args[2]) return (z3_mode) ? ((Z3_Function2)(funcDict(cee->addr)))(arg0, arg1) : symbolic_check(m_ctx, ((Function_2)(cee->addr))(arg0, arg1), bitn);
+    if (!exp_args[2]) return (z3_mode) ? ((Z3_Function2)(cptr))(arg0, arg1) : symbolic_check(m_ctx, ((Function_32_2)(cee->addr))(arg0, arg1), bitn);
     Vns arg2 = tIRExpr(exp_args[2]);
     if (arg2.symbolic()) z3_mode = True;
-    if (!exp_args[3]) return (z3_mode) ? ((Z3_Function3)(funcDict(cee->addr)))(arg0, arg1, arg2) : symbolic_check(m_ctx, ((Function_3)(cee->addr))(arg0, arg1, arg2), bitn);
+    if (!exp_args[3]) return (z3_mode) ? ((Z3_Function3)(cptr))(arg0, arg1, arg2) : symbolic_check(m_ctx, ((Function_32_3)(cee->addr))(arg0, arg1, arg2), bitn);
     Vns arg3 = tIRExpr(exp_args[3]);
     if (arg3.symbolic()) z3_mode = True;
-    if (!exp_args[4]) return (z3_mode) ? ((Z3_Function4)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3) : symbolic_check(m_ctx, ((Function_4)(cee->addr))(arg0, arg1, arg2, arg3), bitn);
+    if (!exp_args[4]) return (z3_mode) ? ((Z3_Function4)(cptr))(arg0, arg1, arg2, arg3) : symbolic_check(m_ctx, ((Function_32_4)(cee->addr))(arg0, arg1, arg2, arg3), bitn);
     Vns arg4 = tIRExpr(exp_args[4]);
     if (arg4.symbolic()) z3_mode = True;
-    if (!exp_args[5]) return (z3_mode) ? ((Z3_Function5)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3, arg4) : symbolic_check(m_ctx, ((Function_5)(cee->addr))(arg0, arg1, arg2, arg3, arg4), bitn);
+    if (!exp_args[5]) return (z3_mode) ? ((Z3_Function5)(cptr))(arg0, arg1, arg2, arg3, arg4) : symbolic_check(m_ctx, ((Function_32_5)(cee->addr))(arg0, arg1, arg2, arg3, arg4), bitn);
     Vns arg5 = tIRExpr(exp_args[5]);
     if (arg5.symbolic()) z3_mode = True;
-    if (!exp_args[6]) return (z3_mode) ? ((Z3_Function6)(funcDict(cee->addr)))(arg0, arg1, arg2, arg3, arg4, arg5) : symbolic_check(m_ctx, ((Function_6)(cee->addr))(arg0, arg1, arg2, arg3, arg4, arg5), bitn);
+    if (!exp_args[6]) return (z3_mode) ? ((Z3_Function6)(cptr))(arg0, arg1, arg2, arg3, arg4, arg5) : symbolic_check(m_ctx, ((Function_32_6)(cee->addr))(arg0, arg1, arg2, arg3, arg4, arg5), bitn);
+}
+
+template<>
+Vns State<Addr64>::CCall(IRCallee* cee, IRExpr** exp_args, IRType ty)
+{
+    Int regparms = cee->regparms;
+    UInt mcx_mask = cee->mcx_mask;
+    UShort bitn = ty2bit(ty);
+    Bool z3_mode = False;
+    if (!exp_args[0]) return Vns(m_ctx, ((Function_64_0)(cee->addr))(), bitn);
+    Vns arg0 = tIRExpr(exp_args[0]);
+    if (arg0.symbolic()) z3_mode = True;
+
+    void* cptr = funcDict(cee->addr);
+    if (!m_dirty_vex_mode) {
+        m_dirty_vex_mode = true;
+        m_dctx = dirty_context(this);
+    }
+    if (!cptr) {
+        return dirty_ccall<Addr64>(m_dctx, ty, cee, exp_args);
+    };
+
+    if (!exp_args[1]) return (z3_mode) ? ((Z3_Function1)(cptr))(arg0) : symbolic_check(m_ctx, ((Function_64_1)(cee->addr))(arg0), bitn);
+    Vns arg1 = tIRExpr(exp_args[1]);
+    if (arg1.symbolic()) z3_mode = True;
+    if (!exp_args[2]) return (z3_mode) ? ((Z3_Function2)(cptr))(arg0, arg1) : symbolic_check(m_ctx, ((Function_64_2)(cee->addr))(arg0, arg1), bitn);
+    Vns arg2 = tIRExpr(exp_args[2]);
+    if (arg2.symbolic()) z3_mode = True;
+    if (!exp_args[3]) return (z3_mode) ? ((Z3_Function3)(cptr))(arg0, arg1, arg2) : symbolic_check(m_ctx, ((Function_64_3)(cee->addr))(arg0, arg1, arg2), bitn);
+    Vns arg3 = tIRExpr(exp_args[3]);
+    if (arg3.symbolic()) z3_mode = True;
+    if (!exp_args[4]) return (z3_mode) ? ((Z3_Function4)(cptr))(arg0, arg1, arg2, arg3) : symbolic_check(m_ctx, ((Function_64_4)(cee->addr))(arg0, arg1, arg2, arg3), bitn);
+    Vns arg4 = tIRExpr(exp_args[4]);
+    if (arg4.symbolic()) z3_mode = True;
+    if (!exp_args[5]) return (z3_mode) ? ((Z3_Function5)(cptr))(arg0, arg1, arg2, arg3, arg4) : symbolic_check(m_ctx, ((Function_64_5)(cee->addr))(arg0, arg1, arg2, arg3, arg4), bitn);
+    Vns arg5 = tIRExpr(exp_args[5]);
+    if (arg5.symbolic()) z3_mode = True;
+    if (!exp_args[6]) return (z3_mode) ? ((Z3_Function6)(cptr))(arg0, arg1, arg2, arg3, arg4, arg5) : symbolic_check(m_ctx, ((Function_64_6)(cee->addr))(arg0, arg1, arg2, arg3, arg4, arg5), bitn);
 
 }
 
-inline void State::init_irTemp()
+template <typename ADDR>
+void State<ADDR>::init_irTemp()
 {
     for (int j = 0; j < MAX_IRTEMP; j++) {
-        ir_temp[j].m_kind = REAL;
+        ir_temp[j].Vns::Vns(m_ctx, 0);
+        //ir_temp[j].m_kind = REAL;
     }
 }
-inline void State::clear_irTemp()
+
+template <typename ADDR>
+void State<ADDR>::clear_irTemp()
 {
     for (int j = 0; j < MAX_IRTEMP; j++) {
         ir_temp[j].~Vns();
     }
 }
 
-void State::read_mem_dump(const char  *filename)
+template <typename ADDR>
+void State<ADDR>::read_mem_dump(const char  *filename)
 {
     struct memdump {
         unsigned long long nameoffset;
@@ -753,9 +626,8 @@ void State::read_mem_dump(const char  *filename)
     fclose(infile);
 }
 
-
-
-inline Vns State::ILGop(IRLoadG *lg) {
+template <typename ADDR>
+inline Vns State<ADDR>::ILGop(IRLoadG *lg) {
     switch (lg->cvt) {
     case ILGop_IdentV128:{ return mem.Iex_Load(tIRExpr(lg->addr), Ity_V128);            }
     case ILGop_Ident64:  { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I64 );            }
@@ -769,10 +641,8 @@ inline Vns State::ILGop(IRLoadG *lg) {
     }
 }
 
-
-
-
-inline Vns State::tIRExpr(IRExpr* e)
+template <typename ADDR>
+inline Vns State<ADDR>::tIRExpr(IRExpr* e)
 {
     switch (e->tag) {
     case Iex_Get: { return regs.Iex_Get(e->Iex.Get.offset, e->Iex.Get.ty); }
@@ -797,21 +667,11 @@ inline Vns State::tIRExpr(IRExpr* e)
         return regs.Iex_Get(e->Iex.GetI.descr->base + (((UInt)(e->Iex.GetI.bias + (int)(ix))) % e->Iex.GetI.descr->nElems)*ty2length(e->Iex.GetI.descr->elemTy), e->Iex.GetI.descr->elemTy);
     };
     case Iex_GSPTR: {
-        if (!VexGuestARCHState) {
-            switch (guest) {
-            case VexArchX86: VexGuestARCHState = new TRGL::VexGuestX86State(*this); break;
-            case VexArchAMD64: VexGuestARCHState = new TRGL::VexGuestAMD64State(*this); break;
-            case VexArchARM: VexGuestARCHState = new VexGuestARMState; break;
-            case VexArchARM64: VexGuestARCHState = new VexGuestARM64State; break;
-            case VexArchMIPS32: VexGuestARCHState = new VexGuestMIPS32State; break;
-            case VexArchMIPS64: VexGuestARCHState = new VexGuestMIPS64State; break;
-            case VexArchPPC32: VexGuestARCHState = new VexGuestPPC32State; break;
-            case VexArchPPC64: VexGuestARCHState = new VexGuestPPC64State; break;
-            case VexArchS390X: VexGuestARCHState = new VexGuestS390XState; break;
-            default:VPANIC("not support");
-            }
+        if (!m_dirty_vex_mode) {
+            m_dirty_vex_mode = true;
+            m_dctx = dirty_context(this);
         }
-        return Vns(m_ctx, VexGuestARCHState);
+        return Vns(m_ctx, dirty_get_gsptr<ADDR>(m_dctx));
     };
     case Iex_VECRET:
     case Iex_Binder:
@@ -821,16 +681,18 @@ inline Vns State::tIRExpr(IRExpr* e)
     }
 }
 
-
-
-void State::start(Bool first_bkp_pass) {
+template <typename ADDR>
+void State<ADDR>::start(Bool first_bkp_pass) {
     if (this->status != NewState) {
         vex_printf("this->status != NewState");
         return;
     }
+    init_vta_chunk(vta_chunk, vge_chunk);
+    pap.state = (void*)(this);
+    pap.n_page_mem = _n_page_mem;
+    pap.guest_max_insns = guest_max_insns;
     status = Running;
     traceStart();
-    initVexEngine();
     g_state = this;
     is_dynamic_block = false;
     Hook_struct hs;
@@ -845,7 +707,10 @@ Begin_try:
                         goto bkp_pass;
                     }
                     else {
-                        goto SigTRAP;
+                        if (get_hook(hs, guest_start)) { goto deal_bkp; }
+                        status = Death;
+                        vex_printf("Ijk_SigTRAP: %p", guest_start); 
+                        goto EXIT;
                     }
                 }
 
@@ -995,15 +860,16 @@ For_Begin:
                         break;
                     }
                     case Ist_Dirty: {
-                        IRDirty* dirty = s->Ist.Dirty.details;
-                        auto guard = tIRExpr(dirty->guard);
-                        if (((UChar)guard) & 1) {
-                            auto k = CCall(dirty->cee, dirty->args, Ity_I64);
-                            if (dirty->tmp != -1) {
-                                ir_temp[dirty->tmp] = k;
-                            }
+                        if (!m_dirty_vex_mode) {
+                            m_dirty_vex_mode = true;
+                            m_dctx = dirty_context(this);
                         }
-                        break;
+                        traceIRStmtEnd(s);
+                        dirty_run<ADDR>(m_dctx,
+                            s->Ist.Dirty.details->tmp == IRTemp_INVALID ? nullptr : &(ir_temp[s->Ist.Dirty.details->tmp]),
+                            s->Ist.Dirty.details->tmp == IRTemp_INVALID ? Ity_I64 : typeOfIRTemp(irsb->tyenv, s->Ist.Dirty.details->tmp),
+                            s->Ist.Dirty.details);
+                        break;// fresh changed block
                     }
                     case Ist_LoadG: {
                         IRLoadG* lg = s->Ist.LoadG.details;
@@ -1143,19 +1009,8 @@ EXIT:
 }
 
 
-State* BranchChunk::getState(State& fstate)
-{
-    State* ns = fstate.ForkState(m_oep);
-    if (m_guard.symbolic()) {
-        ns->solv.add_assert(m_guard.translate(ns->m_ctx), m_tof);
-    }
-    if (m_sym_addr.symbolic()) {
-        ns->solv.add_assert_eq(m_sym_addr.translate(ns->m_ctx), Vns(ns->m_ctx, m_oep));
-    }
-    return ns;
-}
-
-void State::branchGo()
+template <typename ADDR>
+void State<ADDR>::branchGo()
 {
     for(auto b : branch){
         State::pool->enqueue([b] {
@@ -1164,8 +1019,21 @@ void State::branchGo()
     }
 }
 
-template<class TC>
-inline void StatePrinter<TC>::spIRExpr(const IRExpr* e)
+template <typename ADDR>
+State<ADDR>* State<ADDR>::mkChildState(BranchChunk const& bc)
+{
+    State* ns = ForkState(bc.m_oep);
+    if (bc.m_guard.symbolic()) {
+        ns->solv.add_assert(bc.m_guard.translate(ns->m_ctx), bc.m_tof);
+    }
+    if (bc.m_sym_addr.symbolic()) {
+        ns->solv.add_assert_eq(bc.m_sym_addr.translate(ns->m_ctx), Vns(ns->m_ctx, bc.m_oep));
+    }
+    return ns;
+}
+
+template<typename ADDR, class TC>
+inline void StatePrinter<ADDR, TC>::spIRExpr(const IRExpr* e)
 
 {
     Int i;
@@ -1272,8 +1140,8 @@ inline void StatePrinter<TC>::spIRExpr(const IRExpr* e)
     }
 }
 
-template<class TC>
-void StatePrinter<TC>::spIRTemp(IRTemp tmp)
+template<typename ADDR, class TC>
+void StatePrinter<ADDR, TC>::spIRTemp(IRTemp tmp)
 
 {
     if (tmp == IRTemp_INVALID)
@@ -1285,8 +1153,8 @@ void StatePrinter<TC>::spIRTemp(IRTemp tmp)
     }
 }
 
-template<class TC>
-void StatePrinter<TC>::spIRPutI(const IRPutI* puti)
+template<typename ADDR, class TC>
+void StatePrinter<ADDR, TC>::spIRPutI(const IRPutI* puti)
 {
     vex_printf("PUTI");
     ppIRRegArray(puti->descr);
@@ -1296,8 +1164,8 @@ void StatePrinter<TC>::spIRPutI(const IRPutI* puti)
     ppIRExpr(puti->data);
 }
 
-template<class TC>
-void StatePrinter<TC>::spIRStmt(const IRStmt* s)
+template<typename ADDR, class TC>
+void StatePrinter<ADDR, TC>::spIRStmt(const IRStmt* s)
 
 {
     if (!s) {
@@ -1386,118 +1254,17 @@ void StatePrinter<TC>::spIRStmt(const IRStmt* s)
     }
 }
 
-//old
+static inline bool is_avoid(std::vector<State_Tag>& avoid, State_Tag tag) { return (find(avoid.begin(), avoid.end(), tag) != avoid.end()); }
 
-//inline UInt State::treeCompress(State &target_state, ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid,
-//    ChangeView& change_view,
-//    std::hash_map<ULong, Vns>& change_map, 
-//    std::hash_map<UShort, Vns>& regs_change_map)
-//{
-//    TRcontext& ctx = target_state;
-//    ChangeView _change_view = { this, &change_view };
-//    if (branch.empty()) {
-//        for (auto av : avoid) {
-//            if (av == status) {
-//                return 2;
-//            }
-//        }
-//        if (guest_start == Target_Addr && status == Target_Tag) {
-//            ChangeView* _cv = &_change_view;
-//            do {
-//                auto state = _cv->elders;
-//                if (state->regs.record) {
-//                    for (auto offset : *state->regs.record) {
-//                        auto _Where = regs_change_map.lower_bound(offset);
-//                        if (_Where == regs_change_map.end()) {
-//                            regs_change_map[offset] = state->regs.Iex_Get(offset, Ity_I64, ctx);
-//                        }
-//                    }
-//                }
-//                for (auto mcm : state->mem.mem_change_map) {
-//                    vassert(mcm.second->record != NULL);
-//                    for (auto offset : *(mcm.second->record)) {
-//                        auto _Where = change_map.lower_bound(offset);
-//                        if (_Where == change_map.end()) {
-//                            auto Address = mcm.first + offset;
-//                            auto p = state->mem.getMemPage(Address);
-//                            vassert(p);
-//                            vassert(p->user == state->mem.user);
-//                            change_map[Address] = p->unit->Iex_Get(offset, Ity_I64, ctx);
-//                        }
-//                    }
-//                }
-//                _cv = _cv->front;
-//            } while (_cv->front && _cv->front->elders);
-//            return False;
-//        }
-//        return True;
-//    }
-//    Bool has_branch = False;
-//    std::vector<State*> ::iterator it = branch.begin();
-//    while (it != branch.end()) {
-//        std::hash_map<ULong, Vns> _change_map;
-//        _change_map.reserve(20);
-//        std::hash_map<UShort, Vns> _regs_change_map;
-//        _change_map.reserve(20);
-//        Bool _has_branch = (*it)->treeCompress(target_state, Target_Addr, Target_Tag, avoid, _change_view, _change_map, _regs_change_map);
-//        if (!has_branch) {
-//            has_branch = _has_branch;
-//        }
-//        for (auto map_it : _change_map) {
-//            auto _Where = change_map.lower_bound(map_it.first);
-//            if (_Where == change_map.end()) {
-//                change_map[map_it.first] = map_it.second;
-//            }
-//            else {
-//                if (map_it.second.real() && (_Where->second.real()) && ((ULong)(map_it.second) == (ULong)(_Where->second))) {
-//
-//                }
-//                else {
-//                    _Where->second = Vns(ctx, Z3_mk_ite(ctx, (*it)->getassert(ctx), map_it.second, _Where->second), 64);
-//                }
-//            }
-//        }
-//        for (auto map_it : _regs_change_map) {
-//            auto _Where = regs_change_map.lower_bound(map_it.first);
-//            if (_Where == regs_change_map.end()) {
-//                regs_change_map[map_it.first] = map_it.second;
-//            }
-//            else {
-//                if (((map_it.second.real()) && (_Where->second.real())) && ((ULong)(map_it.second) == (ULong)(_Where->second))) {
-//
-//                }
-//                else {
-//                    _Where->second = Vns(ctx, Z3_mk_ite(ctx, (*it)->getassert(ctx), map_it.second, _Where->second), 64);
-//                }
-//            }
-//        }
-//        if (_has_branch == False) {
-//            State* ds = *it;
-//            delete ds;
-//            it = branch.erase(it);
-//            continue;
-//        }
-//        else if (_has_branch == 2) {
-//            State* ds = *it;
-//            delete ds;
-//            it = branch.erase(it);
-//            continue;
-//        }
-//        it++;
-//    }
-//    if (branch.empty() && status == Fork) {
-//        return 2;
-//    }
-//    else {
-//        return has_branch;
-//    }
-//}
-
-static bool is_avoid(std::vector<State_Tag>& avoid, State_Tag tag) { return (find(avoid.begin(), avoid.end(), tag) != avoid.end()); }
-
-void State::get_write_map(
+template <typename ADDR>
+void State<ADDR>::get_write_map(
     std::hash_map<ADDR, Vns>& change_map_ret, TRcontext& ctx
 ) {
+    UInt size = regs.record->get_count();
+    for (auto mcm : mem.mem_change_map) {
+        size += mcm.second->record->get_count();
+    }
+    change_map_ret.reserve(size);
     if (regs.record) {
         for (auto offset : *regs.record) {
             change_map_ret[offset] = regs.Iex_Get<Ity_I64>(offset, ctx);
@@ -1514,13 +1281,14 @@ void State::get_write_map(
             change_map_ret[Address] = p->unit->Iex_Get<Ity_I64>(offset, ctx);
         }
     }
+    vassert(size == change_map_ret.size());
 }
 
-
-static UInt divide_into_groups(std::vector<State*>& group, State* s) {
+template <typename ADDR>
+static UInt divide_into_groups(std::vector<State<ADDR>*>& group, State<ADDR>* s) {
     UInt group_count = 0;
     for (auto gs : group) {
-        if (gs->StateCompression(*s)) {
+        if (gs->_StateCompression(*s)) {
             return group_count;
         }
         group_count++;
@@ -1529,14 +1297,14 @@ static UInt divide_into_groups(std::vector<State*>& group, State* s) {
     return group_count;
 }
 
-
-StateCompressNode* State::mkCompressTree(
+template <typename ADDR>
+StateCompressNode<ADDR>* State<ADDR>::mkCompressTree(
     std::vector<State*>& group, ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid
 ) {
     if (branch.empty()) {
         if (status == Target_Tag) {
             if (guest_start == Target_Addr) {
-                StateCompressNode* delnode = new StateCompressNode;
+                StateCompressNode<ADDR>* delnode = new StateCompressNode<ADDR>;
                 delnode->state = this;
                 delnode->State_flag = 1;
                 delnode->compress_group = divide_into_groups(group, this);
@@ -1548,7 +1316,7 @@ StateCompressNode* State::mkCompressTree(
         }
         else {
             if (is_avoid(avoid, status)) {
-                StateCompressNode* delnode = new StateCompressNode;
+                StateCompressNode<ADDR>* delnode = new StateCompressNode<ADDR>;
                 delnode->state = this;
                 delnode->State_flag = 0;
                 return delnode;
@@ -1560,14 +1328,14 @@ StateCompressNode* State::mkCompressTree(
     }
     else {
         vassert(status == Fork);
-        StateCompressNode* delnode = new StateCompressNode;
+        StateCompressNode<ADDR>* delnode = new StateCompressNode<ADDR>;
         delnode->state = this;
         delnode->State_flag = 2;
-        std::vector<State*> avoid_assert;
-        std::vector<State*>::iterator b_end = branch.end();
+        std::vector<State<ADDR>*> avoid_assert;
+        std::vector<State<ADDR>*>::iterator b_end = branch.end();
         for (auto it = branch.begin(); it != b_end;) {
-            State* child_state = *it;
-            StateCompressNode* ret_del_node = child_state->mkCompressTree(group, Target_Addr, Target_Tag, avoid);
+            State<ADDR>* child_state = *it;
+            StateCompressNode<ADDR>* ret_del_node = child_state->mkCompressTree(group, Target_Addr, Target_Tag, avoid);
             if (ret_del_node) {
                 delnode->child_nodes.emplace_back(ret_del_node);
             }
@@ -1587,21 +1355,18 @@ StateCompressNode* State::mkCompressTree(
     }
 }
 
-
-bool State::treeCompress(
+template <typename ADDR>
+bool State<ADDR>::treeCompress(
     Vns& avoid_asserts_ret, bool &has_branch,
     std::hash_map<ADDR, Vns>& change_map_ret,
-    StateCompressNode* SCNode, UInt group, TRcontext& ctx, UInt deep
+    StateCompressNode<ADDR>* SCNode, UInt group, TRcontext& ctx, UInt deep
     ) {
     vassert(SCNode->state == this);
-    /*if (guest_start_ep == 0x4009d6) {
-        printf("??");
-    }*/
     if (SCNode->State_flag == 1) {
         vassert(branch.empty());
         has_branch = false;
         if (SCNode->compress_group == group) {
-            SCNode->state->get_write_map(change_map_ret, ctx);
+           SCNode->state->get_write_map(change_map_ret, ctx);
             auto op = SCNode->state->regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::cc_op);
             return true;
         }
@@ -1618,13 +1383,12 @@ bool State::treeCompress(
     else {
         Vns avoid_asserts(ctx,1,1);
         bool first = true;
-        std::hash_map<ADDR, bool> change_address;
-
-        std::vector <std::hash_map<ADDR, Vns>> change_map_temp;
-        std::vector <State*> change_map_states;
+        std::hash_map<ADDR, bool> change_address;                   //change_address.reserve(200);
+        std::vector <std::hash_map<ADDR, Vns>> change_map_temp;     change_map_temp.reserve(10);
+        std::vector <State*> change_map_states;                     change_map_states.reserve(10);
         change_map_temp.emplace_back(std::hash_map<ADDR, Vns>());
         for (auto child_node_it = SCNode->child_nodes.begin(); child_node_it != SCNode->child_nodes.end();) {
-            StateCompressNode* child_node = *child_node_it;
+            StateCompressNode<ADDR>* child_node = *child_node_it;
             bool child_has_branch = false;
             Vns avoid_asserts_temp(ctx, 1, 1);
             if (child_node->state->treeCompress(avoid_asserts_temp, child_has_branch, change_map_temp.back(), child_node, group, ctx, deep + 1)) {
@@ -1660,7 +1424,7 @@ bool State::treeCompress(
         }
         if(deep){
             if (avoid_asserts.symbolic()) {
-                if ((Z3_context)ctx == (Z3_context)m_ctx) {
+                if (ctx == m_ctx) {
                     avoid_asserts_ret = solv.getassert() && avoid_asserts;
                 }
                 else {
@@ -1679,7 +1443,13 @@ bool State::treeCompress(
         }
         else {
             std::vector<std::hash_map<ADDR, Vns>>::iterator cmt_it = change_map_temp.begin();
-           
+
+            std::hash_map<ADDR, Vns> change_map_fork_state;
+            if (deep) {
+                SCNode->state->get_write_map(change_map_fork_state, ctx);
+            }
+            change_map_ret.reserve(change_address.size() + change_map_fork_state.size());
+
             for (UInt idx = 0; idx < change_map_temp.size() - 1; idx++) {
                 State* cld_state = change_map_states[idx];
                 for (auto ca : change_address) {
@@ -1687,7 +1457,7 @@ bool State::treeCompress(
                         auto _Where = (*cmt_it).lower_bound(ca.first);
                         if (_Where == (*cmt_it).end()) {
                             if (ca.first < REGISTER_LEN) {
-                                if ((Z3_context)ctx == (Z3_context)cld_state->m_ctx) {
+                                if (ctx == cld_state->m_ctx) {
                                     (*cmt_it)[ca.first] = cld_state->regs.Iex_Get<Ity_I64>(ca.first);
                                 }
                                 else {
@@ -1696,7 +1466,7 @@ bool State::treeCompress(
                             }
                             else {
                                 auto p = cld_state->mem.getMemPage(ca.first);
-                                if ((Z3_context)ctx == (Z3_context)p->unit->m_ctx) {
+                                if (ctx == p->unit->m_ctx) {
                                     (*cmt_it)[ca.first] = p->unit->Iex_Get<Ity_I64>(ca.first & 0xfff);
                                 }else{
                                     (*cmt_it)[ca.first] = p->unit->Iex_Get<Ity_I64>(ca.first & 0xfff, ctx);
@@ -1706,9 +1476,6 @@ bool State::treeCompress(
                     };
                     {
                         auto _Where = change_map_ret.lower_bound(ca.first);
-                        /*if (ca.first == 0x90) {
-                            printf("??");
-                        }*/
                         if (_Where == change_map_ret.end()) {
                             change_map_ret[ca.first] = (*cmt_it)[ca.first];
                         }
@@ -1723,9 +1490,8 @@ bool State::treeCompress(
                 }
                 cmt_it++;
             }
+            vassert(change_map_ret.size() == change_address.size());
             if(deep){
-                std::hash_map<ADDR, Vns> change_map_fork_state;
-                SCNode->state->get_write_map(change_map_fork_state, ctx);
                 for (auto ca : change_map_fork_state) {
                     auto _Where = change_map_ret.lower_bound(ca.first);
                     if (_Where == change_map_ret.end()) {
@@ -1738,7 +1504,8 @@ bool State::treeCompress(
     }
 }
 
-static bool delete_avoid_state(StateCompressNode* node) {
+template <typename ADDR>
+static bool delete_avoid_state(StateCompressNode<ADDR>* node) {
     if (node->child_nodes.empty()) {
         return true;
     }
@@ -1768,8 +1535,8 @@ static bool delete_avoid_state(StateCompressNode* node) {
 }
 
 
-
-void State::set_changes(std::hash_map<ADDR, Vns>& change_map) {
+template <typename ADDR>
+void State<ADDR>::set_changes(std::hash_map<ADDR, Vns>& change_map) {
     for (auto map_it : change_map) {
         if (map_it.first < REGISTER_LEN) {
 #ifdef  _DEBUG
@@ -1787,8 +1554,8 @@ void State::set_changes(std::hash_map<ADDR, Vns>& change_map) {
     };
 }
 
-
-void State::set_changes(std::hash_map<ADDR, Vns>& change_map, z3::solver::translate) {
+template <typename ADDR>
+void State<ADDR>::set_changes(std::hash_map<ADDR, Vns>& change_map, z3::solver::translate) {
     for (auto map_it : change_map) {
         if (map_it.first < REGISTER_LEN) {
 #ifdef  _DEBUG
@@ -1806,184 +1573,80 @@ void State::set_changes(std::hash_map<ADDR, Vns>& change_map, z3::solver::transl
     };
 }
 
-
-void State::compress(ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid)
+template <typename ADDR>
+void State<ADDR>::compress(ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid)
 {
     std::vector<State*> group;
-    StateCompressNode* stateCompressNode = mkCompressTree(group, Target_Addr, Target_Tag, avoid);
-   /* if (delete_avoid_state(stateCompressNode, 0)) {
-        delete stateCompressNode;
-        branchChunks.clear();
-        status = Death;
-    }
-    else {*/
-    branchChunks.clear();
-    if (group.size() == 1){
-        Vns avoid_asserts(m_ctx, 1, 1);
-        std::hash_map<ADDR, Vns> change_map;
-        bool child_has_branch = false;
-        if (treeCompress(avoid_asserts, child_has_branch, change_map, stateCompressNode, 0, m_ctx, 0)) {
-            if (child_has_branch) {
-                State* compress_state = new State(this, Target_Addr);
-                compress_state->set_changes(change_map, z3::solver::translate{});
-                compress_state->StateCompressMkSymbol(*group[0]);
-                compress_state->solv.add_assert(avoid_asserts, false);
-                if (!compress_state->StateCompression(*group[0])) {
-                    VPANIC("State::StateCompressMkSymbol that you implement error");
-                }
-                branch.emplace_back(compress_state);
-            }
-            else {
-                mem.clearRecord();
-                regs.clearRecord();
-                solv.add_assert(avoid_asserts, false);
-                StateCompressMkSymbol(*group[0]);
-                delete_avoid_state(stateCompressNode);
-                set_changes(change_map);
-                guest_start = Target_Addr;
-                status = NewState;
-            }
-        }
-        else {
-            VPANIC("no compress");
-        }
-
-    }else {
-        for (UInt gp = 0; gp < group.size(); gp++) {
-            State* compress_state = new State(this, Target_Addr);
-            std::hash_map<ADDR, Vns> change_map;
-            Vns avoid_asserts(compress_state->m_ctx, 1, 1);
+    group.reserve(8);
+    StateCompressNode<ADDR>* stateCompressNode = mkCompressTree(group, Target_Addr, Target_Tag, avoid);
+    if (stateCompressNode) {
+        if (group.size() == 0) {
+            return;
+        }else if (group.size() == 1) {
+            Vns avoid_asserts(m_ctx, 1, 1);
+            std::hash_map<ADDR, Vns> change_map; 
             bool child_has_branch = false;
-            if (treeCompress(avoid_asserts, child_has_branch, change_map, stateCompressNode, gp, compress_state->m_ctx, 0)) {
-                compress_state->set_changes(change_map);
-                compress_state->StateCompressMkSymbol(*group[gp]);
-                compress_state->solv.add_assert(avoid_asserts, false);
-                if (!compress_state->StateCompression(*group[gp])) {
-                    VPANIC("State::StateCompressMkSymbol that you implement error");
+            if (treeCompress(avoid_asserts, child_has_branch, change_map, stateCompressNode, 0, m_ctx, 0)) {
+                if (child_has_branch) {
+                    State* compress_state = ForkState(Target_Addr);
+                    compress_state->set_changes(change_map, z3::solver::translate{});
+                    compress_state->_StateCompressMkSymbol(*group[0]);
+                    compress_state->solv.add_assert(avoid_asserts, false);
+                    if (!compress_state->_StateCompression(*group[0])) {
+                        VPANIC("State::StateCompressMkSymbol that you implement error");
+                    }
+                    branch.emplace_back(compress_state);
+                    if (delete_avoid_state(stateCompressNode)) {
+                        delete stateCompressNode;
+                    }
                 }
-                branch.emplace_back(compress_state);
+                else {
+                    branchChunks.clear();
+                    mem.clearRecord();
+                    regs.clearRecord();
+                    solv.add_assert(avoid_asserts, false);
+                    _StateCompressMkSymbol(*group[0]);
+                    if (delete_avoid_state(stateCompressNode)) {
+                        delete stateCompressNode;
+                    }
+                    vassert(branch.empty());
+                    set_changes(change_map);
+                    guest_start = Target_Addr;
+                    status = NewState;
+                }
             }
             else {
                 VPANIC("no compress");
             }
+
         }
-        delete_avoid_state(stateCompressNode);
-    }
-    delete stateCompressNode;
-   /* }*/
-}
-
-
-
-#include "Unop.hpp"
-#include "Binop.hpp"
-#include "Triop.hpp"
-#include "Qop.hpp"
-
-void Vex_Info::init_vex_info(const char* filename) {
-    iropt_register_updates_default = VexRegUpdSpAtMemAccess;
-    iropt_level = 2;
-    guest_max_insns = 100;
-    err = loadFile(filename);
-    doc_TriggerBug = doc.FirstChildElement("TriggerBug");
-    doc_VexControl = doc_TriggerBug->FirstChildElement("VexControl");
-    doc_debug = doc_TriggerBug->FirstChildElement("DEBUG");
-
-    guest_system = unknowSystem;
-    guest = VexArch_INVALID;
-    MemoryDumpPath = "你没有这个文件";
-
-    _gGuestArch();
-    _gVexArchSystem();
-    _gMemoryDumpPath();
-    _gMaxThreadsNum();
-
-    if (doc_VexControl) {
-        _giropt_register_updates_default();
-        _giropt_level();
-        _gguest_max_insns();
-    }
-}
-
-UInt Vex_Info::_gtraceflags() {
-    tinyxml2::XMLElement* _traceflags = doc_VexControl->FirstChildElement("traceflags");
-    if (_traceflags) return _traceflags->IntText();
-    return 0;
-}
-
-tinyxml2::XMLError Vex_Info::loadFile(const char* filename) {
-    tinyxml2::XMLError error = doc.LoadFile(filename);
-    if (error != tinyxml2::XML_SUCCESS) {
-        printf("error: %d Error filename %s    at:%s line %d", error, filename, __FILE__, __LINE__);
-        exit(1);
-    }
-    return error;
-}
-
-void Vex_Info::_gGuestArch() {
-    auto _VexArch = doc_TriggerBug->FirstChildElement("VexArch");
-    if (_VexArch) sscanf(_VexArch->GetText(), "%x", &guest);
-}
-
-void Vex_Info::_gMemoryDumpPath() {
-    tinyxml2::XMLElement* _MemoryDumpPath = doc_TriggerBug->FirstChildElement("MemoryDumpPath");
-    if (_MemoryDumpPath) MemoryDumpPath = _MemoryDumpPath->GetText();
-}
-
-void Vex_Info::_gVexArchSystem() {
-    tinyxml2::XMLElement* _VexArchSystem = doc_TriggerBug->FirstChildElement("VexArchSystem");
-    if (_VexArchSystem) {
-
-        if (!strcmp(_VexArchSystem->GetText(), "linux")) {
-            guest_system = linux;
-        }
-        if (!strcmp(_VexArchSystem->GetText(), "windows")) {
-            guest_system = windows;
-        }
-        if (!strcmp(_VexArchSystem->GetText(), "win")) {
-            guest_system = windows;
+        else {
+            for (UInt gp = 0; gp < group.size(); gp++) {
+                State* compress_state = ForkState(Target_Addr);
+                std::hash_map<ADDR, Vns> change_map;
+                Vns avoid_asserts(compress_state->m_ctx, 1, 1);
+                bool child_has_branch = false;
+                if (treeCompress(avoid_asserts, child_has_branch, change_map, stateCompressNode, gp, compress_state->m_ctx, 0)) {
+                    compress_state->set_changes(change_map);
+                    compress_state->_StateCompressMkSymbol(*group[gp]);
+                    compress_state->solv.add_assert(avoid_asserts, false);
+                    if (!compress_state->_StateCompression(*group[gp])) {
+                        VPANIC("State::StateCompressMkSymbol that you implement error");
+                    }
+                    branch.emplace_back(compress_state);
+                }
+                else {
+                    VPANIC("no compress");
+                }
+            }
+            if (delete_avoid_state(stateCompressNode)) {
+                delete stateCompressNode;
+            }
         }
     }
 }
 
-void Vex_Info::_giropt_register_updates_default() {
-    tinyxml2::XMLElement* _iropt_register_updates_default = doc_VexControl->FirstChildElement("iropt_register_updates_default");
-    if (_iropt_register_updates_default) sscanf(_iropt_register_updates_default->GetText(), "%x", &iropt_register_updates_default);
-}
 
-void Vex_Info::_giropt_level() {
-    tinyxml2::XMLElement* _iropt_level = doc_VexControl->FirstChildElement("iropt_level");
-    if (_iropt_level) iropt_level = _iropt_level->IntText();
-}
-
-void Vex_Info::_gguest_max_insns() {
-    auto _guest_max_insns = doc_TriggerBug->FirstChildElement("guest_max_insns");
-    if (_guest_max_insns) guest_max_insns = _guest_max_insns->IntText();
-}
-
-void Vex_Info::_gMaxThreadsNum() {
-    UInt    mMaxThreadsNum = 16;
-    tinyxml2::XMLElement* _MaxThreadsNum = doc_TriggerBug->FirstChildElement("MaxThreadsNum");
-    if (_MaxThreadsNum) _MaxThreadsNum->QueryIntText((Int*)(&mMaxThreadsNum));
-    MaxThreadsNum = mMaxThreadsNum;
-}
-
-UInt Vex_Info::gRegsIpOffset() {
-    switch (guest) {
-    case VexArchX86:return X86_IR_OFFSET::eip;
-    case VexArchAMD64:return AMD64_IR_OFFSET::rip;
-    case VexArchARM:
-    case VexArchARM64:
-    case VexArchPPC32:
-    case VexArchPPC64:
-    case VexArchS390X:
-    case VexArchMIPS32:
-    case VexArchMIPS64:
-    default:
-        std::cout << "Invalid arch in vex_prepare_vai.\n" << std::endl;
-        vassert(0);
-    }
-}
 
 inline Vns  TRsolver::getassert(z3::context& ctx) {
     return getassert().translate(ctx);
@@ -1993,6 +1656,9 @@ inline Vns  TRsolver::getassert() {
     Z3_context m_ctx = this->ctx();
     if (m_asserts.empty()) {
         VPANIC("impossible assertions num is zero");
+    }
+    if (m_asserts.size() == 1) {
+        return m_asserts[0];
     }
     auto it = m_asserts.begin();
     auto end = m_asserts.end();
@@ -2006,3 +1672,22 @@ inline Vns  TRsolver::getassert() {
     free(args);
     return re;
 }
+
+template State<Addr32>::State(State<Addr32>* father_state, Addr32 gse);
+template State<Addr64>::State(State<Addr64>* father_state, Addr64 gse);
+template State<Addr32>::State(const char* filename, Addr32 gse, Bool _need_record);
+template State<Addr64>::State(const char* filename, Addr64 gse, Bool _need_record);
+template Vns State<Addr32>::mk_int_const(UShort nbit);
+template Vns State<Addr64>::mk_int_const(UShort nbit);
+template UInt State<Addr32>::getStr(std::stringstream& st, Addr32 addr);
+template UInt State<Addr64>::getStr(std::stringstream& st, Addr64 addr);
+template State<Addr32>::~State();
+template State<Addr64>::~State();
+template void State<Addr32>::compress(Addr32 Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid);
+template void State<Addr64>::compress(Addr64 Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid);
+template State<Addr32>* State<Addr32>::mkChildState(BranchChunk const& bc);
+template State<Addr64>* State<Addr64>::mkChildState(BranchChunk const& bc);
+template State<Addr32>::operator std::string() const;
+template State<Addr64>::operator std::string() const;
+template void State<Addr32>::start(Bool first_bkp_pass);
+template void State<Addr64>::start(Bool first_bkp_pass);

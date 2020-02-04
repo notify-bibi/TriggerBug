@@ -199,7 +199,7 @@ case Iop_##OPNAME##64:{																			\
 
 
 
-inline Vns State::T_Binop(context &m_ctx, IROp op, Vns const& a, Vns const& b) {
+Vns Kernel::T_Binop(context &m_ctx, IROp op, Vns const& a, Vns const& b) {
     if (a.symbolic() || b.symbolic()) 
     {
         switch (op) {

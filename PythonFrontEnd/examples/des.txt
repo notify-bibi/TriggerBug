@@ -1,0 +1,164 @@
+
+expr item(context& ctx,expr const&exp , Int base) {
+    expr r = ctx.bv_val(0x63, 8);
+
+    for (int i = 1; i < 256;i++) {
+        expr d = exp == (base + i * 4);
+        r = ite(d, ctx.bv_val(SE[i], 8), r);
+    }
+    return r;
+}
+//expr item(context& ctx, expr const& exp, Int base) {
+//    return (exp - base).extract(7,0);
+//}
+
+
+Z3_ast dword_4062E0(State* state, Addr64, Z3_ast maddr) {
+    State& _state = *state;
+
+    expr s = item(_state.m_ctx,expr(_state.m_ctx, maddr), 0x4062E0);
+    expr r = concat(concat(concat((s), (s)), _xtime3(s)), _xtime(s));
+    Z3_inc_ref(_state.m_ctx, r);
+    return r;
+}
+Z3_ast dword_4059E0(State* state, Addr64, Z3_ast maddr) {
+    State& _state = *state;
+    expr s = item(_state.m_ctx, expr(_state.m_ctx, maddr), 0x4059E0);
+    expr r = concat(concat(concat(_xtime(s), (s)), (s)), _xtime3(s));
+    Z3_inc_ref(_state.m_ctx, r);
+    return r;
+}
+   
+Z3_ast dword_4055E0(State* state, Addr64, Z3_ast maddr) {
+    State& _state = *state;
+    expr s = item(_state.m_ctx, expr(_state.m_ctx, maddr), 0x4055E0);
+    expr r = concat(concat(concat(_xtime3(s), _xtime(s)), (s)), (s));
+    Z3_inc_ref(_state.m_ctx, r);
+    return r;
+}
+Z3_ast dword_4051E0(State* state, Addr64, Z3_ast maddr) {
+    State& _state = *state;
+    expr s = item(_state.m_ctx, expr(_state.m_ctx, maddr), 0x4051E0);
+    expr r = concat(concat(concat((s), _xtime3(s)), _xtime(s)), (s));
+    Z3_inc_ref(_state.m_ctx, r);
+    return r;
+}
+
+
+
+#define read_S(base, idx, n)  (expr(c,state.mem.Iex_Load<Ity_I32>((Z3_ast)((base) + (shl(zext((idx).extract(8 * n + 7, 8 * n),24),2))))))
+#define ZeroExt(size, v) zext(v,size)
+#define Extract(hi,lo, v) ((v).extract(hi,lo))
+#define Concat(a ,b) concat(a, b)
+
+
+void df(State &state, context& c ) {
+    expr v4 = c.bv_const("v4 ", 32);
+    expr v5 = c.bv_const("v5 ", 32);
+    expr v25 = c.bv_const("v25 ", 32);
+    expr v8 = c.bv_const("v8 ", 32);
+    expr v27 = c.bv_const("v27 ", 32); 
+
+    /* expr v5 = c.bv_val(0x7D747075, 32);
+    expr v4 = c.bv_val(0x617B766B, 32);
+    expr v8 = c.bv_val(0x7D747075, 32);
+    expr v25 = c.bv_val(0x617b766b, 32);
+    expr v27 = c.bv_val(0x7d747075, 32);*/
+
+
+    int v24[][4] = { {1244931012, 625100470, 1446716890, 961364136},{2872959446, 2390730592, 3628368570, 3775513106},{2920818734, 543657806, 4163046900, 422236134},{1133684474, 1677011380, 2614502464, 2197613478},{3816522473, 2156833629, 458788637, 2577687739},{2318952455, 179749722, 300829767, 2286561532},{470603971, 381295513, 122968030, 2401140514},{4007545776, 4167323689, 4281337847, 1882093781} };
+
+
+
+
+
+    UInt v22 = 8;
+    UInt v24_idx = 0;
+    while (True) {
+        expr v9 = v24[v24_idx][1] ^ read_S(0x4062E0, v4, 0) ^ read_S(0x4059E0, v5, 3) ^ read_S(0x4055E0, v25, 2) ^ read_S(0x4051E0, v8, 1);
+        expr v10 = v24[v24_idx][3] ^ read_S(0x4062E0, v25, 0) ^ read_S(0x4055E0, v4, 2) ^ read_S(0x4051E0, v5, 1) ^ read_S(0x4059E0, v27, 3);
+        expr v11 = ZeroExt(24, Extract(15, 8, v25));
+        v25 = v24[v24_idx][2] ^ read_S(0x4062E0, v5, 0) ^ read_S(0x4051E0, v4, 1) ^ read_S(0x4059E0, v25, 3) ^ read_S(0x4055E0, v27, 2);
+        expr v12 = read_S(0x4062E0, v27, 0) ^ read_S(0x4059E0, v4, 3) ^ read_S(0x4055E0, v5, 2) ^ read_S(0x4051E0, v11, 0);
+
+
+        v8 = v24[v24_idx][0] ^ v12;
+        v24_idx += 1;
+        v5 = v9;
+        v22 -= 1;
+        v4 = v8;
+        //v8 = Concat(Concat(Extract(31, 16, v8), Extract(15, 8, v10)), Extract(7, 0, v8));
+        v8 = v10;
+        v27 = v10;
+
+
+        /*std::cout << (v5).simplify() << std::endl;
+        std::cout << (v4).simplify() << std::endl;
+        std::cout << (v8).simplify() << std::endl;
+        std::cout << (v25).simplify() << std::endl;
+        std::cout << (v27).simplify() << std::endl;*/
+
+
+        params p(c);
+        p.set("mul2concat", false);
+        p.set("arith_lhs", false);
+        p.set("som", false); // sum-of-monomials normal form
+        tactic t =
+            with(tactic(c, "simplify"), p) &
+            tactic(c, "solve-eqs") &
+            tactic(c, "bit-blast") &
+            tactic(c, "split-clause") &
+            tactic(c, "aig") &
+            tactic(c, "smt") & 
+            tactic(c, "qe") &
+            tactic(c, "pb2bv") &
+            tactic(c, "sat");
+        
+        solver s = t.mk_solver();
+        s.push();
+        if (v22 == 7) {
+            s.add(v5 == (int)0x8D73BB22);
+            s.add(v4 == (int)0x87319265);
+            s.add(v8 == (int)0x917CBD3C);
+            s.add(v25== (int)0x9b3e947b);
+            s.add(v27== (int)0x917cbd3c);
+        }
+
+        if (v22 == 6) {
+            state.add_assert_eq(Vns(v5), Vns(c, 0xCE9E6BD5u));
+            state.add_assert_eq(Vns(v4), Vns(c, 0xC6A21B8Fu));
+            state.add_assert_eq(Vns(v8), Vns(c, 0x611928E5u));
+            state.add_assert_eq(Vns(v25), Vns(c, 0x1C32B6E4u));
+            state.add_assert_eq(Vns(v27), Vns(c, 0x611928E5u));
+        }
+
+        vex_printf("checking %d\n\n", v22);
+        auto dfdfs = s.check();
+        if (dfdfs == sat) {
+            vex_printf("sat");
+            auto m = s.get_model();
+            std::cout << m << std::endl;
+        }
+
+        else {
+            vex_printf("unsat??????????\n\n%d", dfdfs);
+            exit(0);
+        }
+        s.pop();
+
+        if (v22 == 0)
+            break;
+    }
+}
+
+    p.set("mul2concat", true);
+        //p.set("arith_lhs", false);
+        //p.set("som", false); // sum-of-monomials normal form
+        tactic t =
+            with(tactic(c, "simplify"), p) &
+            tactic(c, "sat") &
+            tactic(c, "solve-eqs") &
+            tactic(c, "bit-blast") &
+            tactic(c, "smt");
+        
+        solver s = t.mk_solver();

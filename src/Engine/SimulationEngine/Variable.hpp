@@ -343,8 +343,8 @@ public:
                 }
             }
             //ÈÆ¹ıconst
-            *(Z3_ast*)(void *)(&(this->m_ast)) = r_ast;
-            *(V_Kind*)(void *)(&(this->m_kind)) = REAL_BCKAST;
+            const_cast<Z3_ast>(this->m_ast) = r_ast;
+            const_cast<V_Kind>(this->m_kind) = REAL_BCKAST;
         };
         return m_ast;
     }
@@ -683,17 +683,17 @@ public:
         }
     }
 
-    inline Vns translate(Z3_context target_ctx)
+    inline Vns translate(Z3_context target_ctx) const
     {
         if (real())
-            return Vns(target_ctx, (__m256i)*this, bitn);
+            return Vns(target_ctx, (__m256i)(*this), bitn);
         Z3_ast t = *this;
         return Vns(target_ctx, Z3_translate(m_ctx, t, target_ctx), bitn);
     }
 
-    inline Vns mkFalse() { return Vns(m_ctx, Z3_mk_false(m_ctx), 1); }
+    inline Vns mkFalse() const { return Vns(m_ctx, Z3_mk_false(m_ctx), 1); }
 
-    inline Vns mkTrue() { return Vns(m_ctx, Z3_mk_true(m_ctx), 1); }
+    inline Vns mkTrue() const { return Vns(m_ctx, Z3_mk_true(m_ctx), 1); }
 
     inline Bool is_bool() const
     {

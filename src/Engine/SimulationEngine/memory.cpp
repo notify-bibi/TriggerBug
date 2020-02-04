@@ -22,7 +22,8 @@ std::mutex      global_user_mutex;
 using namespace z3;
 
 //a=b+c+d+e...+z -> b c d e
-void addressingMode::_offset2opAdd(std::vector<Vns> &ret, expr const& _e)
+template<typename ADDR>
+void addressingMode<ADDR>::_offset2opAdd(std::vector<Vns> &ret, expr const& _e)
 {
     expr e = _e;
     context& c = e.ctx();
@@ -55,7 +56,8 @@ void addressingMode::_offset2opAdd(std::vector<Vns> &ret, expr const& _e)
     }
 }
 
-bool addressingMode::_check_add_no_overflow(expr const& e1, expr const& e2) {
+template<typename ADDR>
+bool addressingMode<ADDR>::_check_add_no_overflow(expr const& e1, expr const& e2) {
     UInt bs = e1.get_sort().bv_size();
     bool bit_jw = false;
   /*  std::cout << e1 << std::endl;
@@ -80,7 +82,8 @@ bool addressingMode::_check_add_no_overflow(expr const& e1, expr const& e2) {
 }
 
 // ast(symbolic address) = numreal(base) + symbolic(offset) 
-expr addressingMode::_ast2base(expr& base,
+template<typename ADDR>
+expr addressingMode<ADDR>::_ast2base(expr& base,
     expr const& e, 
     UInt deep, UInt max_deep
 ) {
@@ -299,7 +302,8 @@ goFaild:
 }
 
 
-addressingMode::sbit_struct addressingMode::_check_is_extract(expr const& _e, UInt _idx) {
+template<typename ADDR>
+addressingMode<ADDR>::sbit_struct addressingMode<ADDR>::_check_is_extract(expr const& _e, UInt _idx) {
     context& c = _e.ctx();
     UInt idx = _idx;
     expr e = _e;
@@ -520,7 +524,8 @@ static inline int dec_used_ref(PAGE *pt) {
     }
 }
 
-MEM::MEM(State& so, TRcontext& ctx, Bool _need_record) :
+template<typename ADDR>
+MEM<ADDR>::MEM(State<ADDR>& so, TRcontext& ctx, Bool _need_record) :
     m_state(so),
     m_ctx(ctx),
     need_record(_need_record)
@@ -531,7 +536,8 @@ MEM::MEM(State& so, TRcontext& ctx, Bool _need_record) :
     this->user = newDifUser();
 }
 
-MEM::MEM(State& so, MEM& father_mem, TRcontext& ctx, Bool _need_record) :
+template<typename ADDR>
+MEM<ADDR>::MEM(State<ADDR>& so, MEM& father_mem, TRcontext& ctx, Bool _need_record) :
     m_state(so),
     m_ctx(ctx),
     need_record(_need_record)
@@ -544,7 +550,8 @@ MEM::MEM(State& so, MEM& father_mem, TRcontext& ctx, Bool _need_record) :
     this->copy(father_mem);
 }
 
-ULong MEM::map(ULong address, ULong length) {
+template<typename ADDR>
+ULong MEM<ADDR>::map(ULong address, ULong length) {
     ULong max = (address + length - 1) & (~0xfff);
     UShort PML4T_max = (max >> 39 & 0x1ff);
     UShort PDPT_max = (max >> 30 & 0x1ff);
@@ -628,6 +635,7 @@ ULong MEM::map(ULong address, ULong length) {
             //goto _returnaddr; 
         }
         address += 0x1000;
+        if (address == 0) return;
     }
     return 0;
 _returnaddr:
@@ -636,7 +644,8 @@ _returnaddr:
 
 
 
-void MEM::copy(MEM& mem) {
+template<typename ADDR>
+void MEM<ADDR>::copy(MEM& mem) {
     PML4T* CR3_point = *(mem.CR3);
     PML4T* lCR3 = *CR3;
     LCODEDEF4(LSTRUCT2, pdpt_point, CR3_point, lCR3, LTAB2, i1);
@@ -712,7 +721,8 @@ void MEM::copy(MEM& mem) {
     lCR3->size = CR3_point->size;
 }
 
-ULong MEM::unmap(ULong address, ULong length) {
+template<typename ADDR>
+ULong MEM<ADDR>::unmap(ULong address, ULong length) {
     ULong max = (address + length - 1) & (~0xfff);
     address &= (~0xfff);
 #ifdef OPSTR
@@ -789,17 +799,55 @@ ULong MEM::unmap(ULong address, ULong length) {
 #endif
     return 0;
 }
-void MEM::clearRecord()
+
+template<typename ADDR>
+void MEM<ADDR>::clearRecord()
 {
     for (auto p : mem_change_map) {
         p.second->clearRecord();
     }
     mem_change_map.clear();
 }
+
+template<typename ADDR>
+ULong MEM<ADDR>::find_block_forward(ULong start, ADDR size) {
+    start &= ~0xfffull;
+    ADDR get_mem = 0;
+    for (; get_mem < size; start += 0x1000) {
+        PAGE* p = getMemPage(start);
+        if (p) {
+            get_mem = 0;
+        }
+        else {
+            get_mem += 0x1000;
+        }
+    }
+    return start -= 0x1000;
+
+
+}
+
+template<typename ADDR>
+ULong MEM<ADDR>::find_block_reverse(ULong start, ADDR size)
+{
+    start &= ~0xfffull;
+    ADDR get_mem = 0;
+    for (; get_mem < size; start -= 0x1000) {
+        PAGE* p = getMemPage(start);
+        if (p) {
+            get_mem = 0;
+        }
+        else {
+            get_mem += 0x1000;
+        }
+    }
+    return start += 0x1000;
+}
 ;
 
 
-MEM::~MEM() {
+template<typename ADDR>
+MEM<ADDR>::~MEM() {
     PML4T* CR3_point = *CR3;
     //  遍历双向链表
     LCODEDEF5(LSTRUCT2, pdpt_point, free_pdpt_point, CR3_point, i1,
@@ -834,51 +882,54 @@ MEM::~MEM() {
 }
 
 
-    Vns MEM::Iex_Load(ADDR address, IRType ty)
-    {
-        switch (ty) {
-        case 8:
-        case Ity_I8: return Iex_Load<Ity_I8>(address);
-        case 16:
-        case Ity_I16: return Iex_Load<Ity_I16>(address);
-        case 32:
-        case Ity_F32:
-        case Ity_I32:return Iex_Load<Ity_I32>(address);
-        case 64:
-        case Ity_F64:
-        case Ity_I64:return Iex_Load<Ity_I64>(address);
-        case 128:
-        case Ity_I128:
-        case Ity_V128:return Iex_Load<Ity_V128>(address);
-        case 256:
-        case Ity_V256:return Iex_Load<Ity_V256>(address);
-        default:VPANIC("2333333");
-        }
+template<typename ADDR>
+Vns MEM<ADDR>::Iex_Load(ADDR address, IRType ty)
+{
+    switch (ty) {
+    case 8:
+    case Ity_I8: return Iex_Load<Ity_I8>(address);
+    case 16:
+    case Ity_I16: return Iex_Load<Ity_I16>(address);
+    case 32:
+    case Ity_F32:
+    case Ity_I32:return Iex_Load<Ity_I32>(address);
+    case 64:
+    case Ity_F64:
+    case Ity_I64:return Iex_Load<Ity_I64>(address);
+    case 128:
+    case Ity_I128:
+    case Ity_V128:return Iex_Load<Ity_V128>(address);
+    case 256:
+    case Ity_V256:return Iex_Load<Ity_V256>(address);
+    default:VPANIC("2333333");
     }
+}
 
-    Vns MEM::Iex_Load(Z3_ast address, IRType ty) {
-        switch (ty) {
-        case 8:
-        case Ity_I8: return Iex_Load<Ity_I8>(address);
-        case 16:
-        case Ity_I16:return Iex_Load<Ity_I16>(address);
-        case 32:
-        case Ity_F32:
-        case Ity_I32:return Iex_Load<Ity_I32>(address);
-        case 64:
-        case Ity_F64:
-        case Ity_I64:return Iex_Load<Ity_I64>(address);
-        case 128:
-        case Ity_I128:
-        case Ity_V128:return Iex_Load<Ity_V128>(address);
-        case 256:
-        case Ity_V256:return Iex_Load<Ity_V256>(address);
-        default:
-            VPANIC("2333333");
-        }
+template<typename ADDR>
+Vns MEM<ADDR>::Iex_Load(Z3_ast address, IRType ty) {
+    switch (ty) {
+    case 8:
+    case Ity_I8: return Iex_Load<Ity_I8>(address);
+    case 16:
+    case Ity_I16:return Iex_Load<Ity_I16>(address);
+    case 32:
+    case Ity_F32:
+    case Ity_I32:return Iex_Load<Ity_I32>(address);
+    case 64:
+    case Ity_F64:
+    case Ity_I64:return Iex_Load<Ity_I64>(address);
+    case 128:
+    case Ity_I128:
+    case Ity_V128:return Iex_Load<Ity_V128>(address);
+    case 256:
+    case Ity_V256:return Iex_Load<Ity_V256>(address);
+    default:
+        VPANIC("2333333");
     }
+}
 
-void MEM::CheckSelf(PAGE*& P, ADDR address)
+template<typename ADDR>
+void MEM<ADDR>::CheckSelf(PAGE*& P, ADDR address)
 {
 #ifndef CLOSECNW
     if (user == P->user) {
@@ -934,7 +985,8 @@ void MEM::CheckSelf(PAGE*& P, ADDR address)
 #endif
 }
 
-void MEM::init_page(PAGE*& P, ADDR address)
+template<typename ADDR>
+void MEM<ADDR>::init_page(PAGE*& P, ADDR address)
 {
     if (user == P->user) return;
     bool xchgbv = false;
@@ -969,7 +1021,8 @@ static bool sse_cmp(__m256i& pad, void* data, unsigned long size) {
 }
 
 //very fast this api have no record
-UInt MEM::write_bytes(ULong address, ULong length, UChar* data) {
+template<typename ADDR>
+UInt MEM<ADDR>::write_bytes(ULong address, ULong length, UChar* data) {
     UInt write_count = 0;
     if (length < 32) {
         {
@@ -1091,3 +1144,39 @@ UInt MEM::write_bytes(ULong address, ULong length, UChar* data) {
 
     return write_count;
 }
+
+
+template void MEM<Addr32>::CheckSelf(PAGE*& P, Addr32 address);
+template void MEM<Addr64>::CheckSelf(PAGE*& P, Addr64 address);
+template ULong MEM<Addr32>::map(ULong address, ULong length);
+template ULong MEM<Addr64>::map(ULong address, ULong length);
+template ULong MEM<Addr32>::unmap(ULong address, ULong length);
+template ULong MEM<Addr64>::unmap(ULong address, ULong length);
+template void addressingMode<Addr32>::_offset2opAdd(std::vector<Vns>& ret, expr const& _e);
+template void addressingMode<Addr64>::_offset2opAdd(std::vector<Vns>& ret, expr const& _e);
+template bool addressingMode<Addr32>::_check_add_no_overflow(expr const& e1, expr const& e2);
+template bool addressingMode<Addr64>::_check_add_no_overflow(expr const& e1, expr const& e2);
+template expr addressingMode<Addr32>::_ast2base(expr& base, expr const& e, UInt deep, UInt max_deep);
+template expr addressingMode<Addr64>::_ast2base(expr& base, expr const& e, UInt deep, UInt max_deep);
+template addressingMode<Addr32>::sbit_struct addressingMode<Addr32>::_check_is_extract(expr const& _e, UInt _idx);
+template addressingMode<Addr64>::sbit_struct addressingMode<Addr64>::_check_is_extract(expr const& _e, UInt _idx);
+template MEM<Addr32>::MEM(State<Addr32>& so, TRcontext& ctx, Bool _need_record);
+template MEM<Addr64>::MEM(State<Addr64>& so, TRcontext& ctx, Bool _need_record);
+template MEM<Addr32>::MEM(State<Addr32>& so, MEM& father_mem, TRcontext& ctx, Bool _need_record);
+template MEM<Addr64>::MEM(State<Addr64>& so, MEM& father_mem, TRcontext& ctx, Bool _need_record);
+template MEM<Addr32>::~MEM();
+template MEM<Addr64>::~MEM();
+template Vns MEM<Addr32>::Iex_Load(Addr32 address, IRType ty);
+template Vns MEM<Addr64>::Iex_Load(Addr64 address, IRType ty);
+template Vns MEM<Addr32>::Iex_Load(Z3_ast address, IRType ty);
+template Vns MEM<Addr64>::Iex_Load(Z3_ast address, IRType ty);
+template void MEM<Addr32>::init_page(PAGE*& P, Addr32 address);
+template void MEM<Addr64>::init_page(PAGE*& P, Addr64 address);
+template UInt MEM<Addr32>::write_bytes(ULong address, ULong length, UChar* data);
+template UInt MEM<Addr64>::write_bytes(ULong address, ULong length, UChar* data);
+template void MEM<Addr32>::clearRecord();
+template void MEM<Addr64>::clearRecord();
+template ULong MEM<Addr32>::find_block_forward(ULong start, Addr32 size);
+template ULong MEM<Addr64>::find_block_forward(ULong start, Addr64 size);
+template ULong MEM<Addr32>::find_block_reverse(ULong start, Addr32 size);
+template ULong MEM<Addr64>::find_block_reverse(ULong start, Addr64 size);

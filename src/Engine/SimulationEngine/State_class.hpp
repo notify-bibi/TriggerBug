@@ -9,8 +9,8 @@ Author:
 Revision History:
 --*/
 
-#ifndef State_class_defs
-#define State_class_defs
+#ifndef STATE_CLASS_DEFS
+#define STATE_CLASS_DEFS
 
 
 #include "../engine.hpp"
@@ -19,6 +19,8 @@ Revision History:
 #include "memory.hpp"
 #include "tinyxml2/tinyxml2.h"
 #include "../Thread_Pool/ThreadPool.hpp"
+#include "Kernel.hpp"
+#include "IRDirty.hpp"
 
 #define ir_temp ((Vns*)ir_temp_trunk)
 extern void* funcDict(void*);
@@ -30,106 +32,51 @@ extern __m256i  m32_fast[33];
 extern __m256i  m32_mask_reverse[33];
 
 
-extern thread_local State* g_state ;
+extern thread_local void* g_state;
 extern thread_local bool   ret_is_ast ;
 extern thread_local Pap    pap ;
-extern thread_local ADDR   guest_start_of_block ;
+extern thread_local Addr64   guest_start_of_block ;
 extern thread_local bool   is_dynamic_block ;
 extern thread_local UChar  ir_temp_trunk[MAX_IRTEMP * sizeof(Vns)];
 
+unsigned char* _n_page_mem(void* pap);
 
-class State;
 class GraphView;
 
 
-typedef enum :UChar {
-    unknowSystem = 0b00,
-    linux,
-    windows
-}GuestSystem;
-
-
-typedef enum :ULong {
-    CF_None = 0,
-    CF_ppStmts = 1ull,
-    CF_traceJmp = 1ull << 1,
-    CF_traceState = 1ull << 2,
-    CF_TraceSymbolic = 1ull << 3,
-    CF_PassSigSEGV = 1ull << 4,
-}TRControlFlags;
-
-
-typedef struct _Hook {
-    TRtype::Hook_CB cb;
-    UChar original;
-    TRControlFlags cflag;
-}Hook_struct;
-
-
-
-
-class Vex_Info {
-    friend GraphView;
-private:
-    static tinyxml2::XMLDocument doc;
-    static tinyxml2::XMLError err;
-    static tinyxml2::XMLElement* doc_TriggerBug;
+class ForkException {
+    std::string m_msg;
+    Addr64 m_gaddr;
 public:
-    static Int iropt_level;
-    static UInt guest_max_insns;
-    static VexRegisterUpdates iropt_register_updates_default;
-    static VexArch	guest;
-    static GuestSystem guest_system;
-    static const char* MemoryDumpPath;
-    static tinyxml2::XMLElement* doc_VexControl;
-    static tinyxml2::XMLElement* doc_debug;
-    static UInt MaxThreadsNum;
-    static Int traceflags;
-    UInt gRegsIpOffset();
-protected:
-    thread_local static VexGuestExtents     vge_chunk;
-    thread_local static VexTranslateArgs    vta_chunk;
-
-protected:
-    Vex_Info(const char* filename) { init_vex_info(filename); }
-    Vex_Info(Vex_Info& f) {}
-
-private:
-
-    static UInt _gtraceflags();
-    static tinyxml2::XMLError loadFile(const char* filename);
-    static void _gGuestArch();
-    static void _gMemoryDumpPath();
-    static void _gVexArchSystem();
-    static void _giropt_register_updates_default();
-    static void _giropt_level();
-    static void _gguest_max_insns();
-    static void _gMaxThreadsNum();
-    void init_vex_info(const char* filename);
-
+    ForkException(char const* msg, Addr64 gaddr = 0) :m_msg(msg), m_gaddr(gaddr){ }
+    //ForkException(char const* msg) :m_msg(msg), m_gaddr(0) { }
+    std::string msg() const {
+        return m_msg;
+    }
+    friend std::ostream& operator<<(std::ostream& out, ForkException const& e);
 };
+inline std::ostream& operator<<(std::ostream& out, ForkException const& e) { out << e.msg(); return out; }
 
 
 class BranchChunk {
 public:
-    ADDR m_oep;
+    Addr64 m_oep;
     Vns  m_sym_addr;
     Vns  m_guard;
     bool m_tof;
 
-    BranchChunk(ADDR oep, Vns const& sym_addr, Vns const& guard, bool tof) :
+    BranchChunk(Addr64 oep, Vns const& sym_addr, Vns const& guard, bool tof) :
         m_oep(oep),
         m_sym_addr(sym_addr),
         m_guard(guard),
         m_tof(tof)
-    {
-    }
-    State* getState(State& fstate);
+    {}
     ~BranchChunk(){}
 };
 
 
 class TRsolver :public z3::solver{
+    template<typename ADDR>
     friend class State;
     friend class BranchChunk;
     friend class StateX86;
@@ -177,12 +124,13 @@ private:
 };
 
 //Functional programming
+template<typename ADDR>
 class InvocationStack {
     std::queue<ADDR> guest_call_stack;
     std::queue<ADDR> guest_stack;
 public:
     inline InvocationStack(){}
-    inline InvocationStack(InvocationStack const& fsk) {
+    inline InvocationStack(InvocationStack<ADDR> const& fsk) {
         guest_call_stack = fsk.guest_call_stack;
         guest_stack = fsk.guest_stack;
     }
@@ -194,45 +142,47 @@ public:
         guest_call_stack.pop();
         guest_stack.pop();
     }
-    friend bool operator==(InvocationStack const& a, InvocationStack const& b);
-    void operator=(InvocationStack const& b) {
+    template<typename ADDR> friend bool operator==(InvocationStack<ADDR> const& a, InvocationStack<ADDR> const& b);
+    void operator=(InvocationStack<ADDR> const& b) {
         guest_call_stack = b.guest_call_stack;
         guest_stack = b.guest_stack;
     }
 };
 
-static inline bool operator==(InvocationStack const& a, InvocationStack const& b) { 
+template<typename ADDR>
+static inline bool operator==(InvocationStack<ADDR> const& a, InvocationStack<ADDR> const& b) {
     return (a.guest_call_stack == b.guest_call_stack) && (a.guest_stack == b.guest_stack);
 }
 
+template<typename ADDR>
 class StateCompressNode {
 public:
-    State* state;
+    State<ADDR>* state;
     UInt compress_group;
     UInt State_flag;//0:delete 1:compress 2:Fork State
-    std::vector<StateCompressNode*> child_nodes;
-    std::vector<State*> avoid_assert_state;
+    std::vector<StateCompressNode<ADDR>*> child_nodes;
+    std::vector<State<ADDR>*> avoid_assert_state;
     StateCompressNode(){}
 };
 
+template<typename ADDR>
 class StateAnalyzer;
-class State:public Vex_Info {
-    friend MEM;
-    friend GraphView;
-    friend StateAnalyzer;
-    friend InvocationStack;
+
+template<typename ADDR>
+class State :public Kernel {
+    template<typename ADDR> friend class MEM;
+    friend class GraphView;
+    template<typename ADDR> friend class StateAnalyzer;
+    template<typename ADDR> friend class InvocationStack;
 
 protected:
-    //模拟软件断点 software backpoint callback
-    static std::hash_map<ADDR, Hook_struct> CallBackDict;
-    static std::hash_map<ADDR/*static table base*/, TRtype::TableIdx_CB> TableIdxDict;
     //当前state的入口点
     ADDR        guest_start_ep;
     //客户机state的eip（计数器eip）
     ADDR        guest_start;
-	void*       VexGuestARCHState;
-
 private:
+    bool        m_dirty_vex_mode = false;
+    DirtyCtx    m_dctx = nullptr;
     VexArchInfo *vai_guest,  *vai_host;
 
     Bool        need_record;
@@ -241,83 +191,46 @@ private:
     ADDR        m_delta;
 
 public:
-    static ThreadPool*      pool;
-    State*                  m_father_state;
+    Kernel* m_father_state;
     State_Tag               status;
-    TRcontext               m_ctx;
+    InvocationStack<ADDR>   m_InvokStack;
     TRsolver                solv;
-    InvocationStack         m_InvokStack;
-public:
     //客户机寄存器
-	Register<REGISTER_LEN>  regs;
+    Register<REGISTER_LEN>  regs;
     //客户机内存 （多线程设置相同user，不同state设置不同user）
-	MEM                     mem;
+	MEM<ADDR>               mem;
     std::vector<State*>     branch;
     std::vector<BranchChunk> branchChunks;
-
 
     State(const char* filename, ADDR gse, Bool _need_record) ;
 	State(State *father_state, ADDR gse) ;
     void setSolver(z3::tactic const& tactic) { 
+        vassert(m_father_state == nullptr);
         solv.reset();
         (solver)solv = tactic.mk_solver(); 
     };
     void read_mem_dump(const char*);
 
 	~State() ;
-    static void init_irTemp();
-    static void clear_irTemp();
-    void initVexEngine();
+    void init_irTemp();
+    void clear_irTemp();
 	inline IRSB* BB2IR();
     void start(Bool first_bkp_pass);
     void branchGo();
+    State* mkChildState(BranchChunk const&);
     //ip = ip + offset
     inline void hook_pass(ADDR offset) { m_delta = offset; };
-
 
 	void compress(ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag> &avoid);//最大化缩合状态 
 	inline Vns tIRExpr(IRExpr*); 
     Vns CCall(IRCallee *cee, IRExpr **exp_args, IRType ty);
-    static Vns T_Unop(context & m_ctx, IROp, Vns const&);
-    static Vns T_Binop(context & m_ctx, IROp, Vns const&, Vns const&);
-    static Vns T_Triop(context & m_ctx, IROp, Vns const&, Vns const&, Vns const&);
-    static Vns T_Qop(context & m_ctx, IROp, Vns const&, Vns const&, Vns const&, Vns const&);
 	inline Vns ILGop(IRLoadG *lg);
 
     Vns mk_int_const(UShort nbit);
     Vns mk_int_const(UShort n, UShort nbit);
     UInt getStr(std::stringstream& st, ADDR addr);
-    /*read static_table from symbolic address  定义 index 和 该常量数组 之间的关系 不然只能逐一爆破 如DES的4个静态表
-    表映射 callback
-    
-        模拟程序有静态的数组
-            UInt staticMagic[256]（bss）;
-
-        隐含关系为：
-            For i in 0-255
-                staticMagic[i] = unknownFx()
-
-        假如有如下加密方式：
-            const UInt staticMagic[256]={xx,xx,xx,...,xx};
-
-            UChar passwd[4] = input(4);
-            UInt enc = staticMagic[passwd[0]]^staticMagic[passwd[1]]^staticMagic[passwd[2]]^staticMagic[passwd[3]]
-            IF enc == encStatic:
-                print("ok")
-            ELSE:
-                print("faild")
-        当求解这种表达式时在原理上是解不开的，需要您显式进行定义staticMagic的index与staticMagic[index]的转换关系（否则需要爆破255^4）
-        所以请使用idx2Value_Decl_add添加回调函数，当模拟执行时访问staticMagic，回调函数被调用
-    */
-    static inline void idx2Value_Decl_add(Addr64 addr, TRtype::TableIdx_CB func) { TableIdxDict[addr] = func; };
-    static inline void idx2Value_Decl_del(Addr64 addr, TRtype::TableIdx_CB func) { TableIdxDict.erase(TableIdxDict.find(addr)); };
-    Z3_ast idx2Value(ADDR base, Z3_ast idx);
-
-    inline operator context& () { return m_ctx; }
-    inline operator TRcontext& () { return m_ctx; }
-    inline operator Z3_context() const { return m_ctx; }
-    inline operator MEM& () { return mem; }
-    inline operator Register<REGISTER_LEN>&() { return regs; }
+    inline operator MEM<ADDR>& () { return mem; }
+    inline operator Register<REGISTER_LEN>& () { return regs; }
     inline ADDR get_cpu_ip() { return guest_start; }
     inline ADDR get_state_ep() { return guest_start_ep; }
     inline ADDR get_start_of_block() { return guest_start_of_block; }
@@ -365,8 +278,8 @@ public:
     virtual State_Tag   Ijk_call(IRJumpKind){ VPANIC("need to implement the method"); status = Death; };
     virtual void        cpu_exception()     { VPANIC("need to implement the method"); status = Death; }
     virtual State*      ForkState(ADDR ges) { VPANIC("need to implement the method"); return nullptr; }
-    virtual bool        StateCompression(State const& next) { return m_InvokStack == next.m_InvokStack; }
-    virtual void        StateCompressMkSymbol(State const& newState) { m_InvokStack = newState.m_InvokStack; }
+    virtual bool        StateCompression(State const& next) { return true; }
+    virtual void        StateCompressMkSymbol(State const& newState) {  };
     //State::delta maybe changed by callback
     virtual inline State_Tag call_back_hook(Hook_struct const &hs) { return (hs.cb) ? (hs.cb)(this) : Running; }
     
@@ -376,15 +289,28 @@ private:
         solv.check_if_forget_pop();
         return ret;
     }
+
+    inline bool _StateCompression(State<ADDR> const& next) {
+        bool ret = m_InvokStack == next.m_InvokStack;// 压缩条件
+        return ret && StateCompression(next);//支持扩展条件
+    }
+
+    template<typename ADDR> friend static UInt divide_into_groups(std::vector<State<ADDR>*>& group, State<ADDR>* s);
+    
+    inline void _StateCompressMkSymbol(State<ADDR> const& newState) {
+        m_InvokStack = newState.m_InvokStack;// 使其满足压缩条件
+        StateCompressMkSymbol(newState);//支持
+    }
+
     bool treeCompress(Vns& avoid_asserts_ret, bool &has_branch,
         std::hash_map<ADDR, Vns>& change_map_ret,
-        StateCompressNode* SCNode, UInt group, TRcontext& ctx, UInt deep);
+        StateCompressNode<ADDR>* SCNode, UInt group, TRcontext& ctx, UInt deep);
 
     void get_write_map(
         std::hash_map<ADDR, Vns>& change_map_ret, TRcontext& ctx
     );
 
-    StateCompressNode* mkCompressTree(
+    StateCompressNode<ADDR>* mkCompressTree(
         std::vector<State*>& group,
         ADDR Target_Addr, State_Tag Target_Tag, std::vector<State_Tag>& avoid
     );
@@ -393,14 +319,12 @@ private:
     void set_changes(std::hash_map<ADDR, Vns>& change_map_ret, z3::solver::translate);
 }; 
 
-
-static inline std::ostream& operator<<(std::ostream& out, State const& n) {
+template<typename ADDR>
+static inline std::ostream& operator<<(std::ostream& out, State<ADDR> const& n) {
     return out << (std::string)n;
 }
 
-
-
-template <class TC>
+template <typename ADDR, class TC>
 class StatePrinter : public TC {
     friend GraphView;
     TRControlFlags trtraceflags;
@@ -481,15 +405,9 @@ public:
     };
 
 
-    virtual State* ForkState(ADDR ges) { return new StatePrinter<TC>(this, ges); };
+    virtual State<ADDR>* ForkState(ADDR ges) { return new StatePrinter<ADDR, TC>(this, ges); };
     virtual State_Tag call_back_hook(Hook_struct const& hs) { setFlag(hs.cflag); return (hs.cb) ? (hs.cb)(this) : Running; }
 };
-
-
-
-
-
-
 
 
 #endif

@@ -2,6 +2,7 @@
 
 
 
+template<typename ADDR>
 class Block {
     ADDR m_front;
     ADDR m_end;
@@ -21,83 +22,11 @@ private:
 };
 
 
-
-
-class IRT {
-    UInt irTempSize;
-    IRExpr** irTemp;
-public:
-    IRT() {
-        irTempSize = 10;
-        irTemp = (IRExpr**)malloc(sizeof(IRExpr*) * irTempSize);
-    }
-
-    IRExpr*& operator [](UInt idx) {
-        if (idx >= irTempSize) {
-            if (idx < 2 * irTempSize) {
-                IRExpr** newtmp = (IRExpr**)malloc(sizeof(IRExpr*) * 2 * irTempSize);
-                for (int i = 0; i < irTempSize; i++) {
-                    newtmp[i] = irTemp[i];
-                }
-                irTempSize = 2 * irTempSize;
-                irTemp = newtmp;
-            }
-            else {
-                IRExpr** newtmp = (IRExpr**)malloc(sizeof(IRExpr*) * (idx + 1));
-                for (int i = 0; i < irTempSize; i++) {
-                    newtmp[i] = irTemp[i];
-                }
-                irTempSize = idx + 1;
-                irTemp = newtmp;
-            }
-        }
-        return irTemp[idx];
-    }
-};
-
-
-
-
-class WriteMap {
-    IRSB const* irsb;
-    struct Bms {
-        IRExpr* address;
-        IRExpr* mem;
-        UShort nb;
-    };
-    std::vector<Bms> unit;
-public:
-    WriteMap(IRSB const*bb):
-        irsb(bb)
-    {
-        unit.reserve(10);
-    }
-
-    void Ist_Store(IRExpr *address, IRExpr* data) {
-        IRType ty = typeOfIRExpr(irsb->tyenv, data);
-        UShort dnb = sizeofIRType(ty);
-        unit.emplace_back(Bms{ address, data, dnb });
-    }
-};
-
-class GraphView{
-    State& m_state;
-public:
-    GraphView(State& state):
-        m_state(state)
-    {
-    }
-    IRSB* BB2IR();
-    inline IRExpr* tIRExpr(IRExpr* e);
-    void run();
-};
-
-
-
+template<typename ADDR>
 class StateAnalyzer {
-    State& m_state;
+    State<ADDR>& m_state;
 public:
-    StateAnalyzer(State& state) :
+    StateAnalyzer(State<ADDR>& state) :
         m_state(state)
     {
     }

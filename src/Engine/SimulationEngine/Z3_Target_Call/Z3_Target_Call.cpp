@@ -61,17 +61,14 @@ void Func_Map_Init() {
 
 
 void* funcDict(void* irfunc) {
-    auto where = fuc_2_Z3_Func_Map.find(irfunc);
-    if (where == fuc_2_Z3_Func_Map.end()) {
-        vpanic("error func");
-        return NULL;
-    }
-    else {
-        if (old_fuc != irfunc) {
-            old_fuc = irfunc;
-            old_z3_fuc = where->second;
-            return where->second;
+    if (old_fuc != irfunc) {
+        auto where = fuc_2_Z3_Func_Map.find(irfunc);
+        if (where == fuc_2_Z3_Func_Map.end()) {
+            return NULL;
         }
-        return old_z3_fuc;
+        old_fuc = irfunc;
+        old_z3_fuc = where->second;
+        return where->second;
     }
+    return old_z3_fuc;
 }

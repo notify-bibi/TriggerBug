@@ -46,6 +46,7 @@ if (delta > 0 && delta < pap.delta) {                                           
     is_dynamic_block = true;                                                             \
 }}                                                                                       
 
+template<typename ADDR>
 class addressingMode
 {
 public:
@@ -69,6 +70,7 @@ private:
     };
 
     //超集的解遍历算法
+    template<typename ADDR>
     class iterator
     {
         struct shift_mask {
@@ -91,7 +93,7 @@ private:
     public:
         inline iterator() {};
 
-        inline iterator(addressingMode &am) :
+        inline iterator(addressingMode<ADDR>&am) :
             m_sym_mask(am.m_sym_mask),
             m_or_mask(am.m_or_mask),
             tmp_bit_blast((ADDR)0),
@@ -316,7 +318,7 @@ public:
         return m_offset;
     }
 
-    inline addressingMode(const addressingMode& a) :
+    inline addressingMode(const addressingMode<ADDR>& a) :
         m_ctx(a.m_ctx),
         m_offset(a.m_offset),
         m_base(a.m_base),
@@ -325,7 +327,7 @@ public:
 
     }
 
-    inline void operator=(const addressingMode& a)
+    inline void operator=(const addressingMode<ADDR>& a)
     {
         this->~addressingMode();
         m_offset = a.m_offset;
@@ -337,13 +339,13 @@ public:
     }
 
 
-    inline iterator begin() {
+    inline iterator<ADDR> begin() {
         assert(m_analysis_kind == support_bit_blast);
-        return iterator(*this);
+        return iterator<ADDR>(*this);
     }
 
-    inline iterator end() {
-        return iterator();
+    inline iterator<ADDR> end() {
+        return iterator<ADDR>();
     }
 
     void print() {
@@ -496,10 +498,10 @@ typedef enum {
 namespace TRMem {
     class MEMexception {
         std::string m_msg;
-        ADDR m_gaddr;
+        Addr64 m_gaddr;
         MEMexceptionTag m_errorID;
     public:
-        MEMexception(char const* msg, ADDR gaddr = 0) :m_msg(msg), m_gaddr(gaddr), m_errorID(guest_mem_accesss_err){ }
+        MEMexception(char const* msg, Addr64 gaddr = 0) :m_msg(msg), m_gaddr(gaddr), m_errorID(guest_mem_accesss_err){ }
         MEMexception(char const* msg, MEMexceptionTag id) :m_msg(msg), m_gaddr(0), m_errorID(id) { }
         std::string msg() const {
             if (m_errorID == guest_mem_accesss_err) {
@@ -573,8 +575,12 @@ namespace TRMem {
 
 using namespace TRMem;
 
+struct dirty_cp_mem {};
+
+template<typename ADDR>
 class MEM {
-    friend class State;
+    friend class State<ADDR>;
+    template<typename TADDR> friend class Dirty_Mem;
 public:
     class Itaddress {
     private:
@@ -645,12 +651,19 @@ private:
     void CheckSelf(PAGE*& P, ADDR address);
     void init_page(PAGE*& P, ADDR address);
     UInt write_bytes(ULong address, ULong length, UChar* data);
+    template<typename TADDR>
+    MEM(struct dirty_cp_mem, MEM<TADDR>& fmem):
+        m_state(fmem.m_state),
+        m_ctx(fmem.m_ctx),
+        need_record(true)
+    {
+    };
 
 public:
     TRcontext& m_ctx;
-    State& m_state;
-    MEM(State& so, TRcontext& ctx, Bool _need_record);
-    MEM(State& so, MEM& father_mem, TRcontext& ctx, Bool _need_record);
+    Kernel& m_state;
+    MEM(State<ADDR>& so, TRcontext& ctx, Bool _need_record);
+    MEM(State<ADDR>& so, MEM& father_mem, TRcontext& ctx, Bool _need_record);
     ~MEM();
     //客户机的分配空间算法 类似cpu的硬件虚拟映射技术。这里我们使用软件虚拟映射
     ULong map(ULong address, ULong length);
@@ -661,6 +674,8 @@ public:
     Int getUser() { return user; }
     //清空写入记录
     void clearRecord();
+    ULong find_block_forward(ULong start, ADDR size);
+    ULong find_block_reverse(ULong start, ADDR size);
     //把两个不连续的页放到Pap里，以支持valgrind的跨页翻译
     inline void set_double_page(ADDR address, Pap &addrlst) {
         addrlst.guest_addr = address;
@@ -676,45 +691,7 @@ public:
     }
 
     //虚拟映射一个虚拟地址
-    inline PAGE** get_pointer_of_mem_page(ADDR address) {
-        if (sizeof(address) == 4) {
-            UShort PDPT_ind = (address >> 30 & 0x3);
-            UShort PDT_ind = (address >> 21 & 0x1ff);
-            UShort PT_ind = (address >> 12 & 0x1ff);
-            if (!(*CR3)->size) {
-                PDPT* pdpt = (*CR3)->pt[0];
-                if (pdpt && PDPT_ind < pdpt->size) {
-                    PDT* pdt = pdpt->pt[PDPT_ind];
-                    if (pdt && PDT_ind < pdt->size) {
-                        PT* pt = pdt->pt[PDT_ind];
-                        if (pt && PT_ind < pt->size) {
-                            return &pt->pt[PT_ind];
-                        }
-                    }
-                }
-            }
-        }
-        else {
-            UShort PML4T_ind = (address >> 39 & 0x1ff);
-            UShort PDPT_ind = (address >> 30 & 0x1ff);
-            UShort PDT_ind = (address >> 21 & 0x1ff);
-            UShort PT_ind = (address >> 12 & 0x1ff);
-            if (PML4T_ind < (*CR3)->size) {
-                PDPT* pdpt = (*CR3)->pt[PML4T_ind];
-                if (pdpt && PDPT_ind < pdpt->size) {
-                    PDT* pdt = pdpt->pt[PDPT_ind];
-                    if (pdt && PDT_ind < pdt->size) {
-                        PT* pt = pdt->pt[PDT_ind];
-                        if (pt && PT_ind < pt->size) {
-                            return &pt->pt[PT_ind];
-                        }
-                    }
-                }
-            }
-        }
-        return nullptr;
-    }
-
+    inline PAGE** get_pointer_of_mem_page(ADDR address);
 
     inline PAGE* getMemPage(ADDR address) {
         PAGE** r = get_pointer_of_mem_page(address);
@@ -840,10 +817,10 @@ public:
 
     template<IRType ty>
     Vns Iex_Load(Z3_ast address) {
-        addressingMode am(expr(m_state.m_ctx, address));
+        addressingMode<ADDR> am(expr(m_state.m_ctx, address));
         Z3_ast reast = nullptr;
         auto kind = am.analysis_kind();
-        if (kind != addressingMode::cant_analysis) {
+        if (kind != addressingMode<ADDR>::cant_analysis) {
 #ifdef TRACE_AM
             printf("addr: %p  Iex_Load  base: %p {\n", m_state.get_cpu_ip(), am.getBase());
             am.print();
@@ -855,7 +832,7 @@ public:
                 return Vns(m_ctx, reast, no_inc{});
             }
             else {
-                if (kind == addressingMode::support_bit_blast) {
+                if (kind == addressingMode<ADDR>::support_bit_blast) {
                     for (auto offset : am) {
                         Vns data = Iex_Load<ty>(am.getBase() + offset);
                         if (!reast) {
@@ -876,9 +853,9 @@ public:
             }
         }
 #ifdef TRACE_AM
-        vex_printf("Iex_Load : guest: %p \n", m_state.guest_start);
+        vex_printf("Iex_Load : guest: %p \n", m_state.get_cpu_ip());
 #endif
-        Itaddress it = this->addr_begin(m_state.solv, address);
+        Itaddress it = this->addr_begin(m_state, address);
         uint64_t Z3_RE;
         while (it.check()) {
             auto addr = *it;
@@ -924,8 +901,6 @@ public:
             return Iex_Load((Z3_ast)address, ty);
         }
     }
-
-
 
     template<typename DataTy>
     void Ist_Store(ADDR address, DataTy data) {
@@ -979,9 +954,9 @@ public:
 
     template<typename DataTy>
     void Ist_Store(Z3_ast address, DataTy data) {
-        addressingMode am(expr(m_state.m_ctx, address));
+        addressingMode<ADDR> am(expr(m_state.m_ctx, address));
         auto kind = am.analysis_kind();
-        if (kind == addressingMode::support_bit_blast) {
+        if (kind == addressingMode<ADDR>::support_bit_blast) {
 #ifdef TRACE_AM
             printf("addr: %p  Ist_Store base: %p {\n", m_state.get_cpu_ip(), am.getBase());
             am.print();
@@ -1000,7 +975,7 @@ public:
             }
         }
         else {
-            Itaddress it = this->addr_begin(m_state.solv, address);
+            Itaddress it = this->addr_begin(m_state, address);
             while (it.check()) {
                 Vns addr = *it;
                 ADDR addr_re = addr;
@@ -1029,7 +1004,7 @@ public:
         QueryPerformanceCounter(&beginPerformanceCount);
     redo:
         {
-            Itaddress it = this->addr_begin(m_state.solv, address);
+            Itaddress it = this->addr_begin(m_state, address);
             while (it.check()) {
                 if (suspend_solve) {
                     QueryPerformanceCounter(&closePerformanceCount);
@@ -1055,9 +1030,9 @@ public:
             }
         }
         if (suspend_solve) {
-            addressingMode am(expr(m_state.m_ctx, address));
+            addressingMode<ADDR> am(expr(m_state.m_ctx, address));
             auto kind = am.analysis_kind();
-            if (kind == addressingMode::support_bit_blast) {
+            if (kind == addressingMode<ADDR>::support_bit_blast) {
 #ifdef TRACE_AM
                 printf("addr: %p  Ist_Store base: %p {\n", m_state.get_cpu_ip(), am.getBase());
                 am.print();
@@ -1081,7 +1056,6 @@ public:
             }
         }
     }
-
 
     inline void Ist_Store(ADDR address, Vns const &data) {
         if (data.real()) {
@@ -1160,29 +1134,71 @@ public:
         }
     }
 
-    inline operator Z3_context() { return m_ctx; }
-
+    inline operator Z3_context() { return m_ctx; };
+    ;;
 private:
 
-    template<>
-    inline void Ist_Store(ADDR address, Vns data) = delete;
-    template<>
-    inline void Ist_Store(ADDR address, Vns &data) = delete;
-    template<>
-    inline void Ist_Store(ADDR address, Vns const &data) = delete;
-    template<>
-    inline void Ist_Store(ADDR address, Z3_ast data) = delete;
-    template<>
-    inline void Ist_Store(ADDR address, Z3_ast &data) = delete;
+    //template<>
+    //void Ist_Store(ADDR address, Vns data) = delete;
+    //template<>
+    //void Ist_Store(ADDR address, Vns &data) = delete;
+    //template<>
+    //void Ist_Store(ADDR address, Vns const &data) = delete;
+    //template<>
+    //void Ist_Store(ADDR address, Z3_ast data) = delete;
+    //template<>
+    //void Ist_Store(ADDR address, Z3_ast &data) = delete;
 
-    template<>
-    inline void Ist_Store(Z3_ast address, Vns data) = delete;
-    template<>
-    inline void Ist_Store(Z3_ast address, Vns &data) = delete;
-    template<>
-    inline void Ist_Store(Z3_ast address, Vns const &data) = delete;
+    //template<>
+    //void Ist_Store(Z3_ast address, Vns data) = delete;
+    //template<>
+    //void Ist_Store(Z3_ast address, Vns &data) = delete;
+    //template<>
+    //void Ist_Store(Z3_ast address, Vns const &data) = delete;
 
 };
+
+template<>
+inline PAGE** MEM<Addr64>::get_pointer_of_mem_page(Addr64 address) {
+    UShort PML4T_ind = (address >> 39 & 0x1ff);
+    UShort PDPT_ind = (address >> 30 & 0x1ff);
+    UShort PDT_ind = (address >> 21 & 0x1ff);
+    UShort PT_ind = (address >> 12 & 0x1ff);
+    if (PML4T_ind < (*CR3)->size) {
+        PDPT* pdpt = (*CR3)->pt[PML4T_ind];
+        if (pdpt && PDPT_ind < pdpt->size) {
+            PDT* pdt = pdpt->pt[PDPT_ind];
+            if (pdt && PDT_ind < pdt->size) {
+                PT* pt = pdt->pt[PDT_ind];
+                if (pt && PT_ind < pt->size) {
+                    return &pt->pt[PT_ind];
+                }
+            }
+        }
+    }
+    return nullptr;
+};
+
+template<>
+inline PAGE** MEM<Addr32>::get_pointer_of_mem_page(Addr32 address) {
+    UShort PDPT_ind = (address >> 30 & 0x3);
+    UShort PDT_ind = (address >> 21 & 0x1ff);
+    UShort PT_ind = (address >> 12 & 0x1ff);
+    if (!(*CR3)->size) {
+        PDPT* pdpt = (*CR3)->pt[0];
+        if (pdpt && PDPT_ind < pdpt->size) {
+            PDT* pdt = pdpt->pt[PDPT_ind];
+            if (pdt && PDT_ind < pdt->size) {
+                PT* pt = pdt->pt[PDT_ind];
+                if (pt && PT_ind < pt->size) {
+                    return &pt->pt[PT_ind];
+                }
+            }
+        }
+    }
+    return nullptr;
+};
+
 
 
 #ifndef UNDEFMEM

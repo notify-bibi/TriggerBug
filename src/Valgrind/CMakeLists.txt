@@ -50,52 +50,51 @@ add_library(host_x86_defs   "priv/host_x86_defs.c"
                             "priv/host_x86_isel.c"
                             "priv/guest_x86_toIR.cpp"
                             )
-add_library(guest_x86_helpers "priv/guest_x86_helpers.cpp")
 
 add_library(host_amd64_defs "priv/host_amd64_defs.c"
                             "priv/host_amd64_isel.c"
                             "priv/guest_amd64_toIR.cpp"
                             )
-add_library(guest_amd64_helpers "priv/guest_amd64_helpers.cpp")
 
 add_library(host_arm_defs   "priv/host_arm_defs.c"
                             "priv/host_arm_isel.c"
                             "priv/guest_arm_toIR.cpp"
                             )
-add_library(guest_arm_helpers "priv/guest_arm_helpers.cpp")
 							
 add_library(host_arm64_defs "priv/host_arm64_defs.c"
                             "priv/host_arm64_isel.c"
                             "priv/guest_arm64_toIR.cpp"
                             )
-add_library(guest_arm64_helpers "priv/guest_arm64_helpers.cpp")
 
 add_library(host_ppc_defs   "priv/host_ppc_defs.c"
                             "priv/host_ppc_isel.c"
                             "priv/guest_ppc_toIR.cpp"
                             )
-add_library(guest_ppc_helpers "priv/guest_ppc_helpers.cpp")
 
 add_library(host_mips_defs  "priv/host_mips_defs.c"
                             "priv/host_mips_isel.c"
                             "priv/guest_mips_toIR.cpp"
                             "priv/guest_mipsdsp_toIR.cpp"
                             )	 
-add_library(guest_mips_helpers "priv/guest_mips_helpers.cpp")  
 
 add_library(host_s390_defs  "priv/s390_disasm.c"
                             "priv/host_s390_isel.c"
                             "priv/host_s390_defs.c"
                             "priv/guest_s390_toIR.cpp"
                             )
-add_library(guest_s390_helpers "priv/guest_s390_helpers.cpp")
 
 
+add_library(guest_helpers   "priv/guest_x86_helpers.cpp"
+                            "priv/guest_amd64_helpers.cpp" 
+                            "priv/guest_arm_helpers.cpp"
+                            "priv/guest_arm64_helpers.cpp"
+                            "priv/guest_ppc_helpers.cpp"
+                            "priv/guest_mips_helpers.cpp"
+                            "priv/guest_s390_helpers.cpp"
+                            )
 
-TARGET_LINK_LIBRARIES(  Valgrind ir_match host_generic_maddf host_generic_simd host_generic_regs  
+TARGET_LINK_LIBRARIES(  Valgrind ir_match host_generic_maddf host_generic_simd host_generic_regs guest_helpers
                         host_x86_defs host_amd64_defs host_arm_defs host_arm64_defs host_ppc_defs host_mips_defs host_s390_defs
-                        )
-TARGET_LINK_LIBRARIES(  Valgrind guest_amd64_helpers guest_x86_helpers guest_arm64_helpers guest_arm_helpers guest_ppc_helpers guest_mips_helpers guest_s390_helpers
                         )
 
 # TODO: 如有需要，请添加测试并安装目标。

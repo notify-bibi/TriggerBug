@@ -621,7 +621,7 @@ Vns z3_x86g_calculate_condition(
         flag = !flag;
     }
     if (flag.real()) {
-        return ((UChar)flag) ? Vns(cond, 1u) : Vns(cond, 0u);
+        return ((UInt)flag & 1) ? Vns(cond, 1u) : Vns(cond, 0u);
     }
     else {
         return Vns(cond, Z3_mk_ite(cond, flag, Vns(cond, 1u), Vns(cond, 0u)), 32);
@@ -635,7 +635,7 @@ Vns z3_x86g_calculate_eflags_c(Vns& cc_op,
 {
     auto flag = z3_x86g_calculate_eflags_cf(cc_op, cc_dep1, cc_dep2, cc_ndep);
     if (flag.real()) {
-        return ((UChar)flag) ? Vns(cc_op, 1u) : Vns(cc_op, 0u);
+        return ((UInt)flag & 1) ? Vns(cc_op, 1u) : Vns(cc_op, 0u);
     }
     else {
         return Vns(cc_op, Z3_mk_ite(cc_op, flag, Vns(cc_op, 1u), Vns(cc_op, 0u)), 32);
