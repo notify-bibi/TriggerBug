@@ -1,0 +1,15 @@
+build
+*.dir
+*.zip
+*.bz2
+*.id2
+*.id1
+*.id0
+*.nam
+*.til
+*.dump
+TriggerBug.7z
+PythonFrontEnd/.idea
+PythonFrontEnd/dist
+PythonFrontEnd/build
+PythonFrontEnd/TriggerBug.egg-info
