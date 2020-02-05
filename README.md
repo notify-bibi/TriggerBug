@@ -1,4 +1,7 @@
+
+
 # TriggerBug
+
 本项目编写近一年了，天天肝，目的就是解决现代符号执行的各种困难（路径爆炸，符号地址读写，求解费时，客户机适配工作量大），本项目力求写好约束就可快速得到flag
 
 tips:  不浪费你的时间 You can save time
@@ -19,9 +22,7 @@ The engine was developed to solve some of angr's more intractable problems.
 	计划写反ollvm控制流平坦化的算法。
 
 
-​	
-
-ing.....。
+​	ing.....
 
 ### Advantages：The present does not represent the future
 
@@ -34,13 +35,14 @@ ing.....。
 |solve thread|Single thread|Multi-threaded|
 |compress State|support(Is not very good)|support(automatically)|
 |vex(dirtycall)|Incomplete support<br />Implementation by developers|fully supported<br />emu all host code|
-|binary load|py module:cle(Incomplete loading)<br />Parsing is not complete<br />slowly|py dump mem from  IDA <br/>1:1 Fully symbolic loading<br/>200MB/1s|
+|binary load|[py module:cle(Incomplete loading)<br />Parsing is not complete<br />slowly][CLE]|[py dump mem from  IDA <br/>1:1 Fully symbolic loading<br/>200MB/1s][MDB]|
 |speed| |like qemu|
 
+## shortcomings：
 
-|  guest arch  |   archX86,AMD64,ARM,ARM64,PPC32,PPC64,S390X,MIPS32,MIPS64|
-| ---- | ---- |
-|      |      |
+|  all Arch  | X86,AMD64,ARM,ARM64,PPC32,PPC64,S390X,MIPS32,MIPS64 |
+| :--: | ---- |
+| MEM dump support | X86,AMD64（Under construction..） [CLE][CLE] can give you more supports |
 
 It is possible that I have misunderstood angr, so I apologize again
 
@@ -57,7 +59,7 @@ cd ./TriggerBug/PythonFrontEnd
 python setup.py install
 ```
 
-Put the ```TriggerBug\PythonFrontEnd\ida-plugins``` folder in ```${ your installation path of ida }```
+Put the [TriggerBug\PythonFrontEnd\ida-plugins][MDB] folder in ```${ your installation path of ida }```
 
 ## Usage
 1. open ida, make a backpoint(bpt). When you get to the bpt, you need to delete the bpt and ```(Shift-2)``` to dump binary.
@@ -155,66 +157,7 @@ PS: C:\Users\bibi\Desktop\TriggerBug\PythonFrontEnd\examples> python .\str2flag.
 >>   #x6c)
 >> (define-fun p_23 () (_ BitVec 8)
 >>   #x5f)
->> (define-fun p_25 () (_ BitVec 8)
->>   #x6f)
->> (define-fun p_28 () (_ BitVec 8)
->>   #x5f)
->> (define-fun p_31 () (_ BitVec 8)
->>   #x6e)
->> (define-fun p_37 () (_ BitVec 8)
->>   #x65)
->> (define-fun p_36 () (_ BitVec 8)
->>   #x74)
->> (define-fun p_22 () (_ BitVec 8)
->>   #x72)
->> (define-fun p_16 () (_ BitVec 8)
->>   #x5f)
->> (define-fun p_33 () (_ BitVec 8)
->>   #x69)
->> (define-fun p_5 () (_ BitVec 8)
->>   #x67)
->> (define-fun p_21 () (_ BitVec 8)
->>   #x6f)
->> (define-fun p_11 () (_ BitVec 8)
->>   #x61)
->> (define-fun p_26 () (_ BitVec 8)
->>   #x75)
->> (define-fun p_29 () (_ BitVec 8)
->>   #x76)
->> (define-fun p_30 () (_ BitVec 8)
->>   #x69)
->> (define-fun p_6 () (_ BitVec 8)
->>   #x69)
->> (define-fun p_1 () (_ BitVec 8)
->>   #x68)
->> (define-fun p_2 () (_ BitVec 8)
->>   #x61)
->> (define-fun p_14 () (_ BitVec 8)
->>   #x6e)
->> (define-fun p_17 () (_ BitVec 8)
->>   #x6e)
->> (define-fun p_10 () (_ BitVec 8)
->>   #x73)
->> (define-fun p_34 () (_ BitVec 8)
->>   #x63)
->> (define-fun p_18 () (_ BitVec 8)
->>   #x6f)
->> (define-fun p_9 () (_ BitVec 8)
->>   #x5f)
->> (define-fun p_27 () (_ BitVec 8)
->>   #x72)
->> (define-fun p_7 () (_ BitVec 8)
->>   #x72)
->> (define-fun p_3 () (_ BitVec 8)
->>   #x74)
->> (define-fun p_13 () (_ BitVec 8)
->>   #x69)
->> (define-fun p_15 () (_ BitVec 8)
->>   #x67)
->> (define-fun p_12 () (_ BitVec 8)
->>   #x79)
->> (define-fun p_19 () (_ BitVec 8)
->>   #x5f)
+..................................
 >> (define-fun p_32 () (_ BitVec 8)
 >>   #x64)
 >> (define-fun p_0 () (_ BitVec 8)
@@ -262,3 +205,6 @@ Warmly welcome to join us in the development. Study together.
 [Plre]: <https://github.com/notify-bibi/TriggerBug/releases>
 [Plxml]: <https://github.com/notify-bibi/TriggerBug/blob/master/PythonFrontEnd/TriggerBug-default32.xml>
 [Develop]: <https://github.com/notify-bibi/TriggerBug/blob/master/%E5%BC%80%E5%8F%91%E6%89%8B%E5%86%8C.docx>
+
+[MDB]: <https://github.com/notify-bibi/TriggerBug/blob/master/PythonFrontEnd/ida-plugins/memory_dump_BIN.py>
+[CLE]: <https://github.com/angr/cle>
