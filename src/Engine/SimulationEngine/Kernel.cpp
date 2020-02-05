@@ -16,10 +16,9 @@ UInt                                Vex_Info::MaxThreadsNum = 16;
 Int                                 Vex_Info::traceflags = 0;
 
 
-UInt Vex_Info::_gtraceflags() {
+void Vex_Info::_gtraceflags() {
     tinyxml2::XMLElement* _traceflags = doc_VexControl->FirstChildElement("traceflags");
-    if (_traceflags) return _traceflags->IntText();
-    return 0;
+    if (_traceflags) traceflags = _traceflags->IntText();
 }
 
 tinyxml2::XMLError Vex_Info::loadFile(const char* filename) {
@@ -81,15 +80,15 @@ void Vex_Info::_gMaxThreadsNum() {
 
 UInt Vex_Info::gRegsIpOffset() {
     switch (guest) {
-    case VexArchX86:return X86_IR_OFFSET::eip;
-    case VexArchAMD64:return AMD64_IR_OFFSET::rip;
-    case VexArchARM:
-    case VexArchARM64:
-    case VexArchPPC32:
-    case VexArchPPC64:
-    case VexArchS390X:
-    case VexArchMIPS32:
-    case VexArchMIPS64:
+    case VexArchX86:return X86_IR_OFFSET::EIP;
+    case VexArchAMD64:return AMD64_IR_OFFSET::RIP;
+    case VexArchARM:return ARM_IR_OFFSET::R15T;
+    case VexArchARM64:return ARM64_IR_OFFSET::PC;
+    case VexArchPPC32:return PPC32_IR_OFFSET::CIA;
+    case VexArchPPC64:return PPC64_IR_OFFSET::CIA;
+    case VexArchS390X:return S390X_IR_OFFSET::IA;
+    case VexArchMIPS32:return MIPS32_IR_OFFSET::PC;
+    case VexArchMIPS64:return MIPS64_IR_OFFSET::PC;
     default:
         std::cout << "Invalid arch in vex_prepare_vai.\n" << std::endl;
         vassert(0);
@@ -114,11 +113,12 @@ void Vex_Info::vex_info_init(const char* filename)
     _gVexArchSystem();
     _gMemoryDumpPath();
     _gMaxThreadsNum();
+    _gguest_max_insns();
 
     if (doc_VexControl) {
         _giropt_register_updates_default();
         _giropt_level();
-        _gguest_max_insns();
+        _gtraceflags();
     }
 }
 

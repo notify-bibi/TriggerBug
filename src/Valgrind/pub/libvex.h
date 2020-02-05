@@ -847,7 +847,7 @@ typedef
 
 /* Runs the entire compilation pipeline. */
 extern 
-VexTranslateResult LibVEX_Translate ( /*MOD*/ VexTranslateArgs* );
+VexTranslateResult LibVEX_Translate ( /*MOD*/ VexTranslateArgs*, Pap* pap); 
 
 /* Runs the first half of the compilation pipeline: lifts guest code to IR,
    optimises, instruments and optimises it some more. */

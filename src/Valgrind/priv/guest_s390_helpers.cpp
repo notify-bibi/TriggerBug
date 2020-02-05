@@ -48,6 +48,16 @@ extern "C" {
 #undef NULL
 #define NULL nullptr
 
+
+/*------------------------------------------------------------*/
+/*--- Dedicated registers                                  ---*/
+/*------------------------------------------------------------*/
+
+#define guest_LR guest_r14  /* Link register */
+#define guest_SP guest_r15  /* Stack pointer */
+#define guest_FP guest_r11  /* Frame pointer */
+
+
 extern thread_local ULong last_execute_target;
 
 void

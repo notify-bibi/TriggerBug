@@ -123,6 +123,8 @@ extern VexAllocMode vexGetAllocMode ( void );
 extern void         vexAllocSanityCheck ( void );
 
 extern void vexSetAllocModeTEMP_and_clear ( void );
+extern void vexSetAllocModeTEMP_and_save_curr(void);
+extern void vexTEMP_clear(void);
 
 /* Allocate in Vex's temporary allocation area.  Be careful with this.
    You can only call it inside an instrumentation or optimisation

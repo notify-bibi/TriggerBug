@@ -79,6 +79,8 @@ bool task_explorer(State<ADDR>* top) {
             std::cout << *top << std::endl;
         }
         else {
+            if(Fork_addr.empty())
+                return false;
             std::cout << *top << std::endl;
             for (auto SD : Fork_addr) {
                 printf("%p  %d ", SD.first, SD.second);
@@ -91,6 +93,8 @@ bool task_explorer(State<ADDR>* top) {
             }
         }
     };
+
+    return false;
 
     //std::vector<State*> ForkTree;
     //ForkTree.emplace_back(top);

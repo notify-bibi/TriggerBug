@@ -848,6 +848,7 @@ ULong MEM<ADDR>::find_block_reverse(ULong start, ADDR size)
 
 template<typename ADDR>
 MEM<ADDR>::~MEM() {
+    if (!CR3) return;
     PML4T* CR3_point = *CR3;
     //  遍历双向链表
     LCODEDEF5(LSTRUCT2, pdpt_point, free_pdpt_point, CR3_point, i1,

@@ -33,7 +33,6 @@ extern __m256i  m32_mask_reverse[33];
 
 
 extern thread_local void* g_state;
-extern thread_local bool   ret_is_ast ;
 extern thread_local Pap    pap ;
 extern thread_local Addr64   guest_start_of_block ;
 extern thread_local bool   is_dynamic_block ;

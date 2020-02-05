@@ -31,7 +31,6 @@ public:
 
 private:
 
-    static UInt _gtraceflags();
     static tinyxml2::XMLError loadFile(const char* filename);
     static void _gGuestArch();
     static void _gMemoryDumpPath();
@@ -40,6 +39,7 @@ private:
     static void _giropt_level();
     static void _gguest_max_insns();
     static void _gMaxThreadsNum();
+    static void _gtraceflags();
 
 };
 

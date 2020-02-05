@@ -274,7 +274,16 @@ void vexSetAllocModeTEMP_and_clear ( void )
    vexAllocSanityCheck();
 }
 
-
+void vexSetAllocModeTEMP_and_save_curr(void)
+{
+    mode = VexAllocModeTEMP;
+    temporary_curr = private_LibVEX_alloc_curr;
+    private_LibVEX_alloc_curr = &temporary[0];
+}
+void vexTEMP_clear(void)
+{
+    private_LibVEX_alloc_curr = temporary_curr;
+}
 /* Exported to library client. */
 
 void LibVEX_ShowAllocStats ( void )

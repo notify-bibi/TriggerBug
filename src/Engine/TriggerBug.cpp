@@ -37,7 +37,7 @@ public:
     StateX86(StateX86* father_state, Addr32 gse) :State(father_state, gse) {};
 
     void cpu_exception() {
-        UInt seh_addr = x86g_use_seg_selector(regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::ldt), regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::gdt), regs.Iex_Get<Ity_I16>(X86_IR_OFFSET::fs).zext(16), 0);
+        UInt seh_addr = x86g_use_seg_selector(regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::LDT), regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::GDT), regs.Iex_Get<Ity_I16>(X86_IR_OFFSET::FS).zext(16), 0);
         Vns seh = mem.Iex_Load<Ity_I32>(seh_addr);
         Vns next = mem.Iex_Load<Ity_I32>(seh);
         Vns seh_exception_method = mem.Iex_Load<Ity_I32>(seh + 4);
@@ -46,7 +46,7 @@ public:
         guest_start = seh_exception_method;
 
         /*  esp & ebp  不正确的esp*/
-        regs.Ist_Put(X86_IR_OFFSET::esp, seh);
+        regs.Ist_Put(X86_IR_OFFSET::ESP, seh);
 
         exit(2);
     }
@@ -64,10 +64,10 @@ public:
     }
 
     State_Tag Sys_syscall() {
-        UChar rax = regs.Iex_Get<Ity_I64>(X86_IR_OFFSET::eax);
-        ULong rdi = regs.Iex_Get<Ity_I64>(X86_IR_OFFSET::edi);
-        ULong rdx = regs.Iex_Get<Ity_I64>(X86_IR_OFFSET::edx);
-        ULong rsi = regs.Iex_Get<Ity_I64>(X86_IR_OFFSET::esi);
+        UChar rax = regs.Iex_Get<Ity_I64>(X86_IR_OFFSET::EAX);
+        ULong rdi = regs.Iex_Get<Ity_I64>(X86_IR_OFFSET::EDI);
+        ULong rdx = regs.Iex_Get<Ity_I64>(X86_IR_OFFSET::EDX);
+        ULong rsi = regs.Iex_Get<Ity_I64>(X86_IR_OFFSET::ESI);
         return Death;
     }
 
@@ -122,11 +122,11 @@ public:
     }
 
     State_Tag Sys_syscall_linux() {
-        Vns al = regs.Iex_Get<Ity_I8>(AMD64_IR_OFFSET::rax);
+        Vns al = regs.Iex_Get<Ity_I8>(AMD64_IR_OFFSET::RAX);
         if (al.real()) {
-            Vns rdi = regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::rdi);
-            Vns rdx = regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::rdx);
-            Vns rsi = regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::rsi);
+            Vns rdi = regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::RDI);
+            Vns rdx = regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::RDX);
+            Vns rsi = regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::RSI);
             switch ((UChar)al) {
             case 0:// //LINUX - sys_read
                 if (rdi == 0) {
@@ -143,7 +143,7 @@ public:
                             solv.add_assert(ao1 || ao2 || ao3 || FLAG == '_' || FLAG == '{' || FLAG == '}', True);
                         }
                     }
-                    regs.Ist_Put(AMD64_IR_OFFSET::rax, rdx);
+                    regs.Ist_Put(AMD64_IR_OFFSET::RAX, rdx);
                     flag_count += rdx;
                     return Running;
                 }
@@ -152,23 +152,23 @@ public:
                     UChar chr = mem.Iex_Load<Ity_I8>(rsi + n);
                     vex_printf("%c", chr);
                 }
-                regs.Ist_Put(AMD64_IR_OFFSET::rax, rdx);
+                regs.Ist_Put(AMD64_IR_OFFSET::RAX, rdx);
                 return Running;
             }
 
             case 0x3: {//LINUX - sys_close
                 vex_printf("system call: sys_close description:0x%x\n", rdi);
-                regs.Ist_Put(AMD64_IR_OFFSET::rax, 1);
+                regs.Ist_Put(AMD64_IR_OFFSET::RAX, 1);
                 break;
             }
             case 0x5: {//LINUX - sys_newfstat
                 vex_printf("system call: sys_newfstat\tfd:0x%x 	struct stat __user *statbuf:0x%x", (ULong)rdi, (ULong)rsi);
-                regs.Ist_Put(AMD64_IR_OFFSET::rax, 0ull);
+                regs.Ist_Put(AMD64_IR_OFFSET::RAX, 0ull);
                 return Running;
             }
 
             case 0xC: {//LINUX - sys_brk
-                ULong rbx = regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::rbx);
+                ULong rbx = regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::RBX);
                 vex_printf("system call: brk address:0x%x\n", rbx);
                 ULong brk = rbx;
                 if (brk) {
@@ -185,7 +185,7 @@ public:
                         g_brk = ALIGN(brk, 32);
                     }
                 }
-                regs.Ist_Put(AMD64_IR_OFFSET::rax, g_brk);
+                regs.Ist_Put(AMD64_IR_OFFSET::RAX, g_brk);
                 return Running;
             }
             case 0x23: {//LINUX - sys_nanosleep
@@ -378,6 +378,8 @@ int main() {
         state.solv.add_assert(ao3);
     }
     state.hook_add(0x400CC0, success_ret3);*/
+
+
     StateAnalyzer<Addr64> gv(state);
     gv.Run();
 }

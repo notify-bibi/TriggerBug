@@ -3,13 +3,6 @@
 #include "Z3_Target_Call.hpp"
 
 
-static inline ULong resultsr(Vns const & retv) {
-    Z3_inc_ref(retv, retv);
-    ret_is_ast = True;
-    return (ULong)(Z3_ast)retv;
-}
-
-#define TRRET(retv) (retv.real()? (ULong)(retv):resultsr(retv))
 #define ISUNSIGNED_TYPE(type) ((type)-1 > 0)
 
 namespace TRGL{

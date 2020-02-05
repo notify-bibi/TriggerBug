@@ -16,7 +16,6 @@ Revision History:
 
 
 thread_local void* g_state = nullptr;
-thread_local bool   ret_is_ast = false;
 thread_local Pap    pap;
 thread_local Addr64   guest_start_of_block = 0;
 thread_local bool   is_dynamic_block = false;//Need to refresh IRSB memory?
@@ -436,18 +435,6 @@ inline void TRsolver::add_assert_eq(Vns const& eqA, Vns const& eqB)
 }
 
 
-inline Vns symbolic_check(Z3_context ctx, ULong ret, UInt bitn) {
-    if (ret_is_ast) {
-        ret_is_ast = False;
-        dassert(Z3_get_bv_sort_size(ctx, Z3_get_sort(ctx, (Z3_ast)ret)) == bitn);
-        return Vns(ctx, (Z3_ast)ret, bitn, no_inc{});
-    }
-    else {
-        return Vns(ctx, ret, bitn);
-    }
-}
-
-
 typedef ULong(*Function_32_6)(UInt, UInt, UInt, UInt, UInt, UInt);
 typedef ULong(*Function_32_5)(UInt, UInt, UInt, UInt, UInt);
 typedef ULong(*Function_32_4)(UInt, UInt, UInt, UInt);
@@ -484,22 +471,22 @@ Vns State<Addr32>::CCall(IRCallee *cee, IRExpr **exp_args, IRType ty)
         return dirty_ccall<Addr32>(m_dctx, ty, cee, exp_args);
     };
 
-    if (!exp_args[1]) return (z3_mode) ? ((Z3_Function1)(cptr))(arg0) : symbolic_check(m_ctx, ((Function_32_1)(cee->addr))(arg0), bitn);
+    if (!exp_args[1]) return (z3_mode) ? ((Z3_Function1)(cptr))(arg0) : Vns(m_ctx, ((Function_32_1)(cee->addr))(arg0), bitn);
     Vns arg1 = tIRExpr(exp_args[1]);
     if (arg1.symbolic()) z3_mode = True;
-    if (!exp_args[2]) return (z3_mode) ? ((Z3_Function2)(cptr))(arg0, arg1) : symbolic_check(m_ctx, ((Function_32_2)(cee->addr))(arg0, arg1), bitn);
+    if (!exp_args[2]) return (z3_mode) ? ((Z3_Function2)(cptr))(arg0, arg1) : Vns(m_ctx, ((Function_32_2)(cee->addr))(arg0, arg1), bitn);
     Vns arg2 = tIRExpr(exp_args[2]);
     if (arg2.symbolic()) z3_mode = True;
-    if (!exp_args[3]) return (z3_mode) ? ((Z3_Function3)(cptr))(arg0, arg1, arg2) : symbolic_check(m_ctx, ((Function_32_3)(cee->addr))(arg0, arg1, arg2), bitn);
+    if (!exp_args[3]) return (z3_mode) ? ((Z3_Function3)(cptr))(arg0, arg1, arg2) : Vns(m_ctx, ((Function_32_3)(cee->addr))(arg0, arg1, arg2), bitn);
     Vns arg3 = tIRExpr(exp_args[3]);
     if (arg3.symbolic()) z3_mode = True;
-    if (!exp_args[4]) return (z3_mode) ? ((Z3_Function4)(cptr))(arg0, arg1, arg2, arg3) : symbolic_check(m_ctx, ((Function_32_4)(cee->addr))(arg0, arg1, arg2, arg3), bitn);
+    if (!exp_args[4]) return (z3_mode) ? ((Z3_Function4)(cptr))(arg0, arg1, arg2, arg3) : Vns(m_ctx, ((Function_32_4)(cee->addr))(arg0, arg1, arg2, arg3), bitn);
     Vns arg4 = tIRExpr(exp_args[4]);
     if (arg4.symbolic()) z3_mode = True;
-    if (!exp_args[5]) return (z3_mode) ? ((Z3_Function5)(cptr))(arg0, arg1, arg2, arg3, arg4) : symbolic_check(m_ctx, ((Function_32_5)(cee->addr))(arg0, arg1, arg2, arg3, arg4), bitn);
+    if (!exp_args[5]) return (z3_mode) ? ((Z3_Function5)(cptr))(arg0, arg1, arg2, arg3, arg4) : Vns(m_ctx, ((Function_32_5)(cee->addr))(arg0, arg1, arg2, arg3, arg4), bitn);
     Vns arg5 = tIRExpr(exp_args[5]);
     if (arg5.symbolic()) z3_mode = True;
-    if (!exp_args[6]) return (z3_mode) ? ((Z3_Function6)(cptr))(arg0, arg1, arg2, arg3, arg4, arg5) : symbolic_check(m_ctx, ((Function_32_6)(cee->addr))(arg0, arg1, arg2, arg3, arg4, arg5), bitn);
+    if (!exp_args[6]) return (z3_mode) ? ((Z3_Function6)(cptr))(arg0, arg1, arg2, arg3, arg4, arg5) : Vns(m_ctx, ((Function_32_6)(cee->addr))(arg0, arg1, arg2, arg3, arg4, arg5), bitn);
 }
 
 template<>
@@ -522,22 +509,22 @@ Vns State<Addr64>::CCall(IRCallee* cee, IRExpr** exp_args, IRType ty)
         return dirty_ccall<Addr64>(m_dctx, ty, cee, exp_args);
     };
 
-    if (!exp_args[1]) return (z3_mode) ? ((Z3_Function1)(cptr))(arg0) : symbolic_check(m_ctx, ((Function_64_1)(cee->addr))(arg0), bitn);
+    if (!exp_args[1]) return (z3_mode) ? ((Z3_Function1)(cptr))(arg0) : Vns(m_ctx, ((Function_64_1)(cee->addr))(arg0), bitn);
     Vns arg1 = tIRExpr(exp_args[1]);
     if (arg1.symbolic()) z3_mode = True;
-    if (!exp_args[2]) return (z3_mode) ? ((Z3_Function2)(cptr))(arg0, arg1) : symbolic_check(m_ctx, ((Function_64_2)(cee->addr))(arg0, arg1), bitn);
+    if (!exp_args[2]) return (z3_mode) ? ((Z3_Function2)(cptr))(arg0, arg1) : Vns(m_ctx, ((Function_64_2)(cee->addr))(arg0, arg1), bitn);
     Vns arg2 = tIRExpr(exp_args[2]);
     if (arg2.symbolic()) z3_mode = True;
-    if (!exp_args[3]) return (z3_mode) ? ((Z3_Function3)(cptr))(arg0, arg1, arg2) : symbolic_check(m_ctx, ((Function_64_3)(cee->addr))(arg0, arg1, arg2), bitn);
+    if (!exp_args[3]) return (z3_mode) ? ((Z3_Function3)(cptr))(arg0, arg1, arg2) : Vns(m_ctx, ((Function_64_3)(cee->addr))(arg0, arg1, arg2), bitn);
     Vns arg3 = tIRExpr(exp_args[3]);
     if (arg3.symbolic()) z3_mode = True;
-    if (!exp_args[4]) return (z3_mode) ? ((Z3_Function4)(cptr))(arg0, arg1, arg2, arg3) : symbolic_check(m_ctx, ((Function_64_4)(cee->addr))(arg0, arg1, arg2, arg3), bitn);
+    if (!exp_args[4]) return (z3_mode) ? ((Z3_Function4)(cptr))(arg0, arg1, arg2, arg3) : Vns(m_ctx, ((Function_64_4)(cee->addr))(arg0, arg1, arg2, arg3), bitn);
     Vns arg4 = tIRExpr(exp_args[4]);
     if (arg4.symbolic()) z3_mode = True;
-    if (!exp_args[5]) return (z3_mode) ? ((Z3_Function5)(cptr))(arg0, arg1, arg2, arg3, arg4) : symbolic_check(m_ctx, ((Function_64_5)(cee->addr))(arg0, arg1, arg2, arg3, arg4), bitn);
+    if (!exp_args[5]) return (z3_mode) ? ((Z3_Function5)(cptr))(arg0, arg1, arg2, arg3, arg4) : Vns(m_ctx, ((Function_64_5)(cee->addr))(arg0, arg1, arg2, arg3, arg4), bitn);
     Vns arg5 = tIRExpr(exp_args[5]);
     if (arg5.symbolic()) z3_mode = True;
-    if (!exp_args[6]) return (z3_mode) ? ((Z3_Function6)(cptr))(arg0, arg1, arg2, arg3, arg4, arg5) : symbolic_check(m_ctx, ((Function_64_6)(cee->addr))(arg0, arg1, arg2, arg3, arg4, arg5), bitn);
+    if (!exp_args[6]) return (z3_mode) ? ((Z3_Function6)(cptr))(arg0, arg1, arg2, arg3, arg4, arg5) : Vns(m_ctx, ((Function_64_6)(cee->addr))(arg0, arg1, arg2, arg3, arg4, arg5), bitn);
 
 }
 
@@ -683,20 +670,21 @@ inline Vns State<ADDR>::tIRExpr(IRExpr* e)
 
 template <typename ADDR>
 void State<ADDR>::start(Bool first_bkp_pass) {
+    pap.state = (void*)(this);
+    pap.n_page_mem = _n_page_mem;
+    pap.guest_max_insns = guest_max_insns;
+    init_vta_chunk(vta_chunk, vge_chunk, guest, traceflags);
+
     if (this->status != NewState) {
         vex_printf("this->status != NewState");
         return;
     }
-    init_vta_chunk(vta_chunk, vge_chunk);
-    pap.state = (void*)(this);
-    pap.n_page_mem = _n_page_mem;
-    pap.guest_max_insns = guest_max_insns;
+    IRSB* irsb = nullptr;
     status = Running;
     traceStart();
     g_state = this;
     is_dynamic_block = false;
     Hook_struct hs;
-    IRSB* irsb = nullptr;
     init_irTemp();
 Begin_try:
     try {
@@ -1367,7 +1355,7 @@ bool State<ADDR>::treeCompress(
         has_branch = false;
         if (SCNode->compress_group == group) {
            SCNode->state->get_write_map(change_map_ret, ctx);
-            auto op = SCNode->state->regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::cc_op);
+            auto op = SCNode->state->regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::CC_OP);
             return true;
         }
         else {
