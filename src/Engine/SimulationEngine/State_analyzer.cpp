@@ -16,7 +16,7 @@ bool check_has_loop(State<ADDR>*s, ADDR oep) {
         if (s->get_state_ep() == oep) {
             return true;
         }
-        s = s->m_father_state;
+        //s = s->m_father_state;
     }
     return false;
 }
@@ -24,19 +24,18 @@ bool check_has_loop(State<ADDR>*s, ADDR oep) {
 template<typename ADDR>
 void find_explore_state(State<ADDR> &state, std::vector<State<ADDR>*>& explore, std::hash_map<ADDR, UInt> &Fork_addr) {
    if (state.branch.empty()) {
-        if (state.status == Fork) {
+        if (state.status() == Fork) {
             auto _where = Fork_addr.lower_bound(state.get_cpu_ip());
             if (_where == Fork_addr.end()) {
                 for (BranchChunk& bc : state.branchChunks) {
                     State<ADDR>* nstate = state.mkChildState(bc);
-                    state.branch.emplace_back(nstate);
                     explore.emplace_back(nstate);
                 }
             }
             else {
                 Fork_addr[state.get_cpu_ip()] += 1;
             }
-        }else if (state.status == NewState) {
+        }else if (state.status() == NewState) {
             explore.emplace_back(&state);
         }
         return;
@@ -87,7 +86,7 @@ bool task_explorer(State<ADDR>* top) {
                 if (SD.second) {
                     std::vector<State_Tag> avoid;
                     avoid.emplace_back(Death);
-                    top->compress(SD.first, Fork, avoid);
+                    //top->compress(SD.first, Fork, avoid);
                     std::cout << *top << std::endl;
                 }
             }

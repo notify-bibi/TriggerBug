@@ -36,7 +36,8 @@ extern std::mutex global_user_mutex;
 #define CONCATSTR(A, B) " ACCESS MEM ERR UNMAPPED; " A " AT Line: " LINETOSTR(B)
 
 //客户机内存访问检查
-#define MEMACCESSASSERT(CODE, ADDRESS) if (!(CODE)) throw TRMem::MEMexception(CONCATSTR(__FILE__, __LINE__), ADDRESS);
+#define MEM_ACCESS_ASSERT_R(CODE, ADDRESS) if (!(CODE)) throw Expt::GuestMemReadErr(CONCATSTR(__FILE__, __LINE__), ADDRESS);
+#define MEM_ACCESS_ASSERT_W(CODE, ADDRESS) if (!(CODE)) throw Expt::GuestMemWriteErr(CONCATSTR(__FILE__, __LINE__), ADDRESS);
 
 //检查是否将ir translate的block区代码修改了，避免某些vmp或者ctf的恶作剧
 #define CODEBLOCKISWRITECHECK(address){                                                  \
@@ -490,35 +491,9 @@ for (UInt i1 = 0; i1 < CR3_point->used; i1++) {																				\
 #define LSTRUCT4 PT
 #define LSTRUCT5 PAGE
 
-typedef enum {
-    guest_mem_accesss_err,
-    engine_memory_leak
-}MEMexceptionTag;
+
 
 namespace TRMem {
-    class MEMexception {
-        std::string m_msg;
-        Addr64 m_gaddr;
-        MEMexceptionTag m_errorID;
-    public:
-        MEMexception(char const* msg, Addr64 gaddr = 0) :m_msg(msg), m_gaddr(gaddr), m_errorID(guest_mem_accesss_err){ }
-        MEMexception(char const* msg, MEMexceptionTag id) :m_msg(msg), m_gaddr(0), m_errorID(id) { }
-        std::string msg() const {
-            if (m_errorID == guest_mem_accesss_err) {
-                char buffer[50];
-                snprintf(buffer, 50, "Gest mem access addr: %p { ", m_gaddr);
-                std::string ret;
-                return ret.assign(buffer) + m_msg + "}";
-            }
-            else {
-                return m_msg;
-            }
-        }
-        friend std::ostream& operator<<(std::ostream& out, MEMexception const& e);
-    };
-    inline std::ostream& operator<<(std::ostream& out, MEMexception const& e) { out << e.msg() ; return out; }
-
-
 
     typedef struct PAGE {
         Int user;
@@ -676,12 +651,14 @@ public:
     void clearRecord();
     ULong find_block_forward(ULong start, ADDR size);
     ULong find_block_reverse(ULong start, ADDR size);
+    inline std::hash_map<ADDR, Register<0x1000>*> change_map() { return mem_change_map; }
+    inline Int get_user() { return user; }
     //把两个不连续的页放到Pap里，以支持valgrind的跨页翻译
     inline void set_double_page(ADDR address, Pap &addrlst) {
         addrlst.guest_addr = address;
         addrlst.Surplus = 0x1000 - (address & 0xfff);
         PAGE* P = getMemPage(address);
-        MEMACCESSASSERT(P, address);
+        MEM_ACCESS_ASSERT_R(P, address);
         addrlst.t_page_addr = (UChar*)P->unit->m_bytes + (address & 0xfff);
     }
     
@@ -704,14 +681,14 @@ public:
     private:
         Vns _Iex_Load_a(PAGE* P, ADDR address, UShort size) {
             PAGE* nP = getMemPage(address + 0x1000);
-            MEMACCESSASSERT(nP, address + 0x1000);
+            MEM_ACCESS_ASSERT_R(nP, address + 0x1000);
             UInt plength = 0x1000 - ((UShort)address & 0xfff);
             return nP->unit->Iex_Get(0, size - plength).translate(m_ctx).Concat(P->unit->Iex_Get(((UShort)address & 0xfff), plength));
         }
 
         Vns _Iex_Load_b(PAGE* P, ADDR address, UShort size) {
             PAGE* nP = getMemPage(address + 0x1000);
-            MEMACCESSASSERT(nP, address + 0x1000);
+            MEM_ACCESS_ASSERT_R(nP, address + 0x1000);
             UInt plength = 0x1000 - ((UShort)address & 0xfff);
             return nP->unit->Iex_Get(0, size - plength).translate(m_ctx).Concat(P->unit->Iex_Get(((UShort)address & 0xfff), plength, m_ctx));
         }
@@ -744,7 +721,7 @@ public:
     inline Vns Iex_Load(ADDR address)
     {
         PAGE *P = getMemPage(address);
-        MEMACCESSASSERT(P, address);
+        MEM_ACCESS_ASSERT_R(P, address);
         UShort offset = (UShort)address & 0xfff;
         if (P->is_pad) {
             return Pad2Value<ty>(P->pad);
@@ -906,14 +883,14 @@ public:
     void Ist_Store(ADDR address, DataTy data) {
         CODEBLOCKISWRITECHECK(address);
         PAGE* P = getMemPage(address);
-        MEMACCESSASSERT(P, address);
+        MEM_ACCESS_ASSERT_W(P, address);
         CheckSelf(P, address);
         vassert(P->user == user);
         vassert(P->used_point == 1);
         UShort offset = address & 0xfff;
         if (fastalignD1[sizeof(data) << 3] > 0xFFF - offset) {
             PAGE* nP = getMemPage(address + 0x1000);
-            MEMACCESSASSERT(nP, address + 0x1000);
+            MEM_ACCESS_ASSERT_W(nP, address + 0x1000);
             CheckSelf(nP, address + 0x1000);
             UInt plength = (0x1000 - offset);
             P->unit->Ist_Put(offset, (void*)&data, plength);
@@ -928,14 +905,14 @@ public:
     void Ist_Store(ADDR address, Z3_ast data) {
         CODEBLOCKISWRITECHECK(address);
         PAGE* P = getMemPage(address);
-        MEMACCESSASSERT(P, address);
+        MEM_ACCESS_ASSERT_W(P, address);
         CheckSelf(P, address);
         vassert(P->user == user);
         vassert(P->used_point == 1);
         UShort offset = address & 0xfff;
         if (fastalignD1[bitn] > 0xFFF - offset) {
             PAGE* nP = getMemPage(address + 0x1000);
-            MEMACCESSASSERT(nP, address + 0x1000);
+            MEM_ACCESS_ASSERT_W(nP, address + 0x1000);
             CheckSelf(nP, address + 0x1000);
             UInt plength = (0x1000 - offset);
             Z3_ast Low = Z3_mk_extract(m_ctx, (plength << 3) - 1, 0, data);

@@ -30,18 +30,25 @@ UInt flag_count = 0;
 UInt flag_max_count = 0;
 extern "C" void dfd();
 
+namespace SP {
+    template <typename ADDR, class TC>
+    class StatePrinter;
+};
 
 class StateX86 : public State<Addr32> {
+    friend class SP::StatePrinter<Addr32, StateX86>;
+    ULong g_brk = ALIGN(0x0000000000603000, 32);
+    StateX86(StateX86* father_state, Addr32 gse) :State(father_state, gse) {};
 public:
     StateX86(const char* filename, Addr32 gse, Bool _need_record) :State(filename, gse, _need_record) {};
-    StateX86(StateX86* father_state, Addr32 gse) :State(father_state, gse) {};
+    
 
-    void cpu_exception() {
+    void cpu_exception() override {
         UInt seh_addr = x86g_use_seg_selector(regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::LDT), regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::GDT), regs.Iex_Get<Ity_I16>(X86_IR_OFFSET::FS).zext(16), 0);
         Vns seh = mem.Iex_Load<Ity_I32>(seh_addr);
         Vns next = mem.Iex_Load<Ity_I32>(seh);
         Vns seh_exception_method = mem.Iex_Load<Ity_I32>(seh + 4);
-        status = Exception;
+        set_status(Exception);
         std::cout << " SEH Exceptions at:" << std::hex << guest_start << " \nGoto handel:" << seh_exception_method << std::endl;
         guest_start = seh_exception_method;
 
@@ -51,7 +58,7 @@ public:
         exit(2);
     }
 
-    State_Tag Ijk_call(IRJumpKind kd) {
+    State_Tag Ijk_call(IRJumpKind kd) override {
         switch (kd) {
         case Ijk_Sys_syscall:
             return Sys_syscall();
@@ -71,29 +78,27 @@ public:
         return Death;
     }
 
-    virtual State<Addr32>* ForkState(Addr32 ges) {
-        return new StateX86(this, ges);
-    };
-
+    void* ForkState(Addr32 ges) override { return new StateX86(this, ges); };
+    void* mkState(Addr32 ges) override { return (State<Addr32>*)(StateX86*)ForkState(ges); }
 };
 
 
 class StateAMD64 : public State<Addr64> {
     ULong g_brk = ALIGN(0x0000000000603000, 32);
-public:
-    StateAMD64(const char* filename, Addr64 gse, Bool _need_record) :
-
-        State(filename, gse, _need_record)
-    {
-    };
-
+    friend class SP::StatePrinter<Addr64, StateAMD64>;
     StateAMD64(StateAMD64* father_state, Addr64 gse) :
         State(father_state, gse)
     {
     };
+public:
+    StateAMD64(const char* filename, Addr64 gse, Bool _need_record) :
+        State(filename, gse, _need_record)
+    {
+    };
 
-    void cpu_exception() {
-        status = Death;
+
+    void cpu_exception() override {
+        set_status(Death);
         //UInt seh_addr = x86g_use_seg_selector(regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::ldt), regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::gdt), regs.Iex_Get<Ity_I16>(X86_IR_OFFSET::fs).zext(16), 0);
         //Vns seh = mem.Iex_Load<Ity_I32>(seh_addr);
         //Vns next = mem.Iex_Load<Ity_I32>(seh);
@@ -108,7 +113,7 @@ public:
         //exit(2);
     }
 
-    State_Tag Ijk_call(IRJumpKind kd) {
+    State_Tag Ijk_call(IRJumpKind kd) override {
         switch (kd) {
         case Ijk_Sys_syscall:
             switch (guest_system) {
@@ -194,7 +199,7 @@ public:
             }
             case 0xE7: {//LINUX - sys_Exit
                 vex_printf("system call: sys_Exit\n");
-                return Death;
+                return Exit;
             }
             case 0x101: {//LINUX - sync_file_range
                 // rsi filename   rdx flag
@@ -218,14 +223,97 @@ public:
         return Death;
     }
 
-    State<Addr64>* ForkState(Addr64 ges) {
-        return new StateAMD64(this, ges);
-    };
+    virtual void* ForkState(Addr64 ges) override { return new StateAMD64(this, ges); };
+    virtual void* mkState(Addr64 ges) override { return (State<Addr64>*)(StateAMD64*)ForkState(ges); }
 };
 
 
 
 
+namespace SP {
+
+    template <typename ADDR, class TC>
+    class StatePrinter : public TC {
+        friend GraphView;
+        TRControlFlags trtraceflags;
+    public:
+        StatePrinter(StatePrinter* father_state, ADDR gse) : TC(father_state, gse), trtraceflags(father_state->trtraceflags) {};
+        inline bool getFlag(TRControlFlags t) const { return trtraceflags & t; }
+        inline void setFlag(TRControlFlags t) { *(ULong*)&trtraceflags |= t; }
+        inline void unsetFlag(TRControlFlags t) { *(ULong*)&trtraceflags &= ~t; };
+        inline TRControlFlags gtrtraceflags() { return trtraceflags; }
+    public:
+        StatePrinter(const char* filename, ADDR gse, Bool _need_record) :
+            TC(filename, gse, _need_record),
+            trtraceflags(CF_None) {
+            if (doc_debug) {
+                bool traceState = false, traceJmp = false, ppStmts = false, TraceSymbolic = false;
+                auto _ppStmts = doc_debug->FirstChildElement("ppStmts");
+                auto _TraceState = doc_debug->FirstChildElement("TraceState");
+                auto _TraceJmp = doc_debug->FirstChildElement("TraceJmp");
+                auto _TraceSymbolic = doc_debug->FirstChildElement("TraceSymbolic");
+
+                if (_TraceState) _TraceState->QueryBoolText(&traceState);
+                if (_TraceJmp) _TraceJmp->QueryBoolText(&traceJmp);
+                if (_ppStmts) _ppStmts->QueryBoolText(&ppStmts);
+                if (_TraceSymbolic) _TraceSymbolic->QueryBoolText(&TraceSymbolic);
+                if (traceState) setFlag(CF_traceState);
+                if (traceJmp) setFlag(CF_traceJmp);
+                if (ppStmts) setFlag(CF_ppStmts);
+                if (TraceSymbolic) setFlag(CF_TraceSymbolic);
+            }
+        };
+
+
+        void   traceStart() override {
+            if (getFlag(CF_traceState))
+                std::cout << "\n+++++++++++++++ Thread ID: " << GetCurrentThreadId() << "  address: " << std::hex << guest_start << "  Started +++++++++++++++\n" << std::endl;
+        };
+
+        void   traceFinish() override {
+            if (getFlag(CF_traceState)) {
+                if (status() == Fork) {
+                    vex_printf("Fork from: %p to:{ ", guest_start);
+                    for (BranchChunk& bc : branchChunks) {
+                        vex_printf(" %p", bc.m_oep);
+                    }
+                    vex_printf(" };", guest_start);
+                }
+                std::cout << "\n+++++++++++++++ Thread ID: " << GetCurrentThreadId() << "  address: " << std::hex << guest_start << "  OVER +++++++++++++++\n" << std::endl;
+            }
+        }
+
+        void   traceIRStmtEnd(IRStmt* s) override {
+            if (getFlag(CF_ppStmts)) {
+                if (s->tag == Ist_WrTmp) {
+                    UInt tmp = s->Ist.WrTmp.tmp;
+                    vex_printf("t%u = ", tmp);
+                    std::cout << ir_temp[tmp];
+                    vex_printf(" = ");
+                    ppIRExpr(s->Ist.WrTmp.data);
+                }
+                else {
+                    ppIRStmt(s);
+                }
+                vex_printf("\n");
+            }
+        };
+
+        void   traceIRSB(IRSB* bb) override {
+            if (getFlag(CF_traceJmp)) {
+                vex_printf("Jmp: %llx \n", guest_start);
+            }
+        };
+
+        
+        virtual void* ForkState(ADDR ges) override { return new StatePrinter<ADDR, TC>(this, ges); };
+        virtual void* mkState(ADDR ges) override { return (State<ADDR>*)(StatePrinter<ADDR, TC>*)ForkState(ges); }
+        virtual State_Tag call_back_hook(Hook_struct const& hs) override { setFlag(hs.cflag); return (hs.cb) ? (hs.cb)(this) : Running; }
+    };
+
+    using AMD64 = StatePrinter<Addr64, StateAMD64>;
+    using X86 = StatePrinter<Addr32, StateX86>;
+}
 
 
 //#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\TriggerBug-asong.xml"
@@ -369,7 +457,52 @@ Vns flag_limit(Vns &flag) {
  
 
 int main() {
-    StatePrinter<Addr64, StateAMD64> state("C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.xml", 0, True);
+    SP::AMD64 state("C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.xml", 0, True);
+    
+    for (int i = 0; i < 4; i++) {
+        SP::AMD64* s = (SP::AMD64*)(state.ForkState(20));
+        Vns f1 = s->m_ctx.bv_const("a1", 8);
+        Vns f2 = s->m_ctx.bv_const("a2", 8);
+        s->solv.add_assert(f1 > i);
+        s->solv.add_assert(f2 < i);
+        if(i==3)
+            s->set_status(Death);
+    }
+    std::cout << state << std::endl;
+    for (int i = 4; i < 8; i++) {
+        SP::AMD64* s = (SP::AMD64*)(state.ForkState(32));
+        Vns f1 = s->m_ctx.bv_const("a1", 8);
+        Vns f2 = s->m_ctx.bv_const("a2", 8);
+        s->solv.add_assert(f1 > i);
+        s->solv.add_assert(f2 < i);
+        s->set_status(Death);
+    }
+
+    std::cout << state << std::endl;
+    UInt i = 0;
+    for (auto s : state.branch) {
+        i += 1;
+        if (i <= 6) { continue; }
+        SP::AMD64* s2 = (SP::AMD64*)(s->ForkState(20));
+        s->set_status(Fork);
+        Vns f = s2->m_ctx.bv_const("b", 8);
+        s2->solv.add_assert(f > i - 3);
+    }
+
+
+    std::cout << state << std::endl;
+
+    state.compress();
+    for (auto s : state.branch) {
+        delete s;
+    }
+
+
+    for (auto s : state.branch) {
+        std::cout << *s << std::endl;
+    }
+
+
     /*TRGL::VexGuestAMD64State reg(state);
     for (int i = 0; i < 38; i++) {
         auto flag = state.mk_int_const(8);
@@ -379,7 +512,7 @@ int main() {
     }
     state.hook_add(0x400CC0, success_ret3);*/
 
-
+    
     StateAnalyzer<Addr64> gv(state);
     gv.Run();
 }

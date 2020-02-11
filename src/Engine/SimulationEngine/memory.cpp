@@ -861,7 +861,7 @@ MEM<ADDR>::~MEM() {
                     PAGE* pt = pt_point->pt[index];
                     if (pt->user == user) {
                         if (pt->used_point != 1) {
-                            throw TRMem::MEMexception("memory leak!!!", engine_memory_leak);
+                            VPANIC("engine memory leak!!!");
                         }
                         if (pt->unit) {
                             delete pt->unit;
@@ -1029,7 +1029,7 @@ UInt MEM<ADDR>::write_bytes(ULong address, ULong length, UChar* data) {
         {
             ULong max = address + length;
             PAGE* p_page = getMemPage(address);
-            MEMACCESSASSERT(p_page, address);
+            MEM_ACCESS_ASSERT_W(p_page, address);
             init_page(p_page, address);
             if (p_page->is_pad) {
                 p_page->unit = new Register<0x1000>(m_ctx, need_record);
@@ -1039,7 +1039,7 @@ UInt MEM<ADDR>::write_bytes(ULong address, ULong length, UChar* data) {
             while (address < max) {
                 if (!(address % 0x1000)) {
                     p_page = getMemPage(address);
-                    MEMACCESSASSERT(p_page, address);
+                    MEM_ACCESS_ASSERT_W(p_page, address);
                     init_page(p_page, address);
                     if (p_page->is_pad) {
                         p_page->unit = new Register<0x1000>(m_ctx, need_record);
@@ -1061,7 +1061,7 @@ UInt MEM<ADDR>::write_bytes(ULong address, ULong length, UChar* data) {
     }
     else {
         PAGE* p_page = getMemPage(address);
-        MEMACCESSASSERT(p_page, address);
+        MEM_ACCESS_ASSERT_W(p_page, address);
         init_page(p_page, address);
         pad = _mm256_set1_epi8(data[0]);
         if (!sse_cmp(pad, data, align_l) || !p_page->is_pad) {
@@ -1086,7 +1086,7 @@ UInt MEM<ADDR>::write_bytes(ULong address, ULong length, UChar* data) {
     while (count < max) {
         if ((!((address + count) & 0xfff)) || (need_check)) {
             p_page = getMemPage(address + count);
-            MEMACCESSASSERT(p_page, address + count);
+            MEM_ACCESS_ASSERT_W(p_page, address + count);
             init_page(p_page, address + count);
             ULong smax = (count + 0x1000 <= max) ? 0x1000 : max - count;
             need_mem = false;
@@ -1125,7 +1125,7 @@ UInt MEM<ADDR>::write_bytes(ULong address, ULong length, UChar* data) {
     if (align_r) {
         if ((!((address + count) & 0xfff)) || !p_page) {
             p_page = getMemPage(address + count);
-            MEMACCESSASSERT(p_page, address + count);
+            MEM_ACCESS_ASSERT_W(p_page, address + count);
             init_page(p_page, address + count);
             pad = _mm256_set1_epi8(data[count]);
         }

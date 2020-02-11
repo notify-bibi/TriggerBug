@@ -511,7 +511,7 @@ public:
     /*912*/GR<Addr64, ULong>   guest_IP_AT_SYSCALL;
     State<Addr64>& m_state;
 public:
-    VexGuestAMD64State() :VexGuestAMD64State(*(State<Addr64>*)g_state){}
+    //VexGuestAMD64State() :VexGuestAMD64State(*(State<Addr64>*)g_state){}
 	VexGuestAMD64State(State<Addr64>&s):
         m_state(s),
         host_EvC_FAILADDR   (s,0  ),
@@ -645,7 +645,7 @@ public:
     /*348*/GR<Addr32, UInt>      padding2;
     /*352*/GR<Addr32, UInt>      padding3;
 public:
-    VexGuestX86State() :VexGuestX86State(*(State<Addr32>*)g_state) {}
+    //VexGuestX86State() :VexGuestX86State(*(State<Addr32>*)g_state) {}
     VexGuestX86State(State<Addr32>& s):
         host_EvC_FAILADDR   (s, 0  ),
         host_EvC_COUNTER    (s, 4  ),
@@ -780,11 +780,11 @@ namespace X86SegDescr {
         {
 
         }
-        VexGuestX86SegDescr(Addr32 base) :
+        /*VexGuestX86SegDescr(Addr32 base) :
             LdtEnt(*(State<Addr32>*)g_state, base)
         {
 
-        }
+        }*/
 
     };
 };

@@ -58,7 +58,7 @@
             <!--static addr = "0x0401B04" cflag = "1"/-->
         </TraceIrAddrress>
 		<TraceState>0</TraceState>
-		<TraceJmp>1</TraceJmp>
+		<TraceJmp>0</TraceJmp>
         <TraceSymbolic>0</TraceSymbolic>
 	</DEBUG>
 

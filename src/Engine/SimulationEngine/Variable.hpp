@@ -688,6 +688,7 @@ public:
         if (real())
             return Vns(target_ctx, (__m256i)(*this), bitn);
         Z3_ast t = *this;
+        dassert(target_ctx != m_ctx);
         return Vns(target_ctx, Z3_translate(m_ctx, t, target_ctx), bitn);
     }
 
@@ -1050,6 +1051,11 @@ template<typename T>
 static inline Vns ashr(T a, Vns const &b) {
     return  ashr(Vns(b, a), b);
 }
+
+static inline Vns implies(Vns const& a, Vns const& b) {
+    return Vns(a, Z3_mk_implies(a, a.toZ3Bool(), b.toZ3Bool()), 1);
+}
+
 
 static inline std::ostream& operator<<(std::ostream& out, Vns const& n) { return out << (std::string) n; }
 

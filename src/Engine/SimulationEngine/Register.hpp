@@ -220,12 +220,14 @@ public:
     UChar m_flag[(maxlength >> 6) + 1];
     Record(){
         memset(m_flag, 0, sizeof(m_flag));
-        m_flag[maxlength >> 6] = 0x1;
+        UInt shift = (maxlength & ((1 << 6) - 1)) >> 3;
+        m_flag[maxlength >> 6] = shift ? 0x1 << shift : 0x1;
     };
 
     void clearRecord() {
         memset(m_flag, 0, sizeof(m_flag));
-        m_flag[maxlength >> 6] = 0x1;
+        UInt shift = (maxlength & ((1 << 6) - 1)) >> 3;
+        m_flag[maxlength >> 6] = shift ? 0x1 << shift : 0x1;
     };
 
     template<int nbytes>
@@ -262,10 +264,11 @@ public:
     class iterator
     {
     private:
-        int _pcur;
+        UInt _pcur;
+        UInt m_len;
         ULong *m_flag;
     public:
-        inline iterator(UChar *flag) :_pcur(0), m_flag((ULong*)flag) {
+        inline iterator(UChar *flag) :_pcur(0), m_flag((ULong*)flag), m_len(0) {
             DWORD N;
             for (; ; _pcur += 64) {
                 if (_BitScanForward64(&N, m_flag[_pcur >> 6])) {
@@ -274,13 +277,14 @@ public:
                 }
             }
         }
-        iterator(UChar *flag, int length) :
+        iterator(UChar *flag, UInt length) :
             _pcur(length >> 3),
-            m_flag((ULong*)flag)
+            m_flag((ULong*)flag), 
+            m_len(length)
         {}
         inline bool operator!=(const iterator &src)
         {
-            return _pcur < src._pcur;
+            return (_pcur << 3) < src.m_len;
         }
 
         inline void operator++()

@@ -35,7 +35,6 @@ extern "C" void vex_assert_fail(const HChar * expr, const HChar * file, Int line
 extern "C" unsigned int vex_printf(const HChar * format, ...);
 extern "C" void vpanic(const HChar * str);
 
-#define VPANIC(...) { printf("%s line %d",__FILE__,__LINE__); vpanic(__VA_ARGS__); }
 
 #define __i386__
 #define TESTCODE(code)                                                                                                  \
@@ -102,30 +101,10 @@ typedef enum :unsigned int {
     Running,
     Fork,
     Death,
+    Exit,
     NoDecode,
     Exception
 }State_Tag;
-
-#if defined(_DEBUG)
-#undef dassert
-#define dassert(xexpr)                                           \
-  ((void) ((xexpr) ? 0 :                                        \
-           (vex_assert_fail (#xexpr,                            \
-                             __FILE__, __LINE__,                \
-                             __FUNCSIG__), 0)))
-#else
-#define dassert(...) 
-#endif // _DEBUG
-
-#if !defined(RELEASE_OFFICIALLY)||defined(_DEBUG)
-#define vassert(xexpr)                                           \
-  ((void) ((xexpr) ? 0 :                                         \
-           (vex_assert_fail (#xexpr,                             \
-                             __FILE__, __LINE__,                 \
-                             __FUNCSIG__), 0)))
-#else
-#define vassert(...) 
-#endif
 
 /* vex_traceflags values */
 #define VEX_TRACE_FE     (1 << 7)  /* show conversion into IR */
