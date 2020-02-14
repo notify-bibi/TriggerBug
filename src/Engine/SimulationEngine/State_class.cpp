@@ -1047,7 +1047,6 @@ State<ADDR>* State<ADDR>::mkChildState(BranchChunk const& bc)
 namespace cmpr{
 
     static thread_local Z3_context thread_z3_ctx;
-    static thread_local UInt thread_max_size;
 
     static Vns logic_and(std::vector<Vns> const& v) {
         Z3_context ctx = v[0];
@@ -1075,7 +1074,6 @@ namespace cmpr{
         Z3_context m_ctx;
         struct _m_vec_ {
             bool is_ast;
-            UInt m_maps_counts;
             union { Z3_ast ast; ULong data; } value;
             Z3_ast* m_maps_ass;
             UInt m_maps_ass_idx;
@@ -1086,147 +1084,167 @@ namespace cmpr{
         UInt m_idx = 0;
         UInt m_size;
 
-        Vns get(struct _m_vec_* v) { return v->is_ast ? Vns(m_ctx, v->value.ast, 64) : Vns(m_ctx, v->value.data); }
+        Vns vec2ast(struct _m_vec_* v) {
+            return v->is_ast ? Vns(m_ctx, v->value.ast, 64) : Vns(m_ctx, v->value.data);
+        }
 
+        Vns _get(struct _m_vec_* vec) {
+            vassert(vec->m_maps_ass_idx > 0);
+            Vns guard = Vns(m_ctx, vec->m_maps_ass_idx == 1 ? vec->m_maps_ass[0] : Z3_mk_or(m_ctx, vec->m_maps_ass_idx, vec->m_maps_ass), 1);
+
+            return vec->sort ? ite(guard, vec2ast(vec), _get(vec->sort)) : vec2ast(vec);
+        }
+
+        void check() {
+            if (m_idx >= m_size) {
+                vassert(m_idx == m_size);
+                UInt new_size = m_size * 2;
+                m_vec = (_m_vec_*)realloc(m_vec, sizeof(_m_vec_) * new_size);
+                for (struct _m_vec_* vec = m_sort; vec; vec = vec->sort) {
+                    if (vec->m_maps_ass)
+                        vec->m_maps_ass = (Z3_ast*)realloc(vec->m_maps_ass, new_size * sizeof(Z3_ast));
+                }
+                m_size = new_size;
+            }
+        }
     public:
 
-        GPMana() :GPMana(thread_z3_ctx, thread_max_size) {  };
+        GPMana() :GPMana(thread_z3_ctx, 16) {  };
 
-        GPMana(Z3_context ctx, UInt size) :m_size(size), m_ctx(ctx) {
-            m_vec = new _m_vec_[size];
-            m_sort = m_vec;
+        GPMana(Z3_context ctx, UInt size) :m_size(size), m_ctx(ctx), m_sort(nullptr){
+            m_vec = (_m_vec_*)malloc(sizeof(_m_vec_) * size);
             memset(m_vec, 0, sizeof(_m_vec_) * m_size);
         }
 
         GPMana(const GPMana& gp) :GPMana(gp.m_ctx, gp.m_size) {
+            m_sort = m_vec;
             m_idx = gp.m_idx;
             UInt idx = 0;
-            struct _m_vec_* this_vec;
+            struct _m_vec_* this_vec = nullptr;
             for (struct _m_vec_* vec = gp.m_sort; vec; vec = vec->sort, idx++) {
                 this_vec = &m_vec[idx];
-                if (!vec->m_maps_ass) { this_vec->m_maps_ass = new Z3_ast[m_size]; }
-                for (UInt i = 0; i < vec->m_maps_ass_idx; i++) {
-                    this_vec->m_maps_ass[i] = vec->m_maps_ass[i];
-                    Z3_inc_ref(m_ctx, vec->m_maps_ass[i]);
+                if (vec->m_maps_ass_idx) {
+                    if (!this_vec->m_maps_ass) { this_vec->m_maps_ass = new Z3_ast[m_size]; }
+                    for (UInt i = 0; i < vec->m_maps_ass_idx; i++) {
+                        this_vec->m_maps_ass[i] = vec->m_maps_ass[i];
+                        Z3_inc_ref(m_ctx, vec->m_maps_ass[i]);
+                    }
                 }
                 this_vec->sort = &m_vec[idx + 1];
                 this_vec->is_ast = vec->is_ast;
                 this_vec->m_maps_ass_idx = vec->m_maps_ass_idx;
-                this_vec->value.data = vec->value.data;
-                this_vec->m_maps_counts = vec->m_maps_counts;
+                if (this_vec->is_ast) {
+                    this_vec->value.ast = vec->value.ast;
+                    Z3_inc_ref(m_ctx, this_vec->value.ast);
+                }
+                else {
+                    this_vec->value.data = vec->value.data;
+                }
             }
-            this_vec->sort = nullptr;
+            if (this_vec) {
+                this_vec->sort = nullptr;
+            }
+            else {
+                m_sort = nullptr;
+            }
         }
 
         void operator=(const GPMana& gp)
         {
             this->~GPMana();
-            m_idx = gp.m_idx;
-            UInt idx = 0;
-            struct _m_vec_* this_vec;
-            for (struct _m_vec_* vec = gp.m_sort; vec; vec = vec->sort, idx++) {
-                this_vec = &m_vec[idx];
-                if (!vec->m_maps_ass) { this_vec->m_maps_ass = new Z3_ast[m_size]; }
-                for (UInt i = 0; i < vec->m_maps_ass_idx; i++) {
-                    this_vec->m_maps_ass[i] = vec->m_maps_ass[i];
-                    Z3_inc_ref(m_ctx, vec->m_maps_ass[i]);
-                }
-                this_vec->sort = &m_vec[idx + 1];
-                this_vec->is_ast = vec->is_ast;
-                this_vec->m_maps_ass_idx = vec->m_maps_ass_idx;
-                this_vec->value.data = vec->value.data;
-                this_vec->m_maps_counts = vec->m_maps_counts;
-            }
-            this_vec->sort = nullptr;
+            this->GPMana::GPMana(gp);
         }
+
 
         void add(Vns const& ass, Vns const& v) {
             if (v.real()) add((Z3_ast)ass, (ULong)v); else  add((Z3_ast)ass, (Z3_ast)v);
         }
 
         void add(Z3_ast ass, Z3_ast v) {
-            vassert(m_idx < m_size);
+            check();
             bool find = false;
-            for (UInt i = 0; i < m_idx; i++) {
-                if (m_vec[i].is_ast && m_vec[i].value.ast == v) {
-                    find = true; 
-                    break; 
-                }
-            }
-            struct _m_vec_& vec = m_vec[m_idx];
-            if (!find) {
-                vec.value.ast = v;
-                Z3_inc_ref(m_ctx, v);
-                vec.is_ast = true;
-                vec.sort = nullptr;
-                m_idx++;
-                mk_sort(&vec);
-            }
-            else {
-                if (!vec.m_maps_ass) { vec.m_maps_ass = new Z3_ast[m_size]; }
-                vec.m_maps_ass[vec.m_maps_ass_idx++] = ass;
-                Z3_inc_ref(m_ctx, ass);
-            }
-            vec.m_maps_counts++;
-        }
-
-        void add(Z3_ast ass, ULong v) {
-            vassert(m_idx < m_size);
-            bool find = false;
-            for (UInt i = 0; i < m_idx; i++) {
-                if (!m_vec[i].is_ast && m_vec[i].value.data == v) {
+            struct _m_vec_* vec = m_sort;
+            struct _m_vec_* prv = nullptr;
+            for (; vec; prv = vec, vec = vec->sort) {
+                if (vec->is_ast && vec->value.ast == v) {
                     find = true;
                     break;
                 }
             }
-            struct _m_vec_& vec = m_vec[m_idx];
-            if (!find) { 
-                vec.value.data = v;
-                vec.is_ast = false;
-                vec.sort = nullptr;
-                m_idx++;
-                mk_sort(&vec);
+            if (!vec) {
+                vec = &m_vec[m_idx++];
             }
-            else {
-                if (!vec.m_maps_ass) { vec.m_maps_ass = new Z3_ast[m_size]; }
-                vec.m_maps_ass[vec.m_maps_ass_idx++] = ass;
-                Z3_inc_ref(m_ctx, ass);
+            if (!find) {
+                vec->is_ast = true;
+                vec->value.ast = v;
+                Z3_inc_ref(m_ctx, v);
+                struct _m_vec_* next = m_sort;
+                vec->sort = next;
+                m_sort = vec;
             }
-            vec.m_maps_counts++;
+            if (!vec->m_maps_ass) { vec->m_maps_ass = (Z3_ast*)malloc(sizeof(Z3_ast) * m_size); };
+            vec->m_maps_ass[vec->m_maps_ass_idx++] = ass;
+            Z3_inc_ref(m_ctx, ass);
+            if (find) mk_sort(prv, vec);
         }
 
-        void mk_sort(_m_vec_ *new_vec) {
-            if (m_idx == 1) { m_vec[0].sort = nullptr; return; }
-            struct _m_vec_* prv = m_sort;
-            for (struct _m_vec_* vec = m_sort; vec; prv = vec, vec = vec->sort) {
-                if (vec->m_maps_counts > new_vec->m_maps_counts) {
-                    if (vec == m_sort) {
-                        struct _m_vec_* t_next = m_sort;
-                        m_sort = new_vec;
-                        new_vec->sort = t_next;
-                        return;
-                    }
-                    else {
-                        prv->sort = new_vec;
-                        new_vec->sort = vec;
-                        return;
-                    }
+        void add(Z3_ast ass, ULong v) {
+            check();
+            bool find = false;
+            struct _m_vec_* vec = m_sort;
+            struct _m_vec_* prv = nullptr;
+            for (; vec; prv = vec, vec = vec->sort) {
+                if (!vec->is_ast && vec->value.data == v) {
+                    find = true;
+                    break;
                 }
             }
+            if (!vec) {
+                vec = &m_vec[m_idx++];
+            }
+            if (!find) {
+                vec->value.data = v;
+                vec->is_ast = false;
+                struct _m_vec_* next = m_sort;
+                vec->sort = next;
+                m_sort = vec;
+            }
+            if (!vec->m_maps_ass) { vec->m_maps_ass = (Z3_ast*)malloc(sizeof(Z3_ast) * m_size); }
+            vec->m_maps_ass[vec->m_maps_ass_idx++] = ass;
+            Z3_inc_ref(m_ctx, ass);
+            if (find) mk_sort(prv, vec);
+        }
+
+        void mk_sort(struct _m_vec_* prv, _m_vec_ *new_vec) {
+            //unlink
+            if (new_vec->sort) {
+                if (new_vec->m_maps_ass_idx > new_vec->sort->m_maps_ass_idx) {
+                    if (prv) {
+                        prv->sort = new_vec->sort;
+                    }else{
+                        m_sort = new_vec->sort;
+                    }
+                }
+                else {
+                    return;
+                }
+            }
+            //into
+            struct _m_vec_* vec = prv ? prv->sort : m_sort;
+            for (; vec; prv = vec, vec = vec->sort) {
+                if (new_vec->m_maps_ass_idx <= vec->m_maps_ass_idx) {
+                    prv->sort = new_vec;
+                    new_vec->sort = vec;
+                    return;
+                }
+            }
+            prv->sort = new_vec;
+            new_vec->sort = nullptr;
         }
 
 
         Vns get() {
-            Vns ret(m_ctx, 0, 1);
-            for (struct _m_vec_* vec = m_sort; vec; vec = vec->sort) {
-                if (ret.real()) {
-                    ret = get(vec);
-                }
-                else {
-                    ret = ite(Vns(m_ctx, Z3_mk_or(m_ctx, vec->m_maps_ass_idx, vec->m_maps_ass), 1), get(vec), ret);
-                }
-            }
-            return ret;
+            return _get(m_sort);
         }
 
         ~GPMana() {
@@ -1235,10 +1253,10 @@ namespace cmpr{
                     Z3_dec_ref(m_ctx, vec->m_maps_ass[idx]);
                 }
                 if(vec->is_ast) Z3_dec_ref(m_ctx, vec->value.ast);
-                delete vec->m_maps_ass;
+                free(vec->m_maps_ass);
                 vec->m_maps_ass = nullptr;
             }
-            delete m_vec;
+            free(m_vec);
         }
     };
 
@@ -1268,7 +1286,7 @@ namespace cmpr{
         void add_avoid(StateStatus avoid_tag) { m_avoid.emplace_back(avoid_tag); };
         bool is_avoid(StateStatus tag) { return std::find(m_avoid.begin(), m_avoid.end(), tag) != m_avoid.end(); }
         Addr64 get_target_addr() { return m_target_addr; }
-        std::vector<CompressClass*>& group() { return m_group; }
+        std::vector<CompressClass*>& group() const { return m_group; }
         inline TRcontext& ctx() { return m_z3_target_ctx; }
         inline operator TRcontext& () { return m_z3_target_ctx; }
     };
@@ -1287,7 +1305,7 @@ namespace cmpr{
         StateType m_type;
         CmprsContext<State<ADDR>, State_Tag>& m_ctx;
         State<ADDR>& m_state;
-
+        Vns m_condition;
         static bool StateCompression(State<ADDR>& a, State<ADDR> const& next) {
             bool ret = a.m_InvokStack == next.m_InvokStack;// 压缩条件
             return ret && a.StateCompression(next);//支持扩展条件
@@ -1298,19 +1316,46 @@ namespace cmpr{
             a.StateCompressMkSymbol(newState);//支持
         }
 
+        std::vector<Vns>& get_asserts() const { return m_state.solv.get_asserts(); };
+
     public:
         StateCmprsInterface(
             CmprsContext<State<ADDR>, State_Tag>& ctx,
             State<ADDR>& self,
             StateType type
         ) :
-            m_ctx(ctx), m_state(self), m_type(type)
+            m_ctx(ctx), m_state(self), m_type(type), m_condition(ctx, 0, 0)
         { };
 
         CmprsContext<State<ADDR>, State_Tag>& cctx() { return m_ctx; }
         StateType type() { return m_type; };
 
-        std::vector<Vns>& get_asserts() const { return m_state.solv.get_asserts(); };
+        Vns const& get_assert(){ 
+            if (!m_condition.bitn) {
+                m_condition = logic_and(get_asserts()).translate(m_ctx.ctx());
+            }
+            return m_condition;
+        }
+
+        void get_write_map(std::hash_map<Addr64, bool>& record) {
+            if (m_state.regs.record) {
+                for (auto offset : *m_state.regs.record) {
+                    record[offset];
+                }
+            }
+            for (auto mcm : m_state.mem.change_map()) {
+                vassert(mcm.second->record != NULL);
+                for (auto offset : *(mcm.second->record)) {
+                    auto Address = mcm.first + offset;
+                    auto p = m_state.mem.getMemPage(Address);
+                    vassert(p);
+                    vassert(p->user == m_state.mem.get_user());
+                    vassert(Address > REGISTER_LEN);
+                    record[Address];
+                }
+            }
+        }
+        
         auto& branch() { return m_state.branch; };
 
         StateType tag(State<ADDR>* son) {
@@ -1343,11 +1388,20 @@ namespace cmpr{
         }
 
         Vns mem_Load(ADDR addr) {
-            return m_state.mem.Iex_Load<Ity_I64>(addr);
+            return m_state.mem.Iex_Load<Ity_I64>(addr).translate(m_ctx.ctx());
         }
 
         Vns reg_Get(UInt offset) {
-            return m_state.regs.Iex_Get<Ity_I64>(offset);
+            return m_state.regs.Iex_Get<Ity_I64>(offset).translate(m_ctx.ctx());
+        }
+
+        Vns read(ADDR addr) {
+            if (addr < REGISTER_LEN) {
+                return reg_Get(addr);
+            }
+            else {
+                return mem_Load(addr);
+            }
         }
 
         StateCmprsInterface<ADDR>* mk(State<ADDR>* son, StateType tag) {
@@ -1359,31 +1413,6 @@ namespace cmpr{
             default:return new CmprsTarget<StateCmprsInterface<ADDR>>(m_ctx, *son, tag);
             };
             
-        }
-
-        void get_write_map(std::hash_map<Addr64, GPMana>& change_map_ret, Vns const& ass, TRcontext& ctx) {
-            UInt size = m_state.regs.record->get_count();
-            for (auto mcm : m_state.mem.change_map()) {
-                size += mcm.second->record->get_count();
-            }
-            change_map_ret.reserve(size);
-            if (m_state.regs.record) {
-                for (auto offset : *m_state.regs.record) {
-                    change_map_ret[offset].add(ass, m_state.regs.Iex_Get<Ity_I64>(offset, ctx));
-                }
-            }
-            for (auto mcm : m_state.mem.change_map()) {
-                vassert(mcm.second->record != NULL);
-                for (auto offset : *(mcm.second->record)) {
-                    auto Address = mcm.first + offset;
-                    auto p = m_state.mem.getMemPage(Address);
-                    vassert(p);
-                    vassert(p->user == m_state.mem.get_user());
-                    vassert(Address > REGISTER_LEN);
-                    change_map_ret[Address].add(ass, p->unit->Iex_Get<Ity_I64>(offset, ctx));
-                }
-            }
-            vassert(size == change_map_ret.size());
         }
 
         virtual bool has_survive() { return false; }
@@ -1422,16 +1451,13 @@ namespace cmpr{
     template<typename STATEinterface>
     class CmprsTarget :public STATEinterface {
         UInt m_group_id;
-        std::hash_map<Addr64, GPMana> m_change_map;
         
     public:
         template<class _CTX, class _S>
         CmprsTarget(_CTX& ctx, _S& s, Int ty) :STATEinterface(ctx, s, (StateType)ty) { 
             vassert(ty >= 0);
-            get_write_map(m_change_map, logic_and(get_asserts()).translate(cctx().ctx()), cctx().ctx());
         };
         CmprsTarget<STATEinterface>& get_target_node() override { return *this; }
-        std::hash_map<Addr64, GPMana>& change_map()  { return m_change_map; }
         ~CmprsTarget() override { del_obj(); }
     };
 
@@ -1442,7 +1468,7 @@ namespace cmpr{
         StateType m_compr_ty;
         std::vector<STATEinterface*> m_child_nodes;
         bool m_has_survive = false;
-        UInt m_target_counts = 0;
+        std::vector<Int> m_target_counts;
     public:
         template<class _CTX, class _S>
         CmprsFork(_CTX& ctx, _S& s, bool) :CmprsFork(ctx, s) { m_has_survive = true; }
@@ -1450,7 +1476,6 @@ namespace cmpr{
         CmprsFork(_CTX& ctx, _S& s) : STATEinterface(ctx, s, Fork_Node) {
             vassert(!branch().empty());
             m_child_nodes.reserve(branch().size());
-            thread_max_size = branch().size();
             for (auto bstate : branch()) {
                 STATEinterface* ns = mk(bstate, tag(bstate));
                 m_child_nodes.emplace_back(ns);
@@ -1461,16 +1486,38 @@ namespace cmpr{
                     m_has_survive = true;
                 }
                 if (ns->type() == Fork_Node) {
-                    m_target_counts += ns->get_fork_node().m_target_counts;
+                    UInt max = ns->get_fork_node().m_target_counts.size();
+                    if (max >= m_target_counts.size()) {
+                        for (Int g = m_target_counts.size(); g <= max; g++) {
+                            m_target_counts.emplace_back(0);
+                        }
+                    }
+                    for (Int p = 0; p < max; p++) {
+                        m_target_counts[p] += ns->get_fork_node().target_counts(p);
+                    }
                 }
                 if (ns->type() >= 0) {
-                    m_target_counts += 1;
+                    if (ns->type() >= m_target_counts.size()) {
+                        for (Int p = m_target_counts.size(); p <= ns->type(); p++) {
+                            m_target_counts.emplace_back(0);
+                        }
+                    }
+                    m_target_counts[ns->type()] += 1;
                 }
             }
         }
+
         bool has_survive() override { return m_has_survive; }
-        UInt target_counts() const { return m_target_counts; }
+
+        UInt target_counts(Int group) const { 
+            if (group >= m_target_counts.size()) {
+                return 0;
+            }
+            return m_target_counts[group];
+        }
+
         inline std::vector<STATEinterface*>& child_nodes() { return m_child_nodes; }
+
         inline STATEinterface& operator[](Int idx) { return child_nodes[idx]; }
          
         CmprsFork<STATEinterface>& get_fork_node() override { return *this; }
@@ -1489,10 +1536,53 @@ namespace cmpr{
     class Compress {
         CmprsContext<CompressClass, StateStatus> &m_ctx;
         CmprsFork<STATEinterface> m_node;
-        std::vector <Vns> aas_avoid;
-        std::vector<std::hash_map<Addr64, GPMana>> m_change_map_vec;
 
+        class Iterator {
+            friend class Compress;
+            Compress& m_c;
+            UInt m_it_group;
+            UInt m_group_max;
+
+            //state compression results
+            class StateRes {
+                friend class Compress::Iterator;
+                Compress& m_c;
+                UInt m_group;
+                Vns m_assert;
+                std::hash_map<Addr64, GPMana> m_changes;
+
+                StateRes(const StateRes& ass) = delete;
+                void operator =(const StateRes& ass) = delete;
+                StateRes(Compress const& c, UInt group) :m_c(c), m_group(group),
+                    m_assert(m_c.avoid_asserts(m_c.m_node, m_group))
+                {
+                    m_c.treeCompress(m_changes, m_c.m_node, m_group);
+                }
+            public:
+                inline std::hash_map<Addr64, GPMana> const& changes() { return m_changes; }
+                inline Vns conditions() const { return m_assert; }
+            };
+
+
+            Iterator(const Iterator& ass) = delete;
+            void operator =(const Iterator& ass) = delete;
+        public:
+
+            Iterator(Compress const& c) :m_c(c), m_it_group(0){
+                m_group_max = 0;
+                for (CompressClass* cc : m_c.m_ctx.group()) {
+                    m_group_max++;
+                }
+            }
+            inline bool operator!=(const Iterator& src) { return m_it_group != src.m_group_max; }
+            inline void operator++() { m_it_group++; }
+            inline StateRes operator*() { return StateRes(m_c, m_it_group); }
+        };
+
+        Compress(const Compress& ass) = delete;
+        void operator =(const Compress& ass) = delete;
     public:
+
         Compress(
             CmprsContext<CompressClass, StateStatus>& ctx,
             CompressClass& state
@@ -1500,27 +1590,10 @@ namespace cmpr{
             m_ctx(ctx), m_node(m_ctx, state, false)
         {
 
-            Vns av = avoid_asserts(m_node, 0);
-            printf("%s", Z3_ast_to_string(av, av));
-            std::hash_map<Addr64, GPMana> dfg;
-            treeCompress(dfg, m_node, 0);
-            auto it_end = dfg.begin();
-            auto it_start = dfg.begin();
-            for (; it_start != it_end; it_start++) {
-                printf("%s\n\n", Z3_ast_to_string(m_ctx.ctx(), it_start->second.get()));
-                
-            }
-            /*Int group_count = 0;
-            for (CompressClass* cc : m_ctx.group()) {
-                aas_avoid.emplace_back(avoid_asserts(m_node, group_count));
-                treeCompress(m_change_map_vec[0], m_node, group_count);
-                group_count++;
-            }
-            */
-
         }
         inline operator TRcontext& () { return m_z3_target_ctx; }
-
+        Iterator begin() const { return Iterator(*this); }
+        Iterator end() const { return Iterator(*this); }
 
         /*
         ┐(P∧Q)<=> ┐P∨┐Q
@@ -1558,7 +1631,7 @@ namespace cmpr{
                 case Avoid_Node:
                 case Survive_Node: avoid_num += 1; break;
                 case Fork_Node: {
-                    if (sNode->get_fork_node().target_counts()) {
+                    if (sNode->get_fork_node().target_counts(group)) {
                         target_num += 1;
                     }
                     else {
@@ -1582,10 +1655,10 @@ namespace cmpr{
                     case Avoid_Node:
                     case Survive_Node: break;
                     case Fork_Node: {
-                        if (sNode->get_fork_node().target_counts() == 0) 
+                        if (sNode->get_fork_node().target_counts(group) == 0)
                             continue;
                         Vns aas_tmp = avoid_asserts(sNode->get_fork_node(), group);
-                        Vns top = logic_and(sNode->get_asserts()).translate(m_ctx.ctx());
+                        Vns top = sNode->get_assert();
                         if (aas_tmp.real()) {
                             aasv.emplace_back(top);
                             continue;
@@ -1595,7 +1668,7 @@ namespace cmpr{
                     }
                     default: {
                         if ((StateType)group == sNode->type())
-                            aasv.emplace_back(logic_and(sNode->get_asserts()).translate(m_ctx.ctx()));
+                            aasv.emplace_back(sNode->get_assert());
                     }
                     };
                 }
@@ -1611,8 +1684,8 @@ namespace cmpr{
                 for (STATEinterface* sNode : node.child_nodes()) {
                     switch (sNode->type()) {
                     case Fork_Node: {
-                        Vns top = logic_and(sNode->get_asserts()).translate(m_ctx.ctx());
-                        if (sNode->get_fork_node().target_counts() == 0) {
+                        Vns top = sNode->get_assert();
+                        if (sNode->get_fork_node().target_counts(group) == 0) {
                             aasv.emplace_back(top);
                             continue;
                         }
@@ -1625,12 +1698,12 @@ namespace cmpr{
                     }
                     case Survive_Node:
                     case Avoid_Node: {
-                        aasv.emplace_back(logic_and(sNode->get_asserts()).translate(m_ctx.ctx()));
+                        aasv.emplace_back(sNode->get_assert());
                         break;
                     }
                     default: {
                         if ((StateType)group != sNode->type())
-                            aasv.emplace_back(logic_and(sNode->get_asserts()).translate(m_ctx.ctx()));
+                            aasv.emplace_back(sNode->get_assert());
 
                         break;
                     }
@@ -1643,185 +1716,101 @@ namespace cmpr{
 
         }
 
+    private:
 
-        bool treeCompress(
-            std::hash_map<Addr64, GPMana>& change_map_ret,/*OUT*/
-            CmprsFork<STATEinterface>& node, Int group/*IN*/
-        ) {
-
-            for (STATEinterface* sNode : node.child_nodes()) {
-                switch (sNode->type()) {
-                case Avoid_Node:
-                case Survive_Node: break;
-                case Fork_Node: {
-                    std::hash_map<Addr64, GPMana> change_map;
-                    treeCompress(change_map, sNode->get_fork_node(), group);
-                    Vns top = logic_and(sNode->get_asserts()).translate(m_ctx.ctx());
-                    auto it_end = change_map.begin();
-                    auto it_start = change_map.begin();
-                    for (; it_start != it_end; it_start++) {
-                        change_map_ret[it_start->first].add(top, it_start->second.get());
-                    }
-                }
-                default: {
-                    if ((StateType)group == sNode->type()){
-                        CmprsTarget<STATEinterface>& target = sNode->get_target_node();
-                        Vns top = logic_and(sNode->get_asserts()).translate(m_ctx.ctx());
-                        std::hash_map<Addr64, GPMana>& cm = target.change_map();
-                        auto it_end = cm.begin();
-                        auto it_start = cm.begin();
-                        for (; it_start!= it_end; it_start++) {
-                            change_map_ret[it_start->first].add(top, it_start->second.get());
-                        }
-                        
-                    }
-
-                }
-                };
+        class __struct_cmaps__ {
+            STATEinterface* m_node;
+            std::hash_map<Addr64, Vns> m_cm;
+            UInt m_size;
+        public:
+            __struct_cmaps__(STATEinterface* node, UInt size) :m_node(node), m_size(size){
+                m_cm.reserve(m_size);
             }
 
-            //if (SCNode->State_flag == 1) {
-            //    if (SCNode->compress_group == group) {
-            //        SCNode->state->get_write_map(change_map_ret, ctx);
-            //        auto op = SCNode->state->regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::CC_OP);
-            //        return true;
-            //    }
-            //    else {
-            //        avoid_asserts_ret = solv.getassert(ctx);
-            //        return false;
-            //    }
-            //}
-            //else if (SCNode->State_flag == 0) {
-            //    has_branch = false;
-            //    avoid_asserts_ret = solv.getassert(ctx);
-            //    return false;
-            //}
-            //else {
-            //    Vns avoid_asserts(ctx, 1, 1);
-            //    bool first = true;
-            //    std::hash_map<ADDR, bool> change_address;                   //change_address.reserve(200);
-            //    std::vector <std::hash_map<ADDR, Vns>> change_map_temp;     change_map_temp.reserve(10);
-            //    std::vector <State*> change_map_states;                     change_map_states.reserve(10);
-            //    change_map_temp.emplace_back(std::hash_map<ADDR, Vns>());
-            //    for (auto child_node_it = SCNode->child_nodes.begin(); child_node_it != SCNode->child_nodes.end();) {
-            //        StateCompressNode<ADDR>* child_node = *child_node_it;
-            //        bool child_has_branch = false;
-            //        Vns avoid_asserts_temp(ctx, 1, 1);
-            //        if (child_node->state->treeCompress(avoid_asserts_temp, child_has_branch, change_map_temp.back(), child_node, group, ctx, deep + 1)) {
-            //            for (auto tmp_it : change_map_temp.back()) {
-            //                change_address[tmp_it.first] = true;
-            //            }
-            //            change_map_states.emplace_back(child_node->state);
-            //            change_map_temp.emplace_back(std::hash_map<ADDR, Vns>());
-            //            if (child_has_branch) {
-            //                has_branch = true;
-            //            }
-            //        }
-            //        else {
-            //            change_map_temp.back().clear();
-            //        }
-            //        if (first && avoid_asserts_temp.symbolic()) {
-            //            first = false;
-            //            avoid_asserts = avoid_asserts_temp;
-            //        }
-            //        else if (avoid_asserts_temp.symbolic()) {
-            //            avoid_asserts = avoid_asserts || avoid_asserts_temp;
-            //        }
-            //        child_node_it++;
-            //    }
-            //    for (auto cs : SCNode->avoid_assert_state) {
-            //        if (first) {
-            //            first = false;
-            //            avoid_asserts = cs->solv.getassert(ctx);
-            //        }
-            //        else {
-            //            avoid_asserts = avoid_asserts || cs->solv.getassert(ctx);
-            //        }
-            //    }
-            //    if (deep) {
-            //        if (avoid_asserts.symbolic()) {
-            //            if (ctx == m_ctx) {
-            //                avoid_asserts_ret = solv.getassert() && avoid_asserts;
-            //            }
-            //            else {
-            //                avoid_asserts_ret = solv.getassert(ctx) && avoid_asserts;
-            //            }
-            //        }
-            //    }
-            //    else {
-            //        avoid_asserts_ret = avoid_asserts;
-            //    }
-            //    if (!has_branch) {
-            //        has_branch = SCNode->avoid_assert_state.size() != 0;
-            //    }
-            //    if (change_map_temp.size() == 1) {
-            //        return false;
-            //    }
-            //    else {
-            //        std::vector<std::hash_map<ADDR, Vns>>::iterator cmt_it = change_map_temp.begin();
+            void add(Addr64 addr, Vns const&m) {
+                m_cm[addr] = m;
+            }
 
-            //        std::hash_map<ADDR, Vns> change_map_fork_state;
-            //        if (deep) {
-            //            SCNode->state->get_write_map(change_map_fork_state, ctx);
-            //        }
-            //        change_map_ret.reserve(change_address.size() + change_map_fork_state.size());
+            operator std::hash_map<Addr64, Vns>& () {
+                return m_cm;
+            }
 
-            //        for (UInt idx = 0; idx < change_map_temp.size() - 1; idx++) {
-            //            State* cld_state = change_map_states[idx];
-            //            for (auto ca : change_address) {
-            //                {
-            //                    auto _Where = (*cmt_it).lower_bound(ca.first);
-            //                    if (_Where == (*cmt_it).end()) {
-            //                        if (ca.first < REGISTER_LEN) {
-            //                            if (ctx == cld_state->m_ctx) {
-            //                                (*cmt_it)[ca.first] = cld_state->regs.Iex_Get<Ity_I64>(ca.first);
-            //                            }
-            //                            else {
-            //                                (*cmt_it)[ca.first] = cld_state->regs.Iex_Get<Ity_I64>(ca.first, ctx);
-            //                            }
-            //                        }
-            //                        else {
-            //                            auto p = cld_state->mem.getMemPage(ca.first);
-            //                            if (ctx == p->unit->m_ctx) {
-            //                                (*cmt_it)[ca.first] = p->unit->Iex_Get<Ity_I64>(ca.first & 0xfff);
-            //                            }
-            //                            else {
-            //                                (*cmt_it)[ca.first] = p->unit->Iex_Get<Ity_I64>(ca.first & 0xfff, ctx);
-            //                            }
-            //                        }
-            //                    }
-            //                };
-            //                {
-            //                    auto _Where = change_map_ret.lower_bound(ca.first);
-            //                    if (_Where == change_map_ret.end()) {
-            //                        change_map_ret[ca.first] = (*cmt_it)[ca.first];
-            //                    }
-            //                    else {
-            //                        if ((((*cmt_it)[ca.first].real()) && (_Where->second.real())) && ((ULong)((*cmt_it)[ca.first]) == (ULong)(_Where->second))) {
-            //                        }
-            //                        else {
-            //                            _Where->second = Vns(ctx, Z3_mk_ite(ctx, cld_state->solv.getassert(ctx), (*cmt_it)[ca.first], _Where->second), 64);
-            //                        }
-            //                    }
-            //                };
-            //            }
-            //            cmt_it++;
-            //        }
-            //        vassert(change_map_ret.size() == change_address.size());
-            //        if (deep) {
-            //            for (auto ca : change_map_fork_state) {
-            //                auto _Where = change_map_ret.lower_bound(ca.first);
-            //                if (_Where == change_map_ret.end()) {
-            //                    change_map_ret[ca.first] = ca.second;
-            //                }
-            //            }
-            //        }
-            //        return true;
-            //    }
-            //}
+            operator STATEinterface* () {
+                return m_node;
+            }
+
+            bool exist(Addr64 a) {
+                return m_cm.lower_bound(a) != m_cm.end();
+            }
+
+            void load(std::hash_map<Addr64, GPMana>& cm_ret, std::hash_map<Addr64, bool>& maps) {
+                auto it_end = maps.end();
+                auto it_start = maps.begin();
+                Vns ass = m_node->get_assert();
+                for (; it_start != it_end; it_start++) {
+                    Addr64 addr = it_start->first;
+                    if (exist(addr)) {
+                        cm_ret[addr].add(ass, m_cm[addr]);
+                    }
+                    else {
+                        Vns data = m_node->read(addr);
+                        cm_ret[addr].add(ass, data);
+                    }
+                }
+            }
+
+            Vns& operator[](UInt idx) {
+                return m_cm[idx];
+            }
+
+            ~__struct_cmaps__() { }
+        };
+
+
+
+        void treeCompress(
+            std::hash_map<Addr64, GPMana>& cm_ret,/*OUT*/
+            CmprsFork<STATEinterface>& node, Int group/*IN*/
+        ) {
+            std::vector<__struct_cmaps__> changes;
+            UInt max = 0;
+            for (STATEinterface* sNode : node.child_nodes()) {
+                if (sNode->type() >= 0 || (Fork_Node == sNode->type() && sNode->get_fork_node().target_counts(group))) {
+                    changes.emplace_back(__struct_cmaps__(sNode, 10));
+                    max++; 
+                }
+            }
+            changes.reserve(max);
+
+            std::hash_map<Addr64, bool> record;
+            for (__struct_cmaps__ & changes_node: changes) {
+                STATEinterface* sNode = changes_node;
+                Vns top = sNode->get_assert();
+                if (Fork_Node == sNode->type() && sNode->get_fork_node().target_counts(group)) {
+                    sNode->get_write_map(record);
+                    std::hash_map<Addr64, GPMana> cm_ret_tmp;
+                    treeCompress(cm_ret_tmp, sNode->get_fork_node(), group);
+                    auto it_end = cm_ret_tmp.end();
+                    auto it_start = cm_ret_tmp.begin();
+                    std::hash_map<Addr64, Vns>& fork_cm = changes_node;
+                    for (; it_start != it_end; it_start++) {
+                        changes_node.add(it_start->first, it_start->second.get());
+                        record[it_start->first];
+                    }
+                }
+                if ((StateType)group == sNode->type()) {
+                    CmprsTarget<STATEinterface>& target = sNode->get_target_node();
+                    sNode->get_write_map(record);
+                }
+            }
+
+            for (__struct_cmaps__& changes_node : changes) {
+                STATEinterface* sNode = changes_node;
+                changes_node.load(cm_ret, record);
+            }
+
+
         }
-
-
 
     };
 
@@ -1835,7 +1824,16 @@ void State<ADDR>::compress()
     c.add_avoid(Death);
     cmpr::Compress<cmpr::StateCmprsInterface<ADDR>, State<ADDR>, State_Tag> c2(c, *this);
 
-
+    //printf("\n\n\n\n\n\n\n\n");
+    for (cmpr::Compress<cmpr::StateCmprsInterface<ADDR>, State<ADDR>, State_Tag>::Iterator::StateRes state : c2) {
+        Vns cd = state.conditions();
+        printf("%s\n", Z3_ast_to_string(cd, cd));
+        std::hash_map<Addr64, cmpr::GPMana> const& v = state.changes();
+        for (auto sd: v){
+            Vns value = sd.second.get();
+            printf("%p : \n\n%s\n", sd.first,  Z3_ast_to_string(value, value));
+        }
+    }
 }
 
 

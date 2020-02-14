@@ -465,43 +465,39 @@ int main() {
         Vns f2 = s->m_ctx.bv_const("a2", 8);
         s->solv.add_assert(f1 > i);
         s->solv.add_assert(f2 < i);
+        s->mem.Ist_Store(0x602080, 1000+i);
+        s->mem.Ist_Store(0x602088, 1000 + i);
         if(i==3)
             s->set_status(Death);
     }
     std::cout << state << std::endl;
-    for (int i = 4; i < 8; i++) {
+    for (int i = 4; i < 5; i++) {
         SP::AMD64* s = (SP::AMD64*)(state.ForkState(32));
-        Vns f1 = s->m_ctx.bv_const("a1", 8);
-        Vns f2 = s->m_ctx.bv_const("a2", 8);
+        Vns f1 = s->m_ctx.bv_const("aj", 8);
+        Vns f2 = s->m_ctx.bv_const("ak", 8);
         s->solv.add_assert(f1 > i);
         s->solv.add_assert(f2 < i);
-        s->set_status(Death);
+        s->set_status((State_Tag)88);
     }
 
     std::cout << state << std::endl;
     UInt i = 0;
     for (auto s : state.branch) {
         i += 1;
-        if (i <= 6) { continue; }
+        if (i <= 3) { continue; }
         SP::AMD64* s2 = (SP::AMD64*)(s->ForkState(20));
         s->set_status(Fork);
         Vns f = s2->m_ctx.bv_const("b", 8);
-        s2->solv.add_assert(f > i - 3);
+        s2->solv.add_assert(f > i);
+        s2->mem.Ist_Store(0x602080, 100 + i);
+        s2->mem.Ist_Store(0x602081, 100ull + i+(1ull<<63));
     }
 
 
     std::cout << state << std::endl;
 
     state.compress();
-    for (auto s : state.branch) {
-        delete s;
-    }
-
-
-    for (auto s : state.branch) {
-        std::cout << *s << std::endl;
-    }
-
+    std::cout << state << std::endl;
 
     /*TRGL::VexGuestAMD64State reg(state);
     for (int i = 0; i < 38; i++) {
@@ -513,8 +509,8 @@ int main() {
     state.hook_add(0x400CC0, success_ret3);*/
 
     
-    StateAnalyzer<Addr64> gv(state);
-    gv.Run();
+    //StateAnalyzer<Addr64> gv(state);
+    //gv.Run();
 }
 
 //int main() {
