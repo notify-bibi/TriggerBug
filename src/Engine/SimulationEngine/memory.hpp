@@ -19,6 +19,7 @@ Revision History:
 #include "../engine.hpp"
 #include "Variable.hpp"
 #include "Register.hpp"
+#include "State_class.hpp"
 
 using namespace z3;
 extern UInt global_user;
@@ -550,12 +551,10 @@ namespace TRMem {
 
 using namespace TRMem;
 
-struct dirty_cp_mem {};
-
 template<typename ADDR>
 class MEM {
     friend class State<ADDR>;
-    template<typename TADDR> friend class Dirty_Mem;
+    friend class DMEM;
 public:
     class Itaddress {
     private:
@@ -621,32 +620,31 @@ private:
     Bool            need_record;
     Int             user;
     PML4T**         CR3;
-
+    TRcontext&      m_ctx;
+    solver&       m_solver;
 private:
     void CheckSelf(PAGE*& P, ADDR address);
     void init_page(PAGE*& P, ADDR address);
     UInt write_bytes(ULong address, ULong length, UChar* data);
-    template<typename TADDR>
-    MEM(struct dirty_cp_mem, MEM<TADDR>& fmem):
-        m_state(fmem.m_state),
-        m_ctx(fmem.m_ctx),
-        need_record(true)
-    {
-    };
+    MEM(solver& s, TRcontext& ctx, PML4T** cr3, Int _user, Bool _need_record):
+        m_solver(s),
+        m_ctx(ctx),
+        need_record(_need_record),
+        CR3(cr3),
+        user(_user)
+    {};
 
 public:
-    TRcontext& m_ctx;
-    Kernel& m_state;
-    MEM(State<ADDR>& so, TRcontext& ctx, Bool _need_record);
-    MEM(State<ADDR>& so, MEM& father_mem, TRcontext& ctx, Bool _need_record);
+    MEM(solver& so, TRcontext& ctx, Bool _need_record);
+    MEM(solver& so, TRcontext& ctx, MEM& father_mem, Bool _need_record);
     ~MEM();
+    virtual Z3_ast idx2Value(Addr64 base, Z3_ast idx) { return nullptr; };
     //客户机的分配空间算法 类似cpu的硬件虚拟映射技术。这里我们使用软件虚拟映射
     ULong map(ULong address, ULong length);
     //类似于linux的sys_fork.写时复制.速度快
     void copy(MEM& mem);
     //释放物理页
     ULong unmap(ULong address, ULong length);
-    Int getUser() { return user; }
     //清空写入记录
     void clearRecord();
     ULong find_block_forward(ULong start, ADDR size);
@@ -794,17 +792,17 @@ public:
 
     template<IRType ty>
     Vns Iex_Load(Z3_ast address) {
-        addressingMode<ADDR> am(expr(m_state.m_ctx, address));
+        addressingMode<ADDR> am(expr(m_ctx, address));
         Z3_ast reast = nullptr;
         auto kind = am.analysis_kind();
         if (kind != addressingMode<ADDR>::cant_analysis) {
 #ifdef TRACE_AM
-            printf("addr: %p  Iex_Load  base: %p {\n", m_state.get_cpu_ip(), am.getBase());
+            printf("Iex_Load  base: %p {\n", am.getBase());
             am.print();
             printf("}\n");
             //am.print_offset();
 #endif
-            reast = m_state.idx2Value(am.getBase(), am.getoffset());
+            reast = idx2Value(am.getBase(), am.getoffset());
             if (reast) {
                 return Vns(m_ctx, reast, no_inc{});
             }
@@ -829,10 +827,7 @@ public:
                 }
             }
         }
-#ifdef TRACE_AM
-        vex_printf("Iex_Load : guest: %p \n", m_state.get_cpu_ip());
-#endif
-        Itaddress it = this->addr_begin(m_state, address);
+        Itaddress it = this->addr_begin(m_solver, address);
         uint64_t Z3_RE;
         while (it.check()) {
             auto addr = *it;
@@ -931,11 +926,11 @@ public:
 
     template<typename DataTy>
     void Ist_Store(Z3_ast address, DataTy data) {
-        addressingMode<ADDR> am(expr(m_state.m_ctx, address));
+        addressingMode<ADDR> am(expr(m_ctx, address));
         auto kind = am.analysis_kind();
         if (kind == addressingMode<ADDR>::support_bit_blast) {
 #ifdef TRACE_AM
-            printf("addr: %p  Ist_Store base: %p {\n", m_state.get_cpu_ip(), am.getBase());
+            printf("Ist_Store base: %p {\n", am.getBase());
             am.print();
             printf("}\n");
 #endif
@@ -952,7 +947,7 @@ public:
             }
         }
         else {
-            Itaddress it = this->addr_begin(m_state, address);
+            Itaddress it = this->addr_begin(m_solver, address);
             while (it.check()) {
                 Vns addr = *it;
                 ADDR addr_re = addr;
@@ -981,7 +976,7 @@ public:
         QueryPerformanceCounter(&beginPerformanceCount);
     redo:
         {
-            Itaddress it = this->addr_begin(m_state, address);
+            Itaddress it = this->addr_begin(m_solver, address);
             while (it.check()) {
                 if (suspend_solve) {
                     QueryPerformanceCounter(&closePerformanceCount);
@@ -1007,11 +1002,11 @@ public:
             }
         }
         if (suspend_solve) {
-            addressingMode<ADDR> am(expr(m_state.m_ctx, address));
+            addressingMode<ADDR> am(expr(m_ctx, address));
             auto kind = am.analysis_kind();
             if (kind == addressingMode<ADDR>::support_bit_blast) {
 #ifdef TRACE_AM
-                printf("addr: %p  Ist_Store base: %p {\n", m_state.get_cpu_ip(), am.getBase());
+                printf("Ist_Store base: %p {\n", am.getBase());
                 am.print();
                 printf("}\n");
 #endif

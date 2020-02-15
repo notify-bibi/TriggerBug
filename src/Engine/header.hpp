@@ -103,7 +103,8 @@ typedef enum :unsigned int {
     Death,
     Exit,
     NoDecode,
-    Exception
+    Exception,
+    Dirty_ret
 }State_Tag;
 
 /* vex_traceflags values */

@@ -76,6 +76,7 @@ class TRcontext :public z3::context {
     //z3_translate并不是线程安全的，target_ctx不同，ctx相同进行多线程并发也会bug。为了写时复制添加一个锁
     std::mutex translate_mutex;
 public:
+    
     inline TRcontext() :z3::context() { }
     inline std::mutex& getLock() { return translate_mutex; };
     inline operator std::mutex& () { return translate_mutex; };

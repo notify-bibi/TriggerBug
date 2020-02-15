@@ -274,8 +274,8 @@ namespace SP {
             if (getFlag(CF_traceState)) {
                 if (status() == Fork) {
                     vex_printf("Fork from: %p to:{ ", guest_start);
-                    for (BranchChunk& bc : branchChunks) {
-                        vex_printf(" %p", bc.m_oep);
+                    for (auto bc : branch) {
+                        vex_printf(" %p", bc->get_state_ep());
                     }
                     vex_printf(" };", guest_start);
                 }
@@ -370,29 +370,30 @@ namespace SP {
 //}
 //
 //
-//State_Tag success_ret3(State* s) {
-//    s->solv.push();
-//    UChar bf[] = { 0xEC, 0x29, 0xE3, 0x41, 0xE1, 0xF7, 0xAA, 0x1D, 0x29, 0xED, 0x29, 0x99, 0x39, 0xF3, 0xB7, 0xA9, 0xE7, 0xAC, 0x2B, 0xB7, 0xAB, 0x40, 0x9F, 0xA9, 0x31, 0x35, 0x2C, 0x29, 0xEF, 0xA8, 0x3D, 0x4B, 0xB0, 0xE9, 0xE1, 0x68, 0x7B, 0x41 };
-//
-//    auto enc = s->regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::rdi);
-//    for (int i = 0; i < 38; i++) {
-//        Vns e = s->mem.Iex_Load<Ity_I8>(enc + i);
-//        s->solv.add(e == (UChar)bf[i]);
-//    }
-//    vex_printf("checking\n\n");
-//    auto dfdfs = s->solv.check();
-//    if (dfdfs == sat) {
-//        vex_printf("issat");
-//        auto m = s->solv.get_model();
-//        std::cout << m << std::endl;
-//        exit(0);
-//    }
-//    else {
-//        vex_printf("unsat??????????\n\n%d", dfdfs);
-//    }
-//    s->solv.pop();
-//    return Death;
-//}
+State_Tag success_ret3(Kernel* _s) {
+    State<Addr32>* s = *_s;
+    s->solv.push();
+    UChar bf[] = { 0xEC, 0x29, 0xE3, 0x41, 0xE1, 0xF7, 0xAA, 0x1D, 0x29, 0xED, 0x29, 0x99, 0x39, 0xF3, 0xB7, 0xA9, 0xE7, 0xAC, 0x2B, 0xB7, 0xAB, 0x40, 0x9F, 0xA9, 0x31, 0x35, 0x2C, 0x29, 0xEF, 0xA8, 0x3D, 0x4B, 0xB0, 0xE9, 0xE1, 0x68, 0x7B, 0x41 };
+
+    auto enc = s->regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::RDI);
+    for (int i = 0; i < 38; i++) {
+        Vns e = s->mem.Iex_Load<Ity_I8>(enc + i);
+        s->solv.add(e == (UChar)bf[i]);
+    }
+    vex_printf("checking\n\n");
+    auto dfdfs = s->solv.check();
+    if (dfdfs == sat) {
+        vex_printf("issat");
+        auto m = s->solv.get_model();
+        std::cout << m << std::endl;
+        exit(0);
+    }
+    else {
+        vex_printf("unsat??????????\n\n%d", dfdfs);
+    }
+    s->solv.pop();
+    return Death;
+}
 //
 //
 //State_Tag success_ret33(State* s) {
@@ -458,59 +459,20 @@ Vns flag_limit(Vns &flag) {
 
 int main() {
     SP::AMD64 state("C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.xml", 0, True);
-    
-    for (int i = 0; i < 4; i++) {
-        SP::AMD64* s = (SP::AMD64*)(state.ForkState(20));
-        Vns f1 = s->m_ctx.bv_const("a1", 8);
-        Vns f2 = s->m_ctx.bv_const("a2", 8);
-        s->solv.add_assert(f1 > i);
-        s->solv.add_assert(f2 < i);
-        s->mem.Ist_Store(0x602080, 1000+i);
-        s->mem.Ist_Store(0x602088, 1000 + i);
-        if(i==3)
-            s->set_status(Death);
-    }
-    std::cout << state << std::endl;
-    for (int i = 4; i < 5; i++) {
-        SP::AMD64* s = (SP::AMD64*)(state.ForkState(32));
-        Vns f1 = s->m_ctx.bv_const("aj", 8);
-        Vns f2 = s->m_ctx.bv_const("ak", 8);
-        s->solv.add_assert(f1 > i);
-        s->solv.add_assert(f2 < i);
-        s->set_status((State_Tag)88);
-    }
-
-    std::cout << state << std::endl;
-    UInt i = 0;
-    for (auto s : state.branch) {
-        i += 1;
-        if (i <= 3) { continue; }
-        SP::AMD64* s2 = (SP::AMD64*)(s->ForkState(20));
-        s->set_status(Fork);
-        Vns f = s2->m_ctx.bv_const("b", 8);
-        s2->solv.add_assert(f > i);
-        s2->mem.Ist_Store(0x602080, 100 + i);
-        s2->mem.Ist_Store(0x602081, 100ull + i+(1ull<<63));
-    }
-
-
     std::cout << state << std::endl;
 
-    state.compress();
-    std::cout << state << std::endl;
-
-    /*TRGL::VexGuestAMD64State reg(state);
-    for (int i = 0; i < 38; i++) {
+    TRGL::VexGuestAMD64State reg(state);
+    /*for (int i = 0; i < 38; i++) {
         auto flag = state.mk_int_const(8);
         auto ao3 = flag >= 1 && flag <= 128;
         state.mem.Ist_Store(reg.guest_RDI + i, flag);
         state.solv.add_assert(ao3);
-    }
-    state.hook_add(0x400CC0, success_ret3);*/
+    }*/
+    state.hook_add(0x400CC0, success_ret3);
 
     
-    //StateAnalyzer<Addr64> gv(state);
-    //gv.Run();
+    StateAnalyzer<Addr64> gv(state);
+    gv.Run();
 }
 
 //int main() {

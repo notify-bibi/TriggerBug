@@ -14,7 +14,6 @@ Revision History:
 
 #define UNDEFMEM
 #include "memory.hpp"
-#include "State_class.hpp"
 
 unsigned int    global_user;
 std::mutex      global_user_mutex;
@@ -525,8 +524,8 @@ static inline int dec_used_ref(PAGE *pt) {
 }
 
 template<typename ADDR>
-MEM<ADDR>::MEM(State<ADDR>& so, TRcontext& ctx, Bool _need_record) :
-    m_state(so),
+MEM<ADDR>::MEM(solver& so, TRcontext& ctx, Bool _need_record) :
+    m_solver(so),
     m_ctx(ctx),
     need_record(_need_record)
 {
@@ -537,8 +536,8 @@ MEM<ADDR>::MEM(State<ADDR>& so, TRcontext& ctx, Bool _need_record) :
 }
 
 template<typename ADDR>
-MEM<ADDR>::MEM(State<ADDR>& so, MEM& father_mem, TRcontext& ctx, Bool _need_record) :
-    m_state(so),
+MEM<ADDR>::MEM(solver& so, TRcontext& ctx, MEM& father_mem, Bool _need_record) :
+    m_solver(so),
     m_ctx(ctx),
     need_record(_need_record)
 {
@@ -1161,10 +1160,10 @@ template expr addressingMode<Addr32>::_ast2base(expr& base, expr const& e, UInt 
 template expr addressingMode<Addr64>::_ast2base(expr& base, expr const& e, UInt deep, UInt max_deep);
 template addressingMode<Addr32>::sbit_struct addressingMode<Addr32>::_check_is_extract(expr const& _e, UInt _idx);
 template addressingMode<Addr64>::sbit_struct addressingMode<Addr64>::_check_is_extract(expr const& _e, UInt _idx);
-template MEM<Addr32>::MEM(State<Addr32>& so, TRcontext& ctx, Bool _need_record);
-template MEM<Addr64>::MEM(State<Addr64>& so, TRcontext& ctx, Bool _need_record);
-template MEM<Addr32>::MEM(State<Addr32>& so, MEM& father_mem, TRcontext& ctx, Bool _need_record);
-template MEM<Addr64>::MEM(State<Addr64>& so, MEM& father_mem, TRcontext& ctx, Bool _need_record);
+template MEM<Addr32>::MEM(solver& so, TRcontext& ctx, Bool _need_record);
+template MEM<Addr64>::MEM(solver& so, TRcontext& ctx, Bool _need_record);
+template MEM<Addr32>::MEM(solver& so, TRcontext& ctx, MEM& father_mem, Bool _need_record);
+template MEM<Addr64>::MEM(solver& so, TRcontext& ctx, MEM& father_mem, Bool _need_record);
 template MEM<Addr32>::~MEM();
 template MEM<Addr64>::~MEM();
 template Vns MEM<Addr32>::Iex_Load(Addr32 address, IRType ty);

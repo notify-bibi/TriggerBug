@@ -27,8 +27,7 @@ void find_explore_state(State<ADDR> &state, std::vector<State<ADDR>*>& explore, 
         if (state.status() == Fork) {
             auto _where = Fork_addr.lower_bound(state.get_cpu_ip());
             if (_where == Fork_addr.end()) {
-                for (BranchChunk& bc : state.branchChunks) {
-                    State<ADDR>* nstate = state.mkChildState(bc);
+                for (State<ADDR>* nstate : state.branch) {
                     explore.emplace_back(nstate);
                 }
             }
