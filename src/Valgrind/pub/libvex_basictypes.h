@@ -49,7 +49,7 @@ typedef struct {
     unsigned char* (*n_page_mem)(void*);
     char start_swap;
     unsigned int guest_max_insns;
-    void* state;
+    void* mem_obj;
     unsigned int  delta;
 } Pap;
 

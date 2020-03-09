@@ -51,6 +51,9 @@
 #endif
 #endif
 #include <intrin.h>
+
+#define __builtin_memset memset
+
 inline static UInt __builtin_clzll(ULong w64) {
     unsigned long result = 0;
     if (_BitScanReverse64(&result, w64)) {
@@ -851,11 +854,16 @@ VexTranslateResult LibVEX_Translate ( /*MOD*/ VexTranslateArgs*, Pap* pap);
 
 /* Runs the first half of the compilation pipeline: lifts guest code to IR,
    optimises, instruments and optimises it some more. */
-extern
+extern 
 IRSB* LibVEX_FrontEnd ( /*MOD*/ VexTranslateArgs*,
                         /*OUT*/ VexTranslateResult* res,
                         /*OUT*/ VexRegisterUpdates* pxControl , Pap* pap);
 
+extern 
+IRSB* LibVEX_FrontEnd_coexistence( /*MOD*/ VexTranslateArgs* vta,
+    /*OUT*/ VexTranslateResult* res,
+    /*OUT*/ VexRegisterUpdates* pxControl,
+    Pap* pap);
 
 /* A subtlety re interaction between self-checking translations and
    bb-chasing.  The supplied chase_into_ok function should say NO

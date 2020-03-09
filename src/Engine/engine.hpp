@@ -2,7 +2,6 @@
 #define _TR_head
 #define _SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS
 #include <hash_map>
-#include <windows.h>
 #include <mmintrin.h>  //MMX
 #include <xmmintrin.h> //SSE(include mmintrin.h)
 #include <emmintrin.h> //SSE2(include xmmintrin.h)
@@ -17,35 +16,21 @@
 #include <fstream>
 #include <sstream>
 #include <tuple>
-#include <exception>
 #include <string>
 #include <vector>
 #include <queue>
-#include <memory>
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 #include <future>
 #include <functional>
-#include <stdexcept>
 #include <iomanip>
+#include <windows.h>
+
 #include "api/c++/z3++.h"
+#include "engine/ir_guest_defs.h"
+#include "thread_pool/threadpool.h"
 
-
-#ifdef DLL_EXPORTS
-#define DLLDEMO_API __declspec(dllexport)
-#else
-#define DLLDEMO_API __declspec(dllimport)
-#endif
-
-#define Py_LIMITED_API
-#ifdef _DEBUG
-#undef _DEBUG
-#include <python\Python.h>
-#define _DEBUG 1
-#else
-#include <python\Python.h>
-#endif
 
 //觉得引擎没bug了就取消注释，加快速度
 //#define RELEASE_OFFICIALLY
@@ -68,22 +53,178 @@
 //宿主机的平台架构
 #define HOSTARCH VexArchAMD64
 
-#include "Engine/header.hpp"
-#include "Engine/Thread_Pool/ThreadPool_CD.hpp"
+
+extern "C" void vex_assert_fail(const HChar * expr, const HChar * file, Int line, const HChar * fn);
+extern "C" unsigned int vex_printf(const HChar * format, ...);
+extern "C" void vpanic(const HChar * str);
+
+
+#define __i386__
+#define TESTCODE(code)                                                                                                  \
+{                                                                                                                       \
+    LARGE_INTEGER   freq = { 0 };                                                                                       \
+    LARGE_INTEGER   beginPerformanceCount = { 0 };                                                                      \
+    LARGE_INTEGER   closePerformanceCount = { 0 };                                                                      \
+    QueryPerformanceFrequency(&freq);                                                                                   \
+    QueryPerformanceCounter(&beginPerformanceCount);                                                                    \
+    {   code    }                                                                                                       \
+    QueryPerformanceCounter(&closePerformanceCount);                                                                    \
+    double delta_seconds = (double)(closePerformanceCount.QuadPart - beginPerformanceCount.QuadPart) / freq.QuadPart;   \
+    printf("%s line:%d spend %lf \n",__FILE__, __LINE__, delta_seconds);                                                \
+}
+
+
+#define ALIGN(Value,size) ((Value) & ~((size) - 1))
+#define Z3_Get_Ref(exp) (((int*)((Z3_ast)((exp))))[2])
+
+
+template <int maxlength> class Register;
+template <typename ADDR> class State;
+class Kernel;
+
+#ifdef _MSC_VER
+#define NORETURN __declspec(noreturn)
+#else
+#define NORETURN __attribute__ ((noreturn))
+#endif
+typedef enum :unsigned int {
+    NewState = 0,
+    Running,
+    Fork,
+    Death,
+    Exit,
+    NoDecode,
+    Exception,
+    Dirty_ret
+}State_Tag;
+
+/* vex_traceflags values */
+#define VEX_TRACE_FE     (1 << 7)  /* show conversion into IR */
+#define VEX_TRACE_OPT1   (1 << 6)  /* show after initial opt */
+#define VEX_TRACE_INST   (1 << 5)  /* show after instrumentation */
+#define VEX_TRACE_OPT2   (1 << 4)  /* show after second opt */
+#define VEX_TRACE_TREES  (1 << 3)  /* show after tree building */
+#define VEX_TRACE_VCODE  (1 << 2)  /* show selected insns */
+#define VEX_TRACE_RCODE  (1 << 1)  /* show after reg-alloc */
+#define VEX_TRACE_ASM    (1 << 0)  /* show final assembly */
+
+
+#define SET1(addr, value) *(UChar*)((addr)) = (value)
+#define SET2(addr, value) *(UShort*)((addr)) = (value)
+#define SET4(addr, value) *(UInt*)((addr)) = (value)
+#define SET8(addr, value) *(ULong*)((addr)) = (value)
+#define SET16(addr, value) *(__m128i*)((addr)) = (value)
+#define SET32(addr, value) *(__m256i*)((addr)) = (value)
+
+#define GET1(addr) (*(UChar*)((addr))) 
+#define GET2(addr) (*(UShort*)((addr)))
+#define GET4(addr) (*(UInt*)((addr)))
+#define GET8(addr) (*(ULong*)((addr)))
+#define GET16(addr) (*(__m128i*)((addr)))
+#define GET32(addr) (*(__m256i*)((addr)))
+
+
+#define GETS1(addr) (*(Char*)((addr))) 
+#define GETS2(addr) (*(Short*)((addr)))
+#define GETS4(addr) (*(Int*)((addr)))
+#define GETS8(addr) (*(Long*)((addr)))
+#define GETS16(addr) (*(__m128i*)((addr)))
+#define GETS32(addr) (*(__m256i*)((addr)))
+
+#define MV1(addr,fromaddr) *(UChar*)((addr))=(*(UChar*)((fromaddr))) 
+#define MV2(addr,fromaddr) *(UShort*)((addr))=(*(UShort*)((fromaddr)))
+#define MV4(addr,fromaddr) *(UInt*)((addr))=(*(UInt*)((fromaddr)))
+#define MV8(addr,fromaddr) *(ULong*)((addr))=(*(ULong*)((fromaddr)))
+#define MV16(addr,fromaddr) *(__m128i*)((addr))=(*(__m128i*)((fromaddr)))
+#define MV32(addr,fromaddr) *(__m256i*)((addr))=(*(__m256i*)((fromaddr)))
+
+
+typedef enum :UChar {
+    unknowSystem = 0b00,
+    linux,
+    windows
+}GuestSystem;
+
+
+typedef enum :ULong {
+    CF_None = 0,
+    CF_ppStmts = 1ull,
+    CF_traceJmp = 1ull << 1,
+    CF_traceState = 1ull << 2,
+    CF_TraceSymbolic = 1ull << 3,
+    CF_PassSigSEGV = 1ull << 4,
+}TRControlFlags;
+
+
+namespace TRtype {
+    typedef State_Tag(*Hook_CB)         (void*/*obj*/);
+    //得到的ast无需Z3_inc_ref
+    typedef Z3_ast(*TableIdx_CB) (void*/*obj*/, Addr64 /*base*/, Z3_ast /*idx*/);
+};
+
+typedef struct _Hook_ {
+    TRtype::Hook_CB cb;
+    UInt            nbytes;
+    __m64           original;
+    TRControlFlags  cflag;
+}Hook_struct;
+
+
+//class spin_mutex {
+//    std::atomic<bool> flag = ATOMIC_VAR_INIT(false);
+//public:
+//    spin_mutex() = default;
+//    spin_mutex(const spin_mutex&) = delete;
+//    spin_mutex& operator= (const spin_mutex&) = delete;
+//    void lock() {
+//        bool expected = false;
+//        while (!flag.compare_exchange_strong(expected, true))
+//            expected = false;
+//    }
+//    void unlock() {
+//        flag.store(false);
+//    }
+//};
+
+
+class spin_mutex :std::mutex {
+    std::atomic<bool> flag = ATOMIC_VAR_INIT(false);
+public:
+    spin_mutex() = default;
+    spin_mutex(const spin_mutex&) = delete;
+    spin_mutex& operator= (const spin_mutex&) = delete;
+    inline void lock() {
+        std::mutex::lock();
+    }
+    inline void unlock() {
+        std::mutex::unlock();
+    }
+};
+
+class spin_unique_lock {
+    spin_mutex& m_mutex;
+public:
+    spin_unique_lock(const spin_unique_lock&) = delete;
+    spin_unique_lock& operator= (const spin_unique_lock&) = delete;
+    inline spin_unique_lock(spin_mutex& m) :m_mutex(m) { m_mutex.lock(); };
+    inline ~spin_unique_lock() { m_mutex.unlock(); };
+};
 
 
 class TRcontext :public z3::context {
     //z3_translate并不是线程安全的，target_ctx不同，ctx相同进行多线程并发也会bug。为了写时复制添加一个锁
-    std::mutex translate_mutex;
+    spin_mutex translate_mutex;
 public:
     
     inline TRcontext() :z3::context() { }
-    inline std::mutex& getLock() { return translate_mutex; };
-    inline operator std::mutex& () { return translate_mutex; };
+    inline spin_mutex& getLock() { return translate_mutex; };
+    inline operator spin_mutex& () { return translate_mutex; };
     inline bool operator == (Z3_context b) const { return this->operator Z3_context() == b; };
     inline bool operator == (z3::context const& b) const { return this->operator Z3_context() == (Z3_context)b; };
     inline bool operator == (TRcontext const &b) const{ return this->operator Z3_context() == (Z3_context)b; };
 };
+
+
 
 //注：intel编译器对四个及四个一下的switch case会自动使用if else结构。
 
@@ -205,11 +346,12 @@ namespace Expt {
                 snprintf(buffer, 50, "IRfailureExit ::: Thread id: %d\n", m_thread_id);
                 snprintf(tline, 10, "%d", m_line);
                 std::string ret;
-                return ret.assign(buffer) +
+                ret = ret.assign(buffer) +
                     "file: " + m_file + "\n"
                     "line: " + tline + "\n"
-                    "expr: " + m_expr + "\n"
-                    "func: " + m_fn;
+                    "expr: " + m_expr;
+                if (m_fn) { return ret + "\n""func: " + m_fn; }
+                return ret;
             }
             else {
                 char buffer[50];
@@ -251,6 +393,24 @@ inline static std::ostream& operator<<(std::ostream& out, Expt::IRfailureExit co
 #define vassert(...) 
 #endif
 
-#include "Engine/functions/functions.hpp"
+//inline unsigned short mscv_tid2temp() {
+//    UChar index;
+//    __asm__(\
+//        "movq %%gs:0x30, %%rax ;\n\t"\
+//        "movl 0x48(%%rax),%%eax;\n\t"\
+//        "movq %[list],%%rdx;\n\t"\
+//        "movb (%%rdx,%%rax,1),%%al;\n\t"\
+//        "movl %%al,%[out];\n\t"\
+//        : [out] "=r"(index) : [list] "r"(tid2temp) : "rax", "rdx");
+//
+//    return index;
+//}
+
+unsigned int IRConstTag2nb(IRConstTag t);
+unsigned int ty2length(IRType ty);
+unsigned int ty2bit(IRType ty);
+IRType length2ty(UShort bit);
+void tAMD64REGS(int offset, int length);
+
 
 #endif _TR_head

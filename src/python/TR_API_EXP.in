@@ -1,0 +1,71 @@
+
+DLLDEMO_API State *     TB_top_state            (PyObject *base, Super superState_cb, State_Tag(*func_cb)(State *, IRJumpKind), char *filename, Addr64 oep, Bool need_record);
+DLLDEMO_API PyObject*   TB_cState2pState        (State* s);
+DLLDEMO_API State *     TB_state_fork           (PyObject *base, State * father, Addr64 oep);
+DLLDEMO_API Addr64      TB_state_guest_start    (State *s);
+DLLDEMO_API Addr64      TB_state_guest_start_ep (State *s);
+DLLDEMO_API State_Tag   TB_state_status         (State *s);
+DLLDEMO_API Z3_solver   TB_state_solver         (State *s);
+DLLDEMO_API void        TB_state_add_assert     (State *s, Z3_ast assert, Bool ToF);
+DLLDEMO_API Z3_ast      TB_state_cast           (State* s, Z3_ast value);
+//DLLDEMO_API void        TB_replace_add          (State* s, Storage st, Addr64 addr, Addr64 r_offset, IRType ty);
+DLLDEMO_API void        TB_state_start          (State *s);
+DLLDEMO_API void        TB_state_compress       (State *s, Addr64 Target_Addr, State_Tag tag, PyObject* avoid);
+DLLDEMO_API PyObject*   TB_state_branch         (State *s);
+DLLDEMO_API Z3_context  TB_state_ctx            (State *s);
+DLLDEMO_API void        TB_state_delta          (State *s, Long length);
+DLLDEMO_API ULong       TB_mem_map              (State *s, Addr64 address, ULong length);
+DLLDEMO_API ULong       TB_mem_unmap            (State *s, Addr64 address, ULong length);
+DLLDEMO_API void        TB_hook_add             (State *s, Addr64 address, CallBack func);
+DLLDEMO_API void        TB_idx2tableValueDecl_add(Addr64 addr, TableIdxCallBack func);
+DLLDEMO_API HMODULE     TB_Z3_Model_Handle      ();
+DLLDEMO_API void        TB_thread_wait          ();
+
+
+
+DLLDEMO_API void regs_r_write1(State *s, UShort offset, UChar  value);
+DLLDEMO_API void regs_r_write2(State *s, UShort offset, UShort value);
+DLLDEMO_API void regs_r_write4(State *s, UShort offset, UInt   value);
+DLLDEMO_API void regs_r_write8(State *s, UShort offset, ULong  value);
+
+DLLDEMO_API void regs_s_write(State *s, UShort offset, Z3_ast value);
+
+DLLDEMO_API void regs_s_write1(State *s, UShort offset, Z3_ast value);
+DLLDEMO_API void regs_s_write2(State *s, UShort offset, Z3_ast value);
+DLLDEMO_API void regs_s_write4(State *s, UShort offset, Z3_ast value);
+DLLDEMO_API void regs_s_write8(State *s, UShort offset, Z3_ast value);
+
+DLLDEMO_API Z3_ast regs_read1(State *s, UChar  *result, UShort offset);
+DLLDEMO_API Z3_ast regs_read2(State *s, UShort *result, UShort offset);
+DLLDEMO_API Z3_ast regs_read4(State *s, UInt   *result, UShort offset);
+DLLDEMO_API Z3_ast regs_read8(State *s, ULong  *result, UShort offset);
+
+DLLDEMO_API void mem_r_r_write1(State *s, Addr64 offset, UChar  value);
+DLLDEMO_API void mem_r_r_write2(State *s, Addr64 offset, UShort value);
+DLLDEMO_API void mem_r_r_write4(State *s, Addr64 offset, UInt   value);
+DLLDEMO_API void mem_r_r_write8(State *s, Addr64 offset, ULong  value);
+                                                                      
+DLLDEMO_API void mem_r_s_write1(State *s, Addr64 offset, Z3_ast value);
+DLLDEMO_API void mem_r_s_write2(State *s, Addr64 offset, Z3_ast value);
+DLLDEMO_API void mem_r_s_write4(State *s, Addr64 offset, Z3_ast value);
+DLLDEMO_API void mem_r_s_write8(State *s, Addr64 offset, Z3_ast value);
+                                                                      
+DLLDEMO_API void mem_s_r_write1(State *s, Z3_ast offset, UChar  value);
+DLLDEMO_API void mem_s_r_write2(State *s, Z3_ast offset, UShort value);
+DLLDEMO_API void mem_s_r_write4(State *s, Z3_ast offset, UInt   value);
+DLLDEMO_API void mem_s_r_write8(State *s, Z3_ast offset, ULong  value);
+                                                                      
+DLLDEMO_API void mem_s_s_write1(State *s, Z3_ast offset, Z3_ast value);
+DLLDEMO_API void mem_s_s_write2(State *s, Z3_ast offset, Z3_ast value);
+DLLDEMO_API void mem_s_s_write4(State *s, Z3_ast offset, Z3_ast value);
+DLLDEMO_API void mem_s_s_write8(State *s, Z3_ast offset, Z3_ast value);
+
+DLLDEMO_API Z3_ast mem_r_read1(State *s, UChar  *result, Addr64 addr);
+DLLDEMO_API Z3_ast mem_r_read2(State *s, UShort *result, Addr64 addr);
+DLLDEMO_API Z3_ast mem_r_read4(State *s, UInt   *result, Addr64 addr);
+DLLDEMO_API Z3_ast mem_r_read8(State *s, ULong  *result, Addr64 addr);
+
+DLLDEMO_API Z3_ast mem_s_read1(State *s, UChar  *result, Z3_ast addr);
+DLLDEMO_API Z3_ast mem_s_read2(State *s, UShort *result, Z3_ast addr);
+DLLDEMO_API Z3_ast mem_s_read4(State *s, UInt   *result, Z3_ast addr);
+DLLDEMO_API Z3_ast mem_s_read8(State *s, ULong  *result, Z3_ast addr);

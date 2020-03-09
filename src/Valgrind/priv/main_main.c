@@ -311,6 +311,387 @@ void LibVEX_Init (
 UInt s390_host_hwcaps;
 
 
+IRSB* LibVEX_FrontEnd_coexistence( /*MOD*/ VexTranslateArgs* vta,
+    /*OUT*/ VexTranslateResult* res,
+    /*OUT*/ VexRegisterUpdates* pxControl,
+    Pap* pap)
+{
+    IRExpr* (*specHelper)   (const HChar*, IRExpr**, IRStmt**, Int);
+    Bool(*preciseMemExnsFn) (Int, Int, VexRegisterUpdates);
+    DisOneInstrFn disInstrFn;
+
+    VexGuestLayout* guest_layout;
+    IRSB* irsb;
+    Int             i;
+    Int             offB_CMSTART, offB_CMLEN, offB_GUEST_IP, szB_GUEST_IP;
+    IRType          guest_word_type;
+    IRType          host_word_type;
+
+    guest_layout = NULL;
+    specHelper = NULL;
+    disInstrFn = NULL;
+    preciseMemExnsFn = NULL;
+    guest_word_type = arch_word_size(vta->arch_guest);
+    host_word_type = arch_word_size(vta->arch_host);
+    offB_CMSTART = 0;
+    offB_CMLEN = 0;
+    offB_GUEST_IP = 0;
+    szB_GUEST_IP = 0;
+
+    vassert(vta->needs_self_check != NULL);
+    vassert(vta->disp_cp_xassisted != NULL);
+    /* Both the chainers and the indir are either NULL or non-NULL. */
+    if (vta->disp_cp_chain_me_to_slowEP != NULL) {
+        vassert(vta->disp_cp_chain_me_to_fastEP != NULL);
+        vassert(vta->disp_cp_xindir != NULL);
+    }
+    else {
+        vassert(vta->disp_cp_chain_me_to_fastEP == NULL);
+        vassert(vta->disp_cp_xindir == NULL);
+    }
+
+    vexTEMP_clear();
+    vexAllocSanityCheck();
+
+    /* First off, check that the guest and host insn sets
+       are supported. */
+
+    switch (vta->arch_guest) {
+
+    case VexArchX86:
+        preciseMemExnsFn
+            = X86FN(guest_x86_state_requires_precise_mem_exns);
+        disInstrFn = X86FN(disInstr_X86);
+        specHelper = X86FN(guest_x86_spechelper);
+        guest_layout = X86FN(&x86guest_layout);
+        offB_CMSTART = offsetof(VexGuestX86State, guest_CMSTART);
+        offB_CMLEN = offsetof(VexGuestX86State, guest_CMLEN);
+        offB_GUEST_IP = offsetof(VexGuestX86State, guest_EIP);
+        szB_GUEST_IP = sizeof(((VexGuestX86State*)0)->guest_EIP);
+        vassert(vta->archinfo_guest.endness == VexEndnessLE);
+        vassert(0 == sizeof(VexGuestX86State) % LibVEX_GUEST_STATE_ALIGN);
+        vassert(sizeof(((VexGuestX86State*)0)->guest_CMSTART) == 4);
+        vassert(sizeof(((VexGuestX86State*)0)->guest_CMLEN) == 4);
+        vassert(sizeof(((VexGuestX86State*)0)->guest_NRADDR) == 4);
+        break;
+
+    case VexArchAMD64:
+        preciseMemExnsFn
+            = AMD64FN(guest_amd64_state_requires_precise_mem_exns);
+        disInstrFn = AMD64FN(disInstr_AMD64);
+        specHelper = AMD64FN(guest_amd64_spechelper);
+        guest_layout = AMD64FN(&amd64guest_layout);
+        offB_CMSTART = offsetof(VexGuestAMD64State, guest_CMSTART);
+        offB_CMLEN = offsetof(VexGuestAMD64State, guest_CMLEN);
+        offB_GUEST_IP = offsetof(VexGuestAMD64State, guest_RIP);
+        szB_GUEST_IP = sizeof(((VexGuestAMD64State*)0)->guest_RIP);
+        vassert(vta->archinfo_guest.endness == VexEndnessLE);
+        vassert(0 == sizeof(VexGuestAMD64State) % LibVEX_GUEST_STATE_ALIGN);
+        vassert(sizeof(((VexGuestAMD64State*)0)->guest_CMSTART) == 8);
+        vassert(sizeof(((VexGuestAMD64State*)0)->guest_CMLEN) == 8);
+        vassert(sizeof(((VexGuestAMD64State*)0)->guest_NRADDR) == 8);
+        break;
+
+    case VexArchPPC32:
+        preciseMemExnsFn
+            = PPC32FN(guest_ppc32_state_requires_precise_mem_exns);
+        disInstrFn = PPC32FN(disInstr_PPC);
+        specHelper = PPC32FN(guest_ppc32_spechelper);
+        guest_layout = PPC32FN(&ppc32Guest_layout);
+        offB_CMSTART = offsetof(VexGuestPPC32State, guest_CMSTART);
+        offB_CMLEN = offsetof(VexGuestPPC32State, guest_CMLEN);
+        offB_GUEST_IP = offsetof(VexGuestPPC32State, guest_CIA);
+        szB_GUEST_IP = sizeof(((VexGuestPPC32State*)0)->guest_CIA);
+        vassert(vta->archinfo_guest.endness == VexEndnessBE);
+        vassert(0 == sizeof(VexGuestPPC32State) % LibVEX_GUEST_STATE_ALIGN);
+        vassert(sizeof(((VexGuestPPC32State*)0)->guest_CMSTART) == 4);
+        vassert(sizeof(((VexGuestPPC32State*)0)->guest_CMLEN) == 4);
+        vassert(sizeof(((VexGuestPPC32State*)0)->guest_NRADDR) == 4);
+        break;
+
+    case VexArchPPC64:
+        preciseMemExnsFn
+            = PPC64FN(guest_ppc64_state_requires_precise_mem_exns);
+        disInstrFn = PPC64FN(disInstr_PPC);
+        specHelper = PPC64FN(guest_ppc64_spechelper);
+        guest_layout = PPC64FN(&ppc64Guest_layout);
+        offB_CMSTART = offsetof(VexGuestPPC64State, guest_CMSTART);
+        offB_CMLEN = offsetof(VexGuestPPC64State, guest_CMLEN);
+        offB_GUEST_IP = offsetof(VexGuestPPC64State, guest_CIA);
+        szB_GUEST_IP = sizeof(((VexGuestPPC64State*)0)->guest_CIA);
+        vassert(vta->archinfo_guest.endness == VexEndnessBE ||
+            vta->archinfo_guest.endness == VexEndnessLE);
+        vassert(0 == sizeof(VexGuestPPC64State) % LibVEX_GUEST_STATE_ALIGN);
+        vassert(sizeof(((VexGuestPPC64State*)0)->guest_CMSTART) == 8);
+        vassert(sizeof(((VexGuestPPC64State*)0)->guest_CMLEN) == 8);
+        vassert(sizeof(((VexGuestPPC64State*)0)->guest_NRADDR) == 8);
+        vassert(sizeof(((VexGuestPPC64State*)0)->guest_NRADDR_GPR2) == 8);
+        break;
+
+    case VexArchS390X:
+        preciseMemExnsFn
+            = S390FN(guest_s390x_state_requires_precise_mem_exns);
+        disInstrFn = S390FN(disInstr_S390);
+        specHelper = S390FN(guest_s390x_spechelper);
+        guest_layout = S390FN(&s390xGuest_layout);
+        offB_CMSTART = offsetof(VexGuestS390XState, guest_CMSTART);
+        offB_CMLEN = offsetof(VexGuestS390XState, guest_CMLEN);
+        offB_GUEST_IP = offsetof(VexGuestS390XState, guest_IA);
+        szB_GUEST_IP = sizeof(((VexGuestS390XState*)0)->guest_IA);
+        vassert(vta->archinfo_guest.endness == VexEndnessBE);
+        vassert(0 == sizeof(VexGuestS390XState) % LibVEX_GUEST_STATE_ALIGN);
+        vassert(sizeof(((VexGuestS390XState*)0)->guest_CMSTART) == 8);
+        vassert(sizeof(((VexGuestS390XState*)0)->guest_CMLEN) == 8);
+        vassert(sizeof(((VexGuestS390XState*)0)->guest_NRADDR) == 8);
+        break;
+
+    case VexArchARM:
+        preciseMemExnsFn
+            = ARMFN(guest_arm_state_requires_precise_mem_exns);
+        disInstrFn = ARMFN(disInstr_ARM);
+        specHelper = ARMFN(guest_arm_spechelper);
+        guest_layout = ARMFN(&armGuest_layout);
+        offB_CMSTART = offsetof(VexGuestARMState, guest_CMSTART);
+        offB_CMLEN = offsetof(VexGuestARMState, guest_CMLEN);
+        offB_GUEST_IP = offsetof(VexGuestARMState, guest_R15T);
+        szB_GUEST_IP = sizeof(((VexGuestARMState*)0)->guest_R15T);
+        vassert(vta->archinfo_guest.endness == VexEndnessLE);
+        vassert(0 == sizeof(VexGuestARMState) % LibVEX_GUEST_STATE_ALIGN);
+        vassert(sizeof(((VexGuestARMState*)0)->guest_CMSTART) == 4);
+        vassert(sizeof(((VexGuestARMState*)0)->guest_CMLEN) == 4);
+        vassert(sizeof(((VexGuestARMState*)0)->guest_NRADDR) == 4);
+        break;
+
+    case VexArchARM64:
+        preciseMemExnsFn
+            = ARM64FN(guest_arm64_state_requires_precise_mem_exns);
+        disInstrFn = ARM64FN(disInstr_ARM64);
+        specHelper = ARM64FN(guest_arm64_spechelper);
+        guest_layout = ARM64FN(&arm64Guest_layout);
+        offB_CMSTART = offsetof(VexGuestARM64State, guest_CMSTART);
+        offB_CMLEN = offsetof(VexGuestARM64State, guest_CMLEN);
+        offB_GUEST_IP = offsetof(VexGuestARM64State, guest_PC);
+        szB_GUEST_IP = sizeof(((VexGuestARM64State*)0)->guest_PC);
+        vassert(vta->archinfo_guest.endness == VexEndnessLE);
+        vassert(0 == sizeof(VexGuestARM64State) % LibVEX_GUEST_STATE_ALIGN);
+        vassert(sizeof(((VexGuestARM64State*)0)->guest_CMSTART) == 8);
+        vassert(sizeof(((VexGuestARM64State*)0)->guest_CMLEN) == 8);
+        vassert(sizeof(((VexGuestARM64State*)0)->guest_NRADDR) == 8);
+        break;
+
+    case VexArchMIPS32:
+        preciseMemExnsFn
+            = MIPS32FN(guest_mips32_state_requires_precise_mem_exns);
+        disInstrFn = MIPS32FN(disInstr_MIPS);
+        specHelper = MIPS32FN(guest_mips32_spechelper);
+        guest_layout = MIPS32FN(&mips32Guest_layout);
+        offB_CMSTART = offsetof(VexGuestMIPS32State, guest_CMSTART);
+        offB_CMLEN = offsetof(VexGuestMIPS32State, guest_CMLEN);
+        offB_GUEST_IP = offsetof(VexGuestMIPS32State, guest_PC);
+        szB_GUEST_IP = sizeof(((VexGuestMIPS32State*)0)->guest_PC);
+        vassert(vta->archinfo_guest.endness == VexEndnessLE
+            || vta->archinfo_guest.endness == VexEndnessBE);
+        vassert(0 == sizeof(VexGuestMIPS32State) % LibVEX_GUEST_STATE_ALIGN);
+        vassert(sizeof(((VexGuestMIPS32State*)0)->guest_CMSTART) == 4);
+        vassert(sizeof(((VexGuestMIPS32State*)0)->guest_CMLEN) == 4);
+        vassert(sizeof(((VexGuestMIPS32State*)0)->guest_NRADDR) == 4);
+        break;
+
+    case VexArchMIPS64:
+        preciseMemExnsFn
+            = MIPS64FN(guest_mips64_state_requires_precise_mem_exns);
+        disInstrFn = MIPS64FN(disInstr_MIPS);
+        specHelper = MIPS64FN(guest_mips64_spechelper);
+        guest_layout = MIPS64FN(&mips64Guest_layout);
+        offB_CMSTART = offsetof(VexGuestMIPS64State, guest_CMSTART);
+        offB_CMLEN = offsetof(VexGuestMIPS64State, guest_CMLEN);
+        offB_GUEST_IP = offsetof(VexGuestMIPS64State, guest_PC);
+        szB_GUEST_IP = sizeof(((VexGuestMIPS64State*)0)->guest_PC);
+        vassert(vta->archinfo_guest.endness == VexEndnessLE
+            || vta->archinfo_guest.endness == VexEndnessBE);
+        vassert(0 == sizeof(VexGuestMIPS64State) % LibVEX_GUEST_STATE_ALIGN);
+        vassert(sizeof(((VexGuestMIPS64State*)0)->guest_CMSTART) == 8);
+        vassert(sizeof(((VexGuestMIPS64State*)0)->guest_CMLEN) == 8);
+        vassert(sizeof(((VexGuestMIPS64State*)0)->guest_NRADDR) == 8);
+        break;
+
+    default:
+        vpanic("LibVEX_Translate: unsupported guest insn set");
+    }
+
+
+    res->status = VexTransOK;
+    res->n_sc_extents = 0;
+    res->offs_profInc = -1;
+    res->n_guest_instrs = 0;
+
+#ifndef VEXMULTIARCH
+    /* yet more sanity checks ... */
+    if (vta->arch_guest == vta->arch_host) {
+        /* doesn't necessarily have to be true, but if it isn't it means
+           we are simulating one flavour of an architecture a different
+           flavour of the same architecture, which is pretty strange. */
+        vassert(vta->archinfo_guest.hwcaps == vta->archinfo_host.hwcaps);
+        /* ditto */
+        vassert(vta->archinfo_guest.endness == vta->archinfo_host.endness);
+    }
+#endif
+
+    vexAllocSanityCheck();
+
+    if (vex_traceflags & VEX_TRACE_FE)
+        vex_printf("\n------------------------"
+            " Front end "
+            "------------------------\n\n");
+
+    *pxControl = vex_control.iropt_register_updates_default;
+    vassert(*pxControl >= VexRegUpdSpAtMemAccess
+        && *pxControl <= VexRegUpdAllregsAtEachInsn);
+
+    irsb = bb_to_IR(vta->guest_extents,
+        &res->n_sc_extents,
+        &res->n_guest_instrs,
+        pxControl,
+        vta->callback_opaque,
+        disInstrFn,
+        vta->guest_bytes,
+        vta->guest_bytes_addr,
+        vta->chase_into_ok,
+        vta->archinfo_host.endness,
+        vta->sigill_diag,
+        vta->arch_guest,
+        &vta->archinfo_guest,
+        &vta->abiinfo_both,
+        guest_word_type,
+        vta->needs_self_check,
+        vta->preamble_function,
+        offB_CMSTART,
+        offB_CMLEN,
+        offB_GUEST_IP,
+        szB_GUEST_IP,
+        pap);
+
+    vexAllocSanityCheck();
+
+    if (irsb == NULL) {
+        /* Access failure. */
+        vexTEMP_clear();
+        return NULL;
+    }
+
+    vassert(vta->guest_extents->n_used >= 1 && vta->guest_extents->n_used <= 3);
+    vassert(vta->guest_extents->base[0] == vta->guest_bytes_addr);
+    for (i = 0; i < vta->guest_extents->n_used; i++) {
+        vassert(vta->guest_extents->len[i] < 10000); /* sanity */
+    }
+
+    /* bb_to_IR() could have caused pxControl to change. */
+    vassert(*pxControl >= VexRegUpdSpAtMemAccess
+        && *pxControl <= VexRegUpdAllregsAtEachInsn);
+
+    /* If debugging, show the raw guest bytes for this bb. */
+    if (0 || (vex_traceflags & VEX_TRACE_FE)) {
+        if (vta->guest_extents->n_used > 1) {
+            vex_printf("can't show code due to extents > 1\n");
+        }
+        else {
+            /* HACK */
+            const UChar* p = vta->guest_bytes;
+            UInt   sum = 0;
+            UInt   guest_bytes_read = (UInt)vta->guest_extents->len[0];
+            vex_printf("GuestBytes %lx %u ", vta->guest_bytes_addr,
+                guest_bytes_read);
+            for (i = 0; i < guest_bytes_read; i++) {
+                UInt b = (UInt)p[i];
+                vex_printf(" %02x", b);
+                sum = (sum << 1) ^ b;
+            }
+            vex_printf("  %08x\n\n", sum);
+        }
+    }
+
+    /* Sanity check the initial IR. */
+    sanityCheckIRSB(irsb, "initial IR",
+        False/*can be non-flat*/, guest_word_type);
+
+    vexAllocSanityCheck();
+
+    /* Clean it up, hopefully a lot. */
+    irsb = do_iropt_BB(irsb, specHelper, preciseMemExnsFn, *pxControl,
+        vta->guest_bytes_addr,
+        vta->arch_guest);
+
+    // JRS 2016 Aug 03: Sanity checking is expensive, we already checked
+    // the output of the front end, and iropt never screws up the IR by
+    // itself, unless it is being hacked on.  So remove this post-iropt
+    // check in "production" use.
+    // sanityCheckIRSB( irsb, "after initial iropt", 
+    //                  True/*must be flat*/, guest_word_type );
+
+    if (vex_traceflags & VEX_TRACE_OPT1) {
+        vex_printf("\n------------------------"
+            " After pre-instr IR optimisation "
+            "------------------------\n\n");
+        ppIRSB(irsb);
+        vex_printf("\n");
+    }
+
+    vexAllocSanityCheck();
+
+    /* Get the thing instrumented. */
+    if (vta->instrument1)
+        irsb = vta->instrument1(vta->callback_opaque,
+            irsb, guest_layout,
+            vta->guest_extents,
+            &vta->archinfo_host,
+            guest_word_type, host_word_type);
+    vexAllocSanityCheck();
+
+    if (vta->instrument2)
+        irsb = vta->instrument2(vta->callback_opaque,
+            irsb, guest_layout,
+            vta->guest_extents,
+            &vta->archinfo_host,
+            guest_word_type, host_word_type);
+
+    if (vex_traceflags & VEX_TRACE_INST) {
+        vex_printf("\n------------------------"
+            " After instrumentation "
+            "------------------------\n\n");
+        ppIRSB(irsb);
+        vex_printf("\n");
+    }
+
+    // JRS 2016 Aug 03: as above, this never actually fails in practice.
+    // And we'll sanity check anyway after the post-instrumentation
+    // cleanup pass.  So skip this check in "production" use.
+    // if (vta->instrument1 || vta->instrument2)
+    //    sanityCheckIRSB( irsb, "after instrumentation",
+    //                     True/*must be flat*/, guest_word_type );
+
+    /* Do a post-instrumentation cleanup pass. */
+    if (vta->instrument1 || vta->instrument2) {
+        do_deadcode_BB(irsb);
+        irsb = cprop_BB(irsb);
+        do_deadcode_BB(irsb);
+        sanityCheckIRSB(irsb, "after post-instrumentation cleanup",
+            True/*must be flat*/, guest_word_type);
+    }
+
+    vexAllocSanityCheck();
+
+    if (vex_traceflags & VEX_TRACE_OPT2) {
+        vex_printf("\n------------------------"
+            " After post-instr IR optimisation "
+            "------------------------\n\n");
+        ppIRSB(irsb);
+        vex_printf("\n");
+    }
+
+    return irsb;
+}
+
+
 /* Exported to library client. */
 
 IRSB* LibVEX_FrontEnd ( /*MOD*/ VexTranslateArgs* vta,

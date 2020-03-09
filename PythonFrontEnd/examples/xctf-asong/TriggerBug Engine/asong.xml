@@ -52,7 +52,7 @@
 	</VexControl>
 	
 	<DEBUG>
-		<ppStmts>1</ppStmts>
+		<ppStmts>0</ppStmts>
 		<TraceIrAddrress>
             <!--static addr = "0x07FFFF7B5AEB0" cflag = "1"/-->
             <!--static addr = "0x0401B04" cflag = "1"/-->

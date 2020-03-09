@@ -280,6 +280,8 @@ void vexSetAllocModeTEMP_and_save_curr(void)
     temporary_curr = private_LibVEX_alloc_curr;
     private_LibVEX_alloc_curr = &temporary[0];
 }
+
+
 void vexTEMP_clear(void)
 {
     private_LibVEX_alloc_curr = temporary_curr;
