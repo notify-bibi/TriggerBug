@@ -1,3 +1,6 @@
+#ifdef _MSC_VER
+#define __attribute__(...)
+#endif
 
 /*---------------------------------------------------------------*/
 /*--- begin                                       main_util.h ---*/
@@ -21,7 +24,7 @@
    General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
+   along long with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
    02110-1301, USA.
 
@@ -74,7 +77,7 @@
   ((void) (LIKELY(expr) ? 0 :                                   \
            (vex_assert_fail (#expr,                             \
                              __FILE__, __LINE__,                \
-                             __PRETTY_FUNCTION__), 0)))
+                             __FUNCSIG__), 0)))
 
 __attribute__ ((__noreturn__))
 extern void vex_assert_fail ( const HChar* expr, const HChar* file,
@@ -120,6 +123,8 @@ extern VexAllocMode vexGetAllocMode ( void );
 extern void         vexAllocSanityCheck ( void );
 
 extern void vexSetAllocModeTEMP_and_clear ( void );
+extern void vexSetAllocModeTEMP_and_save_curr(void);
+extern void vexTEMP_clear(void);
 
 /* Allocate in Vex's temporary allocation area.  Be careful with this.
    You can only call it inside an instrumentation or optimisation
@@ -127,9 +132,9 @@ extern void vexSetAllocModeTEMP_and_clear ( void );
    LibVEX_Translate.  The storage allocated will only stay alive until
    translation of the current basic block is complete.
  */
-extern HChar* private_LibVEX_alloc_first;
-extern HChar* private_LibVEX_alloc_curr;
-extern HChar* private_LibVEX_alloc_last;
+//extern HChar* private_LibVEX_alloc_first;
+//extern HChar* private_LibVEX_alloc_curr;
+//extern HChar* private_LibVEX_alloc_last;
 extern void   private_LibVEX_alloc_OOM(void) __attribute__((noreturn));
 
 /* Allocated memory as returned by LibVEX_Alloc will be aligned on this
@@ -139,51 +144,7 @@ extern void   private_LibVEX_alloc_OOM(void) __attribute__((noreturn));
 #if defined(ENABLE_INNER)
 #define VEX_REDZONE_SIZEB (2*REQ_ALIGN)
 #endif
-
-static inline void* LibVEX_Alloc_inline ( SizeT nbytes )
-{
-   struct align {
-      char c;
-      union {
-         char c;
-         short s;
-         int i;
-         long l;
-         long long ll;
-         float f;
-         double d;
-         /* long double is currently not used and would increase alignment
-            unnecessarily. */
-         /* long double ld; */
-         void *pto;
-         void (*ptf)(void);
-      } x;
-   };
-
-   /* Make sure the compiler does no surprise us */
-   vassert(offsetof(struct align,x) <= REQ_ALIGN);
-
-#if 0
-  /* Nasty debugging hack, do not use. */
-  return malloc(nbytes);
-#else
-   HChar* curr;
-   HChar* next;
-   SizeT  ALIGN;
-   ALIGN  = offsetof(struct align,x) - 1;
-   curr   = private_LibVEX_alloc_curr;
-   next   = curr + ((nbytes + ALIGN) & ~ALIGN);
-   INNER_REQUEST(next += 2 * VEX_REDZONE_SIZEB);
-   if (next >= private_LibVEX_alloc_last)
-      private_LibVEX_alloc_OOM();
-   private_LibVEX_alloc_curr = next;
-   INNER_REQUEST(curr += VEX_REDZONE_SIZEB);
-   INNER_REQUEST(VALGRIND_MEMPOOL_ALLOC(private_LibVEX_alloc_first,
-                                        curr, nbytes));
-   return curr;
-#endif
-}
-
+extern void* LibVEX_Alloc_inline(SizeT nbytes);
 /* Misaligned memory access support. */
 
 extern UInt  read_misaligned_UInt_LE  ( void* addr );

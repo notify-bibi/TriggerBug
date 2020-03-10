@@ -1,3 +1,6 @@
+#ifdef _MSC_VER
+#define __attribute__(...)
+#endif
 
 /*---------------------------------------------------------------*/
 /*--- begin                                          libvex.h ---*/
@@ -21,7 +24,7 @@
    General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
+   along long with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
    02110-1301, USA.
 
@@ -39,7 +42,40 @@
 
 #include "libvex_basictypes.h"
 #include "libvex_ir.h"
+/*patch start{*/
 
+#if defined(_MSC_VER)
+#ifndef __cplusplus
+#ifndef _HAS_NODISCARD
+#define _HAS_NODISCARD 0
+#endif
+#endif
+#include <intrin.h>
+
+#define __builtin_memset memset
+
+inline static UInt __builtin_clzll(ULong w64) {
+    unsigned long result = 0;
+    if (_BitScanReverse64(&result, w64)) {
+        return 63 - result;
+    }
+    else {
+        return 64;
+    }
+}
+
+inline static UInt __builtin_ctzll(ULong w64) {
+    unsigned long result = 0;
+    if (_BitScanForward64(&result, w64)) {
+        return result;
+    }
+    else {
+        return 64;
+    }
+}
+#endif
+
+/*patched }end*/
 
 /*---------------------------------------------------------------*/
 /*--- This file defines the top-level interface to LibVEX.    ---*/
@@ -814,15 +850,20 @@ typedef
 
 /* Runs the entire compilation pipeline. */
 extern 
-VexTranslateResult LibVEX_Translate ( /*MOD*/ VexTranslateArgs* );
+VexTranslateResult LibVEX_Translate ( /*MOD*/ VexTranslateArgs*, Pap* pap); 
 
 /* Runs the first half of the compilation pipeline: lifts guest code to IR,
    optimises, instruments and optimises it some more. */
-extern
+extern 
 IRSB* LibVEX_FrontEnd ( /*MOD*/ VexTranslateArgs*,
                         /*OUT*/ VexTranslateResult* res,
-                        /*OUT*/ VexRegisterUpdates* pxControl );
+                        /*OUT*/ VexRegisterUpdates* pxControl , Pap* pap);
 
+extern 
+IRSB* LibVEX_FrontEnd_coexistence( /*MOD*/ VexTranslateArgs* vta,
+    /*OUT*/ VexTranslateResult* res,
+    /*OUT*/ VexRegisterUpdates* pxControl,
+    Pap* pap);
 
 /* A subtlety re interaction between self-checking translations and
    bb-chasing.  The supplied chase_into_ok function should say NO

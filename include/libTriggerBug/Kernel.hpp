@@ -71,18 +71,21 @@ class TRsolver;
 class Kernel {
     friend class State<Addr32>;
     friend class State<Addr64>;
+public:
+    static ThreadPool*  pool;
+    TRcontext           m_ctx;
+    std::queue<Z3_ast>  io_buff;
+private:
+    Vex_Info&           m_vex_info;
     template<typename ADDR> friend class VexIRDirty;
-    Vex_Info& m_vex_info;
     Kernel(Vex_Info& vex_info) :m_ctx(), m_vex_info(vex_info)
     {
     }
     Kernel(Kernel const& father_kernel) : m_ctx(), m_vex_info(father_kernel.m_vex_info)
     {
     };
+
 public:
-    TRcontext               m_ctx;
-    static ThreadPool* pool;
-    std::queue<Z3_ast> io_buff;
     Vns const& sys_read() {
 
     }

@@ -89,6 +89,7 @@ macro(TR_add_library)
     set(CMAKE_CXX_STANDARD 17)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+    
     IF(NOT LIB_SOURCESDIR)
         SET(LIB_SOURCESDIR .)
     ENDIF()
@@ -109,7 +110,8 @@ macro(TR_add_library)
         ENDIF()
         ADD_LIBRARY(${LIB_TARGET} ${LIB_CONFIGURE_TYPE} ${LIB_SOURCES})
     ENDIF()
-    
+    target_compile_options(${LIB_TARGET} PRIVATE -O3 -Ob2 -openmp)
+                                              
     message(STATUS "    add files  ${LIB_TARGET} ")
     foreach(cfile ${LIB_SOURCES})
         message(STATUS "        add ${cfile} ")

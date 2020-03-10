@@ -21,7 +21,7 @@
    General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
+   along long with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
    02110-1301, USA.
 
@@ -255,7 +255,6 @@ UInt s390_calculate_cond(ULong mask, ULong op, ULong dep1, ULong dep2,
 #define S390_SPECIAL_OP_SIZE 2
 
 /* Last target instruction for the EX helper */
-extern ULong last_execute_target;
 
 /*------------------------------------------------------------*/
 /*--- Vector helpers.                                      ---*/
@@ -264,7 +263,7 @@ extern ULong last_execute_target;
 /* Vector operatons passed to s390x_dirtyhelper_vec_op(...) helper.
    Please don't change ordering of elements and append new items
    before  S390_VEC_OP_LAST. */
-enum {
+enum s390x_vec_op_t {
    S390_VEC_OP_INVALID = 0,
    S390_VEC_OP_VPKS = 1,
    S390_VEC_OP_VPKLS = 2,
@@ -286,7 +285,7 @@ enum {
    S390_VEC_OP_VFCHE = 18,
    S390_VEC_OP_VFTCI = 19,
    S390_VEC_OP_LAST = 20 // supposed to be the last element in enum
-} s390x_vec_op_t;
+} ;
 
 /* Arguments of s390x_dirtyhelper_vec_op(...) which are packed into one
    ULong variable.

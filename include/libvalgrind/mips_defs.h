@@ -21,7 +21,7 @@
    General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
+   along long with this program; if not, write to the Free Software
    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
    02111-1307, USA.
 
@@ -35,14 +35,14 @@
 #include "libvex.h"
 
 /* MOD: The IRSB* into which we're generating code. */
-extern IRSB *irsb;
+extern thread_local IRSB *irsb;
 
 /* Is our guest binary 32 or 64bit? Set at each call to
    disInstr_MIPS below. */
-extern Bool mode64;
+extern thread_local Bool mode64;
 
 /* Pointer to the guest code area. */
-extern const UChar *guest_code;
+extern thread_local const UChar *guest_code;
 
 /*------------------------------------------------------------*/
 /*---              DSP to IR function                      ---*/
@@ -54,9 +54,9 @@ UInt disDSPInstr_MIPS_WRK ( UInt );
 /*---                  Debugging output                    ---*/
 /*------------------------------------------------------------*/
 
-#define DIP(format, args...)           \
+#define DIP(format, ...)           \
    if (vex_traceflags & VEX_TRACE_FE)  \
-      vex_printf(format, ## args)
+      vex_printf(format, __VA_ARGS__)
 
 /* ------------ MIPS32 DSP ASE(r2) accumulators ------------- */
 
@@ -118,7 +118,7 @@ static inline IRExpr *qop ( IROp op, IRExpr * a1, IRExpr * a2, IRExpr * a3,
 
 static inline IRExpr *load(IRType ty, IRExpr * addr)
 {
-   IRExpr *load1 = NULL;
+   IRExpr *load1 = nullptr;
 #if defined (_MIPSEL)
    load1 = IRExpr_Load(Iend_LE, ty, addr);
 #elif defined (_MIPSEB)

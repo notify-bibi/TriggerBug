@@ -1,6 +1,8 @@
 
 
-#include "TriggerBug.h"
+#include "tr_main.h"
+
+using namespace TR;
 
 
 //#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\TriggerBug-asong.xml"
@@ -126,7 +128,7 @@ State_Tag success_ret3(State<Addr64>* s) {
 
 
 
-#include "engine/Guest_Helper.hpp"
+#include "engine/guest_helper.h"
 
 Vns flag_limit(Vns& flag) {
     char flags_char[] = "@_-{}1:() ^";
@@ -148,7 +150,10 @@ Vns flag_limit(Vns& flag) {
 int main() {
     test_cmpress();
     //test_dirty_cmpress();
-    Vex_Info v("C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.xml");
+    vex_context<Addr64> v("C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.xml");
+    
+    
+    
     SP::AMD64 state(v, 0, True);
     std::cout << state << std::endl;
 

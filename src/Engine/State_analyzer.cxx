@@ -9,9 +9,9 @@ Author:
 Revision History:
 --*/
 
-#include "State_analyzer.hpp"
-#include<set>    
-#include<map>   
+#include "engine/state_analyzer.h"
+#include <set>    
+#include <map>   
 #include <forward_list>
 
 #ifdef _DEBUG
@@ -19,6 +19,7 @@ Revision History:
 //#define OUTPUT_PATH
 #endif
 
+using namespace TR;
 
 template<typename ADDR>
 class StateAnalyzer {
@@ -49,7 +50,7 @@ template<typename ADDR>
 void find_explore_state(State<ADDR> &state, std::vector<State<ADDR>*>& explore, std::hash_map<ADDR, UInt> &Fork_addr) {
    if (state.branch.empty()) {
         if (state.status() == Fork) {
-            auto _where = Fork_addr.lower_bound(state.get_cpu_ip());
+            auto _where = Fork_addr.find(state.get_cpu_ip());
             if (_where == Fork_addr.end()) {
                 for (State<ADDR>* nstate : state.branch) {
                     explore.emplace_back(nstate);

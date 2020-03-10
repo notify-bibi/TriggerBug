@@ -12,6 +12,7 @@ Revision History:
 #ifndef HEADER_H
 #define HEADER_H
 
+
 extern "C"
 {
 #include "libvex.h";
@@ -33,141 +34,6 @@ extern "C"
 extern "C" void vex_assert_fail(const HChar * expr, const HChar * file, Int line, const HChar * fn);
 extern "C" unsigned int vex_printf(const HChar * format, ...);
 extern "C" void vpanic(const HChar * str);
-
-
-#define __i386__
-#define TESTCODE(code)                                                                                                  \
-{                                                                                                                       \
-    LARGE_INTEGER   freq = { 0 };                                                                                       \
-    LARGE_INTEGER   beginPerformanceCount = { 0 };                                                                      \
-    LARGE_INTEGER   closePerformanceCount = { 0 };                                                                      \
-    QueryPerformanceFrequency(&freq);                                                                                   \
-    QueryPerformanceCounter(&beginPerformanceCount);                                                                    \
-    {   code    }                                                                                                          \
-    QueryPerformanceCounter(&closePerformanceCount);                                                                    \
-    double delta_seconds = (double)(closePerformanceCount.QuadPart - beginPerformanceCount.QuadPart) / freq.QuadPart;   \
-    printf("%s line:%d spend %lf \n",__FILE__, __LINE__, delta_seconds);                                                \
-}
-
-
-#define ALIGN(Value,size) ((Value) & ~((size) - 1))
-
-
-#define LZDEF(n) ((unsigned char)(((((((int)(n))-1) & -8) + 8) >> 3) - 1))
-const UChar fastalignD1[257] = { LZDEF(0),  LZDEF(1),  LZDEF(2),  LZDEF(3),  LZDEF(4),  LZDEF(5),  LZDEF(6),  LZDEF(7),  LZDEF(8),  LZDEF(9),  LZDEF(10),  LZDEF(11),  LZDEF(12),  LZDEF(13),  LZDEF(14),  LZDEF(15),  LZDEF(16),  LZDEF(17),  LZDEF(18),  LZDEF(19),  LZDEF(20),  LZDEF(21),  LZDEF(22),  LZDEF(23),  LZDEF(24),  LZDEF(25),  LZDEF(26),  LZDEF(27),  LZDEF(28),  LZDEF(29),  LZDEF(30),  LZDEF(31),  LZDEF(32),  LZDEF(33),  LZDEF(34),  LZDEF(35),  LZDEF(36),  LZDEF(37),  LZDEF(38),  LZDEF(39),  LZDEF(40),  LZDEF(41),  LZDEF(42),  LZDEF(43),  LZDEF(44),  LZDEF(45),  LZDEF(46),  LZDEF(47),  LZDEF(48),  LZDEF(49),  LZDEF(50),  LZDEF(51),  LZDEF(52),  LZDEF(53),  LZDEF(54),  LZDEF(55),  LZDEF(56),  LZDEF(57),  LZDEF(58),  LZDEF(59),  LZDEF(60),  LZDEF(61),  LZDEF(62),  LZDEF(63),  LZDEF(64),  LZDEF(65),  LZDEF(66),  LZDEF(67),  LZDEF(68),  LZDEF(69),  LZDEF(70),  LZDEF(71),  LZDEF(72),  LZDEF(73),  LZDEF(74),  LZDEF(75),  LZDEF(76),  LZDEF(77),  LZDEF(78),  LZDEF(79),  LZDEF(80),  LZDEF(81),  LZDEF(82),  LZDEF(83),  LZDEF(84),  LZDEF(85),  LZDEF(86),  LZDEF(87),  LZDEF(88),  LZDEF(89),  LZDEF(90),  LZDEF(91),  LZDEF(92),  LZDEF(93),  LZDEF(94),  LZDEF(95),  LZDEF(96),  LZDEF(97),  LZDEF(98),  LZDEF(99),  LZDEF(100),  LZDEF(101),  LZDEF(102),  LZDEF(103),  LZDEF(104),  LZDEF(105),  LZDEF(106),  LZDEF(107),  LZDEF(108),  LZDEF(109),  LZDEF(110),  LZDEF(111),  LZDEF(112),  LZDEF(113),  LZDEF(114),  LZDEF(115),  LZDEF(116),  LZDEF(117),  LZDEF(118),  LZDEF(119),  LZDEF(120),  LZDEF(121),  LZDEF(122),  LZDEF(123),  LZDEF(124),  LZDEF(125),  LZDEF(126),  LZDEF(127),  LZDEF(128),  LZDEF(129),  LZDEF(130),  LZDEF(131),  LZDEF(132),  LZDEF(133),  LZDEF(134),  LZDEF(135),  LZDEF(136),  LZDEF(137),  LZDEF(138),  LZDEF(139),  LZDEF(140),  LZDEF(141),  LZDEF(142),  LZDEF(143),  LZDEF(144),  LZDEF(145),  LZDEF(146),  LZDEF(147),  LZDEF(148),  LZDEF(149),  LZDEF(150),  LZDEF(151),  LZDEF(152),  LZDEF(153),  LZDEF(154),  LZDEF(155),  LZDEF(156),  LZDEF(157),  LZDEF(158),  LZDEF(159),  LZDEF(160),  LZDEF(161),  LZDEF(162),  LZDEF(163),  LZDEF(164),  LZDEF(165),  LZDEF(166),  LZDEF(167),  LZDEF(168),  LZDEF(169),  LZDEF(170),  LZDEF(171),  LZDEF(172),  LZDEF(173),  LZDEF(174),  LZDEF(175),  LZDEF(176),  LZDEF(177),  LZDEF(178),  LZDEF(179),  LZDEF(180),  LZDEF(181),  LZDEF(182),  LZDEF(183),  LZDEF(184),  LZDEF(185),  LZDEF(186),  LZDEF(187),  LZDEF(188),  LZDEF(189),  LZDEF(190),  LZDEF(191),  LZDEF(192),  LZDEF(193),  LZDEF(194),  LZDEF(195),  LZDEF(196),  LZDEF(197),  LZDEF(198),  LZDEF(199),  LZDEF(200),  LZDEF(201),  LZDEF(202),  LZDEF(203),  LZDEF(204),  LZDEF(205),  LZDEF(206),  LZDEF(207),  LZDEF(208),  LZDEF(209),  LZDEF(210),  LZDEF(211),  LZDEF(212),  LZDEF(213),  LZDEF(214),  LZDEF(215),  LZDEF(216),  LZDEF(217),  LZDEF(218),  LZDEF(219),  LZDEF(220),  LZDEF(221),  LZDEF(222),  LZDEF(223),  LZDEF(224),  LZDEF(225),  LZDEF(226),  LZDEF(227),  LZDEF(228),  LZDEF(229),  LZDEF(230),  LZDEF(231),  LZDEF(232),  LZDEF(233),  LZDEF(234),  LZDEF(235),  LZDEF(236),  LZDEF(237),  LZDEF(238),  LZDEF(239),  LZDEF(240),  LZDEF(241),  LZDEF(242),  LZDEF(243),  LZDEF(244),  LZDEF(245),  LZDEF(246),  LZDEF(247),  LZDEF(248),  LZDEF(249),  LZDEF(250),  LZDEF(251),  LZDEF(252),  LZDEF(253),  LZDEF(254),  LZDEF(255),  LZDEF(256) };
-#undef  LZDEF
-//
-//#define LZDEF(n) ((unsigned char)((((((int)(n))-1) & -8) + 8) >> 3))
-//const UChar  fastalign[257] = { LZDEF(0),  LZDEF(1),  LZDEF(2),  LZDEF(3),  LZDEF(4),  LZDEF(5),  LZDEF(6),  LZDEF(7),  LZDEF(8),  LZDEF(9),  LZDEF(10),  LZDEF(11),  LZDEF(12),  LZDEF(13),  LZDEF(14),  LZDEF(15),  LZDEF(16),  LZDEF(17),  LZDEF(18),  LZDEF(19),  LZDEF(20),  LZDEF(21),  LZDEF(22),  LZDEF(23),  LZDEF(24),  LZDEF(25),  LZDEF(26),  LZDEF(27),  LZDEF(28),  LZDEF(29),  LZDEF(30),  LZDEF(31),  LZDEF(32),  LZDEF(33),  LZDEF(34),  LZDEF(35),  LZDEF(36),  LZDEF(37),  LZDEF(38),  LZDEF(39),  LZDEF(40),  LZDEF(41),  LZDEF(42),  LZDEF(43),  LZDEF(44),  LZDEF(45),  LZDEF(46),  LZDEF(47),  LZDEF(48),  LZDEF(49),  LZDEF(50),  LZDEF(51),  LZDEF(52),  LZDEF(53),  LZDEF(54),  LZDEF(55),  LZDEF(56),  LZDEF(57),  LZDEF(58),  LZDEF(59),  LZDEF(60),  LZDEF(61),  LZDEF(62),  LZDEF(63),  LZDEF(64),  LZDEF(65),  LZDEF(66),  LZDEF(67),  LZDEF(68),  LZDEF(69),  LZDEF(70),  LZDEF(71),  LZDEF(72),  LZDEF(73),  LZDEF(74),  LZDEF(75),  LZDEF(76),  LZDEF(77),  LZDEF(78),  LZDEF(79),  LZDEF(80),  LZDEF(81),  LZDEF(82),  LZDEF(83),  LZDEF(84),  LZDEF(85),  LZDEF(86),  LZDEF(87),  LZDEF(88),  LZDEF(89),  LZDEF(90),  LZDEF(91),  LZDEF(92),  LZDEF(93),  LZDEF(94),  LZDEF(95),  LZDEF(96),  LZDEF(97),  LZDEF(98),  LZDEF(99),  LZDEF(100),  LZDEF(101),  LZDEF(102),  LZDEF(103),  LZDEF(104),  LZDEF(105),  LZDEF(106),  LZDEF(107),  LZDEF(108),  LZDEF(109),  LZDEF(110),  LZDEF(111),  LZDEF(112),  LZDEF(113),  LZDEF(114),  LZDEF(115),  LZDEF(116),  LZDEF(117),  LZDEF(118),  LZDEF(119),  LZDEF(120),  LZDEF(121),  LZDEF(122),  LZDEF(123),  LZDEF(124),  LZDEF(125),  LZDEF(126),  LZDEF(127),  LZDEF(128),  LZDEF(129),  LZDEF(130),  LZDEF(131),  LZDEF(132),  LZDEF(133),  LZDEF(134),  LZDEF(135),  LZDEF(136),  LZDEF(137),  LZDEF(138),  LZDEF(139),  LZDEF(140),  LZDEF(141),  LZDEF(142),  LZDEF(143),  LZDEF(144),  LZDEF(145),  LZDEF(146),  LZDEF(147),  LZDEF(148),  LZDEF(149),  LZDEF(150),  LZDEF(151),  LZDEF(152),  LZDEF(153),  LZDEF(154),  LZDEF(155),  LZDEF(156),  LZDEF(157),  LZDEF(158),  LZDEF(159),  LZDEF(160),  LZDEF(161),  LZDEF(162),  LZDEF(163),  LZDEF(164),  LZDEF(165),  LZDEF(166),  LZDEF(167),  LZDEF(168),  LZDEF(169),  LZDEF(170),  LZDEF(171),  LZDEF(172),  LZDEF(173),  LZDEF(174),  LZDEF(175),  LZDEF(176),  LZDEF(177),  LZDEF(178),  LZDEF(179),  LZDEF(180),  LZDEF(181),  LZDEF(182),  LZDEF(183),  LZDEF(184),  LZDEF(185),  LZDEF(186),  LZDEF(187),  LZDEF(188),  LZDEF(189),  LZDEF(190),  LZDEF(191),  LZDEF(192),  LZDEF(193),  LZDEF(194),  LZDEF(195),  LZDEF(196),  LZDEF(197),  LZDEF(198),  LZDEF(199),  LZDEF(200),  LZDEF(201),  LZDEF(202),  LZDEF(203),  LZDEF(204),  LZDEF(205),  LZDEF(206),  LZDEF(207),  LZDEF(208),  LZDEF(209),  LZDEF(210),  LZDEF(211),  LZDEF(212),  LZDEF(213),  LZDEF(214),  LZDEF(215),  LZDEF(216),  LZDEF(217),  LZDEF(218),  LZDEF(219),  LZDEF(220),  LZDEF(221),  LZDEF(222),  LZDEF(223),  LZDEF(224),  LZDEF(225),  LZDEF(226),  LZDEF(227),  LZDEF(228),  LZDEF(229),  LZDEF(230),  LZDEF(231),  LZDEF(232),  LZDEF(233),  LZDEF(234),  LZDEF(235),  LZDEF(236),  LZDEF(237),  LZDEF(238),  LZDEF(239),  LZDEF(240),  LZDEF(241),  LZDEF(242),  LZDEF(243),  LZDEF(244),  LZDEF(245),  LZDEF(246),  LZDEF(247),  LZDEF(248),  LZDEF(249),  LZDEF(250),  LZDEF(251),  LZDEF(252),  LZDEF(253),  LZDEF(254),  LZDEF(255),  LZDEF(256) };
-//#undef  LZDEF
-
-
-#define LZDEF(n) ((ULong)((1ull << ((int)n + 1)) - 1))
-const ULong fastMaskI1[65] = { LZDEF(0),  LZDEF(1),  LZDEF(2),  LZDEF(3),  LZDEF(4),  LZDEF(5),  LZDEF(6),  LZDEF(7),  LZDEF(8),  LZDEF(9),  LZDEF(10),  LZDEF(11),  LZDEF(12),  LZDEF(13),  LZDEF(14),  LZDEF(15),  LZDEF(16),  LZDEF(17),  LZDEF(18),  LZDEF(19),  LZDEF(20),  LZDEF(21),  LZDEF(22),  LZDEF(23),  LZDEF(24),  LZDEF(25),  LZDEF(26),  LZDEF(27),  LZDEF(28),  LZDEF(29),  LZDEF(30),  LZDEF(31),  LZDEF(32),  LZDEF(33),  LZDEF(34),  LZDEF(35),  LZDEF(36),  LZDEF(37),  LZDEF(38),  LZDEF(39),  LZDEF(40),  LZDEF(41),  LZDEF(42),  LZDEF(43),  LZDEF(44),  LZDEF(45),  LZDEF(46),  LZDEF(47),  LZDEF(48),  LZDEF(49),  LZDEF(50),  LZDEF(51),  LZDEF(52),  LZDEF(53),  LZDEF(54),  LZDEF(55),  LZDEF(56),  LZDEF(57),  LZDEF(58),  LZDEF(59),  LZDEF(60),  LZDEF(61),  LZDEF(62),  -1ULL,  -1ULL };
-#undef  LZDEF
-
-#define LZDEF(n) ((ULong)((1ull << ((int)n << 3)) - 1))
-const ULong fastMaskB[9] = { LZDEF(0),  LZDEF(1),  LZDEF(2),  LZDEF(3),  LZDEF(4),  LZDEF(5),  LZDEF(6),  LZDEF(7),  -1ULL };
-#undef  LZDEF
-
-#define LZDEF(n) ((ULong)( (1ull << (((int)n + 1) << 3)) - 1))
-const ULong fastMaskBI1[9] = { LZDEF(0),  LZDEF(1),  LZDEF(2),  LZDEF(3),  LZDEF(4),  LZDEF(5),  LZDEF(6),  -1ULL,  -1ULL };
-#undef  LZDEF
-
-#define fastMaskReverseI1(N) (~fastMaskI1[N])
-#define Z3_Get_Ref(exp) (((int*)((Z3_ast)((exp))))[2])
-
-
-template <int maxlength> class Register;
-template <typename ADDR> class State;
-class Kernel;
-
-#ifdef _MSC_VER
-#define NORETURN __declspec(noreturn)
-#else
-#define NORETURN __attribute__ ((noreturn))
-#endif
-typedef enum :unsigned int {
-    NewState = 0,
-    Running,
-    Fork,
-    Death,
-    Exit,
-    NoDecode,
-    Exception,
-    Dirty_ret
-}State_Tag;
-
-/* vex_traceflags values */
-#define VEX_TRACE_FE     (1 << 7)  /* show conversion into IR */
-#define VEX_TRACE_OPT1   (1 << 6)  /* show after initial opt */
-#define VEX_TRACE_INST   (1 << 5)  /* show after instrumentation */
-#define VEX_TRACE_OPT2   (1 << 4)  /* show after second opt */
-#define VEX_TRACE_TREES  (1 << 3)  /* show after tree building */
-#define VEX_TRACE_VCODE  (1 << 2)  /* show selected insns */
-#define VEX_TRACE_RCODE  (1 << 1)  /* show after reg-alloc */
-#define VEX_TRACE_ASM    (1 << 0)  /* show final assembly */
-
-
-#define SET1(addr, value) *(UChar*)((addr)) = (value)
-#define SET2(addr, value) *(UShort*)((addr)) = (value)
-#define SET4(addr, value) *(UInt*)((addr)) = (value)
-#define SET8(addr, value) *(ULong*)((addr)) = (value)
-#define SET16(addr, value) *(__m128i*)((addr)) = (value)
-#define SET32(addr, value) *(__m256i*)((addr)) = (value)
-
-#define GET1(addr) (*(UChar*)((addr))) 
-#define GET2(addr) (*(UShort*)((addr)))
-#define GET4(addr) (*(UInt*)((addr)))
-#define GET8(addr) (*(ULong*)((addr)))
-#define GET16(addr) (*(__m128i*)((addr)))
-#define GET32(addr) (*(__m256i*)((addr)))
-
-
-#define GETS1(addr) (*(Char*)((addr))) 
-#define GETS2(addr) (*(Short*)((addr)))
-#define GETS4(addr) (*(Int*)((addr)))
-#define GETS8(addr) (*(Long*)((addr)))
-#define GETS16(addr) (*(__m128i*)((addr)))
-#define GETS32(addr) (*(__m256i*)((addr)))
-
-#define MV1(addr,fromaddr) *(UChar*)((addr))=(*(UChar*)((fromaddr))) 
-#define MV2(addr,fromaddr) *(UShort*)((addr))=(*(UShort*)((fromaddr)))
-#define MV4(addr,fromaddr) *(UInt*)((addr))=(*(UInt*)((fromaddr)))
-#define MV8(addr,fromaddr) *(ULong*)((addr))=(*(ULong*)((fromaddr)))
-#define MV16(addr,fromaddr) *(__m128i*)((addr))=(*(__m128i*)((fromaddr)))
-#define MV32(addr,fromaddr) *(__m256i*)((addr))=(*(__m256i*)((fromaddr)))
-
-
-typedef enum :UChar {
-    unknowSystem = 0b00,
-    linux,
-    windows
-}GuestSystem;
-
-
-typedef enum :ULong {
-    CF_None = 0,
-    CF_ppStmts = 1ull,
-    CF_traceJmp = 1ull << 1,
-    CF_traceState = 1ull << 2,
-    CF_TraceSymbolic = 1ull << 3,
-    CF_PassSigSEGV = 1ull << 4,
-}TRControlFlags;
-
-
-namespace TRtype {
-    typedef State_Tag(*Hook_CB)         (void*/*obj*/);
-    //得到的ast无需Z3_inc_ref
-    typedef Z3_ast(*TableIdx_CB) (void*/*obj*/, Addr64 /*base*/, Z3_ast /*idx*/);
-};
-
-typedef struct _Hook_ {
-    TRtype::Hook_CB cb;
-    UInt            nbytes;
-    __m64           original;
-    TRControlFlags  cflag;
-}Hook_struct;
 
 
 

@@ -21,7 +21,7 @@
    General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
+   along long with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
    02110-1301, USA.
 
@@ -60,6 +60,15 @@
    but in the latter case we must set the bb's ->next field to point
    to the next instruction.  */
 
+typedef enum  {
+    Dis_StopHere = 0x10, Dis_Continue,
+    Dis_ResteerU, Dis_ResteerC
+} whatNextEnum;
+
+typedef enum { 
+    Dis_HintNone = 0x20, Dis_HintVerbose 
+} hintEnum;
+
 typedef
 
    struct {
@@ -76,14 +85,13 @@ typedef
          Dis_ResteerC:  (speculatively, of course) followed a
                         conditional branch; continue at 'continueAt'
       */
-      enum { Dis_StopHere=0x10, Dis_Continue, 
-             Dis_ResteerU, Dis_ResteerC } whatNext;
+      whatNextEnum whatNext;
 
       /* Any other hints that we should feed back to the disassembler?
          Dis_HintNone:     no hint
          Dis_HintVerbose:  this insn potentially generates a lot of code
       */
-      enum { Dis_HintNone=0x20, Dis_HintVerbose } hint;
+      hintEnum hint;
 
       /* For whatNext==Dis_StopHere, we need to end the block and create a
          transfer to whatever the NIA is.  That will have presumably
@@ -195,7 +203,8 @@ IRSB* bb_to_IR (
          /*IN*/ Int              offB_GUEST_CMSTART,
          /*IN*/ Int              offB_GUEST_CMLEN,
          /*IN*/ Int              offB_GUEST_IP,
-         /*IN*/ Int              szB_GUEST_IP
+         /*IN*/ Int              szB_GUEST_IP,
+         /*IN*/ Pap*             pap
       );
 
 

@@ -21,7 +21,7 @@
    General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
+   along long with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
    02110-1301, USA.
 
@@ -55,10 +55,10 @@ typedef enum {
 
 
 /* Invert the condition code */
-static __inline__ s390_cc_t
+static inline s390_cc_t
 s390_cc_invert(s390_cc_t cond)
 {
-   return S390_CC_ALWAYS - cond;
+   return (s390_cc_t)(S390_CC_ALWAYS - cond);
 }
 
 

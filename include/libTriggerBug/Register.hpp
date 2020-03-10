@@ -15,8 +15,10 @@ Revision History:
 #include "engine/engine.hpp"
 #include "engine/Variable.hpp"
 
-extern __m256i m32_fast[33];
-extern __m256i m32_mask_reverse[33];
+
+#define fastMaskB(n) fastMask(((n)<<3))
+#define fastMaskBI1(n) fastMask((((n)+1)<<3))
+
 
 #ifdef USE_HASH_AST_MANAGER
 class AstManager {
@@ -38,8 +40,8 @@ public:
     };
     inline AstManager() {}
     inline Z3_ast& operator[](Int idx) { return m_mem[idx]; }
-    AstManagerX operator+(Int offset) { return AstManagerX(*this, offset); }
-    AstManagerX operator-(Int offset) { return AstManagerX(*this, -offset); }
+    inline AstManagerX operator+(Int offset) { return AstManagerX(*this, offset); }
+    inline AstManagerX operator-(Int offset) { return AstManagerX(*this, -offset); }
 };
 
 
@@ -150,7 +152,7 @@ public:
         int _pcur = maxlength - 1;
         DWORD N;
         for (; _pcur > 0; ) {
-            if (_BitScanReverse64(&N, ((DWORD64*)(m_fastindex))[_pcur >> 3] & fastMaskBI1[_pcur % 8])) {
+            if (_BitScanReverse64(&N, ((DWORD64*)(m_fastindex))[_pcur >> 3] & fastMaskBI1(_pcur % 8))) {
                 _pcur = ALIGN(_pcur, 8) + (N >> 3);
                 _pcur = _pcur - m_fastindex[_pcur] + 1;
                 Z3_dec_ref(m_ctx, m_ast[_pcur]);
@@ -319,8 +321,8 @@ public:
     //·­Òë×ª»»¸¸register
     inline Register(Register<maxlength>& father_regs, TRcontext& ctx, Bool _need_record) :
         m_ctx(ctx),
-        record(_need_record ? new Record<maxlength>() : NULL),
-        symbolic(father_regs.symbolic ? new Symbolic<maxlength>(m_ctx, father_regs.symbolic) : NULL)
+        symbolic(father_regs.symbolic ? new Symbolic<maxlength>(m_ctx, father_regs.symbolic) : NULL),
+        record(_need_record ? new Record<maxlength>() : NULL)
     {
         memcpy(m_bytes, father_regs.m_bytes, maxlength);
     }
@@ -375,6 +377,7 @@ public:
         }
         default: vex_printf("ty = 0x%x\n", (UInt)ty); vpanic("tIRType");
         }
+        return Vns();
     }
 
     // IRType or nbit
@@ -396,6 +399,7 @@ public:
 #undef lazydef
         default: vex_printf("ty = 0x%x\n", (UInt)ty); vpanic("tIRType");
         }
+        return Vns();
     }
 
     // <IRType> or <nbit>
@@ -438,6 +442,7 @@ public:
         }
         default: vex_printf("ty = 0x%x\n", (UInt)ty); vpanic("tIRType");
         }
+        return Vns();
     }
 
     //ty = (IRType)nbits or IRType
@@ -459,6 +464,7 @@ public:
 #undef lazydef
         default: vex_printf("ty = 0x%x\n", (UInt)ty); vpanic("tIRType");
         }
+        return Vns();
     }
 
     template<typename DataTy>
@@ -694,7 +700,7 @@ inline void Ist_Put(UInt offset, DataTy const& data) {                          
         if (LEN <= 8) {
             ULong fast_index = GET8(m_fastindex + org_offset);
             while (length > 0) {
-                if (_BitScanReverse64(&index, fast_index & fastMaskB[length])) {
+                if (_BitScanReverse64(&index, fast_index & fastMaskB(length))) {
                     index >>= 3;
                     auto fast = m_fastindex[org_offset + index] - 1;
                     length = index - fast;
@@ -711,7 +717,7 @@ inline void Ist_Put(UInt offset, DataTy const& data) {                          
             if (_pcur < org_offset)
                 return;
             for (; ; ) {
-                if (_BitScanReverse64(&index, ((DWORD64*)(m_fastindex))[_pcur >> 3] & fastMaskBI1[_pcur % 8])) {
+                if (_BitScanReverse64(&index, ((DWORD64*)(m_fastindex))[_pcur >> 3] & fastMaskBI1(_pcur % 8))) {
                     _pcur = ALIGN(_pcur, 8) + (index >> 3);
                     _pcur = _pcur - m_fastindex[_pcur] + 1;
                     if (_pcur >= org_offset)

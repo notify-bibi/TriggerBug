@@ -9,11 +9,11 @@ Author:
     WXC 2019-05-31.
 Revision History:
 --*/
-#include "State_class.hpp"
+#include "state_class.h"
 #include "z3_target_call/z3_target_call.h"
+#include <Windows.h>
 
-
-using namespace z3;
+using namespace TR;
 
 static Bool TR_initdone;
 static LARGE_INTEGER   freq_global = { 0 };
@@ -28,60 +28,6 @@ typedef Vns (*Z3_Function2)(Vns &, Vns &);
 typedef Vns (*Z3_Function1)(Vns &);
 
 //######################StateMEM START##############################
-template<typename ADDR>
-inline StateMEM<ADDR>::StateMEM(State<ADDR>& state, z3::solver& so, TRcontext& ctx, Bool _need_record)
-    :MEM(so, ctx, _need_record), m_state(state) {
-    top_state = &state;
-}
-template<typename ADDR>
-void StateMEM<ADDR>::hook_add(ADDR addr, State_Tag(*_func)(State<ADDR>*), TRControlFlags cflag)
-{
-    TRtype::Hook_CB func = (TRtype::Hook_CB) _func;
-    if (CallBackDict.find(addr) == CallBackDict.end()) {
-        Vns o = top_state->mem.Iex_Load<Ity_I64>(addr);
-        vassert(o.real());
-        CallBackDict[addr] = Hook_struct{ func , IRConstTag2nb(top_state->info().softwareBptConst()->tag) , o , cflag };
-        top_state->mem.Ist_Store_bpt(addr, Vns(top_state->m_ctx, top_state->info().softwareBptConst()));
-    }
-    else {
-        if (func) {
-            CallBackDict[addr].cb = func;
-        }
-        if (cflag != CF_None) {
-            CallBackDict[addr].cflag = cflag;
-        }
-    }
-}
-
-template<typename ADDR>
-bool StateMEM<ADDR>::get_hook(Hook_struct& hs, ADDR addr)
-{
-    auto _where = CallBackDict.lower_bound(addr);
-    if (_where == CallBackDict.end()) {
-        return false;
-    }
-    hs = _where->second;
-    return true;
-}
-
-template<typename ADDR>
-void StateMEM<ADDR>::hook_del(ADDR addr)
-{
-    if (CallBackDict.find(addr) != CallBackDict.end()) {
-        //pool->wait();
-        std::hash_map<Addr64, Hook_struct>::iterator h = CallBackDict.find(addr);
-        top_state->mem.Ist_Store_bpt(addr, Vns(top_state->m_ctx, h->second.original, h->second.nbytes));
-        CallBackDict.erase(h);
-    }
-}
-
-std::hash_map<Addr64, Hook_struct> StateMEM<Addr32>::CallBackDict;
-std::hash_map<Addr64, Hook_struct> StateMEM<Addr64>::CallBackDict;
-
-State<Addr32>* StateMEM<Addr32>::top_state;
-State<Addr64>* StateMEM<Addr64>::top_state;
-std::hash_map<Addr64/*static table base*/, TRtype::TableIdx_CB>   StateMEM<Addr64>::TableIdxDict;
-std::hash_map<Addr64/*static table base*/, TRtype::TableIdx_CB>   StateMEM<Addr32>::TableIdxDict;
 
 template class StateMEM<Addr32>;
 template class StateMEM<Addr64>;
@@ -100,8 +46,6 @@ static void _vex_log_bytes(const HChar* bytes, SizeT nbytes) {
     std::cout << bytes;
 }
 
-thread_local Z3_context thread_z3_ctx;
-Z3_context& cmpr::thread_get_z3_ctx() { return thread_z3_ctx; }
 
 std::string Expt::ExceptionBase::msg()const {
     switch (m_errorId) {
@@ -112,6 +56,27 @@ std::string Expt::ExceptionBase::msg()const {
     default:
     }
 }
+
+
+
+UInt arch_2_stack_sp_iroffset(VexArch arch) {
+    switch (arch) {
+    case VexArchX86:return offsetof(VexGuestX86State, guest_ESP);
+    case VexArchAMD64:return offsetof(VexGuestAMD64State, guest_RSP);
+    case VexArchARM:return offsetof(VexGuestARMState, guest_R13);
+    case VexArchARM64:return offsetof(VexGuestARM64State, guest_XSP);
+    case VexArchPPC32:return offsetof(VexGuestPPC32State, guest_GPR1);
+    case VexArchPPC64:return offsetof(VexGuestPPC64State, guest_GPR1);
+    case VexArchS390X:return offsetof(VexGuestS390XState, guest_r15);
+    case VexArchMIPS32:return offsetof(VexGuestMIPS32State, guest_r29);
+    case VexArchMIPS64:return offsetof(VexGuestPPC64State, guest_GPR1);
+    default:
+        VPANIC("Invalid arch in setSP.\n");
+        break;
+    }
+}
+
+
 
 std::string replace(const char* pszSrc, const char* pszOld, const char* pszNew)
 {
@@ -154,7 +119,7 @@ void IR_init(VexControl& vc) {
 }
 
 
-int eval_all(std::vector<Vns>& result, solver& solv, Z3_ast nia) {
+int eval_all(std::vector<Vns>& result, z3::solver& solv, Z3_ast nia) {
     //std::cout << nia << std::endl;
     //std::cout << state.solv.assertions() << std::endl;
     result.reserve(20);
@@ -216,10 +181,10 @@ int eval_all(std::vector<Vns>& result, solver& solv, Z3_ast nia) {
 //    tactic(m_ctx, "symmetry-reduce")/**/
 //);
 //state.setSolver(m_tactic);
-template <typename ADDR> State<ADDR>::State(Vex_Info& vex_info, ADDR gse, Bool _need_record) :
-    Kernel(vex_info),
+template <typename ADDR> State<ADDR>::State(vex_context<ADDR>& vctx, ADDR gse, Bool _need_record) :
+    Kernel(vctx),
     solv(m_ctx),
-    mem(*this, solv, m_ctx, need_record),
+    mem(vctx, *this, solv, m_ctx, need_record),
     regs(m_ctx, need_record), 
     need_record(_need_record),
     m_status(NewState),
@@ -228,11 +193,7 @@ template <typename ADDR> State<ADDR>::State(Vex_Info& vex_info, ADDR gse, Bool _
     m_InvokStack(),
     branch(*this)
 {
-    if (pool) 
-        delete pool;
-    pool = new ThreadPool(info().MaxThreadsNum);
-
-
+    vctx.set_top_state(this);
     VexControl vc;
     LibVEX_default_VexControl(&vc);
     vc.iropt_verbosity = 0;
@@ -381,7 +342,7 @@ UInt State<ADDR>::getStr(std::stringstream& st, ADDR addr)
             return p;
         }
     }
-    return -1;
+    return -1u;
 }
 
 
@@ -1174,8 +1135,8 @@ void State<ADDR>::compress(cmpr::CmprsContext<State<ADDR>, State_Tag>& ctx)
 
 template State<Addr32>::State(State<Addr32>* father_state, Addr32 gse);
 template State<Addr64>::State(State<Addr64>* father_state, Addr64 gse);
-template State<Addr32>::State(Vex_Info&, Addr32 gse, Bool _need_record);
-template State<Addr64>::State(Vex_Info&, Addr64 gse, Bool _need_record);
+template State<Addr32>::State(vex_context<Addr32>&, Addr32 gse, Bool _need_record);
+template State<Addr64>::State(vex_context<Addr64>&, Addr64 gse, Bool _need_record);
 template Vns State<Addr32>::mk_int_const(UShort nbit);
 template Vns State<Addr64>::mk_int_const(UShort nbit);
 template UInt State<Addr32>::getStr(std::stringstream& st, Addr32 addr);
@@ -1525,6 +1486,10 @@ none:
     vex_printf(" what regoffset = %d ", offset);
 }
 
+
+unsigned int TRCurrentThreadId() {
+    return __readgsdword(0x30);
+}
 
 #undef CODEDEF1
 #undef CODEDEF2

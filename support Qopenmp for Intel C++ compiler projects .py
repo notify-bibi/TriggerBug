@@ -4,7 +4,7 @@ import xml.dom.minidom as xmldom
 import xml.etree.ElementTree as ET
 from lxml import etree
 
-original_dir = '.\\build\\src\\'
+original_dir = '.\\build\\'
 
 
 def file_name(file_dir):

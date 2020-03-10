@@ -1,7 +1,7 @@
 extern "C" {
 #include "guest_amd64_defs.h"
 }
-#include "engine/Variable.hpp"
+#include "engine/variable.h"
 #include "z3_target_defs.h"
 
 Vns z3_amd64g_calculate_rflags_cf(ULong cc_op, Vns& cc_dep1_formal, Vns& cc_dep2_formal, Vns& cc_ndep_formal);

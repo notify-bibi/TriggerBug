@@ -1,3 +1,6 @@
+#ifdef _MSC_VER
+#define __attribute__(...)
+#endif
 
 /*---------------------------------------------------------------*/
 /*--- begin                               libvex_basictypes.h ---*/
@@ -21,7 +24,7 @@
    General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
+   along long with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
    02110-1301, USA.
 
@@ -36,6 +39,23 @@
 #ifndef __LIBVEX_BASICTYPES_H
 #define __LIBVEX_BASICTYPES_H
 
+/*patch start{*/
+
+typedef struct {
+    unsigned short Surplus;
+    unsigned char swap[32];
+    unsigned char* t_page_addr;
+    unsigned long long guest_addr;
+    unsigned char* (*n_page_mem)(void*);
+    char start_swap;
+    unsigned int guest_max_insns;
+    void* mem_obj;
+    unsigned int  delta;
+} Pap;
+
+
+/*patched }end*/
+
 /* It is important that the sizes of the following data types (on the
    host) are as stated.  LibVEX_Init therefore checks these at
    startup. */
@@ -43,6 +63,7 @@
 /* Always 8 bits. */
 typedef  unsigned char   UChar;
 typedef    signed char   Char;
+typedef    signed char   SChar;
 typedef           char   HChar; /* signfulness depends on host */
                                 /* Only to be used for printf etc 
                                    format strings */
@@ -50,20 +71,23 @@ typedef           char   HChar; /* signfulness depends on host */
 /* Always 16 bits. */
 typedef  unsigned short  UShort;
 typedef    signed short  Short;
+typedef    signed short  SShort;
 
 /* Always 32 bits. */
 typedef  unsigned int    UInt;
 typedef    signed int    Int;
+typedef    signed int    SInt;
 
 /* Always 64 bits. */
-typedef  unsigned long long int   ULong;
-typedef    signed long long int   Long;
+typedef  unsigned long long int  ULong;
+typedef    signed long long int  Long;
+typedef    signed long long      SLong;
 
 /* Equivalent of C's size_t type. The type is unsigned and has this
    storage requirement:
    32 bits on a 32-bit architecture
    64 bits on a 64-bit architecture. */
-typedef  unsigned long SizeT;
+typedef  unsigned long long SizeT;
 
 /* Always 128 bits. */
 typedef  UInt  U128[4];
@@ -133,14 +157,14 @@ typedef  UInt      Addr32;
 typedef  ULong     Addr64;
 
 /* An address: 32-bit or 64-bit wide depending on host architecture */
-typedef unsigned long Addr;
+typedef unsigned long long Addr;
 
 
 /* Something which has the same size as void* on the host.  That is,
    it is 32 bits on a 32-bit host and 64 bits on a 64-bit host, and so
    it can safely be coerced to and from a pointer type on the host
    machine. */
-typedef  unsigned long HWord;
+typedef  unsigned long long HWord;
 
 /* Size of GPRs */
 #if defined(__mips__) && (__mips == 64) && (_MIPS_SIM == _ABIN32)

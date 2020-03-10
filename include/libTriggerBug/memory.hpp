@@ -17,19 +17,29 @@ Revision History:
 #define MEMORY_DEFS_H
 
 #include "engine/engine.hpp"
-#include "Variable.hpp"
-#include "Register.hpp"
-#include "State_class.hpp"
+#include "engine/Variable.hpp"
+#include "engine/Register.hpp"
+#include "engine/State_class.hpp"
+#include "engine/addressing_mode.h"
 
 extern UInt global_user;
 extern std::mutex global_user_mutex;
+
+
+#define fastMaskI1(n) fastMask(((n)+1))
+#define fastMaskReverseI1(N) (~fastMaskI1(N))
+
+#define LZDEF(n) ((unsigned char)(((((((int)(n))-1) & -8) + 8) >> 3) - 1))
+const UChar fastalignD1[257] = { LZDEF(0),  LZDEF(1),  LZDEF(2),  LZDEF(3),  LZDEF(4),  LZDEF(5),  LZDEF(6),  LZDEF(7),  LZDEF(8),  LZDEF(9),  LZDEF(10),  LZDEF(11),  LZDEF(12),  LZDEF(13),  LZDEF(14),  LZDEF(15),  LZDEF(16),  LZDEF(17),  LZDEF(18),  LZDEF(19),  LZDEF(20),  LZDEF(21),  LZDEF(22),  LZDEF(23),  LZDEF(24),  LZDEF(25),  LZDEF(26),  LZDEF(27),  LZDEF(28),  LZDEF(29),  LZDEF(30),  LZDEF(31),  LZDEF(32),  LZDEF(33),  LZDEF(34),  LZDEF(35),  LZDEF(36),  LZDEF(37),  LZDEF(38),  LZDEF(39),  LZDEF(40),  LZDEF(41),  LZDEF(42),  LZDEF(43),  LZDEF(44),  LZDEF(45),  LZDEF(46),  LZDEF(47),  LZDEF(48),  LZDEF(49),  LZDEF(50),  LZDEF(51),  LZDEF(52),  LZDEF(53),  LZDEF(54),  LZDEF(55),  LZDEF(56),  LZDEF(57),  LZDEF(58),  LZDEF(59),  LZDEF(60),  LZDEF(61),  LZDEF(62),  LZDEF(63),  LZDEF(64),  LZDEF(65),  LZDEF(66),  LZDEF(67),  LZDEF(68),  LZDEF(69),  LZDEF(70),  LZDEF(71),  LZDEF(72),  LZDEF(73),  LZDEF(74),  LZDEF(75),  LZDEF(76),  LZDEF(77),  LZDEF(78),  LZDEF(79),  LZDEF(80),  LZDEF(81),  LZDEF(82),  LZDEF(83),  LZDEF(84),  LZDEF(85),  LZDEF(86),  LZDEF(87),  LZDEF(88),  LZDEF(89),  LZDEF(90),  LZDEF(91),  LZDEF(92),  LZDEF(93),  LZDEF(94),  LZDEF(95),  LZDEF(96),  LZDEF(97),  LZDEF(98),  LZDEF(99),  LZDEF(100),  LZDEF(101),  LZDEF(102),  LZDEF(103),  LZDEF(104),  LZDEF(105),  LZDEF(106),  LZDEF(107),  LZDEF(108),  LZDEF(109),  LZDEF(110),  LZDEF(111),  LZDEF(112),  LZDEF(113),  LZDEF(114),  LZDEF(115),  LZDEF(116),  LZDEF(117),  LZDEF(118),  LZDEF(119),  LZDEF(120),  LZDEF(121),  LZDEF(122),  LZDEF(123),  LZDEF(124),  LZDEF(125),  LZDEF(126),  LZDEF(127),  LZDEF(128),  LZDEF(129),  LZDEF(130),  LZDEF(131),  LZDEF(132),  LZDEF(133),  LZDEF(134),  LZDEF(135),  LZDEF(136),  LZDEF(137),  LZDEF(138),  LZDEF(139),  LZDEF(140),  LZDEF(141),  LZDEF(142),  LZDEF(143),  LZDEF(144),  LZDEF(145),  LZDEF(146),  LZDEF(147),  LZDEF(148),  LZDEF(149),  LZDEF(150),  LZDEF(151),  LZDEF(152),  LZDEF(153),  LZDEF(154),  LZDEF(155),  LZDEF(156),  LZDEF(157),  LZDEF(158),  LZDEF(159),  LZDEF(160),  LZDEF(161),  LZDEF(162),  LZDEF(163),  LZDEF(164),  LZDEF(165),  LZDEF(166),  LZDEF(167),  LZDEF(168),  LZDEF(169),  LZDEF(170),  LZDEF(171),  LZDEF(172),  LZDEF(173),  LZDEF(174),  LZDEF(175),  LZDEF(176),  LZDEF(177),  LZDEF(178),  LZDEF(179),  LZDEF(180),  LZDEF(181),  LZDEF(182),  LZDEF(183),  LZDEF(184),  LZDEF(185),  LZDEF(186),  LZDEF(187),  LZDEF(188),  LZDEF(189),  LZDEF(190),  LZDEF(191),  LZDEF(192),  LZDEF(193),  LZDEF(194),  LZDEF(195),  LZDEF(196),  LZDEF(197),  LZDEF(198),  LZDEF(199),  LZDEF(200),  LZDEF(201),  LZDEF(202),  LZDEF(203),  LZDEF(204),  LZDEF(205),  LZDEF(206),  LZDEF(207),  LZDEF(208),  LZDEF(209),  LZDEF(210),  LZDEF(211),  LZDEF(212),  LZDEF(213),  LZDEF(214),  LZDEF(215),  LZDEF(216),  LZDEF(217),  LZDEF(218),  LZDEF(219),  LZDEF(220),  LZDEF(221),  LZDEF(222),  LZDEF(223),  LZDEF(224),  LZDEF(225),  LZDEF(226),  LZDEF(227),  LZDEF(228),  LZDEF(229),  LZDEF(230),  LZDEF(231),  LZDEF(232),  LZDEF(233),  LZDEF(234),  LZDEF(235),  LZDEF(236),  LZDEF(237),  LZDEF(238),  LZDEF(239),  LZDEF(240),  LZDEF(241),  LZDEF(242),  LZDEF(243),  LZDEF(244),  LZDEF(245),  LZDEF(246),  LZDEF(247),  LZDEF(248),  LZDEF(249),  LZDEF(250),  LZDEF(251),  LZDEF(252),  LZDEF(253),  LZDEF(254),  LZDEF(255),  LZDEF(256) };
+#undef  LZDEF
+
+
 
 #ifdef _DEBUG
 #define NEED_VERIFY 
 #define TRACE_AM
 #endif
 
-#define BIT_BLAST_MAX_BIT 14
 #define ANALYZER_TIMEOUT 0.4d
 
 #define LINETOSTR(A) #A
@@ -42,334 +52,8 @@ extern std::mutex global_user_mutex;
 //检查是否将ir translate的block区代码修改了，避免某些vmp或者ctf的恶作剧
 #define CODEBLOCKISWRITECHECK(address) if(m_ee) m_ee->block_integrity(address);
 
-template<typename ADDR>
-class addressingMode
-{
-public:
-    enum addressingModeKind {
-        cant_analysis = 0,
-        found_base_and_offset,
-        support_bit_blast
-    };
-
-private:
-    struct sbit_struct {
-        Z3_ast sym_ast;
-        bool rbit;
-        UInt idx;
-    };
-
-    struct sbit_struct_r {
-        sbit_struct sbit;
-        ADDR sign_mask;
-        UInt nbit;
-    };
-
-    //超集的解遍历算法
-    template<typename ADDR>
-    class iterator
-    {
-        struct shift_mask {
-            UChar shift;
-            ADDR mask;
-        };
-
-    private:
-        ADDR m_sym_mask;
-        ADDR m_or_mask;
-        ADDR tmp_bit_blast;
-        ADDR tmp_target_bit_blast;
-        struct shift_mask m_sym_ml[BIT_BLAST_MAX_BIT];
-        UInt m_sym_ml_n;
 
 
-        struct shift_mask m_sign_ml[32];
-        UInt m_sign_ml_n;
-
-    public:
-        inline iterator() {};
-
-        inline iterator(addressingMode<ADDR>&am) :
-            m_sym_mask(am.m_sym_mask),
-            m_or_mask(am.m_or_mask),
-            tmp_bit_blast((ADDR)0),
-            tmp_target_bit_blast((ADDR)0),
-            m_sym_ml_n(0),
-            m_sign_ml_n(0)
-        {
-            DWORD N;
-            UInt _pcur;
-            UInt nb = 0;
-
-            if (_BitScanForward64(&N, m_sym_mask)) {
-                m_sym_ml[0] = shift_mask{(UChar)N,((ADDR)1) << N };
-                m_sym_ml_n = 1;
-                _pcur = N;
-                tmp_target_bit_blast = ((ADDR)1);
-                nb = 1;
-
-                for (; ; ) {
-                    if (_BitScanForward64(&N, m_sym_mask & fastMaskReverseI1(_pcur))) {
-                        if (N = _pcur + 1) {
-                            m_sym_ml[m_sym_ml_n - 1].mask |= ((ADDR)1) << N;
-                        }
-                        else {
-                            m_sym_ml[m_sym_ml_n - 1] = shift_mask{ (UChar)N,((ADDR)1) << N };
-                            m_sym_ml_n++;
-                        }
-                        tmp_target_bit_blast |= ((ADDR)1) << (nb++);
-                        _pcur = N;
-                    }
-                    else {
-                        break;
-                    }
-                }
-            }
-
-        parse_sign:
-            for (auto s : am.m_sign_mask) {
-                m_sign_ml[m_sign_ml_n++] = shift_mask{ (UChar)nb, s };
-                tmp_target_bit_blast |= ((ADDR)1) << (nb++);
-            }
-            tmp_target_bit_blast += 1;
-        }
-
-
-        inline bool operator!=(const iterator& src)
-        {
-            return tmp_bit_blast != tmp_target_bit_blast;
-        }
-
-        inline void operator++()
-        {
-            tmp_bit_blast++;
-        }
-
-        inline ADDR operator*()
-        {
-            ADDR re = 0;
-            for (UInt sign_ml_n = 0; sign_ml_n < m_sign_ml_n; sign_ml_n++) {
-                if ((tmp_bit_blast >> m_sign_ml[sign_ml_n].shift) & 1) {
-                    re |= m_sign_ml[sign_ml_n].mask;
-                }
-            }
-            for (UInt sym_ml_n = 0; sym_ml_n < m_sym_ml_n; sym_ml_n++) {
-                re |= (tmp_bit_blast << m_sym_ml[sym_ml_n].shift) & m_sym_ml[sym_ml_n].mask;
-            }
-            return re | m_or_mask;
-        }
-    };
-
-
-
-private:
-    z3::context& m_ctx;
-    z3::expr m_symbolic;
-    ADDR m_base;
-    z3::expr m_offset;
-
-    std::vector<ADDR> m_sign_mask;
-    ADDR m_sym_mask;
-    UInt m_sym_mask_n;
-    ADDR m_or_mask;
-
-    addressingModeKind m_analysis_kind;
-public:
-    addressingMode(const z3::expr& e) :
-        m_ctx(e.ctx()),
-        m_symbolic(e),
-        m_sym_mask(0ull),
-        m_or_mask(0ull),
-        m_sym_mask_n(0),
-        m_offset(m_ctx)
-    {
-        if (ast2baseAoffset()) {
-            if (offset_bit_blast()) {
-                m_analysis_kind = support_bit_blast;
-            }
-            else {
-                m_analysis_kind = found_base_and_offset;
-            }
-        }
-        else {
-            m_analysis_kind = cant_analysis;
-        }
-    }
-
-    void offset2opAdd(std::vector<Vns>& ret) {
-        _offset2opAdd(ret, m_offset);
-    }
-
-private:
-    // ast(symbolic address) = numreal(base) + symbolic(offset) 
-    bool ast2baseAoffset() {
-        //std::cout << saddr.simplify() << std::endl << std::endl;
-        z3::expr base = z3::expr(m_ctx);
-        m_offset = _ast2base(base, m_symbolic, 0, 6);
-        //std::cout << idx << std::endl;
-        ULong _m_base;
-        if ((Z3_ast)base) {
-            if (base.simplify().is_numeral_u64(_m_base)) {
-                m_base = _m_base;
-#if defined(NEED_VERIFY)
-                if (m_base > 100) {
-                    Int is_right;
-                    z3::expr eval = base + m_offset == m_symbolic;
-                    if (z3::ite(eval, m_ctx.bv_val(1, 8), m_ctx.bv_val(0, 8)).simplify().is_numeral_i(is_right)) {
-                        if (is_right) {
-                            return true;
-                        }
-                        else {
-                            goto faild;
-                        }
-                    }
-                    else {
-                        vex_printf("cant determine base %p try solver:\n", m_base);
-                    }
-                    z3::solver s(m_ctx);
-                    s.add(!eval);
-                    if (s.check() == z3::unsat) {
-                        return true;
-                    }
-                    std::cout << "unsat model:\n" << s.get_model() << std::endl;
-                    goto faild;
-                }
-#else
-                return true;
-#endif
-                }
-        }
-        return false;
-faild:
-        std::cout << "symbolic:\n" << m_symbolic << std::endl << std::endl;
-        std::cout << "symbolic.simplify:\n" << m_symbolic.simplify() << std::endl << std::endl;
-
-        std::cout << "base:\n" << m_base << std::endl << std::endl;
-        std::cout << "Index:\n" << m_offset << std::endl << std::endl;
-
-        vex_printf("is False  %p\n", m_base);
-        vpanic("sorry .engine error.  report me and i will fix it\n");
-    }
-
-    //分析offset 使分析器能够求解出超集
-    bool offset_bit_blast() {
-        z3::sort so = m_offset.get_sort();
-        UInt size = so.bv_size();
-
-        std::vector<sbit_struct_r> vec;
-        for (UInt idx = 0; idx < size; idx++) {
-            sbit_struct s = _check_is_extract(m_offset, idx);
-            //把ast分解为 一个一个bit独立单元
-            if (s.sym_ast) {
-                auto end = vec.end();
-                auto m = vec.begin();
-                bool exist = false;
-                while (m != end) {
-                    if (s.sym_ast == m->sbit.sym_ast && s.idx == m->sbit.idx) {
-                        m->sign_mask |= ((ADDR)1) << idx;
-                        m->nbit++;
-                        exist = true;
-                        break;
-                    }
-                    m++;
-                };
-                if (!exist) {
-                    vec.emplace_back(sbit_struct_r{ s  , ((ADDR)1) << idx, 1 });
-                };
-            }
-            else {
-                m_or_mask = m_or_mask | ((ADDR)s.rbit << idx);
-            }
-        }
-
-        
-        auto end = vec.end();
-        auto m = vec.begin();
-        while (m != end) {
-            if (m->nbit == 1) {
-                m_sym_mask |= m->sign_mask;
-                m_sym_mask_n++;
-            }
-            else {
-                m_sign_mask.emplace_back(m->sign_mask);
-            }
-            m++;
-        }
-        return ((m_sym_mask_n + m_sign_mask.size()) >= BIT_BLAST_MAX_BIT) ? false : true;
-    }
-
-public:
-    addressingModeKind analysis_kind() {
-        return m_analysis_kind;
-    }
-
-
-    inline ADDR getBase() {
-        assert(m_analysis_kind != cant_analysis);
-        return m_base;
-    }
-
-    inline z3::expr getoffset() {
-        assert(m_analysis_kind != cant_analysis);
-        return m_offset;
-    }
-
-    inline addressingMode(const addressingMode<ADDR>& a) :
-        m_ctx(a.m_ctx),
-        m_offset(a.m_offset),
-        m_base(a.m_base),
-        m_symbolic(a.m_symbolic)
-    {
-
-    }
-
-    inline void operator=(const addressingMode<ADDR>& a)
-    {
-        this->~addressingMode();
-        m_offset = a.m_offset;
-        m_base = a.m_base;
-        m_symbolic = a.m_symbolic;
-    }
-
-    inline ~addressingMode() {
-    }
-
-
-    inline iterator<ADDR> begin() {
-        assert(m_analysis_kind == support_bit_blast);
-        return iterator<ADDR>(*this);
-    }
-
-    inline iterator<ADDR> end() {
-        return iterator<ADDR>();
-    }
-
-    void print() {
-        printf("\tor_mask: %016x\t\t", m_or_mask);
-        printf("sym_mask: n:%d %016x\n", m_sym_mask_n, m_sym_mask);
-        if (!m_sign_mask.empty()) {
-            printf("sign_mask: \n\t{\n", m_or_mask);
-            for (auto sm : m_sign_mask) {
-                printf("\t\t %016x\n", sm);
-            }
-            printf("\n\t}\n", m_or_mask);
-        }
-    }
-
-    void print_offset() {
-        std::cout << m_offset << std::endl;
-    }
-private:
-    static z3::expr _ast2base(z3::expr& base,
-        z3::expr const& e,
-        UInt deep, UInt max_deep
-    );
-
-    static sbit_struct _check_is_extract(z3::expr const& e, UInt idx);
-    //a=b+c+d+e...+z -> b c d e
-    static void _offset2opAdd(std::vector<Vns>& ret, z3::expr const&e);
-    static bool _check_add_no_overflow(z3::expr const& e1, z3::expr const& e2);
-};
 
 #define GETPT(address) ((*CR3)->pt[(address) >> 39 & 0x1ff]->pt[(address) >> 30 & 0x1ff]->pt[(address) >> 21 & 0x1ff])
 #define GETPAGE(address) ((*CR3)->pt[(address) >> 39 & 0x1ff]->pt[(address) >> 30 & 0x1ff]->pt[(address) >> 21 & 0x1ff]->pt[(address) >> 12 & 0x1ff])
@@ -925,7 +609,7 @@ class PAGE {
     Register<0x1000>* m_unit = nullptr;
 public:
     inline bool is_pad() { return m_is_pad; };
-    inline PAGE(Int u) :m_ref_cound(1), m_user(u), _m_user_(u){};
+    inline PAGE(Int u) :_m_user_(u), m_user(u), m_ref_cound(1){};
     inline Int get_user() const { return _m_user_; };
     inline UChar get_pad() const { return m_pad; };
     inline void set_pad(UChar pad) { 
@@ -1069,7 +753,7 @@ private:
     Bool            need_record;
     Int             user;
     TRcontext&      m_ctx;
-    z3::solver&         m_solver;
+    z3::solver&     m_solver;
     EmuEnvironment<MAX_IRTEMP>* m_ee = nullptr;
 
     virtual PAGE* map_interface(ULong address) override;
@@ -1081,10 +765,10 @@ private:
     void init_page(PAGE*& P, ADDR address);
     UInt write_bytes(ULong address, ULong length, UChar* data);
     MEM(z3::solver& s, TRcontext& ctx, PML4T** cr3, Int _user, Bool _need_record):
-        m_solver(s),
-        m_ctx(ctx),
         need_record(_need_record),
-        user(_user)
+        user(_user),
+        m_solver(s),
+        m_ctx(ctx)
     {
         CR3[0] = cr3[0];
     };
@@ -1238,10 +922,10 @@ public:
 
     template<IRType ty>
     Vns Iex_Load(Z3_ast address) {
-        addressingMode<ADDR> am(z3::expr(m_ctx, address));
+        TR::addressingMode<ADDR> am(z3::expr(m_ctx, address));
         Z3_ast reast = nullptr;
         auto kind = am.analysis_kind();
-        if (kind != addressingMode<ADDR>::cant_analysis) {
+        if (kind != TR::addressingMode<ADDR>::cant_analysis) {
 #ifdef TRACE_AM
             printf("Iex_Load  base: %p {\n", am.getBase());
             am.print();
@@ -1253,8 +937,11 @@ public:
                 return Vns(m_ctx, reast, no_inc{});
             }
             else {
-                if (kind == addressingMode<ADDR>::support_bit_blast) {
-                    for (auto offset : am) {
+                if (kind == TR::addressingMode<ADDR>::support_bit_blast) {
+                    for (TR::addressingMode<ADDR>::iterator off_it = am.begin();
+                        off_it.check();
+                        off_it++) {
+                        auto offset = *off_it;
                         Vns data = Iex_Load<ty>(am.getBase() + offset);
                         if (!reast) {
                             reast = data;
@@ -1409,15 +1096,18 @@ public:
 
     template<typename DataTy>
     void Ist_Store(Z3_ast address, DataTy data) {
-        addressingMode<ADDR> am(z3::expr(m_ctx, address));
+        TR::addressingMode<ADDR> am(z3::expr(m_ctx, address));
         auto kind = am.analysis_kind();
-        if (kind == addressingMode<ADDR>::support_bit_blast) {
+        if (kind == TR::addressingMode<ADDR>::support_bit_blast) {
 #ifdef TRACE_AM
             printf("Ist_Store base: %p {\n", am.getBase());
             am.print();
             printf("}\n");
 #endif
-            for (auto offset : am) {
+            for (TR::addressingMode<ADDR>::iterator off_it = am.begin();
+                off_it.check(); 
+                off_it++) {
+                auto offset = *off_it;
                 ADDR raddr = am.getBase() + offset;
                 auto oData = Iex_Load<(IRType)(sizeof(DataTy) << 3)>(raddr);
                 auto eq = Z3_mk_eq(m_ctx, am.getoffset(), Vns(m_ctx, offset));
@@ -1485,15 +1175,19 @@ public:
             }
         }
         if (suspend_solve) {
-            addressingMode<ADDR> am(z3::expr(m_ctx, address));
+            TR::addressingMode<ADDR> am(z3::expr(m_ctx, address));
             auto kind = am.analysis_kind();
-            if (kind == addressingMode<ADDR>::support_bit_blast) {
+            if (kind == TR::addressingMode<ADDR>::support_bit_blast) {
 #ifdef TRACE_AM
                 printf("Ist_Store base: %p {\n", am.getBase());
                 am.print();
                 printf("}\n");
 #endif
-                for (auto offset : am) {
+
+                for (TR::addressingMode<ADDR>::iterator off_it = am.begin();
+                    off_it.check();
+                    off_it++) {
+                    auto offset = *off_it;
                     ADDR raddr = am.getBase() + offset;
                     auto oData = Iex_Load<(IRType)bitn>(raddr);
                     auto eq = Z3_mk_eq(m_ctx, am.getoffset(), Vns(m_ctx, offset));

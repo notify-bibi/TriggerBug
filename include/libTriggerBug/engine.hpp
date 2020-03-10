@@ -17,7 +17,6 @@
 #include <sstream>
 #include <tuple>
 #include <string>
-#include <vector>
 #include <queue>
 #include <thread>
 #include <mutex>
@@ -25,8 +24,12 @@
 #include <future>
 #include <functional>
 #include <iomanip>
-#include "api/c++/z3++.h"
 #include <windows.h>
+#include <aligned_new>
+
+#include "api/c++/z3++.h"
+#include "engine/ir_guest_defs.h"
+#include "thread_pool/threadpool.h"
 
 
 //觉得引擎没bug了就取消注释，加快速度
@@ -50,8 +53,121 @@
 //宿主机的平台架构
 #define HOSTARCH VexArchAMD64
 
-#include "engine/header.hpp"
-#include "thread_pool/threadpool.h"
+
+extern "C" void vex_assert_fail(const HChar * expr, const HChar * file, Int line, const HChar * fn);
+extern "C" unsigned int vex_printf(const HChar * format, ...);
+extern "C" void vpanic(const HChar * str);
+
+
+#define __i386__
+#define TESTCODE(code)                                                                                                  \
+{                                                                                                                       \
+    LARGE_INTEGER   freq = { 0 };                                                                                       \
+    LARGE_INTEGER   beginPerformanceCount = { 0 };                                                                      \
+    LARGE_INTEGER   closePerformanceCount = { 0 };                                                                      \
+    QueryPerformanceFrequency(&freq);                                                                                   \
+    QueryPerformanceCounter(&beginPerformanceCount);                                                                    \
+    {   code    }                                                                                                       \
+    QueryPerformanceCounter(&closePerformanceCount);                                                                    \
+    double delta_seconds = (double)(closePerformanceCount.QuadPart - beginPerformanceCount.QuadPart) / freq.QuadPart;   \
+    printf("%s line:%d spend %lf \n",__FILE__, __LINE__, delta_seconds);                                                \
+}
+
+
+#define ALIGN(Value,size) ((Value) & ~((size) - 1))
+#define Z3_Get_Ref(exp) (((int*)((Z3_ast)((exp))))[2])
+
+
+template <int maxlength> class Register;
+template <typename ADDR> class State;
+class Kernel;
+
+#ifdef _MSC_VER
+#define NORETURN __declspec(noreturn)
+#else
+#define NORETURN __attribute__ ((noreturn))
+#endif
+typedef enum :unsigned int {
+    NewState = 0,
+    Running,
+    Fork,
+    Death,
+    Exit,
+    NoDecode,
+    Exception,
+    Dirty_ret
+}State_Tag;
+
+/* vex_traceflags values */
+#define VEX_TRACE_FE     (1 << 7)  /* show conversion into IR */
+#define VEX_TRACE_OPT1   (1 << 6)  /* show after initial opt */
+#define VEX_TRACE_INST   (1 << 5)  /* show after instrumentation */
+#define VEX_TRACE_OPT2   (1 << 4)  /* show after second opt */
+#define VEX_TRACE_TREES  (1 << 3)  /* show after tree building */
+#define VEX_TRACE_VCODE  (1 << 2)  /* show selected insns */
+#define VEX_TRACE_RCODE  (1 << 1)  /* show after reg-alloc */
+#define VEX_TRACE_ASM    (1 << 0)  /* show final assembly */
+
+
+#define SET1(addr, value) *(UChar*)((addr)) = (value)
+#define SET2(addr, value) *(UShort*)((addr)) = (value)
+#define SET4(addr, value) *(UInt*)((addr)) = (value)
+#define SET8(addr, value) *(ULong*)((addr)) = (value)
+#define SET16(addr, value) *(__m128i*)((addr)) = (value)
+#define SET32(addr, value) *(__m256i*)((addr)) = (value)
+
+#define GET1(addr) (*(UChar*)((addr))) 
+#define GET2(addr) (*(UShort*)((addr)))
+#define GET4(addr) (*(UInt*)((addr)))
+#define GET8(addr) (*(ULong*)((addr)))
+#define GET16(addr) (*(__m128i*)((addr)))
+#define GET32(addr) (*(__m256i*)((addr)))
+
+
+#define GETS1(addr) (*(Char*)((addr))) 
+#define GETS2(addr) (*(Short*)((addr)))
+#define GETS4(addr) (*(Int*)((addr)))
+#define GETS8(addr) (*(Long*)((addr)))
+#define GETS16(addr) (*(__m128i*)((addr)))
+#define GETS32(addr) (*(__m256i*)((addr)))
+
+#define MV1(addr,fromaddr) *(UChar*)((addr))=(*(UChar*)((fromaddr))) 
+#define MV2(addr,fromaddr) *(UShort*)((addr))=(*(UShort*)((fromaddr)))
+#define MV4(addr,fromaddr) *(UInt*)((addr))=(*(UInt*)((fromaddr)))
+#define MV8(addr,fromaddr) *(ULong*)((addr))=(*(ULong*)((fromaddr)))
+#define MV16(addr,fromaddr) *(__m128i*)((addr))=(*(__m128i*)((fromaddr)))
+#define MV32(addr,fromaddr) *(__m256i*)((addr))=(*(__m256i*)((fromaddr)))
+
+
+typedef enum :UChar {
+    unknowSystem = 0b00,
+    linux,
+    windows
+}GuestSystem;
+
+
+typedef enum :ULong {
+    CF_None = 0,
+    CF_ppStmts = 1ull,
+    CF_traceJmp = 1ull << 1,
+    CF_traceState = 1ull << 2,
+    CF_TraceSymbolic = 1ull << 3,
+    CF_PassSigSEGV = 1ull << 4,
+}TRControlFlags;
+
+
+namespace TRtype {
+    typedef State_Tag(*Hook_CB)         (void*/*obj*/);
+    //得到的ast无需Z3_inc_ref
+    typedef Z3_ast(*TableIdx_CB) (void*/*obj*/, Addr64 /*base*/, Z3_ast /*idx*/);
+};
+
+typedef struct _Hook_ {
+    TRtype::Hook_CB cb;
+    UInt            nbytes;
+    __m64           original;
+    TRControlFlags  cflag;
+}Hook_struct;
 
 
 //class spin_mutex {
@@ -205,20 +321,24 @@ namespace Expt {
     public:
         IRfailureExit(char* msg) :ExceptionBase(IR_failure_exit),
             m_thread_id(GetCurrentThreadId()),
-            m_error_message(msg), m_expr(nullptr), m_file(nullptr), m_line(0), m_fn(nullptr)
+            m_error_message(msg), 
+            m_file(nullptr), 
+            m_line(0),
+            m_expr(nullptr),
+            m_fn(nullptr)
         {
         }
         IRfailureExit(
             const HChar* expr, const HChar* file, Int line, const HChar* fn
         ) :ExceptionBase(IR_failure_exit),
-            m_thread_id(GetCurrentThreadId()), m_expr(expr), m_file(file), m_line(line), m_fn(fn)
+            m_thread_id(GetCurrentThreadId()), m_file(file), m_line(line), m_expr(expr), m_fn(fn)
         {
         }
 
         IRfailureExit(
             const HChar* file, Int line, const HChar* expr
         ) :ExceptionBase(IR_failure_exit),
-            m_thread_id(GetCurrentThreadId()), m_expr(expr), m_file(file), m_line(line), m_fn(nullptr)
+            m_thread_id(GetCurrentThreadId()), m_file(file), m_line(line), m_expr(expr), m_fn(nullptr)
         {
         }
 

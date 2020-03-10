@@ -204,7 +204,7 @@ Warmly welcome to join us in the development. Study together.
 [Pltest]: <https://github.com/notify-bibi/TriggerBug/tree/master/PythonFrontEnd/examples>
 [Plre]: <https://github.com/notify-bibi/TriggerBug/releases>
 [Plxml]: <https://github.com/notify-bibi/TriggerBug/blob/master/PythonFrontEnd/TriggerBug-default32.xml>
-[Develop]: <https://github.com/notify-bibi/TriggerBug/blob/master/%E5%BC%80%E5%8F%91%E6%89%8B%E5%86%8C.docx>
+[Develop]: <https://github.com/notify-bibi/TriggerBug/blob/master/develop.md>
 
 [MDB]: <https://github.com/notify-bibi/TriggerBug/blob/master/PythonFrontEnd/ida-plugins/memory_dump_BIN.py>
 [CLE]: <https://github.com/angr/cle>

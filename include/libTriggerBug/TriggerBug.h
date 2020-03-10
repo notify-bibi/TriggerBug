@@ -2,10 +2,9 @@
 #define _TRIGGERBUG_
 
 #include "engine.hpp"
-#include "Variable.hpp"
-#include "Register.hpp"
-#include "memory.hpp"
-#include "thread_pool/ThreadPool.h"
+#include "engine/Variable.hpp"
+#include "engine/Register.hpp"
+#include "engine/memory.hpp"
 #include "engine/State_class.hpp"
 #include "engine/State_analyzer.hpp"
 

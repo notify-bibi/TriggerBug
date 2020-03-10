@@ -865,6 +865,8 @@ IRSB* LibVEX_FrontEnd_coexistence( /*MOD*/ VexTranslateArgs* vta,
     /*OUT*/ VexRegisterUpdates* pxControl,
     Pap* pap);
 
+extern void vexSetAllocModeTEMP_and_save_curr(void);
+
 /* A subtlety re interaction between self-checking translations and
    bb-chasing.  The supplied chase_into_ok function should say NO
    (False) when presented with any address for which you might want to

@@ -1,3 +1,6 @@
+#ifdef _MSC_VER
+#define __attribute__(...)
+#endif
 
 /*---------------------------------------------------------------*/
 /*--- begin                                       libvex_ir.h ---*/
@@ -21,7 +24,7 @@
    General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
+   along long with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
    02110-1301, USA.
 
@@ -1584,7 +1587,7 @@ typedef
 
        *** Below is the algorithm for the instructions. These Iops could
            be emulated to get this functionality, but the emulation would
-           be long and messy.
+           be long long and messy.
 
         Example for polynomial multiply add for vector of bytes
         do i = 0 to 15

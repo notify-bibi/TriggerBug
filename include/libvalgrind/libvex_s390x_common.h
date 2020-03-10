@@ -21,7 +21,7 @@
    General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
+   along long with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
    02110-1301, USA.
 
@@ -79,7 +79,7 @@
 
 /* The value of the macro is the number of the facility bit as per POP. */
 #define S390_FAC_MSA     17  // message-security-assist
-#define S390_FAC_LDISP   18  // long displacement
+#define S390_FAC_LDISP   18  // long long displacement
 #define S390_FAC_HFPMAS  20  // HFP multiply-and-add-subtract
 #define S390_FAC_EIMM    21  // extended immediate
 #define S390_FAC_HFPUNX  23  // HFP unnormalized extension

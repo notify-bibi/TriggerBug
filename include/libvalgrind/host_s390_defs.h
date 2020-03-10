@@ -21,7 +21,7 @@
    General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
+   along long with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
    02110-1301, USA.
 
@@ -52,7 +52,7 @@ HReg s390_hreg_stack_pointer(void);
 /* Given the index of a function argument, return the number of the
    general purpose register in which it is being passed. Arguments are
    counted 0, 1, 2, ... and they are being passed in r2, r3, r4, ... */
-static __inline__ UInt
+static inline UInt
 s390_gprno_from_arg_index(UInt ix)
 {
    return ix + 2;

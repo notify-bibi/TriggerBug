@@ -20,6 +20,7 @@ template<typename ADDR>
 class StateMEM;
 
 #include <stack>    
+#include "engine/engine.hpp"
 #include "tinyxml2/tinyxml2.h"
 #include "thread_pool/threadpool.h"
 #include "engine/engine.hpp"
@@ -347,60 +348,24 @@ class StateAnalyzer;
 
 
 
+
 template<typename ADDR>
 class StateMEM : public MEM<ADDR> {
-    static State<ADDR>* global_top_state;
     State<ADDR>& m_state;
     //模拟软件断点 software backpoint callback
-    static std::hash_map<Addr64, Hook_struct> global_CallBackDict;
-    static std::hash_map<Addr64/*static table base*/, TRtype::TableIdx_CB> global_TableIdxDict;
+    static State<ADDR>* top_state;
+    static std::hash_map<Addr64, Hook_struct> CallBackDict;
+    static std::hash_map<Addr64/*static table base*/, TRtype::TableIdx_CB> TableIdxDict;
 
 
 public:
-    StateMEM(State<ADDR>& state, z3::solver& so, TRcontext& ctx, Bool _need_record):MEM(so, ctx, _need_record), m_state(state){
-        global_top_state = &state;
-    }
+    StateMEM(State<ADDR>& state, z3::solver& so, TRcontext& ctx, Bool _need_record);
     StateMEM(State<ADDR>& state, z3::solver& so, TRcontext& ctx, StateMEM& father_mem, Bool _need_record) :MEM(so, ctx, father_mem, _need_record),
         m_state(state)
     {}
-    static void hook_add(ADDR addr, State_Tag(*_func)(State<ADDR>*), TRControlFlags cflag = CF_None) {
-        TRtype::Hook_CB func = (TRtype::Hook_CB) _func;
-        if (global_CallBackDict.find(addr) == global_CallBackDict.end()) {
-            Vns o = global_top_state->mem.Iex_Load<Ity_I64>(addr);
-            vassert(o.real());
-            global_CallBackDict[addr] = Hook_struct{ func , IRConstTag2nb(global_top_state->info().softwareBptConst()->tag) , o , cflag };
-            global_top_state->mem.Ist_Store_bpt(addr, Vns(global_top_state->m_ctx, global_top_state->info().softwareBptConst()));
-        }
-        else {
-            if (func) {
-                global_CallBackDict[addr].cb = func;
-            }
-            if (cflag != CF_None) {
-                global_CallBackDict[addr].cflag = cflag;
-            }
-        }
-    }
-
-    static bool get_hook(Hook_struct& hs, ADDR addr)
-    {
-        auto _where = global_CallBackDict.lower_bound(addr);
-        if (_where == global_CallBackDict.end()) {
-            return false;
-        }
-        hs = _where->second;
-        return true;
-    }
-
-    static void hook_del(ADDR addr) {
-        if (global_CallBackDict.find(addr) == global_CallBackDict.end()) {
-        }
-        else {
-            //pool->wait();
-            auto h = global_CallBackDict.find(addr);
-            global_top_state->mem.Ist_Store_bpt(addr, Vns(global_top_state->m_ctx, *(ULong*)h->second.original, h->second.nbytes));
-            global_CallBackDict.erase(h);
-        }
-    }
+    static void hook_add(ADDR addr, State_Tag(*_func)(State<ADDR>*), TRControlFlags cflag = CF_None);
+    static bool get_hook(Hook_struct& hs, ADDR addr);
+    static void hook_del(ADDR addr);
 
 
     /*read static_table from symbolic address  定义 index 和 该常量数组 之间的关系 不然只能逐一爆破 如DES的4个静态表
@@ -425,21 +390,14 @@ public:
         当求解这种表达式时在原理上是解不开的，需要您显式进行定义staticMagic的index与staticMagic[index]的转换关系（否则需要爆破255^4）
         所以请使用idx2Value_Decl_add添加回调函数，当模拟执行时访问staticMagic，回调函数被调用
     */
-    static void idx2Value_Decl_add(Addr64 addr, Z3_ast(*_func) (State<ADDR>*, Addr64 /*base*/, Z3_ast /*idx*/)) { global_TableIdxDict[addr] = (TRtype::TableIdx_CB)_func; };
-    static void idx2Value_Decl_del(Addr64 addr) { global_TableIdxDict.erase(TableIdxDict.find(addr)); };
+    static void idx2Value_Decl_add(Addr64 addr, Z3_ast(*_func) (State<ADDR>*, Addr64 /*base*/, Z3_ast /*idx*/)) { TableIdxDict[addr] = (TRtype::TableIdx_CB)_func; };
+    static void idx2Value_Decl_del(Addr64 addr) { TableIdxDict.erase(TableIdxDict.find(addr)); };
     Z3_ast idx2Value(Addr64 base, Z3_ast idx) override {
-        auto _where = global_TableIdxDict.lower_bound(base);
+        auto _where = TableIdxDict.lower_bound(base);
         Z3_ast(*CB) (State<ADDR>*, Addr64 /*base*/, Z3_ast /*idx*/) = (Z3_ast(*) (State<ADDR>*, Addr64 /*base*/, Z3_ast /*idx*/))_where->second;
-        return (_where != global_TableIdxDict.end()) ? CB(&m_state, (Addr64)base, (Z3_ast)idx) : (Z3_ast)NULL;
+        return (_where != TableIdxDict.end()) ? CB(&m_state, (Addr64)base, (Z3_ast)idx) : (Z3_ast)NULL;
     }
 };
-
-
-
-
-
-
-
 
 
 
@@ -573,7 +531,7 @@ class StateCmprsInterface;
 
 namespace cmpr {
     struct ignore{};
-    extern thread_local Z3_context thread_z3_ctx;
+    extern Z3_context& thread_get_z3_ctx();
 
     static Vns logic_and(std::vector<Vns> const& v) {
         Z3_context ctx = v[0];
@@ -636,7 +594,7 @@ namespace cmpr {
         }
     public:
 
-        GPMana() :GPMana(thread_z3_ctx, 16) {  };
+        GPMana() :GPMana(thread_get_z3_ctx(), 16) {  };
 
         GPMana(Z3_context ctx, UInt size) :m_size(size), m_ctx(ctx), m_sort(nullptr) {
             m_vec = (_m_vec_*)malloc(sizeof(_m_vec_) * size);
@@ -813,7 +771,7 @@ namespace cmpr {
         CmprsContext(TRcontext& target_ctx, Addr64 target_addr, StateStatus ttag)
             :m_target_addr(target_addr), m_target_tag(ttag), m_z3_target_ctx(target_ctx)
         {
-            thread_z3_ctx = target_ctx;
+            thread_get_z3_ctx() = target_ctx;
         }
         void add_avoid(StateStatus avoid_tag) { m_avoid.emplace_back(avoid_tag); };
         bool is_avoid(StateStatus tag) { return std::find(m_avoid.begin(), m_avoid.end(), tag) != m_avoid.end(); }
@@ -901,7 +859,7 @@ namespace cmpr {
                             m_target_counts.emplace_back(0);
                         }
                     }
-                    for (Int p = 0; p < max; p++) {
+                    for (UInt p = 0; p < max; p++) {
                         m_target_counts[p] += ns->get_fork_node().target_counts(p);
                     }
                 }
@@ -922,7 +880,7 @@ namespace cmpr {
 
         bool has_survive() override { return m_has_survive; }
 
-        UInt target_counts(Int group) const {
+        UInt target_counts(UInt group) const {
             if (group >= m_target_counts.size()) {
                 return 0;
             }
@@ -1157,7 +1115,7 @@ namespace cmpr {
             }
 
             bool exist(Addr64 a) {
-                return m_cm.lower_bound(a) != m_cm.end();
+                return m_cm.find(a) != m_cm.end();
             }
 
             void load(std::hash_map<Addr64, GPMana>& cm_ret, std::hash_map<Addr64, bool>& maps) {
@@ -1244,5 +1202,4 @@ namespace cmpr {
 
 
 #endif
-
 

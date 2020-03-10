@@ -1,3 +1,6 @@
+#ifdef _MSC_VER
+#define __attribute__(...)
+#endif
 
 /*---------------------------------------------------------------*/
 /*--- begin                               host_generic_regs.h ---*/
@@ -21,7 +24,7 @@
    General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program; if not, write to the Free Software
+   along long with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
    02110-1301, USA.
 
@@ -133,15 +136,15 @@ extern UInt ppHReg ( HReg );
 /* Construct.  The goal here is that compiler can fold this down to a
    constant in the case where the four arguments are constants, which
    is often the case. */
-static inline HReg mkHReg ( Bool virtual, HRegClass rc, UInt enc, UInt ix )
+static inline HReg mkHReg ( Bool _virtual, HRegClass rc, UInt enc, UInt ix )
 {
    vassert(ix <= 0xFFFFF);
    vassert(enc <= 0x7F);
    vassert(((UInt)rc) <= 0xF);
-   vassert(((UInt)virtual) <= 1);
-   if (virtual) vassert(enc == 0);
+   vassert(((UInt)_virtual) <= 1);
+   if (_virtual) vassert(enc == 0);
    HReg r;
-   r.u32 = ((((UInt)virtual) & 1)       << 31)  |
+   r.u32 = ((((UInt)_virtual) & 1)       << 31)  |
            ((((UInt)rc)      & 0xF)     << 27)  |
            ((((UInt)enc)     & 0x7F)    << 20)  |
            ((((UInt)ix)      & 0xFFFFF) << 0);
@@ -175,7 +178,7 @@ static inline Bool sameHReg ( HReg r1, HReg r2 )
    return toBool(r1.u32 == r2.u32);
 }
 
-static const HReg INVALID_HREG = { .u32 = 0xFFFFFFFF };
+static const HReg INVALID_HREG = { 0xFFFFFFFF };
 
 static inline Bool hregIsInvalid ( HReg r )
 {
@@ -435,19 +438,20 @@ typedef
          relative to the stack pointer.  For all other .how values,
          has no meaning and should be zero. */
       Int spOff;
-   }
-   RetLoc;
+   } RetLoc;
 
 extern void ppRetLoc ( RetLoc rloc );
 
 static inline RetLoc mk_RetLoc_simple ( RetLocPrimary pri ) {
    vassert(pri >= RLPri_INVALID && pri <= RLPri_2Int);
-   return (RetLoc){pri, 0};
+   RetLoc ret = { pri, 0 };
+   return ret;
 }
 
 static inline RetLoc mk_RetLoc_spRel ( RetLocPrimary pri, Int off ) {
    vassert(pri >= RLPri_V128SpRel && pri <= RLPri_V256SpRel);
-   return (RetLoc){pri, off};
+   RetLoc ret = { pri, off };
+   return ret;
 }
 
 static inline Bool is_sane_RetLoc ( RetLoc rloc ) {
@@ -462,7 +466,8 @@ static inline Bool is_sane_RetLoc ( RetLoc rloc ) {
 }
 
 static inline RetLoc mk_RetLoc_INVALID ( void ) {
-   return (RetLoc){RLPri_INVALID, 0};
+    RetLoc ret = { RLPri_INVALID, 0 };
+    return ret;
 }
 
 static inline Bool is_RetLoc_INVALID ( RetLoc rl ) {

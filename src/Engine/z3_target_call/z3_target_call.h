@@ -1,5 +1,5 @@
 //AMD64:
-#include "engine/Variable.hpp"
+#include "engine/variable.h"
 Vns z3_amd64g_calculate_condition(Vns/*AMD64Condcode*/& cond,
     Vns& cc_op,
     Vns& cc_dep1,

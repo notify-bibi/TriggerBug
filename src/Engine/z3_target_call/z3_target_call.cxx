@@ -3,7 +3,7 @@
 #include "AMD64/amd64CCall.h"
 #include "X86/x86CCall.h"
 #include "z3_target_defs.h"
-#include "engine/Variable.hpp"
+#include "engine/variable.h"
 #define _SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS
 #include <hash_map>
 

@@ -10,9 +10,9 @@ Author:
 Revision History:
 --*/
 #define UNDEFREG
-#include "Register.hpp"
+#include "register.h"
 
-using namespace z3;
+using namespace TR;
 
 
 
@@ -87,9 +87,9 @@ void RegisterStatic::setfast(void* fast_ptr, UInt __nbytes) {
 
 //取值函数。将多个ast和真值组合为一个ast
 #ifdef USE_HASH_AST_MANAGER
-Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX &m_ast, TRcontext& ctx) {
+Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX &m_ast, z3::vcontext& ctx) {
 #else
-Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, TRcontext & ctx) {
+Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, z3::vcontext & ctx) {
 #endif
     vassert(nbytes <= 8);
     ULong scan = GET8(m_fastindex);
@@ -223,10 +223,10 @@ Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, T
 
 
 class Translate {
-    TRcontext& m_toctx;
+    z3::vcontext& m_toctx;
     Z3_ast m_ast;
 public:
-    inline Translate(TRcontext& ctx, TRcontext& toctx, Z3_ast s):
+    inline Translate(z3::vcontext& ctx, z3::vcontext& toctx, Z3_ast s):
         m_toctx(toctx)
     {
 #if !defined(CLOSECNW)&&!defined(USECNWNOAST)
@@ -247,9 +247,9 @@ public:
 };
 
 #ifdef USE_HASH_AST_MANAGER
-Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX& m_ast, TRcontext& ctx, TRcontext& toctx) {
+Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX& m_ast, z3::vcontext& ctx, z3::vcontext& toctx) {
 #else
-Z3_ast Reg2Ast(Char nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_ast, TRcontext & ctx, TRcontext & toctx) {
+Z3_ast Reg2Ast(Char nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_ast, z3::vcontext & ctx, z3::vcontext & toctx) {
 #endif
     vassert(nbytes <= 8);
     ULong scan = GET8(m_fastindex);
@@ -414,9 +414,9 @@ static inline Z3_ast mk_large_int(Z3_context ctx, void* data, UInt nbit) {
 
 //取值函数。将多个ast和真值组合为一个ast
 #ifdef USE_HASH_AST_MANAGER
-Z3_ast Reg2AstSSE(Char nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX& m_ast, TRcontext& ctx) {
+Z3_ast Reg2AstSSE(Char nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX& m_ast, z3::vcontext& ctx) {
 #else
-Z3_ast Reg2AstSSE(Char nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_ast, TRcontext & ctx) {
+Z3_ast Reg2AstSSE(Char nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_ast, z3::vcontext & ctx) {
 #endif
     vassert(nbytes <= 32);
     UInt scan = ~_mm256_movemask_epi8(_mm256_cmpeq_epi8(_mm256_setzero_si256(), _mm256_loadu_si256((__m256i*)m_fastindex)));
@@ -530,9 +530,9 @@ Z3_ast Reg2AstSSE(Char nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_
 }
 
 #ifdef USE_HASH_AST_MANAGER
-Z3_ast Reg2AstSSE(Char nbytes, UChar * m_bytes, UChar * m_fastindex, AstManager::AstManagerX & m_ast, TRcontext & ctx, TRcontext & toctx) {
+Z3_ast Reg2AstSSE(Char nbytes, UChar * m_bytes, UChar * m_fastindex, AstManager::AstManagerX & m_ast, z3::vcontext & ctx, z3::vcontext & toctx) {
 #else
-Z3_ast Reg2AstSSE(Char nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_ast, TRcontext & ctx, TRcontext & toctx) {
+Z3_ast Reg2AstSSE(Char nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_ast, z3::vcontext & ctx, z3::vcontext & toctx) {
 #endif
     vassert(nbytes <= 32);
     UInt scan = ~_mm256_movemask_epi8(_mm256_cmpeq_epi8(_mm256_setzero_si256(), _mm256_loadu_si256((__m256i*)m_fastindex)));

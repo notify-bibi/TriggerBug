@@ -1,7 +1,7 @@
 extern "C" {
 #include "guest_x86_defs.h"
 }
-#include "engine/Variable.hpp"
+#include "engine/variable.h"
 #include "z3_target_defs.h"
 Vns z3_x86g_calculate_eflags_cf(UInt cc_op, Vns& cc_dep1_formal, Vns& cc_dep2_formal, Vns& cc_ndep_formal);
 Vns z3_x86g_calculate_eflags_pf(UInt cc_op, Vns& cc_dep1_formal, Vns& cc_dep2_formal, Vns& cc_ndep_formal);
