@@ -1,10 +1,6 @@
 build
 bin/Debug
 bin/Release
-<<<<<<< HEAD
-=======
-lib/lib*
->>>>>>> b8f102059349cf324cabbaff9527045101ccb4e2
 *.dir
 *.zip
 *.bz2
