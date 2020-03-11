@@ -1,4 +1,7 @@
 build
+bin/Debug
+bin/Release
+lib/lib*
 *.dir
 *.zip
 *.bz2
