@@ -44,14 +44,17 @@ macro(TR_lib_add target_name subdir need_build)
         _TR_find_header_(DIR_HDRS ${subdir} "*.h;*.hpp")
         set_target_properties(${target_name} PROPERTIES PUBLIC_HEADER "${DIR_HDRS}")
         SET_TARGET_PROPERTIES(${target_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${BUILD_RUNTIME_OUTPUT_DIRECTORY})
-        MESSAGE(STATUS "[........] build ${target_name} PUBLIC_HEADER")
+        
+        STRING(REGEX REPLACE ".+/(.+)" "\\1" FILE_DIR ${subdir})
+        MESSAGE(STATUS "[........] build ${target_name} PUBLIC_HEADER >> ${CMAKE_INCLUDE_PATH}${FILE_DIR}")
         unset(DIR_HDRS)
         install(TARGETS ${target_name}
            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
            LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
            ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-           PUBLIC_HEADER DESTINATION ${CMAKE_INCLUDE_PATH}/${target_name}
+           PUBLIC_HEADER DESTINATION ${CMAKE_INCLUDE_PATH}${FILE_DIR}
         )
+        unset(FILE_DIR)
     endif() 
 endmacro()
 

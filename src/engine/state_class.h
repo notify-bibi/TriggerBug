@@ -261,7 +261,7 @@ namespace TR {
         State<ADDR>& m_state;
 
     public:
-        StateMEM(State<ADDR>& state, z3::solver& so, z3::vcontext& ctx, Bool _need_record) :MEM(so, ctx, _need_record), m_state(state) {}
+        StateMEM(TR::vctx_base &vb, State<ADDR>& state, z3::solver& so, z3::vcontext& ctx, Bool _need_record) :MEM(vb, so, ctx, _need_record), m_state(state) {}
         StateMEM(State<ADDR>& state, z3::solver& so, z3::vcontext& ctx, StateMEM& father_mem, Bool _need_record) :MEM(so, ctx, father_mem, _need_record), m_state(state) {}
 
         Z3_ast idx2Value(Addr64 base, Z3_ast idx) override {
@@ -331,7 +331,6 @@ namespace TR {
         inline operator Register<REGISTER_LEN>& () { return regs; }
         Addr64 get_cpu_ip() override { return guest_start; }
         inline ADDR get_state_ep() { return guest_start_ep; }
-        inline ADDR get_start_of_block() { return guest_start_of_block; }
         inline State_Tag status() { return m_status; }
         inline void set_status(State_Tag t) { m_status = t; };
         operator std::string() const;
@@ -349,11 +348,6 @@ namespace TR {
             return dirty_result<ADDR>(m_dctx, ty);
         }
 
-        static void pushState(State& s) {
-            pool->enqueue([&s] {
-                s.start(True);
-                });
-        }
         //interface :
 
         virtual inline void traceStart() { return; };

@@ -13,7 +13,7 @@ Revision History:
 --*/
 
 #define UNDEFMEM
-#include "memory.h"
+#include "engine/memory.h"
 using namespace TR;
 
 
@@ -81,7 +81,7 @@ void MEM<ADDR>::unmap_interface(PAGE* pt[1]) {
 
 
 template<typename ADDR>
-MEM<ADDR>::MEM(vex_context<ADDR> &vctx, z3::solver& so, z3::vcontext& ctx, Bool _need_record) :
+MEM<ADDR>::MEM(vctx_base& vctx, z3::solver& so, z3::vcontext& ctx, Bool _need_record) :
     m_vctx(vctx),
     m_solver(so),
     m_ctx(ctx),
@@ -365,26 +365,3 @@ UInt MEM<ADDR>::write_bytes(ULong address, ULong length, UChar* data) {
 
 template MEM<Addr32>;
 template MEM<Addr64>;
-//
-//template void MEM<Addr32>::CheckSelf(PAGE*& P, Addr32 address);
-//template void MEM<Addr64>::CheckSelf(PAGE*& P, Addr64 address);
-//template MEM<Addr32>::MEM(z3::solver& so, vcontext& ctx, Bool _need_record);
-//template MEM<Addr64>::MEM(z3::solver& so, vcontext& ctx, Bool _need_record);
-//template MEM<Addr32>::MEM(z3::solver& so, vcontext& ctx, MEM& father_mem, Bool _need_record);
-//template MEM<Addr64>::MEM(z3::solver& so, vcontext& ctx, MEM& father_mem, Bool _need_record);
-//template MEM<Addr32>::~MEM();
-//template MEM<Addr64>::~MEM();
-//template Vns MEM<Addr32>::Iex_Load(Addr32 address, IRType ty);
-//template Vns MEM<Addr64>::Iex_Load(Addr64 address, IRType ty);
-//template Vns MEM<Addr32>::Iex_Load(Z3_ast address, IRType ty);
-//template Vns MEM<Addr64>::Iex_Load(Z3_ast address, IRType ty);
-//template void MEM<Addr32>::init_page(PAGE*& P, Addr32 address);
-//template void MEM<Addr64>::init_page(PAGE*& P, Addr64 address);
-//template UInt MEM<Addr32>::write_bytes(ULong address, ULong length, UChar* data);
-//template UInt MEM<Addr64>::write_bytes(ULong address, ULong length, UChar* data);
-//template void MEM<Addr32>::clearRecord();
-//template void MEM<Addr64>::clearRecord();
-//template ULong MEM<Addr32>::find_block_forward(ULong start, Addr32 size);
-//template ULong MEM<Addr64>::find_block_forward(ULong start, Addr64 size);
-//template ULong MEM<Addr32>::find_block_reverse(ULong start, Addr32 size);
-//template ULong MEM<Addr64>::find_block_reverse(ULong start, Addr64 size);

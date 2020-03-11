@@ -46,7 +46,7 @@ namespace TR {
         State_Tag Ijk_call(IRJumpKind kd) override {
             switch (kd) {
             case Ijk_Sys_syscall: {
-                switch (info().guest_system) {
+                switch (info().gguest_system()) {
                 case linux:return Sys_syscall_linux();
                 }
                 return Death;
@@ -108,7 +108,7 @@ namespace TR {
         State_Tag Ijk_call(IRJumpKind kd) override {
             switch (kd) {
             case Ijk_Sys_syscall: {
-                switch (info().guest_system) {
+                switch (info().gguest_system()) {
                 case linux:return Sys_syscall_linux();
                 }
                 return Death;

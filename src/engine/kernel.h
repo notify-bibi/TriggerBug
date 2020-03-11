@@ -3,10 +3,9 @@
 #define KERNEL_HEAD_DEF
 
 #include "engine.h"
+#include "engine/vex_context.h"
 #include "variable.h"
 #include "register.h"
-#include "engine/vex_context.h"
-#include "tinyxml2/tinyxml2.h"
 z3::sort translateRM(z3::context&, IRRoundingMode);
 
 class Kernel {

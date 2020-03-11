@@ -35,7 +35,6 @@ template class StateMEM<Addr64>;
 //######################StateMEM END##############################
 
 
-ThreadPool* Kernel::pool;
 
 __attribute__((noreturn))
 static void failure_exit() {
@@ -183,6 +182,7 @@ int eval_all(std::vector<Vns>& result, z3::solver& solv, Z3_ast nia) {
 //state.setSolver(m_tactic);
 template <typename ADDR> State<ADDR>::State(vex_context<ADDR>& vctx, ADDR gse, Bool _need_record) :
     Kernel(vctx),
+    m_vctx(vctx),
     solv(m_ctx),
     mem(vctx, *this, solv, m_ctx, need_record),
     regs(m_ctx, need_record), 
@@ -197,14 +197,14 @@ template <typename ADDR> State<ADDR>::State(vex_context<ADDR>& vctx, ADDR gse, B
     VexControl vc;
     LibVEX_default_VexControl(&vc);
     vc.iropt_verbosity = 0;
-    vc.iropt_level = info().iropt_level;
+    vc.iropt_level = info().giropt_level();
     vc.iropt_unroll_thresh = 0;
-    vc.guest_max_insns = info().guest_max_insns;
+    vc.guest_max_insns = info().gmax_insns();
     vc.guest_chase_thresh = 0;   //不许追赶
-    vc.iropt_register_updates_default = info().iropt_register_updates_default;
+    vc.iropt_register_updates_default = info().gRegisterUpdates();
     IR_init(vc);
     
-    read_mem_dump(info().MemoryDumpPath);
+    read_mem_dump(info().gbin());
     if (gse)
         guest_start_ep = gse;
     else {
@@ -213,21 +213,22 @@ template <typename ADDR> State<ADDR>::State(vex_context<ADDR>& vctx, ADDR gse, B
     guest_start = guest_start_ep;
 
 
-    auto _TraceIrAddrress = info().doc_debug->FirstChildElement("TraceIrAddrress");
+    /*auto _TraceIrAddrress = info().doc_debug->FirstChildElement("TraceIrAddrress");
     if (_TraceIrAddrress) {
         for (auto ta = _TraceIrAddrress->FirstChildElement(); ta; ta = ta->NextSiblingElement()) {
             ULong addr; TRControlFlags flag;
             sscanf(ta->Attribute("addr"), "%llx", &addr);
             sscanf(ta->Attribute("cflag"), "%llx", &flag);
-            hook_add(addr, nullptr, flag);
+            vctx.hook_add(addr, nullptr, flag);
         }
-    }
+    }*/
 
 };
 
 
 template <typename ADDR> State<ADDR>::State(State<ADDR>*father_state, ADDR gse) :
     Kernel(*father_state),
+    m_vctx(father_state->m_vctx),
     mem(*this, solv, m_ctx, father_state->mem, father_state->need_record),
     guest_start_ep(gse),
     guest_start(guest_start_ep), 
@@ -805,7 +806,7 @@ bool State<ADDR>::vex_start() {
         case Ijk_Call: break;
         case Ijk_SigTRAP: {
         SigTRAP:
-            if (get_hook(hs, guest_start)) { goto deal_bkp; }
+            if (m_vctx.get_hook(hs, guest_start)) { goto deal_bkp; }
             m_status = Death;
             vex_printf("Ijk_SigTRAP: %p", guest_start);
             goto EXIT;
@@ -926,7 +927,7 @@ template <typename ADDR>
 void State <ADDR>::branchGo()
 {
     for(auto b : branch){
-        State::pool->enqueue([b] {
+       m_vctx.pool().enqueue([b] {
             b->start();
             });
     }
@@ -1133,22 +1134,8 @@ void State<ADDR>::compress(cmpr::CmprsContext<State<ADDR>, State_Tag>& ctx)
 }
 
 
-template State<Addr32>::State(State<Addr32>* father_state, Addr32 gse);
-template State<Addr64>::State(State<Addr64>* father_state, Addr64 gse);
-template State<Addr32>::State(vex_context<Addr32>&, Addr32 gse, Bool _need_record);
-template State<Addr64>::State(vex_context<Addr64>&, Addr64 gse, Bool _need_record);
-template Vns State<Addr32>::mk_int_const(UShort nbit);
-template Vns State<Addr64>::mk_int_const(UShort nbit);
-template UInt State<Addr32>::getStr(std::stringstream& st, Addr32 addr);
-template UInt State<Addr64>::getStr(std::stringstream& st, Addr64 addr);
-template State<Addr32>::~State();
-template State<Addr64>::~State();
-template void State<Addr32>::compress(cmpr::CmprsContext<State<Addr32>, State_Tag>&);
-template void State<Addr64>::compress(cmpr::CmprsContext<State<Addr64>, State_Tag>&);
-template State<Addr32>::operator std::string() const;
-template State<Addr64>::operator std::string() const;
-template void State<Addr32>::start();
-template void State<Addr64>::start();
+template TR::State<Addr32>;
+template TR::State<Addr64>;
 
 
 

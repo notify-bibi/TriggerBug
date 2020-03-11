@@ -41,7 +41,6 @@ LINK_DIRECTORIES(${CMAKE_INSTALL_LIBDIR})
 TR_add_include(libz3 z3/ src src/api src/api/c++)
 TR_add_include(libvalgrind src/valgrind/ priv/ pub/)
 TR_add_include(libTriggerBug src/engine/ )
-TR_add_include(tinyxml2 src/tinyxml2/ )
 TR_add_include(thread_pool src/thread_pool)
 
 option(BUILD_Z3 "BUILD Z3" OFF)
@@ -52,8 +51,6 @@ option(BUILD_CRYPTO_ANALYZER "BUILD CRYPTO_ANALYZER" OFF)
 option(BUILD_PYTHON_FRONTEND "BUILD PYTHON_BLACKEND" OFF)
 option(BUILD_TRTEST "BUILD DEVELOP TEST" ON)
 
-
-add_subdirectory("src/tinyxml2")
 add_subdirectory("src/thread_pool")
 
 set(CMAKE_BINARY_DIR_tmp ${CMAKE_BINARY_DIR})
@@ -76,8 +73,8 @@ unset(CMAKE_SOURCE_DIR_tmp)
 
 # ----------! lib z3 ----------
 
-TR_lib_add(libvalgrind "src/Valgrind" BUILD_VALGRIND)
-TR_lib_add(libTriggerBug "src/Engine" BUILD_TRIGGERBUG)
+TR_lib_add(libvalgrind "src/valgrind" BUILD_VALGRIND)
+TR_lib_add(libTriggerBug "src/engine" BUILD_TRIGGERBUG)
 TR_lib_add(libcrypto_analyzer "src/crypto_analyzer" BUILD_CRYPTO_ANALYZER)
 TR_lib_add(libpythonfront "src/python" BUILD_PYTHON_FRONTEND)
 TR_lib_add(TRtest "src/test" BUILD_TRTEST)

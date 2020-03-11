@@ -8,8 +8,8 @@
 #include <python\Python.h>
 #endif
 
-#include "engine/State_class.hpp"
-#include "engine/Guest_Helper.hpp"
+#include "engine/state_class.h"
+#include "engine/guest_helper.h"
 
 //
 //class PyInterFace : private State {

@@ -3,4 +3,4 @@
                 REQUIRE libTriggerBug)
                 
 
-TR_ADD_INCLUDE_DIRECTORIES(libcrypto_analyzer libz3 libvalgrind z3_target_call tinyxml2)
+TR_ADD_INCLUDE_DIRECTORIES(libcrypto_analyzer libz3 libvalgrind z3_target_call)

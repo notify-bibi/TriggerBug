@@ -150,7 +150,7 @@ Vns flag_limit(Vns& flag) {
 int main() {
     test_cmpress();
     //test_dirty_cmpress();
-    vex_context<Addr64> v("C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.xml");
+    vex_context<Addr64> v(VexArchAMD64, "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.xml");
     
     
     

@@ -34,6 +34,7 @@ namespace TR {
         };
 
         //超集的解遍历算法
+    public:
         class iterator
         {
             struct shift_mask {
@@ -63,7 +64,7 @@ namespace TR {
                 return tmp_bit_blast != tmp_target_bit_blast;
             }
 
-            inline void operator++()
+            inline void next()
             {
                 tmp_bit_blast++;
             }

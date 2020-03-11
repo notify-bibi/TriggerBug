@@ -27,21 +27,21 @@ namespace TR {
         EmuEnvironment(vex_info const& info, MEM<Addr64>& mem_obj) :m_info(info) {
             m_pap.mem_obj = (void*)(&mem_obj);
             m_pap.n_page_mem = mem_next_page<Addr64>;
-            m_pap.guest_max_insns = info.guest_max_insns;
-            vex_info::init_vta_chunk(m_vta_chunk, m_vge_chunk, info.guest, info.traceflags);
-            for (int j = 0; j < MAX_TMP; j++) { ((Vns*)m_ir_temp_trunk)[j].Vns::Vns((Z3_context)mem_obj, 0); }
+            m_pap.guest_max_insns = info.gmax_insns();
+            vex_info::init_vta_chunk(m_vta_chunk, m_vge_chunk, info.gguest(), info.gtraceflags());
+            for (unsigned j = 0; j < MAX_TMP; j++) { ((Vns*)m_ir_temp_trunk)[j].Vns::Vns((Z3_context)mem_obj, 0); }
         }
         EmuEnvironment(vex_info const& info, MEM<Addr32>& mem_obj) :m_info(info) {
             m_pap.mem_obj = (void*)(&mem_obj);
             m_pap.n_page_mem = mem_next_page<Addr32>;
-            m_pap.guest_max_insns = info.guest_max_insns;
-            vex_info::init_vta_chunk(m_vta_chunk, m_vge_chunk, info.guest, info.traceflags);
-            for (int j = 0; j < MAX_TMP; j++) { ((Vns*)m_ir_temp_trunk)[j].Vns::Vns((Z3_context)mem_obj, 0); }
+            m_pap.guest_max_insns = info.gmax_insns();
+            vex_info::init_vta_chunk(m_vta_chunk, m_vge_chunk, info.gguest(), info.gtraceflags());
+            for (unsigned j = 0; j < MAX_TMP; j++) { ((Vns*)m_ir_temp_trunk)[j].Vns::Vns((Z3_context)mem_obj, 0); }
         }
         inline void set_start(Addr64 s) { m_guest_start_of_block = s; m_is_dynamic_block = false; }
         inline void set_guest_bytes_addr(UChar* bytes, Addr64 virtual_addr) {
             m_pap.start_swap = 0;
-            m_pap.guest_max_insns = m_info.guest_max_insns;
+            m_pap.guest_max_insns = m_info.gmax_insns();
             m_vta_chunk.guest_bytes = bytes;
             m_vta_chunk.guest_bytes_addr = virtual_addr;
             set_start(virtual_addr);
@@ -61,8 +61,8 @@ namespace TR {
             m_pap.n_page_mem = nullptr;
             m_pap.guest_max_insns = 100;
             m_pap.start_swap = 2;
-            vex_info::init_vta_chunk(m_vta_chunk, m_vge_chunk, host, info.traceflags);
-            for (int j = 0; j < MAX_TMP; j++) { ((Vns*)m_ir_temp_trunk)[j].Vns::Vns(ctx, 0); }
+            vex_info::init_vta_chunk(m_vta_chunk, m_vge_chunk, host, info.gtraceflags());
+            for (unsigned j = 0; j < MAX_TMP; j++) { ((Vns*)m_ir_temp_trunk)[j].Vns::Vns(ctx, 0); }
         }
         inline void set_host_addr(Addr64 host_virtual_addr) {
             m_pap.start_swap = 2;

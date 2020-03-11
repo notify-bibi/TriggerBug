@@ -85,39 +85,39 @@ void find_fork_state(State<ADDR>& state, std::hash_map<ADDR, UInt>& Fork_addr) {
 template<typename ADDR>
 bool task_explorer(State<ADDR>* top) {
 
-    while (true) {
-        std::hash_map<ADDR, UInt> Fork_addr;
-        std::vector<State<ADDR>*> explore;
-        find_fork_state(*top, Fork_addr);
-        find_explore_state(*top, explore, Fork_addr);
+    //while (true) {
+    //    std::hash_map<ADDR, UInt> Fork_addr;
+    //    std::vector<State<ADDR>*> explore;
+    //    find_fork_state(*top, Fork_addr);
+    //    find_explore_state(*top, explore, Fork_addr);
 
-        if (!explore.empty()) {
-            std::cout << *top << std::endl;
-            for (State<ADDR>* nstate : explore) {
-                Kernel::pool->enqueue([nstate] {
-                    nstate->start();
-                    });
-            }
-            Kernel::pool->wait();
-            std::cout << *top << std::endl;
-        }
-        else {
-            if(Fork_addr.empty())
-                return false;
-            std::cout << *top << std::endl;
-            for (auto SD : Fork_addr) {
-                printf("%p  %d ", SD.first, SD.second);
-                if (SD.second) {
-                    std::vector<State_Tag> avoid;
-                    avoid.emplace_back(Death);
-                    //top->compress(SD.first, Fork, avoid);
-                    std::cout << *top << std::endl;
-                }
-            }
-        }
-    };
+    //    if (!explore.empty()) {
+    //        std::cout << *top << std::endl;
+    //        for (State<ADDR>* nstate : explore) {
+    //            Kernel::pool->enqueue([nstate] {
+    //                nstate->start();
+    //                });
+    //        }
+    //        Kernel::pool->wait();
+    //        std::cout << *top << std::endl;
+    //    }
+    //    else {
+    //        if(Fork_addr.empty())
+    //            return false;
+    //        std::cout << *top << std::endl;
+    //        for (auto SD : Fork_addr) {
+    //            printf("%p  %d ", SD.first, SD.second);
+    //            if (SD.second) {
+    //                std::vector<State_Tag> avoid;
+    //                avoid.emplace_back(Death);
+    //                //top->compress(SD.first, Fork, avoid);
+    //                std::cout << *top << std::endl;
+    //            }
+    //        }
+    //    }
+    //};
 
-    return false;
+    //return false;
 
     //std::vector<State*> ForkTree;
     //ForkTree.emplace_back(top);
@@ -174,7 +174,7 @@ bool task_explorer(State<ADDR>* top) {
     //        return ret;
     //    }
     //};
-    //return false;
+    return false;
 }
 
 template<typename ADDR>
@@ -189,7 +189,7 @@ void StateAnalyzer<ADDR>::Run() {
 template<typename ADDR, class _jmps = std::forward_list<ADDR>>
 class GraphView {
     template<typename ADDR> friend class PathExplorer;
-    Vex_Info& m_info;
+    vex_info& m_info;
     MEM<ADDR>& m_mem;
     spin_mutex translate_mutex;
     typedef struct blockEnd {
@@ -349,7 +349,7 @@ class GraphView {
         pap.mem_obj = (void*)&m_mem;
         pap.n_page_mem = EmuEnvironment<MAX_IRTEMP>::mem_next_page<ADDR>;
         pap.start_swap = 0;
-        pap.guest_max_insns = m_info.guest_max_insns;
+        pap.guest_max_insns = m_info.gmax_insns();
         vta->guest_bytes = pap.t_page_addr;
         vta->guest_bytes_addr = addr;
         VexRegisterUpdates pxControl;
@@ -470,10 +470,10 @@ class GraphView {
 
 
 public:
-    GraphView(Vex_Info const& info, MEM<ADDR>& mem, ADDR oep) :m_pool(8), m_info(info), m_mem(mem) {
+    GraphView(vex_info const& info, MEM<ADDR>& mem, ADDR oep) :m_pool(8), m_info(info), m_mem(mem) {
         enqueue(oep);
     }
-    inline const Vex_Info& info() const { return m_info; }
+    inline const vex_info& info() const { return m_info; }
     void wait() { m_pool.wait(); }
 
     void explore_block(ADDR block_start) {
@@ -516,9 +516,10 @@ class PathExplorer : public GraphView<ADDR> {
 
     template <class _Ty, class _Container = std::deque<_Ty>, class _jmps = std::forward_list<_Ty>>
     class Stack :protected _Container {
+    public:
         typedef typename _Container::iterator iterator;
         using jmps = _jmps;
-
+    private:
         std::hash_map<_Ty, _jmps> m_stack_map;
     public:
         void pop() {
@@ -564,7 +565,7 @@ class PathExplorer : public GraphView<ADDR> {
     };
 
 public:
-    PathExplorer(Vex_Info const& info, MEM<ADDR>& mem, ADDR oep) :GraphView(info, mem, oep) {
+    PathExplorer(vex_info const& info, MEM<ADDR>& mem, ADDR oep) :GraphView(info, mem, oep) {
         
     }
 

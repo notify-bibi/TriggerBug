@@ -1,6 +1,6 @@
 
-int test_cmpress() {
-    Vex_Info v("C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.xml");
+bool test_cmpress() {
+    ctx64 v(VexArchAMD64, "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.xml");
     SP::AMD64 state(v, 0, True);
     
     for (int i = 0; i < 4; i++) {
@@ -50,11 +50,12 @@ int test_cmpress() {
 
     state.compress(c);
     std::cout << state << std::endl;
+    return true;
 }
 
 
-int test_dirty_cmpress() {
-    Vex_Info v("C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.xml");
+bool test_dirty_cmpress() {
+    ctx64 v(VexArchAMD64, "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.xml");
     SP::AMD64 state(v, 0, True);
 
 
@@ -80,4 +81,5 @@ int test_dirty_cmpress() {
     state.start();
     
     std::cout << state << std::endl;
+    return true;
 }

@@ -16,16 +16,16 @@ public:
 };
 
 class mem32 : public membase {
-    MEM<Addr32>& m_mem;
+    TR::MEM<Addr32>& m_mem;
 public:
-    mem32(MEM<Addr32>& mem) :m_mem(mem) { }
+    mem32(TR::MEM<Addr32>& mem) :m_mem(mem) { }
     z3::context& ctx() override { return m_mem.ctx(); }
 };
 
 class mem64 : public membase {
-    MEM<Addr64>& m_mem;
+    TR::MEM<Addr64>& m_mem;
 public:
-    mem64(MEM<Addr64>& mem) : m_mem(mem) { }
+    mem64(TR::MEM<Addr64>& mem) : m_mem(mem) { }
     z3::context& ctx() override { return m_mem.ctx(); }
 };
 
@@ -35,12 +35,12 @@ public:
     Addr64 m_ana_addr;
     z3::expr m_offset;
 
-    analyzer(MEM<Addr32>& mem, Addr64 memaddr, z3::expr offset) :
+    analyzer(TR::MEM<Addr32>& mem, Addr64 memaddr, z3::expr offset) :
         membase(mem32(mem)), m_ctx(mem), m_ana_addr(memaddr), m_offset(offset)
     {
     }
 
-    analyzer(MEM<Addr64>& mem, Addr64 memaddr, z3::expr offset) :
+    analyzer(TR::MEM<Addr64>& mem, Addr64 memaddr, z3::expr offset) :
         membase(mem64(mem)), m_ctx(mem), m_ana_addr(memaddr), m_offset(offset)
     {
     }

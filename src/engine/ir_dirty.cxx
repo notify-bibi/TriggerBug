@@ -24,7 +24,7 @@ class DMEM : public MEM<Addr64> {
 
 public:
     template<typename ADDR>
-    DMEM(vctx_base const& vctxb, TRsolver& s, z3::vcontext& ctx, MEM<ADDR>& mem, bool front, Bool _need_record) : MEM(vctxb, s, ctx, mem.CR3, mem.user, _need_record),
+    DMEM(vctx_base & vctxb, TRsolver& s, z3::vcontext& ctx, MEM<ADDR>& mem, bool front, Bool _need_record) : MEM(vctxb, s, ctx, mem.CR3, mem.user, _need_record),
         m_front(front),
         m_stack_reservve_size(0),
         m_stack_addr(0),

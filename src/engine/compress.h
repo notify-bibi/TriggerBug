@@ -386,7 +386,7 @@ namespace cmpr {
     class Compress {
         CmprsContext<CompressClass, StateStatus>& m_ctx;
         CmprsFork<STATEinterface> m_node;
-
+    public:
         class Iterator {
             friend class Compress;
             Compress& m_c;
@@ -394,6 +394,7 @@ namespace cmpr {
             UInt m_group_max;
 
             //state compression results
+        public:
             class StateRes {
                 friend class Compress::Iterator;
                 Compress& m_c;
@@ -403,7 +404,7 @@ namespace cmpr {
 
                 StateRes(const StateRes& ass) = delete;
                 void operator =(const StateRes& ass) = delete;
-                StateRes(Compress const& c, UInt group) :m_c(c), m_group(group),
+                StateRes(Compress const& c, UInt group) :m_c(const_cast<Compress&>(c)), m_group(group),
                     m_assert(m_c.avoid_asserts(m_c.m_node, m_group))
                 {
                     m_c.treeCompress(m_changes, m_c.m_node, m_group);
@@ -412,13 +413,13 @@ namespace cmpr {
                 inline std::hash_map<Addr64, GPMana> const& changes() { return m_changes; }
                 inline Vns conditions() const { return m_assert; }
             };
-
+        private:
 
             Iterator(const Iterator& ass) = delete;
             void operator =(const Iterator& ass) = delete;
         public:
 
-            Iterator(Compress const& c) :m_c(c), m_it_group(0) {
+            Iterator(Compress const& c) :m_c(const_cast<Compress&>(c)), m_it_group(0) {
                 m_group_max = m_c.m_ctx.group().size();
             }
             inline bool operator!=(const Iterator& src) { return m_it_group != src.m_group_max; }
@@ -426,7 +427,7 @@ namespace cmpr {
             inline StateRes operator*() { return StateRes(m_c, m_it_group); }
             inline UInt group_max() { return m_group_max; }
         };
-
+    private:
         Compress(const Compress& ass) = delete;
         void operator =(const Compress& ass) = delete;
     public:

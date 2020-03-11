@@ -370,8 +370,8 @@ public:
                 }
             }
             //ÈÆ¹ýconst
-            const_cast<Z3_ast>(this->m_ast) = r_ast;
-            const_cast<V_Kind>(this->m_kind) = REAL_BCKAST;
+            const_cast<Vns*>(this)->m_ast = r_ast;
+            const_cast<Vns*>(this)->m_kind = REAL_BCKAST;
         };
         return m_ast;
     }
