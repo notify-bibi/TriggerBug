@@ -143,12 +143,15 @@ Vns flag_limit(Vns& flag) {
 }
 
 
-//#include "test/example.hpp"
+#include "test/example.hpp"
 #include "test/test.hpp"
-
+#include "test/solve/creakme.h"
 
 int main() {
-    test_cmpress();
+    vassert(creakme());
+    vassert(test_cmpress());
+
+    testz3();
     //test_dirty_cmpress();
     vex_context<Addr64> v(VexArchAMD64, "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.xml");
     

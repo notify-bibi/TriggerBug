@@ -47,7 +47,7 @@ unsigned int ty2bit(IRType ty);
 IRType       length2ty(UShort bit);
 void         tAMD64REGS(int offset, int length);
 unsigned int TRCurrentThreadId();
-
+const char*  constStrIRJumpKind(IRJumpKind kind);
 
 #define __i386__
 #define TESTCODE(code)                                                                                                  \
@@ -221,10 +221,14 @@ namespace z3 {
 
 //Exception
 namespace Expt {
+    class GuestMemReadErr;
+    class GuestMemWriteErr;
+
     typedef enum {
         //模拟软件错误
         GuestMem_read_err,
         GuestMem_write_err,
+        GuestRuntime_exception,
         //设计bug
         /*
         Engine_memory_leak,
@@ -244,11 +248,14 @@ namespace Expt {
         friend class Solver_no_solution; 
         friend class SolverNoSolution;
         friend class IRfailureExit;
+        friend class RuntimeIrSig;
+
         ExceptionTag m_errorId;
         ExceptionBase(ExceptionTag t) :m_errorId(t) {}
     public:
-        operator ExceptionTag() { return m_errorId; };
-        std::string msg() const;
+        operator ExceptionTag() const{ return m_errorId; };
+        virtual std::string msg() const { printf("GG"); exit(1); };
+        virtual Addr64 addr() const { return 0; }
     };
 
     class GuestMem :public ExceptionBase {
@@ -259,12 +266,13 @@ namespace Expt {
         GuestMem(char const* msg, Addr64 gaddr, ExceptionTag err) :ExceptionBase(err),
             m_msg(msg), m_gaddr(gaddr) {
         }
+        virtual Addr64 addr() const override { return m_gaddr; }
     };
 
     class GuestMemReadErr :public GuestMem {
     public:
         GuestMemReadErr(char const* msg, Addr64 gaddr) :GuestMem(msg, gaddr, GuestMem_read_err) {}
-        std::string msg() const {
+        std::string msg() const override {
             assert(m_errorId == GuestMem_read_err);
             char buffer[50];
             snprintf(buffer, 50, "Gest : mem read addr(%p) :::  ", m_gaddr);
@@ -276,7 +284,7 @@ namespace Expt {
     class GuestMemWriteErr :public GuestMem {
     public:
         GuestMemWriteErr(char const* msg, Addr64 gaddr) :GuestMem(msg, gaddr, GuestMem_write_err) {}
-        std::string msg() const {
+        std::string msg() const override {
             assert(m_errorId == GuestMem_write_err);
             char buffer[50];
             snprintf(buffer, 50, "Gest : mem write addr(%p) :::  ", m_gaddr);
@@ -290,7 +298,7 @@ namespace Expt {
         const char * m_msg;
     public:
         SolverNoSolution(char const* msg, z3::solver& solver) :ExceptionBase(Solver_no_solution), m_msg(msg), m_solver(solver) {}
-        std::string msg() const {
+        std::string msg() const override {
             assert(m_errorId == Solver_no_solution);
             return std::string("Solver no solution ::: ") + m_msg + "\nsolver's assertions:\n" +
                 Z3_solver_to_string(m_solver.ctx(), m_solver);
@@ -330,7 +338,7 @@ namespace Expt {
         {
         }
 
-        std::string msg() const {
+        std::string msg() const override {
             assert(m_errorId == IR_failure_exit);
             if (m_expr && m_file) {
                 char buffer[50];
@@ -352,13 +360,24 @@ namespace Expt {
             }
         }
     };
+
+
+    class RuntimeIrSig :public ExceptionBase {
+        Addr64 m_sig_addr;
+        IRJumpKind m_jk;
+    public:
+        RuntimeIrSig(Addr64 a, IRJumpKind k) :ExceptionBase(GuestRuntime_exception), m_sig_addr(a) , m_jk(k){}
+        std::string msg() const override {
+            assert(m_errorId == GuestRuntime_exception);
+            char buffer[50];
+            snprintf(buffer, 50, "Gest : Sig(%s) at (%p) :::  ", constStrIRJumpKind(m_jk), m_sig_addr);
+            std::string ret;
+            return ret.assign(buffer);
+        }
+    };
 };
 
 inline static std::ostream& operator<<(std::ostream& out, Expt::ExceptionBase const& e) { out << e.msg(); return out; }
-inline static std::ostream& operator<<(std::ostream& out, Expt::GuestMemReadErr const& e) { out << e.msg(); return out; }
-inline static std::ostream& operator<<(std::ostream& out, Expt::GuestMemWriteErr const& e) { out << e.msg(); return out; }
-inline static std::ostream& operator<<(std::ostream& out, Expt::SolverNoSolution const& e) { out << e.msg(); return out; }
-inline static std::ostream& operator<<(std::ostream& out, Expt::IRfailureExit const& e) { out << e.msg(); return out; }
 
 
 #define VPANIC(...) { throw Expt::IRfailureExit(__FILE__ ,__LINE__, __VA_ARGS__); }

@@ -84,14 +84,10 @@ macro(TR_add_library)
     CMAKE_PARSE_ARGUMENTS(
         LIB 
         ""
-        "TARGET;CONFIGURE_TYPE"
-        "SOURCESDIR;SOURCES;REQUIRE"
+        "TARGET;CONFIGURE_TYPE;SOURCESDIR"
+        "SOURCES;REQUIRE"
         ${ARGN}
     )
-    
-    set(CMAKE_CXX_STANDARD 17)
-    set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
     
     IF(NOT LIB_SOURCESDIR)
         SET(LIB_SOURCESDIR .)

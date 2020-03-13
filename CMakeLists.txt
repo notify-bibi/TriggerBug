@@ -2,12 +2,12 @@
 # 并包含子项目。
 #
 cmake_minimum_required (VERSION 3.9.9)
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -Ob2 /Qopenmp -Wall")
 SET(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -O3 -Ob2  -Wall")
-add_compile_options("$<$<CONFIG:RELEASE>:-std=c++17 -O3 -Ob2 /Qopenmp /GS->")
+add_compile_options("$<$<CONFIG:RELEASE>:-std=c++14 -O3 -Ob2 /Qopenmp /GS->")
 
 project (TriggerBug
         VERSION 1.3.0
@@ -28,7 +28,7 @@ ADD_DEFINITIONS(-D VGA_arm)
 ADD_DEFINITIONS(-D VGA_arm64)	 
 ADD_DEFINITIONS(-D VGA_mips32) 
 ADD_DEFINITIONS(-D VGA_mips64) 
-#ADD_DEFINITIONS(-D VGA_s390x)
+# ADD_DEFINITIONS(-D VGA_s390x)
 
 include(cmake/tr_add_project.cmake)
 

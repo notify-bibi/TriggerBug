@@ -1,17 +1,21 @@
 
+
+
+
+
 bool test_cmpress() {
     ctx64 v(VexArchAMD64, "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.xml");
     SP::AMD64 state(v, 0, True);
-    
+
     for (int i = 0; i < 4; i++) {
         SP::AMD64* s = (SP::AMD64*)(state.ForkState(20));
         Vns f1 = s->m_ctx.bv_const("a1", 8);
         Vns f2 = s->m_ctx.bv_const("a2", 8);
         s->solv.add_assert(f1 > i);
         s->solv.add_assert(f2 < i);
-        s->mem.Ist_Store(0x602080, 1000+i);
+        s->mem.Ist_Store(0x602080, 1000 + i);
         s->mem.Ist_Store(0x602088, 1000 + i);
-        if(i==3)
+        if (i == 3)
             s->set_status(Death);
     }
     std::cout << state << std::endl;
@@ -34,7 +38,7 @@ bool test_cmpress() {
         Vns f = s2->m_ctx.bv_const("b", 8);
         s2->solv.add_assert(f > i);
         s2->mem.Ist_Store(0x602080, 100 + i);
-        s2->mem.Ist_Store(0x602081, 100ull + i+(1ull<<63));
+        s2->mem.Ist_Store(0x602081, 100ull + i + (1ull << 63));
         if (i <= 4)
             continue;
         s2->m_InvokStack.push(787, 87);
@@ -70,7 +74,7 @@ bool test_dirty_cmpress() {
     //        Int regparms, const HChar * name, void* addr,
     //        IRExpr * *args);
 
-    
+
     UChar bf[] = { 0xD9 ,0x74 ,0x24 ,0xE2 };
     for (int i = 0; i < sizeof(bf); i++) {
         state.mem.Ist_Store(state.get_cpu_ip() + i, bf[i]);
@@ -79,7 +83,7 @@ bool test_dirty_cmpress() {
     state.solv.add_assert(f != 0);
     state.regs.Ist_Put(AMD64_IR_OFFSET::FPTAG, f);
     state.start();
-    
+
     std::cout << state << std::endl;
     return true;
 }

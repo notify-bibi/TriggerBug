@@ -309,7 +309,7 @@ void error_example() {
         // The next call fails because x is a Boolean.
         expr n = x + 1;
     }
-    catch (exception ex) {
+    catch (z3exception ex) {
         std::cout << "failed: " << ex << "\n";
     }
 
@@ -317,7 +317,7 @@ void error_example() {
     try {
         expr arg = to_expr(c, Z3_get_app_arg(c, x, 0));
     }
-    catch (exception ex) {
+    catch (z3exception ex) {
         std::cout << "failed: " << ex << "\n";
     }
 }
@@ -743,7 +743,7 @@ void tactic_example8() {
     try {
         t(g);
     }
-    catch (exception) {
+    catch (z3exception) {
         std::cout << "tactic failed...\n";
     }
     std::cout << "trying again...\n";
@@ -1313,7 +1313,7 @@ int testz3() {
         string_issue_2298(); std::cout << "\n";
         std::cout << "done\n";
     }
-    catch (exception & ex) {
+    catch (z3exception & ex) {
         std::cout << "unexpected error: " << ex << "\n";
     }
     return 0;

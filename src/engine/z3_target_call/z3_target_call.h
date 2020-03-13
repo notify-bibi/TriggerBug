@@ -1,5 +1,11 @@
 //AMD64:
 #include "engine/variable.h"
+extern "C" ULong x86g_use_seg_selector(HWord ldt, HWord gdt, UInt seg_selector, UInt virtual_addr);
+UChar* extern_dealy_call(UChar* fuc);
+
+//0xd127ca11 = dirty call
+#define DIRTY_CALL_MAGIC ((UChar*) 0xd127ca11)
+
 Vns z3_amd64g_calculate_condition(Vns/*AMD64Condcode*/& cond,
     Vns& cc_op,
     Vns& cc_dep1,

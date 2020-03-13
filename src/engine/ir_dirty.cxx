@@ -1,5 +1,6 @@
 #include "engine/ir_dirty.h"
 #include "engine/state_class.h"
+#include "engine/z3_target_call/z3_target_call.h"
 
 #ifdef _DEBUG
 //#define OUTPUT_STMTS
@@ -228,8 +229,11 @@ public:
     void             init_param(IRCallee* cee, IRExpr** exp_args) {
         set_ip((UChar*)cee->addr);
         Addr64 stack_ret = m_stack_addr + m_stack_reservve_size - 0x8ull * 6;
+        regs.Ist_Put(AMD64_IR_OFFSET::RAX, -1ll);
         regs.Ist_Put(AMD64_IR_OFFSET::RSP, stack_ret);
         regs.Ist_Put(AMD64_IR_OFFSET::RBP, 0x233ull);
+        //code : call cee->addr
+        vex_push(vex_ret_addr);
         {
             //x64 fastcall 
             const UInt assembly_args[] = { AMD64_IR_OFFSET::RCX, AMD64_IR_OFFSET::RDX, AMD64_IR_OFFSET::R8, AMD64_IR_OFFSET::R9 };
@@ -242,10 +246,30 @@ public:
                 }
             };
         };
-        //code : call cee->addr
-        vex_push(vex_ret_addr);
     }
 
+    void             init_param(IRCallee* cee, const std::initializer_list<Vns>& exp_args) {
+        set_ip((UChar*)cee->addr);
+        Addr64 stack_ret = m_stack_addr + m_stack_reservve_size - 0x8ull * 6;
+        regs.Ist_Put(AMD64_IR_OFFSET::RAX, -1ll);
+        regs.Ist_Put(AMD64_IR_OFFSET::RSP, stack_ret);
+        regs.Ist_Put(AMD64_IR_OFFSET::RBP, 0x233ull);
+        //code : call cee->addr
+        vex_push(vex_ret_addr);
+        {
+            //x64 fastcall 
+            const UInt assembly_args[] = { AMD64_IR_OFFSET::RCX, AMD64_IR_OFFSET::RDX, AMD64_IR_OFFSET::R8, AMD64_IR_OFFSET::R9 };
+            auto v = exp_args.begin();
+            for (UInt i = 0; i != exp_args.size(); i++, v++) {
+                if (i >= (sizeof(assembly_args) / sizeof(UInt))) {
+                    mem.Ist_Store(stack_ret - ((ULong)i << 3), *v);
+                }
+                else {
+                    regs.Ist_Put(assembly_args[i], *v);
+                }
+            };
+        };
+    }
 
 
     DState*         getDirtyVexCtx() {
@@ -670,6 +694,9 @@ Vns DState::CCall(IRCallee* cee, IRExpr** exp_args, IRType ty)
     if (!exp_args[0]) return Vns(m_ctx, ((Function_64_0)(cee->addr))(), bitn);
 
     void* cptr = funcDict(cee->addr);
+    if (cptr == DIRTY_CALL_MAGIC) {
+        return dirty_call(cee, exp_args, ty);
+    }
     Vns arg0 = tIRExpr(exp_args[0]); CDFCHECK(arg0);
     if (!exp_args[1]) return (z3_mode) ? ((Z3_Function1)(cptr))(arg0) : Vns(m_ctx, ((Function_64_1)(cee->addr))(arg0), bitn);
     Vns arg1 = tIRExpr(exp_args[1]); CDFCHECK(arg1);
@@ -948,6 +975,15 @@ void dirty_ccall(DirtyCtx dctx, IRCallee* cee, IRExpr** args) {
 }
 
 template<typename ADDR>
+void dirty_call_np(DirtyCtx dctx, const HChar* name, void* func, const std::initializer_list<Vns>& parms) {
+    VexIRDirty<ADDR>* d = (VexIRDirty<ADDR>*)dctx;
+    IRCallee cee = { parms.size() , name, func, -1ull };
+    vexSetAllocModeTEMP_and_save_curr();
+    d->init_param(&cee, parms);
+    d->start();
+}
+
+template<typename ADDR>
 void dirty_run(DirtyCtx dctx, IRDirty* dirty) {
     VexIRDirty<ADDR>* d = (VexIRDirty<ADDR>*)dctx;
     d->store_regs_to_mem(dirty);
@@ -971,6 +1007,8 @@ template void dirty_context_del<Addr32>(DirtyCtx dctx);
 template void dirty_context_del<Addr64>(DirtyCtx dctx);
 template void dirty_ccall<Addr32>(DirtyCtx dctx, IRCallee* cee, IRExpr** args);
 template void dirty_ccall<Addr64>(DirtyCtx dctx, IRCallee* cee, IRExpr** args);
+template void dirty_call_np<Addr32>(DirtyCtx dctx, const HChar* name, void* func, const std::initializer_list<Vns>& parms);
+template void dirty_call_np<Addr64>(DirtyCtx dctx, const HChar* name, void* func, const std::initializer_list<Vns>& parms);
 template Vns dirty_result<Addr32>(DirtyCtx dctx, IRType rty);
 template Vns dirty_result<Addr64>(DirtyCtx dctx, IRType rty);
 

@@ -10,7 +10,6 @@ Author:
 Revision History:
 --*/
 #include "state_class.h"
-#include "z3_target_call/z3_target_call.h"
 #include <Windows.h>
 
 using namespace TR;
@@ -44,18 +43,6 @@ static void failure_exit() {
 static void _vex_log_bytes(const HChar* bytes, SizeT nbytes) {
     std::cout << bytes;
 }
-
-
-std::string Expt::ExceptionBase::msg()const {
-    switch (m_errorId) {
-    case Expt::GuestMem_read_err:return ((Expt::GuestMemReadErr*)(this))->msg();
-    case Expt::GuestMem_write_err:return ((Expt::GuestMemWriteErr*)(this))->msg();
-    case Expt::IR_failure_exit:return ((Expt::IRfailureExit*)(this))->msg();
-    case Expt::Solver_no_solution:return ((Expt::SolverNoSolution*)(this))->msg();
-    default:
-    }
-}
-
 
 
 UInt arch_2_stack_sp_iroffset(VexArch arch) {
@@ -425,6 +412,9 @@ Vns State<Addr32>::CCall(IRCallee *cee, IRExpr **exp_args, IRType ty)
     Bool z3_mode = False;
     if (!exp_args[0]) return Vns(m_ctx, ((Function_32_0)(cee->addr))(), bitn);
     void* cptr = funcDict(cee->addr);
+    if (cptr == DIRTY_CALL_MAGIC) { 
+        return dirty_call(cee, exp_args, ty);
+    }
     Vns arg0 = tIRExpr(exp_args[0]); CDFCHECK(arg0);
     if (!exp_args[1]) return (z3_mode) ? ((Z3_Function1)(cptr))(arg0) : Vns(m_ctx, ((Function_32_1)(cee->addr))(arg0), bitn);
     Vns arg1 = tIRExpr(exp_args[1]); CDFCHECK(arg1);
@@ -451,7 +441,9 @@ Vns State<Addr64>::CCall(IRCallee* cee, IRExpr** exp_args, IRType ty)
     Bool z3_mode = False;
     if (!exp_args[0]) return Vns(m_ctx, ((Function_64_0)(cee->addr))(), bitn);
 
-    void* cptr = funcDict(cee->addr);
+    void* cptr = funcDict(cee->addr); if (cptr == DIRTY_CALL_MAGIC) {
+        return dirty_call(cee, exp_args, ty);
+    }
     Vns arg0 = tIRExpr(exp_args[0]); CDFCHECK(arg0);
     if (!exp_args[1]) return (z3_mode) ? ((Z3_Function1)(cptr))(arg0) : Vns(m_ctx, ((Function_64_1)(cee->addr))(arg0), bitn);
     Vns arg1 = tIRExpr(exp_args[1]); CDFCHECK(arg1);
@@ -576,13 +568,7 @@ inline Vns State<ADDR>::tIRExpr(IRExpr* e)
         assert(ix.real());
         return regs.Iex_Get(e->Iex.GetI.descr->base + (((UInt)(e->Iex.GetI.bias + (int)(ix))) % e->Iex.GetI.descr->nElems)*ty2length(e->Iex.GetI.descr->elemTy), e->Iex.GetI.descr->elemTy);
     };
-    case Iex_GSPTR: {
-        if (!m_dirty_vex_mode) {
-            m_dirty_vex_mode = true;
-            m_dctx = dirty_context(this);
-        }
-        return Vns(m_ctx, dirty_get_gsptr<ADDR>(m_dctx));
-    };
+    case Iex_GSPTR: { return Vns(m_ctx, gsptr());  };
     case Iex_VECRET:
     case Iex_Binder:
     default:
@@ -599,6 +585,7 @@ bool State<ADDR>::vex_start() {
     mem.set(&emu);
     IRSB* irsb = nullptr;
     State<ADDR>* newBranch = nullptr;
+    bool call_stack_is_empty = false;
     for (;;) {
     For_Begin:
         mem.set_double_page(guest_start, emu);
@@ -799,17 +786,23 @@ bool State<ADDR>::vex_start() {
         traceIrsbEnd(irsb);
         switch (irsb->jumpkind) {
         case Ijk_Ret: {
-            m_InvokStack.pop();
+            if (call_stack_is_empty || m_InvokStack.empty()) {
+                if (!call_stack_is_empty) {
+                    call_stack_is_empty = true;
+                    std::cout << "调用栈结束 :: " << std::hex << guest_start << std::endl;
+                }
+            }
+            else {
+                m_InvokStack.pop();
+            }
             break;
         }
         case Ijk_Boring: break;
         case Ijk_Call: break;
         case Ijk_SigTRAP: {
-        SigTRAP:
+            //software backpoint
             if (m_vctx.get_hook(hs, guest_start)) { goto deal_bkp; }
-            m_status = Death;
-            vex_printf("Ijk_SigTRAP: %p", guest_start);
-            goto EXIT;
+            m_status = Exception;
         }
         default: {
             m_status = Ijk_call(irsb->jumpkind);
@@ -888,10 +881,11 @@ Begin_try:
         mem.set(nullptr);
         m_ir_temp = nullptr;
         switch ((Expt::ExceptionTag)error) {
+        case Expt::GuestRuntime_exception:
         case Expt::GuestMem_read_err:
         case Expt::GuestMem_write_err: {
             try {
-                cpu_exception();
+                cpu_exception(error);
             }
             catch (Expt::ExceptionBase & cpu_exception_error) {
                 std::cout << "Usage issues or simulation software problems.\nError message:" << std::endl;
@@ -1138,6 +1132,39 @@ template TR::State<Addr32>;
 template TR::State<Addr64>;
 
 
+const char* constStrIRJumpKind(IRJumpKind kind)
+{
+    switch (kind) {
+    case Ijk_Boring:        return ("Boring"); break;
+    case Ijk_Call:          return ("Call"); break;
+    case Ijk_Ret:           return ("Return"); break;
+    case Ijk_ClientReq:     return ("ClientReq"); break;
+    case Ijk_Yield:         return ("Yield"); break;
+    case Ijk_EmWarn:        return ("EmWarn"); break;
+    case Ijk_EmFail:        return ("EmFail"); break;
+    case Ijk_NoDecode:      return ("NoDecode"); break;
+    case Ijk_MapFail:       return ("MapFail"); break;
+    case Ijk_InvalICache:   return ("InvalICache"); break;
+    case Ijk_FlushDCache:   return ("FlushDCache"); break;
+    case Ijk_NoRedir:       return ("NoRedir"); break;
+    case Ijk_SigILL:        return ("SigILL"); break;
+    case Ijk_SigTRAP:       return ("SigTRAP"); break;
+    case Ijk_SigSEGV:       return ("SigSEGV"); break;
+    case Ijk_SigBUS:        return ("SigBUS"); break;
+    case Ijk_SigFPE:        return ("SigFPE"); break;
+    case Ijk_SigFPE_IntDiv: return ("SigFPE_IntDiv"); break;
+    case Ijk_SigFPE_IntOvf: return ("SigFPE_IntOvf"); break;
+    case Ijk_Sys_syscall:   return ("Sys_syscall"); break;
+    case Ijk_Sys_int32:     return ("Sys_int32"); break;
+    case Ijk_Sys_int128:    return ("Sys_int128"); break;
+    case Ijk_Sys_int129:    return ("Sys_int129"); break;
+    case Ijk_Sys_int130:    return ("Sys_int130"); break;
+    case Ijk_Sys_int145:    return ("Sys_int145"); break;
+    case Ijk_Sys_int210:    return ("Sys_int210"); break;
+    case Ijk_Sys_sysenter:  return ("Sys_sysenter"); break;
+    default:                return ("ppIRJumpKind");
+    }
+}
 
 
 unsigned int IRConstTag2nb(IRConstTag t) {

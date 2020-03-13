@@ -19,7 +19,7 @@ def file_name(file_dir):
 
 c1 = "<AdditionalOptions>%(AdditionalOptions) /Qopenmp</AdditionalOptions>"
 c2 = "<OpenMP>GenerateParallelCode</OpenMP>"
-c3 = "<LanguageStandard>stdcpp17</LanguageStandard>"
+c3 = "<LanguageStandard>stdcpp14</LanguageStandard>"
 c4 = "<Optimization>MaxSpeedHighLevel</Optimization>"
 c5 = "<BufferSecurityCheck>false</BufferSecurityCheck>"
 

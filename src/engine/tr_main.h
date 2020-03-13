@@ -13,6 +13,8 @@ namespace SP {
     class StatePrinter;
 };
 
+
+
 namespace TR {
 
     class StateX86 : public State<Addr32> {
@@ -23,25 +25,7 @@ namespace TR {
         StateX86(vex_context<Addr32>& vex_info, Addr32 gse, Bool _need_record) :State(vex_info, gse, _need_record) {};
 
 
-        void cpu_exception() override {
-
-
-            UInt seh_addr = get_TIB();
-                
-            
-            
-            Vns seh = mem.Iex_Load<Ity_I32>(seh_addr);
-            Vns next = mem.Iex_Load<Ity_I32>(seh);
-            Vns seh_exception_method = mem.Iex_Load<Ity_I32>(seh + 4);
-            set_status(Exception);
-            std::cout << " SEH Exceptions at:" << std::hex << guest_start << " \nGoto handel:" << seh_exception_method << std::endl;
-            guest_start = seh_exception_method;
-
-            /*  esp & ebp  不正确的esp*/
-            regs.Ist_Put(X86_IR_OFFSET::ESP, seh);
-
-            exit(2);
-        }
+        void cpu_exception(Expt::ExceptionBase const& e) override;
 
         State_Tag Ijk_call(IRJumpKind kd) override {
             switch (kd) {
@@ -52,6 +36,14 @@ namespace TR {
                 return Death;
             }
             case Ijk_NoDecode:  return NoDecode;
+            case Ijk_SigILL:         /* current instruction synths SIGILL */
+            case Ijk_SigTRAP:        /* current instruction synths SIGTRAP */
+            case Ijk_SigSEGV:        /* current instruction synths SIGSEGV */
+            case Ijk_SigBUS:         /* current instruction synths SIGBUS */
+            case Ijk_SigFPE:         /* current instruction synths generic SIGFPE */
+            case Ijk_SigFPE_IntDiv:  /* current instruction synths SIGFPE - IntDiv */
+            case Ijk_SigFPE_IntOvf:  /* current instruction synths SIGFPE - IntOvf */
+            { throw Expt::RuntimeIrSig(guest_start, kd); }
             default:
                 vex_printf("guest address: %p jmp kind: ", guest_start);
                 ppIRJumpKind(kd);
@@ -69,9 +61,11 @@ namespace TR {
         }
 
         Kernel* ForkState(Addr32 ges) override { return new StateX86(this, ges); };
-        Vns get_TIB() override {
-            VPANIC("no");
-            //x86g_use_seg_selector(regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::LDT), regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::GDT), regs.Iex_Get<Ity_I16>(X86_IR_OFFSET::FS).zext(16), 0);
+        //Thread Environment Block
+        Vns get_teb() override {
+            return dirty_call("x86g_use_seg_selector", extern_dealy_call((UChar*)x86g_use_seg_selector),
+                { regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::LDT), regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::GDT), regs.Iex_Get<Ity_I16>(X86_IR_OFFSET::FS).zext(16), Vns(m_ctx, 0ull) },
+                Ity_I32);
         }
     };
 
@@ -90,8 +84,8 @@ namespace TR {
         };
 
 
-        void cpu_exception() override {
-            UInt seh_addr = get_TIB();
+        void cpu_exception(Expt::ExceptionBase const& e) override {
+            UInt seh_addr = get_teb();
             Vns seh = mem.Iex_Load<Ity_I64>(seh_addr);
             Vns next = mem.Iex_Load<Ity_I64>(seh);
             Vns seh_exception_method = mem.Iex_Load<Ity_I64>(seh + 8);
@@ -114,6 +108,14 @@ namespace TR {
                 return Death;
             }
             case Ijk_NoDecode:  return NoDecode;
+            case Ijk_SigILL:         /* current instruction synths SIGILL */
+            case Ijk_SigTRAP:        /* current instruction synths SIGTRAP */
+            case Ijk_SigSEGV:        /* current instruction synths SIGSEGV */
+            case Ijk_SigBUS:         /* current instruction synths SIGBUS */
+            case Ijk_SigFPE:         /* current instruction synths generic SIGFPE */
+            case Ijk_SigFPE_IntDiv:  /* current instruction synths SIGFPE - IntDiv */
+            case Ijk_SigFPE_IntOvf:  /* current instruction synths SIGFPE - IntOvf */
+            { throw Expt::RuntimeIrSig(guest_start, kd); }
             default:
                 vex_printf("guest address: %p . error jmp kind: ", guest_start);
                 ppIRJumpKind(kd);
@@ -125,7 +127,7 @@ namespace TR {
         virtual Kernel* ForkState(Addr64 ges) override { return new StateAMD64(this, ges); };
         virtual bool  StateCompression(State const& next) override { return true; }
         virtual void  StateCompressMkSymbol(State const& newState) override {  };
-        Vns get_TIB() override { return regs.Iex_Get<Ity_I16>(AMD64_IR_OFFSET::FS_CONST); }
+        Vns get_teb() override { return regs.Iex_Get<Ity_I16>(AMD64_IR_OFFSET::FS_CONST); }
     };
 
 

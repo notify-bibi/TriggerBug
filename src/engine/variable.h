@@ -275,19 +275,7 @@ public:
     inline void operator=(const Vns & a)
     {
         this->~Vns();
-        m_ctx = a.m_ctx;
-        if (a.m_kind == REAL) {
-            CP_DATA(a);
-        }
-        else {
-            m_ast = a.m_ast;
-            Z3_inc_ref(m_ctx, m_ast);
-            if (a.m_kind == REAL_BCKAST) {
-                CP_DATA(a);
-            }
-        }
-        bitn = a.bitn;
-        m_kind = a.m_kind;
+        this->Vns::Vns(a);
     }
 
     inline Vns(z3::expr &a) :

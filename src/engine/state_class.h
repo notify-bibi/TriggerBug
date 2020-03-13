@@ -24,6 +24,7 @@ Revision History:
 #include "engine/ir_dirty.h"
 #include "engine/compress.h"
 #include "engine/emu_environment.h"
+#include "z3_target_call/z3_target_call.h"
 
 extern void* funcDict(void*);
 extern void Func_Map_Init();
@@ -149,13 +150,19 @@ namespace TR {
             guest_stack.push(bp);
         }
         inline void pop() {
-            guest_call_stack.pop();
-            guest_stack.pop();
+            if (!guest_call_stack.empty()) {
+                guest_call_stack.pop();
+                guest_stack.pop();
+            }
         }
         template<typename ADDR> friend bool operator==(InvocationStack<ADDR> const& a, InvocationStack<ADDR> const& b);
         void operator=(InvocationStack<ADDR> const& b) {
             guest_call_stack = b.guest_call_stack;
             guest_stack = b.guest_stack;
+        }
+
+        bool empty() const {
+            return guest_call_stack.empty();
         }
     };
 
@@ -348,6 +355,13 @@ namespace TR {
             return dirty_result<ADDR>(m_dctx, ty);
         }
 
+        Vns dirty_call(const HChar* name, void* func, std::initializer_list<Vns> parms, IRType ty) {
+            getDirtyVexCtx();
+            dirty_call_np<ADDR>(m_dctx, name, func, parms);
+            return dirty_result<ADDR>(m_dctx, ty);
+        }
+
+        Addr64 gsptr() { return dirty_get_gsptr<ADDR>(getDirtyVexCtx()); }
         //interface :
 
         virtual inline void traceStart() { return; };
@@ -357,9 +371,9 @@ namespace TR {
         virtual inline void traceIRStmtEnd(IRStmt*) { return; };
 
         Kernel* mkState(ADDR ges) { return ForkState(ges); }
-        virtual Vns get_TIB() { VPANIC("need to implement the method"); return Vns(); }
+        virtual Vns get_teb() { VPANIC("need to implement the method"); return Vns(); }
         virtual State_Tag Ijk_call(IRJumpKind) { VPANIC("need to implement the method"); m_status = Death; };
-        virtual void  cpu_exception() { VPANIC("need to implement the method"); m_status = Death; }
+        virtual void  cpu_exception(Expt::ExceptionBase const& e) { VPANIC("need to implement the method"); m_status = Death; }
         virtual Kernel* ForkState(ADDR ges) { VPANIC("need to implement the method"); return nullptr; }
         virtual bool  StateCompression(State const& next) { return true; }
         virtual void  StateCompressMkSymbol(State const& newState) {  };
