@@ -402,26 +402,24 @@ namespace cmpr {
                 Vns m_assert;
                 std::hash_map<Addr64, GPMana> m_changes;
 
-                StateRes(const StateRes& ass) = delete;
-                void operator =(const StateRes& ass) = delete;
                 StateRes(Compress const& c, UInt group) :m_c(const_cast<Compress&>(c)), m_group(group),
                     m_assert(m_c.avoid_asserts(m_c.m_node, m_group))
                 {
                     m_c.treeCompress(m_changes, m_c.m_node, m_group);
                 }
             public:
+                StateRes(const StateRes& ass) = delete;
+                void operator =(const StateRes& ass) = delete;
                 inline std::hash_map<Addr64, GPMana> const& changes() { return m_changes; }
                 inline Vns conditions() const { return m_assert; }
             };
-        private:
-
-            Iterator(const Iterator& ass) = delete;
-            void operator =(const Iterator& ass) = delete;
         public:
 
             Iterator(Compress const& c) :m_c(const_cast<Compress&>(c)), m_it_group(0) {
                 m_group_max = m_c.m_ctx.group().size();
             }
+            Iterator(const Iterator& ass) = delete;
+            void operator =(const Iterator& ass) = delete;
             inline bool operator!=(const Iterator& src) { return m_it_group != src.m_group_max; }
             inline void operator++() { m_it_group++; }
             inline StateRes operator*() { return StateRes(m_c, m_it_group); }

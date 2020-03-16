@@ -30,7 +30,7 @@ UInt vex_info::gMaxThreadsNum() {
     return c;
 }
 
- UInt vex_info::gRegsIpOffset(VexArch guest) {
+ Int vex_info::gRegsIpOffset(VexArch guest) {
     switch (guest) {
     case VexArchX86:return X86_IR_OFFSET::EIP;
     case VexArchAMD64:return AMD64_IR_OFFSET::RIP;
@@ -43,9 +43,26 @@ UInt vex_info::gMaxThreadsNum() {
     case VexArchMIPS64:return MIPS64_IR_OFFSET::PC;
     default:
         std::cout << "Invalid arch in vex_prepare_vai.\n" << std::endl;
-        vassert(0);
+        return -1;
     }
 }
+
+ Int vex_info::gRegsSPOffset(VexArch arch) {
+     switch (arch) {
+     case VexArchX86:return offsetof(VexGuestX86State, guest_ESP);
+     case VexArchAMD64:return offsetof(VexGuestAMD64State, guest_RSP);
+     case VexArchARM:return offsetof(VexGuestARMState, guest_R13);
+     case VexArchARM64:return offsetof(VexGuestARM64State, guest_XSP);
+     case VexArchPPC32:return offsetof(VexGuestPPC32State, guest_GPR1);
+     case VexArchPPC64:return offsetof(VexGuestPPC64State, guest_GPR1);
+     case VexArchS390X:return offsetof(VexGuestS390XState, guest_r15);
+     case VexArchMIPS32:return offsetof(VexGuestMIPS32State, guest_r29);
+     case VexArchMIPS64:return offsetof(VexGuestPPC64State, guest_GPR1);
+     default:
+         std::cout << "Invalid arch in vex_prepare_vai.\n" << std::endl;
+         return -1;
+     }
+ }
 
  static void vex_hwcaps_vai(VexArch arch, VexArchInfo* vai) {
      switch (arch) {
@@ -146,14 +163,14 @@ UInt vex_info::gMaxThreadsNum() {
 
 namespace TR {
     template<typename ADDR>
-    inline void vex_context<ADDR>::hook_add(ADDR addr, State_Tag(*_func)(State<ADDR>*), TRControlFlags cflag)
+    inline void vex_context<ADDR>::hook_add(IN State<ADDR>& state, ADDR addr, State_Tag(*_func)(State<ADDR>&), TRControlFlags cflag)
     {
         Hook_CB func = (Hook_CB) _func;
         if (m_callBackDict.find(addr) == m_callBackDict.end()) {
-            Vns o = m_top_state->mem.Iex_Load<Ity_I64>(addr);
+            Vns o = state.mem.Iex_Load<Ity_I64>(addr);
             vassert(o.real());
-            m_callBackDict[addr] = Hook_struct{ func , IRConstTag2nb(m_top_state->info().softwareBptConst()->tag) , o , cflag };
-            m_top_state->mem.Ist_Store_bpt(addr, Vns(m_top_state->m_ctx, m_top_state->info().softwareBptConst()));
+            m_callBackDict[addr] = Hook_struct{ func , IRConstTag2nb(state.info().softwareBptConst()->tag) , o , cflag };
+            state.mem.Ist_Store_bpt(addr, Vns(state.m_ctx, state.info().softwareBptConst()));
         }
         else {
             if (func) {
@@ -198,7 +215,7 @@ namespace TR {
         m_traceflags(0),
         m_maxThreadsNum(gMaxThreadsNum()),
         m_bpt_code(gsoftwareBpt(guest)),
-        m_IRoffset_IP(gRegsIpOffset(guest))
+        m_IRoffset_IP(vex_info::gRegsIpOffset(guest)), m_IRoffset_SP(vex_info::gRegsSPOffset(guest))
     {
     }
 

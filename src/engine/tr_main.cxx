@@ -23,11 +23,6 @@ UInt flag_max_count = 0;
 using namespace TR;
 
 
-extern UInt x86g_calculate_eflags_all(UInt cc_op,
-    UInt cc_dep1,
-    UInt cc_dep2,
-    UInt cc_ndep);
-
 static UInt x86g_create_mxcsr(UInt sseround)
 {
     sseround &= 3;
@@ -35,10 +30,39 @@ static UInt x86g_create_mxcsr(UInt sseround)
 }
 
 
-//ntdll::KiUserExceptionDispatcher
+/*
+The first element of the array contains a read-write flag that indicates the type of operation that caused the access violation.
+数组的第一个元素包含了一个读写标志，表示引起访问违规的操作类型。
+If this value is zero, the thread attempted to read the inaccessible data.
+如果这个值为0，表示线程试图读取不可访问的数据。
+If this value is 1, the thread attempted to write to an inaccessible address.
+如果这个值为1，表示线程试图写入不可访问的地址。
+If this value is 8, the thread causes a user-mode data execution prevention (DEP) violation.
+如果这个值是8，表示线程线程引发了一个用户模式的DEP违规。
+
+The second array element specifies the virtual address of the inaccessible data.
+数组的第二个元素指定了不可访问数据的虚拟地址。
+
+
+
+The first element of the array contains a read-write flag that indicates the type of operation that caused the access violation.
+数组的第一个元素包含了一个读写标志，用于表示引起访问违规的操作类型。
+If this value is zero, the thread attempted to read the inaccessible data.
+如果值为0，表示线程试图读取不可访问的数据。
+If this value is 1, the thread attempted to write to an inaccessible address.
+如果值为1，表示线程试图写入不可访问的地址。
+If this value is 8, the thread causes a user-mode data execution prevention (DEP) violation.
+如果值为8，表示线程引起了一个用户模式的DEP违规。
+
+The second array element specifies the virtual address of the inaccessible data.
+数组的第二个元素指定了不可访问数据的虚拟地址。
+The third array element specifies the underlying NTSTATUS code that resulted in the exception.
+数组的第三个元素表示底层的NTSTATUS码引起的本次异常。
+
+ntdll::KiUserExceptionDispatcher*/
 VOID initExecptionCtx32(
     PEXCEPTION_RECORD32 ExceptionRecord, PWOW64_CONTEXT ContextRecord,
-    VexGuestX86State* gst,
+    VexGuestX86State* gst, DWORD eflags,
     DWORD ExceptionCode, DWORD ExceptionAddress, DWORD ExceptionFlags, DWORD NumberParameters, DWORD  nextExceptionRecord, 
     DWORD info0, DWORD info1, DWORD info2) {
     ExceptionRecord->ExceptionCode = ExceptionCode;
@@ -46,44 +70,11 @@ VOID initExecptionCtx32(
     ExceptionRecord->ExceptionRecord = nextExceptionRecord;
     ExceptionRecord->ExceptionAddress = ExceptionAddress;
     ExceptionRecord->NumberParameters = NumberParameters;
-    if (ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
-        /*
-        The first element of the array contains a read-write flag that indicates the type of operation that caused the access violation. 
-        数组的第一个元素包含了一个读写标志，表示引起访问违规的操作类型。
-        If this value is zero, the thread attempted to read the inaccessible data. 
-        如果这个值为0，表示线程试图读取不可访问的数据。
-        If this value is 1, the thread attempted to write to an inaccessible address. 
-        如果这个值为1，表示线程试图写入不可访问的地址。
-        If this value is 8, the thread causes a user-mode data execution prevention (DEP) violation.
-        如果这个值是8，表示线程线程引发了一个用户模式的DEP违规。
 
-        The second array element specifies the virtual address of the inaccessible data.
-        数组的第二个元素指定了不可访问数据的虚拟地址。
-        */
-        ExceptionRecord->ExceptionInformation[0] = info0;
-        ExceptionRecord->ExceptionInformation[1] = info1;
-        ExceptionRecord->ExceptionInformation[2] = info2;
-    }
-    else if (ExceptionCode == EXCEPTION_IN_PAGE_ERROR) {
-        /*
-        The first element of the array contains a read-write flag that indicates the type of operation that caused the access violation. 
-        数组的第一个元素包含了一个读写标志，用于表示引起访问违规的操作类型。
-        If this value is zero, the thread attempted to read the inaccessible data. 
-        如果值为0，表示线程试图读取不可访问的数据。
-        If this value is 1, the thread attempted to write to an inaccessible address. 
-        如果值为1，表示线程试图写入不可访问的地址。
-        If this value is 8, the thread causes a user-mode data execution prevention (DEP) violation.
-        如果值为8，表示线程引起了一个用户模式的DEP违规。
+    ExceptionRecord->ExceptionInformation[0] = info0;
+    ExceptionRecord->ExceptionInformation[1] = info1;
+    ExceptionRecord->ExceptionInformation[2] = info2;
 
-        The second array element specifies the virtual address of the inaccessible data.
-        数组的第二个元素指定了不可访问数据的虚拟地址。
-        The third array element specifies the underlying NTSTATUS code that resulted in the exception.
-        数组的第三个元素表示底层的NTSTATUS码引起的本次异常。
-        */
-        ExceptionRecord->ExceptionInformation[0] = info0;
-        ExceptionRecord->ExceptionInformation[1] = info1;
-        ExceptionRecord->ExceptionInformation[2] = info2;
-    }
     for (int i = 3; i < EXCEPTION_MAXIMUM_PARAMETERS; i++) { ExceptionRecord->ExceptionInformation[i] = 0; }
 
 
@@ -104,7 +95,7 @@ VOID initExecptionCtx32(
     ContextRecord->Eip = gst->guest_EIP;
     ContextRecord->SegCs = gst->guest_CS;
     
-    ContextRecord->EFlags = x86g_calculate_eflags_all(gst->guest_CC_OP, gst->guest_CC_DEP1, gst->guest_CC_DEP2, gst->guest_CC_NDEP);
+    ContextRecord->EFlags = eflags;
     ContextRecord->Esp = gst->guest_ESP;
     ContextRecord->SegSs = gst->guest_SS;
 
@@ -134,7 +125,7 @@ VOID initExecptionCtx32(
 //ntdll::KiUserExceptionDispatcher
 VOID initExecptionCtx64(
     PEXCEPTION_RECORD64 ExceptionRecord, PCONTEXT ContextRecord,
-    VexGuestAMD64State* gst,
+    VexGuestAMD64State* gst, DWORD64 rflags,
     DWORD ExceptionCode, DWORD64 ExceptionAddress, DWORD ExceptionFlags, DWORD NumberParameters, DWORD64  nextExceptionRecord,
     DWORD64 info0, DWORD64 info1, DWORD64 info2) {
 
@@ -143,16 +134,11 @@ VOID initExecptionCtx64(
     ExceptionRecord->ExceptionRecord = nextExceptionRecord;
     ExceptionRecord->ExceptionAddress = ExceptionAddress;
     ExceptionRecord->NumberParameters = NumberParameters;
-    if (ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
-        ExceptionRecord->ExceptionInformation[0] = info0;
-        ExceptionRecord->ExceptionInformation[1] = info1;
-        ExceptionRecord->ExceptionInformation[2] = info2;
-    }
-    else if (ExceptionCode == EXCEPTION_IN_PAGE_ERROR) {
-        ExceptionRecord->ExceptionInformation[0] = info0;
-        ExceptionRecord->ExceptionInformation[1] = info1;
-        ExceptionRecord->ExceptionInformation[2] = info2;
-    }
+
+    ExceptionRecord->ExceptionInformation[0] = info0;
+    ExceptionRecord->ExceptionInformation[1] = info1;
+    ExceptionRecord->ExceptionInformation[2] = info2;
+    
     for (int i = 3; i < EXCEPTION_MAXIMUM_PARAMETERS; i++) { ExceptionRecord->ExceptionInformation[i] = 0; }
 
     ContextRecord->MxCsr = x86g_create_mxcsr(gst->guest_SSEROUND);
@@ -163,7 +149,7 @@ VOID initExecptionCtx64(
     ContextRecord->SegFs = gst->guest_FS_CONST;
     ContextRecord->SegGs = gst->guest_GS_CONST;
     ContextRecord->SegSs = 0;
-    ContextRecord->EFlags = x86g_calculate_eflags_all(gst->guest_CC_OP, gst->guest_CC_DEP1, gst->guest_CC_DEP2, gst->guest_CC_NDEP);
+    ContextRecord->EFlags = rflags;
 
     ContextRecord->Rax = gst->guest_RAX;
     ContextRecord->Rcx = gst->guest_RCX;
@@ -208,20 +194,22 @@ VOID initExecptionCtx64(
 
 void TR::StateX86::cpu_exception(Expt::ExceptionBase const& e)
 {
+    std::cerr << "Error message:" << std::endl;
+    std::cerr << e << std::endl;
     UInt stack_size = sizeof(EXCEPTION_RECORD32) + sizeof(WOW64_CONTEXT);
-    UInt esp = regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::ESP) - 4;
-    regs.Ist_Put(X86_IR_OFFSET::ESP, esp - stack_size);
+    UInt sp_tmp = regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::ESP);
+    UInt esp = sp_tmp - 532;
 
 
-    PEXCEPTION_RECORD32 ExceptionRecord = (PEXCEPTION_RECORD32)(esp - sizeof(EXCEPTION_RECORD32));
-    PWOW64_CONTEXT ContextRecord = (PWOW64_CONTEXT)((UInt)ExceptionRecord - sizeof(WOW64_CONTEXT));
+    PWOW64_CONTEXT ContextRecord = (PWOW64_CONTEXT)(esp - sizeof(WOW64_CONTEXT));
+    PEXCEPTION_RECORD32 ExceptionRecord = (PEXCEPTION_RECORD32)(esp - sizeof(WOW64_CONTEXT) - sizeof(EXCEPTION_RECORD32));
     Addr64 gst;
-    DWORD ExceptionCode, ExceptionAddress, NumberParameters, nextExceptionRecord;
+    DWORD ExceptionCode, ExceptionAddress, ExceptionFlags, NumberParameters, nextExceptionRecord;
     DWORD info0, info1, info2;
 
-    switch ((Expt::ExceptionTag)e) {
+    switch (e.errTag()) {
     case Expt::GuestMem_read_err: {
-        gst = gsptr();
+        gst = getGSPTR();
         ExceptionCode = EXCEPTION_ACCESS_VIOLATION;
         ExceptionAddress = guest_start;
         NumberParameters = 0;
@@ -231,7 +219,7 @@ void TR::StateX86::cpu_exception(Expt::ExceptionBase const& e)
         info2 = 0;
     }
     case Expt::GuestMem_write_err: {
-        gst = gsptr();
+        gst = getGSPTR();
         ExceptionCode = EXCEPTION_ACCESS_VIOLATION;
         ExceptionAddress = guest_start;
         NumberParameters = 0;
@@ -241,7 +229,22 @@ void TR::StateX86::cpu_exception(Expt::ExceptionBase const& e)
         info2 = 0;
     }
     case Expt::GuestRuntime_exception: {
-
+        gst = getGSPTR();
+        switch (e.jkd()) {
+        case Ijk_SigTRAP:
+            ExceptionCode = EXCEPTION_BREAKPOINT;
+            ExceptionAddress = guest_start;
+            NumberParameters = 0;
+            nextExceptionRecord = 0;
+            info0 = 0;
+            info1 = 0;
+            info2 = 0;
+            break;
+        default:
+            set_status(Death);
+            return;
+        }
+        break;
     }
     default:
         set_status(Death);
@@ -250,18 +253,152 @@ void TR::StateX86::cpu_exception(Expt::ExceptionBase const& e)
 
 
     //std::cout << " SEH Exceptions at:" << std::hex << guest_start << " \nGoto handel:" << seh_exception_method << std::endl;
-
+    
+    Vns eflags = z3_x86g_calculate_eflags_all(regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::CC_OP), regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::CC_DEP1), regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::CC_DEP2), regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::CC_NDEP));
     dirty_call("initExecptionCtx32", initExecptionCtx32,
-        { },
+        { 
+            Vns(ExceptionRecord), Vns(ContextRecord), 
+            Vns(gst), eflags, 
+            Vns(ExceptionCode), Vns(ExceptionAddress), Vns(ExceptionFlags),Vns(NumberParameters), Vns(nextExceptionRecord),
+            Vns(info0), Vns(info1), Vns(info2) 
+        },
         Ity_I32);
 
+    regs.Ist_Put(X86_IR_OFFSET::ESP, esp - stack_size);
+    vex_push((Addr32)(ULong)ContextRecord);
+    vex_push((Addr32)(ULong)ExceptionRecord);
+
+    guest_start = 0x774F4200;
     set_status(Exception);
 
 }
 
 
+Vns TR::StateX86::get_teb()
+{
+    return dirty_call("x86g_use_seg_selector", extern_dealy_call((UChar*)x86g_use_seg_selector),
+        { regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::LDT), regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::GDT), regs.Iex_Get<Ity_I16>(X86_IR_OFFSET::FS).zext(16), Vns(m_ctx, 0ull) },
+        Ity_I32);
+}
 
 
+State_Tag TR::StateX86::Ijk_call(IRJumpKind kd)
+{
+    switch (kd) {
+    case Ijk_Sys_syscall: {
+        switch (info().gguest_system()) {
+        case linux:return Sys_syscall_linux();
+        case windows:return Sys_syscall_windows();
+        }
+        return Death;
+    }
+    case Ijk_NoDecode: {
+        //EA 09 60 47 77 33 00 00
+        if (info().gguest_system() == windows) {
+            if ((ULong)mem.Iex_Load<Ity_I64>(get_cpu_ip()) == 0x3377476009ea) {
+                return Sys_syscall_windows();
+            }
+            if ((UChar)mem.Iex_Load<Ity_I8>(get_cpu_ip()) == 0xf2) {
+                set_delta(1);
+                return Running;
+            }
+        }
+        std::cerr << "Error message: valgrind Ijk_NoDecode " << std::hex << get_cpu_ip() << std::endl;
+        return NoDecode;
+    }
+    case Ijk_SigILL:         /* current instruction synths SIGILL */
+    case Ijk_SigTRAP:        /* current instruction synths SIGTRAP */
+    case Ijk_SigSEGV:        /* current instruction synths SIGSEGV */
+    case Ijk_SigBUS:         /* current instruction synths SIGBUS */
+    case Ijk_SigFPE:         /* current instruction synths generic SIGFPE */
+    case Ijk_SigFPE_IntDiv:  /* current instruction synths SIGFPE - IntDiv */
+    case Ijk_SigFPE_IntOvf:  /* current instruction synths SIGFPE - IntOvf */
+    { throw Expt::RuntimeIrSig(guest_start, kd); }
+    default:
+        vex_printf("guest address: %p jmp kind: ", guest_start);
+        ppIRJumpKind(kd);
+        vex_printf("\n");
+    }
+    return Death;
+}
+
+State_Tag TR::StateX86::Sys_syscall_linux()
+{
+    Vns eax = regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::EAX);
+    Vns edi = regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::EDI);
+    Vns edx = regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::EDX);
+    Vns esi = regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::ESI);
+    return Death;
+}
+
+State_Tag TR::StateX86::Sys_syscall_windows()
+{
+    Vns eax = regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::EAX);
+    Vns edi = regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::EDI);
+    Vns edx = regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::EDX);
+    Vns esi = regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::ESI);
+
+    if (eax.real()) {//这就非常的烦
+        switch ((UShort)eax) {
+        case 0x19: {//ntdll_NtQueryInformationProcess
+            goto_ptr(vex_pop());
+            return Running;
+            break;
+        }
+        }
+    }
+    return Death;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+void TR::StateAMD64::cpu_exception(Expt::ExceptionBase const& e)
+{
+    exit(2);
+}
+
+State_Tag TR::StateAMD64::Ijk_call(IRJumpKind kd)
+{
+    switch (kd) {
+    case Ijk_Sys_syscall: {
+        switch (info().gguest_system()) {
+        case linux:return Sys_syscall_linux();
+        case windows:return Sys_syscall_windows();
+        }
+        return Death;
+    }
+    case Ijk_NoDecode: {
+        std::cerr << "Error message:" << std::hex << get_cpu_ip() << std::endl;
+        return NoDecode;
+    }
+    case Ijk_SigILL:         /* current instruction synths SIGILL */
+    case Ijk_SigTRAP:        /* current instruction synths SIGTRAP */
+    case Ijk_SigSEGV:        /* current instruction synths SIGSEGV */
+    case Ijk_SigBUS:         /* current instruction synths SIGBUS */
+    case Ijk_SigFPE:         /* current instruction synths generic SIGFPE */
+    case Ijk_SigFPE_IntDiv:  /* current instruction synths SIGFPE - IntDiv */
+    case Ijk_SigFPE_IntOvf:  /* current instruction synths SIGFPE - IntOvf */
+    { throw Expt::RuntimeIrSig(guest_start, kd); }
+    default:
+        vex_printf("guest address: %p . error jmp kind: ", guest_start);
+        ppIRJumpKind(kd);
+        vex_printf("\n");
+    }
+}
 
 State_Tag StateAMD64::Sys_syscall_linux() {
     Vns al = regs.Iex_Get<Ity_I8>(AMD64_IR_OFFSET::RAX);
@@ -357,5 +494,10 @@ State_Tag StateAMD64::Sys_syscall_linux() {
         vex_printf("system call: sys_ %d\n", (UChar)al);
     }
 
+    return Death;
+}
+
+State_Tag TR::StateAMD64::Sys_syscall_windows()
+{
     return Death;
 }

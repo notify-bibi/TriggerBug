@@ -7,6 +7,45 @@
 UInt gMaxThreadsNum();
 
 namespace TR {
+    template<typename ADDR>
+    class MEM;
+    template<unsigned int MAX_TMP>
+    class EmuEnvironment;
+    template<typename ADDR>
+    class StateMEM;
+    template<typename ADDR>
+    class State;
+    class TRsolver;
+
+    typedef enum :unsigned int {
+        NewState = 0,
+        Running,
+        Fork,
+        Death,
+        Exit,
+        NoDecode,
+        Exception,
+        Dirty_ret
+    }State_Tag;
+
+    typedef enum :UChar {
+        unknowSystem = 0b00,
+        linux,
+        windows
+    }GuestSystem;
+
+
+    typedef enum :ULong {
+        CF_None = 0,
+        CF_ppStmts = 1ull,
+        CF_traceJmp = 1ull << 1,
+        CF_traceState = 1ull << 2,
+        CF_TraceSymbolic = 1ull << 3,
+        CF_PassSigSEGV = 1ull << 4,
+    }TRControlFlags;
+
+}
+namespace TR {
 
     class vex_info;
     class vctx_base;
@@ -35,20 +74,26 @@ namespace TR {
         ULong m_traceflags;
         UInt  m_maxThreadsNum;
         IRConst m_bpt_code;
-        UInt m_IRoffset_IP;
+        UInt m_IRoffset_IP, m_IRoffset_SP;
 
         vex_info(VexArch guest, const char* filename);
     public:
         static void init_vta_chunk(VexTranslateArgs& vta_chunk, VexGuestExtents& vge_chunk, VexArch guest, ULong traceflags);
         void init_vta_chunk(VexTranslateArgs& vta_chunk, VexGuestExtents& vge_chunk) { init_vta_chunk(vta_chunk, vge_chunk, m_guest, m_traceflags); }
+        inline void set_system(GuestSystem s) { m_guest_system = s; }
         inline ULong getFlags() const { return m_traceflags; }
+        inline ULong setFlag(ULong f) { return m_traceflags |= f; }
+        inline ULong delFlag(ULong f) { return m_traceflags &= ~f; }
+        inline ULong setFlag(TRControlFlags f) { return m_traceflags |= f; }
+        inline ULong delFlag(TRControlFlags f) { return m_traceflags &= ~f; }
         IRConst const* softwareBptConst() const { return &m_bpt_code; };
         void softwareBptStore(UChar* dst) { memcpy(dst, &m_bpt_code.Ico.U8, IRConstTag2nb(m_bpt_code.tag)); };
         //必须保留一个virtual
         virtual UInt bit_wide() { VPANIC("??"); }
         static UInt gMaxThreadsNum();
         static IRConst gsoftwareBpt(VexArch guest);
-        static UInt gRegsIpOffset(VexArch guest);
+        static Int gRegsIpOffset(VexArch guest);
+        static Int gRegsSPOffset(VexArch guest);
         inline const char* gbin() const { return m_bin; }
         VexRegisterUpdates gRegisterUpdates() const { return m_iropt_register_updates_default; };
         inline VexArch gguest()const { return m_guest; }
@@ -58,6 +103,7 @@ namespace TR {
         inline UInt gmax_threads_num() const { return m_maxThreadsNum; }
         inline ULong gtraceflags() const { return m_traceflags; }
         inline UInt gRegsIpOffset() const { return m_IRoffset_IP; }
+        inline UInt gRegsSpOffset() const { return m_IRoffset_SP; }
 
         inline operator vex_context<Addr32>& () const { return *reinterpret_cast <vex_context<Addr32>*>(const_cast<vex_info*>(this)); };
         inline operator vex_context<Addr64>& () const { return *reinterpret_cast <vex_context<Addr64>*>(const_cast<vex_info*>(this)); };
@@ -102,10 +148,10 @@ namespace TR {
         vex_context(vex_context const&) = delete;
         void operator = (vex_context const&) = delete;
         void set_top_state(State<ADDR>* s) { vassert(!m_top_state); m_top_state = s; }
+        //backpoint add
+        void hook_add(State<ADDR>&state, ADDR addr, State_Tag(*_func)(State<ADDR>&), TRControlFlags cflag);
     public:
         vex_context(VexArch guest, const char* filename) :vctx_base(guest, filename), m_top_state(nullptr) {};
-        //backpoint add
-        void hook_add(ADDR addr, State_Tag(*_func)(State<ADDR>*), TRControlFlags cflag);
 
         bool get_hook(Hook_struct& hs, ADDR addr);
 

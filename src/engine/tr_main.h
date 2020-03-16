@@ -25,49 +25,32 @@ namespace TR {
         StateX86(vex_context<Addr32>& vex_info, Addr32 gse, Bool _need_record) :State(vex_info, gse, _need_record) {};
 
 
+
+        State_Tag Sys_syscall_linux();
+        State_Tag Sys_syscall_windows();
+        State_Tag Ijk_call(IRJumpKind kd) override;
         void cpu_exception(Expt::ExceptionBase const& e) override;
-
-        State_Tag Ijk_call(IRJumpKind kd) override {
-            switch (kd) {
-            case Ijk_Sys_syscall: {
-                switch (info().gguest_system()) {
-                case linux:return Sys_syscall_linux();
-                }
-                return Death;
-            }
-            case Ijk_NoDecode:  return NoDecode;
-            case Ijk_SigILL:         /* current instruction synths SIGILL */
-            case Ijk_SigTRAP:        /* current instruction synths SIGTRAP */
-            case Ijk_SigSEGV:        /* current instruction synths SIGSEGV */
-            case Ijk_SigBUS:         /* current instruction synths SIGBUS */
-            case Ijk_SigFPE:         /* current instruction synths generic SIGFPE */
-            case Ijk_SigFPE_IntDiv:  /* current instruction synths SIGFPE - IntDiv */
-            case Ijk_SigFPE_IntOvf:  /* current instruction synths SIGFPE - IntOvf */
-            { throw Expt::RuntimeIrSig(guest_start, kd); }
-            default:
-                vex_printf("guest address: %p jmp kind: ", guest_start);
-                ppIRJumpKind(kd);
-                vex_printf("\n");
-            }
-            return Death;
-        }
-
-        State_Tag Sys_syscall_linux() {
-            UChar rax = regs.Iex_Get<Ity_I64>(X86_IR_OFFSET::EAX);
-            ULong rdi = regs.Iex_Get<Ity_I64>(X86_IR_OFFSET::EDI);
-            ULong rdx = regs.Iex_Get<Ity_I64>(X86_IR_OFFSET::EDX);
-            ULong rsi = regs.Iex_Get<Ity_I64>(X86_IR_OFFSET::ESI);
-            return Death;
-        }
 
         Kernel* ForkState(Addr32 ges) override { return new StateX86(this, ges); };
         //Thread Environment Block
-        Vns get_teb() override {
-            return dirty_call("x86g_use_seg_selector", extern_dealy_call((UChar*)x86g_use_seg_selector),
-                { regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::LDT), regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::GDT), regs.Iex_Get<Ity_I16>(X86_IR_OFFSET::FS).zext(16), Vns(m_ctx, 0ull) },
-                Ity_I32);
-        }
+        Vns get_teb() override;
     };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
     class StateAMD64 : public State<Addr64> {
@@ -84,46 +67,11 @@ namespace TR {
         };
 
 
-        void cpu_exception(Expt::ExceptionBase const& e) override {
-            UInt seh_addr = get_teb();
-            Vns seh = mem.Iex_Load<Ity_I64>(seh_addr);
-            Vns next = mem.Iex_Load<Ity_I64>(seh);
-            Vns seh_exception_method = mem.Iex_Load<Ity_I64>(seh + 8);
-            set_status(Exception);
-            std::cout << " SEH Exceptions at:" << std::hex << guest_start << " \nGoto handel:" << seh_exception_method << std::endl;
-            guest_start = seh_exception_method;
-
-            /*  esp & ebp  不正确的esp*/
-            regs.Ist_Put(AMD64_IR_OFFSET::RSP, seh);
-
-            exit(2);
-        }
-
-        State_Tag Ijk_call(IRJumpKind kd) override {
-            switch (kd) {
-            case Ijk_Sys_syscall: {
-                switch (info().gguest_system()) {
-                case linux:return Sys_syscall_linux();
-                }
-                return Death;
-            }
-            case Ijk_NoDecode:  return NoDecode;
-            case Ijk_SigILL:         /* current instruction synths SIGILL */
-            case Ijk_SigTRAP:        /* current instruction synths SIGTRAP */
-            case Ijk_SigSEGV:        /* current instruction synths SIGSEGV */
-            case Ijk_SigBUS:         /* current instruction synths SIGBUS */
-            case Ijk_SigFPE:         /* current instruction synths generic SIGFPE */
-            case Ijk_SigFPE_IntDiv:  /* current instruction synths SIGFPE - IntDiv */
-            case Ijk_SigFPE_IntOvf:  /* current instruction synths SIGFPE - IntOvf */
-            { throw Expt::RuntimeIrSig(guest_start, kd); }
-            default:
-                vex_printf("guest address: %p . error jmp kind: ", guest_start);
-                ppIRJumpKind(kd);
-                vex_printf("\n");
-            }
-        }
-
         State_Tag Sys_syscall_linux();
+        State_Tag Sys_syscall_windows();
+        State_Tag Ijk_call(IRJumpKind kd) override;
+        void cpu_exception(Expt::ExceptionBase const& e) override;
+
         virtual Kernel* ForkState(Addr64 ges) override { return new StateAMD64(this, ges); };
         virtual bool  StateCompression(State const& next) override { return true; }
         virtual void  StateCompressMkSymbol(State const& newState) override {  };
@@ -144,6 +92,13 @@ namespace SP {
         inline void setFlag(TRControlFlags t) { *(ULong*)&trtraceflags |= t; }
         inline void unsetFlag(TRControlFlags t) { *(ULong*)&trtraceflags &= ~t; };
         inline TRControlFlags gtrtraceflags() { return trtraceflags; }
+        void pp_call_space(){
+            UInt size = m_InvokStack.size();
+            printf("[%-2d:%2d]", size, mem.get_user());
+            for (UInt i = 0; i < size; i++) {
+                vex_printf("  ");
+            }
+        }
     public:
         StatePrinter(vex_context<ADDR>& vex_info, ADDR gse, Bool _need_record) :
             TC(vex_info, gse, _need_record),
@@ -153,9 +108,11 @@ namespace SP {
 
 
         void   traceStart() override {
-            if (getFlag(CF_traceState))
+            if (getFlag(CF_traceState)) {
+                pp_call_space();
                 std::cout << "\n+++++++++++++++ Thread ID: " << GetCurrentThreadId() << "  address: " << std::hex << guest_start << "  Started +++++++++++++++\n" << std::endl;
-        };
+            };
+        }
 
         void   traceFinish() override {
             if (getFlag(CF_traceState)) {
@@ -172,6 +129,7 @@ namespace SP {
 
         void   traceIRStmtEnd(IRStmt* s) override {
             if (getFlag(CF_ppStmts)) {
+                pp_call_space();
                 if (s->tag == Ist_WrTmp) {
                     UInt tmp = s->Ist.WrTmp.tmp;
                     vex_printf("t%u = ", tmp);
@@ -188,6 +146,7 @@ namespace SP {
 
         void   traceIRSB(IRSB* bb) override {
             if (getFlag(CF_traceJmp)) {
+                pp_call_space();
                 vex_printf("Jmp: %llx \n", guest_start);
             }
         };

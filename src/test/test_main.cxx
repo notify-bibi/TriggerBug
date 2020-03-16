@@ -147,7 +147,40 @@ Vns flag_limit(Vns& flag) {
 #include "test/test.hpp"
 #include "test/solve/creakme.h"
 
+
+bool test_ir_dirty() {
+    ctx32 v(VexArchX86, "");
+    v.set_system(windows);
+    v.setFlag(CF_traceJmp);
+    v.setFlag(CF_ppStmts);
+
+
+    SP::X86 state(v, 0, True);
+    state.mem.map(0x1000, 0x2000);
+    state.mem.map(0x5000, 0x5000);
+    state.mem.Ist_Store(0x1000, 0xcc);
+
+    state.regs.Ist_Put(X86_IR_OFFSET::ESP, 0x8000);
+    state.regs.Ist_Put(X86_IR_OFFSET::EIP, 0x1000);
+    UInt esp = 0x8000;
+
+    PWOW64_CONTEXT ContextRecord = (PWOW64_CONTEXT)(esp - sizeof(WOW64_CONTEXT));
+    PEXCEPTION_RECORD32 ExceptionRecord = (PEXCEPTION_RECORD32)(esp - sizeof(WOW64_CONTEXT) - sizeof(EXCEPTION_RECORD32));
+
+
+    state.start(0x1000);
+
+
+    vassert((UInt)state.vex_stack_get(1) == (Addr32)(ULong)ContextRecord);
+    vassert((UInt)state.vex_stack_get(2) == EXCEPTION_BREAKPOINT);
+    vassert((UInt)state.vex_stack_get(22 + offsetof(WOW64_CONTEXT, Esp) / 4) == esp);
+
+
+
+}
+
 int main() {
+    test_ir_dirty();
     vassert(creakme());
     vassert(test_cmpress());
 

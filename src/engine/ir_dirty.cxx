@@ -43,62 +43,30 @@ public:
         m_front = false;
     }
 
-    void set_clear(Addr64 srs, Addr64 sa, Addr64 grmd) {
+    void set_clear(Addr64 srs, Addr64 sa) {
         m_stack_reservve_size = srs;
         m_stack_addr = sa;
+    }
+
+    template<int MAX>
+    void mount_regs(Register<MAX>* s, Addr64 grmd) {
         m_guest_regs_map_addr = grmd;
+        PAGE** p = get_pointer_of_mem_page(grmd);
+        p[0]->mount_regs(s);
     }
 
    ~DMEM()
     {
+       PAGE** p = get_pointer_of_mem_page(m_guest_regs_map_addr);
+       p[0]->mount_regs((TR::Register<2333>*)nullptr);
+       p[0]->set_pad(0xcc);
        if(m_front){
            CR3[0] = nullptr;
        }else{
            unmap(m_stack_addr, m_stack_reservve_size);
-           unmap(m_guest_regs_map_addr, REGISTER_LEN);
        }
     };
 
-    void store_regs_to_mem(Addr64 guest_regs_map_addr, Register<REGISTER_LEN> &regs_in, IRDirty* d) {
-        m_guest_regs_map_addr = guest_regs_map_addr;
-        for (Int i = 0; i < d->nFxState; i++) {
-            switch (d->fxState[i].fx) {
-            case Ifx_None: continue;
-            case Ifx_Modify:
-            case Ifx_Read: { 
-                Ist_Store(m_guest_regs_map_addr + (UInt)d->fxState[i].offset, regs_in.Iex_Get(d->fxState[i].offset, d->fxState[i].size));
-                if (d->fxState[i].nRepeats > 0) {
-                    for (UInt repeat = 0; repeat < d->fxState[i].nRepeats; repeat++) {
-                        Ist_Store(m_guest_regs_map_addr + (UInt)d->fxState[i].offset + (UInt)d->fxState[i].repeatLen * repeat, regs_in.Iex_Get(d->fxState[i].offset, d->fxState[i].size));
-                    }
-                }
-                break; 
-            }
-            case Ifx_Write: break;
-            default: vpanic("ppIREffect");
-            }
-        }
-    }
-
-    void put_regs_from_mem(Register<REGISTER_LEN>& regs_out, IRDirty* d) {
-        for (Int i = 0; i < d->nFxState; i++) {
-            switch (d->fxState[i].fx) {
-            case Ifx_None: continue;
-            case Ifx_Modify:
-            case Ifx_Write: {
-                regs_out.Ist_Put(d->fxState[i].offset, Iex_Load(m_guest_regs_map_addr + (UInt)d->fxState[i].offset, (IRType)(d->fxState[i].size << 3)));
-                if (d->fxState[i].nRepeats > 0) {
-                    for (UInt repeat = 0; repeat < d->fxState[i].nRepeats; repeat++) {
-                        regs_out.Ist_Put(d->fxState[i].offset, Iex_Load(m_guest_regs_map_addr + (UInt)d->fxState[i].offset + (UInt)d->fxState[i].repeatLen * repeat, (IRType)(d->fxState[i].size << 3)));
-                    }
-                }
-                break;
-            }
-            case Ifx_Read: break;
-            default: vpanic("ppIREffect");
-            }
-        }
-    }
 };
 
 
@@ -155,8 +123,8 @@ class DState {
         m_vex_info(fork.m_vex_info)
     {
         mem.map(m_stack_addr, m_stack_reservve_size);
-        mem.map(m_guest_regs_map_addr, 1000);
-        mem.set_clear(m_stack_reservve_size, m_stack_addr, m_guest_regs_map_addr);
+        mem.map(m_guest_regs_map_addr, 0x1000);
+        mem.set_clear(m_stack_reservve_size, m_stack_addr);
     };
 
     //fork
@@ -186,8 +154,8 @@ public:
         m_vex_info(info)
     {
         mem.map(m_stack_addr, m_stack_reservve_size);
-        mem.map(m_guest_regs_map_addr, 1000);
-        mem.set_clear(m_stack_reservve_size, m_stack_addr, m_guest_regs_map_addr);
+        mem.map(m_guest_regs_map_addr, 0x1000);
+        mem.set_clear(m_stack_reservve_size, m_stack_addr);
     };
 
 
@@ -215,8 +183,6 @@ public:
     inline operator z3::vcontext& () { return m_ctx; }
     inline operator Z3_context() const { return m_ctx; }
 
-    virtual void     store_regs_to_mem(IRDirty* dirty) { mem.store_regs_to_mem(m_guest_regs_map_addr, regs, dirty); }
-    virtual void     put_regs_from_mem(IRDirty* dirty) { mem.put_regs_from_mem(regs, dirty); }
     virtual Vns      base_tIRExpr(IRExpr* e) { return m_base->tIRExpr(e).translate(m_ctx); }
     virtual IRSB*    translate(
         /*MOD*/ VexTranslateArgs* vta,
@@ -228,7 +194,7 @@ public:
     }
     void             init_param(IRCallee* cee, IRExpr** exp_args) {
         set_ip((UChar*)cee->addr);
-        Addr64 stack_ret = m_stack_addr + m_stack_reservve_size - 0x8ull * 6;
+        Addr64 stack_ret = m_stack_addr + m_stack_reservve_size - 0x8ull * MAX_GUEST_DIRTY_CALL_PARARM_NUM;
         regs.Ist_Put(AMD64_IR_OFFSET::RAX, -1ll);
         regs.Ist_Put(AMD64_IR_OFFSET::RSP, stack_ret);
         regs.Ist_Put(AMD64_IR_OFFSET::RBP, 0x233ull);
@@ -237,20 +203,22 @@ public:
         {
             //x64 fastcall 
             const UInt assembly_args[] = { AMD64_IR_OFFSET::RCX, AMD64_IR_OFFSET::RDX, AMD64_IR_OFFSET::R8, AMD64_IR_OFFSET::R9 };
-            for (UInt i = 0; exp_args[i] != NULL; i++) {
+            UInt i;
+            for ( i = 0; exp_args[i] != NULL; i++) {
                 if (i >= (sizeof(assembly_args) / sizeof(UInt))) {
-                    mem.Ist_Store(stack_ret - ((ULong)i << 3), base_tIRExpr(exp_args[i]));
+                    mem.Ist_Store(stack_ret + (ULong)(i << 3), base_tIRExpr(exp_args[i]));
                 }
                 else {
                     regs.Ist_Put(assembly_args[i], base_tIRExpr(exp_args[i]));
                 }
             };
+            vassert(i <= MAX_GUEST_DIRTY_CALL_PARARM_NUM);
         };
     }
 
     void             init_param(IRCallee* cee, const std::initializer_list<Vns>& exp_args) {
         set_ip((UChar*)cee->addr);
-        Addr64 stack_ret = m_stack_addr + m_stack_reservve_size - 0x8ull * 6;
+        Addr64 stack_ret = m_stack_addr + m_stack_reservve_size - 0x8ull * MAX_GUEST_DIRTY_CALL_PARARM_NUM;
         regs.Ist_Put(AMD64_IR_OFFSET::RAX, -1ll);
         regs.Ist_Put(AMD64_IR_OFFSET::RSP, stack_ret);
         regs.Ist_Put(AMD64_IR_OFFSET::RBP, 0x233ull);
@@ -260,14 +228,16 @@ public:
             //x64 fastcall 
             const UInt assembly_args[] = { AMD64_IR_OFFSET::RCX, AMD64_IR_OFFSET::RDX, AMD64_IR_OFFSET::R8, AMD64_IR_OFFSET::R9 };
             auto v = exp_args.begin();
-            for (UInt i = 0; i != exp_args.size(); i++, v++) {
+            UInt i;
+            for (i = 0; i != exp_args.size(); i++, v++) {
                 if (i >= (sizeof(assembly_args) / sizeof(UInt))) {
-                    mem.Ist_Store(stack_ret - ((ULong)i << 3), *v);
+                    mem.Ist_Store(stack_ret + (ULong)(i << 3), *v);
                 }
                 else {
                     regs.Ist_Put(assembly_args[i], *v);
                 }
             };
+            vassert(i <= MAX_GUEST_DIRTY_CALL_PARARM_NUM);
         };
     }
 
@@ -289,9 +259,7 @@ public:
             });
     }
     void            dirty_run(IRDirty* dirty) {
-        m_dctx->store_regs_to_mem(dirty);
         m_dctx->dirty_ccall(dirty->cee, dirty->args);
-        m_dctx->put_regs_from_mem(dirty);
     }
     Vns            dirty_call(IRCallee* cee, IRExpr** exp_args, IRType ty) {
         getDirtyVexCtx();
@@ -313,8 +281,8 @@ public:
     }
 
     Vns vex_pop() {
-        Vns sp = regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::RSP) + 0x8ull;
-        regs.Ist_Put(AMD64_IR_OFFSET::RSP, sp);
+        Vns sp = regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::RSP) ;
+        regs.Ist_Put(AMD64_IR_OFFSET::RSP, sp + 0x8ull);
         return mem.Iex_Load(sp, sp);
     }
 
@@ -342,7 +310,7 @@ private:
 
         while (true) {
             if (reinterpret_cast<Addr64>(m_host_addr) == vex_ret_addr) {
-                Addr64 stack_ret = m_stack_addr + m_stack_reservve_size - 0x8ull * 6;
+                Addr64 stack_ret = m_stack_addr + m_stack_reservve_size - 0x8ull * MAX_GUEST_DIRTY_CALL_PARARM_NUM;
                 Vns rsp = regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::RSP);
                 if (rsp.real()) {
                     vassert((ULong)rsp == stack_ret);
@@ -434,6 +402,14 @@ private:
                         goto EXIT;
                     };
                     m_host_addr = (UChar*)s->Ist.IMark.addr;
+                    //windows dealy call ldt 
+                    //00007FFAF6695BCC FF 25 F6 94 1C 00    jmp         qword ptr [00007FFAF685F0C8h]  
+                    if (((UShort*)m_host_addr)[0] == 0x25FF) {
+                        vassert(irsb->jumpkind == Ijk_Boring);
+                        UInt offset = *(UInt*)(&m_host_addr[2]) + 6;
+                        m_host_addr = ((UChar**)(&m_host_addr[offset]))[0];
+                        goto For_Begin;
+                    }
                     break;
                 };
                 case Ist_AbiHint: { m_InvokStack.push(tIRExpr(s->Ist.AbiHint.nia), tIRExpr(s->Ist.AbiHint.base)); break; }
@@ -505,7 +481,9 @@ private:
             }
 
             switch (irsb->jumpkind) {
-            case Ijk_Boring:        break;
+            case Ijk_Boring: {
+                break;
+            }
             case Ijk_Call:          break;
             case Ijk_Ret: {
                 m_InvokStack.pop();
@@ -586,7 +564,7 @@ public:
         }
         catch (Expt::ExceptionBase & error) {
             std::cout << "dirty err :: " << std::endl;
-            switch ((Expt::ExceptionTag)error) {
+            switch (error.errTag()) {
             case Expt::GuestMem_read_err:
             case Expt::GuestMem_write_err: {
                 std::cout << "Usage issues or simulation software problems.\nError message:" << std::endl;
@@ -620,11 +598,11 @@ class VexIRDirty :public DState {
     State<ADDR>& m_state;
 
 public:
-    VexIRDirty(State<ADDR>& state) :DState(state.info(), state.m_ctx, state.solv, state.mem), m_state(state) { }
+    VexIRDirty(State<ADDR>& state) :DState(state.info(), state.m_ctx, state.solv, state.mem), m_state(state) { 
+       mem.mount_regs(&m_state.regs, m_guest_regs_map_addr);
+    }
     ~VexIRDirty(){  }
 
-    virtual void     store_regs_to_mem(IRDirty* dirty) override { mem.store_regs_to_mem(m_guest_regs_map_addr, m_state.regs, dirty); }
-    virtual void     put_regs_from_mem(IRDirty* dirty) override { mem.put_regs_from_mem(m_state.regs, dirty); }
     virtual Vns      base_tIRExpr(IRExpr* e) override { return m_state.tIRExpr(e); }
 
 };
@@ -635,8 +613,6 @@ class DStateIRDirty :public DState {
 
     ~DStateIRDirty() {  }
 
-    virtual void     store_regs_to_mem(IRDirty* dirty) override { mem.store_regs_to_mem(m_guest_regs_map_addr, m_state.regs, dirty); }
-    virtual void     put_regs_from_mem(IRDirty* dirty) override { mem.put_regs_from_mem(m_state.regs, dirty); }
     virtual Vns      base_tIRExpr(IRExpr* e) override { return m_state.tIRExpr(e); }
     virtual IRSB*    translate(
         /*MOD*/ VexTranslateArgs* vta,
@@ -647,7 +623,9 @@ class DStateIRDirty :public DState {
         return LibVEX_FrontEnd(vta, res, pxControl, pap);
     }
 public:
-    DStateIRDirty(DState& state) :DState(state.m_vex_info, state.m_ctx, state.m_solv, state.mem), m_state(state) { }
+    DStateIRDirty(DState& state) :DState(state.m_vex_info, state.m_ctx, state.m_solv, state.mem), m_state(state) { 
+        //mem.mount_regs(&m_state.regs, m_guest_regs_map_addr);
+    }
 };
 
 DState* mk_DStateIRDirty(DState *s){
@@ -977,7 +955,7 @@ void dirty_ccall(DirtyCtx dctx, IRCallee* cee, IRExpr** args) {
 template<typename ADDR>
 void dirty_call_np(DirtyCtx dctx, const HChar* name, void* func, const std::initializer_list<Vns>& parms) {
     VexIRDirty<ADDR>* d = (VexIRDirty<ADDR>*)dctx;
-    IRCallee cee = { parms.size() , name, func, -1ull };
+    IRCallee cee = { (Int)parms.size() , name, func, 0xffffffff };
     vexSetAllocModeTEMP_and_save_curr();
     d->init_param(&cee, parms);
     d->start();
@@ -986,9 +964,7 @@ void dirty_call_np(DirtyCtx dctx, const HChar* name, void* func, const std::init
 template<typename ADDR>
 void dirty_run(DirtyCtx dctx, IRDirty* dirty) {
     VexIRDirty<ADDR>* d = (VexIRDirty<ADDR>*)dctx;
-    d->store_regs_to_mem(dirty);
     dirty_ccall<ADDR>(dctx, dirty->cee, dirty->args);
-    d->put_regs_from_mem(dirty);
 }
 
 template<typename ADDR>

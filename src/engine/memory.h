@@ -99,6 +99,13 @@ public:
     }
     inline  TR::Register<0x1000>* operator->() { return m_unit; }
     inline  operator TR::Register<0x1000>* () { return m_unit; }
+    template<int MAX>
+    void mount_regs(TR::Register<MAX>* s) {
+        if (m_is_pad) {
+            m_is_pad = false;
+        }
+        m_unit = (TR::Register<0x1000>*)s;
+    }
     inline void lock(Int& xchg_user) {
         xchg_user = 0;
         while (!xchg_user) { __asm__ __volatile("xchgb %b0,%1":"=r"(xchg_user) : "m"(m_user), "0"(xchg_user) : "memory"); }

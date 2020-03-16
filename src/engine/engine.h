@@ -21,7 +21,7 @@
 //#define RELEASE_OFFICIALLY
 
 //所有客户机寄存器的ir层的最大长度。建议>=100
-#define REGISTER_LEN 1000
+#define REGISTER_LEN 0x800
 
 //100条任意客户机指令所需要的最大 IR temp index。建议>=400
 #define MAX_IRTEMP 400
@@ -117,47 +117,6 @@ const char*  constStrIRJumpKind(IRJumpKind kind);
 #define MV32(addr,fromaddr) *(__m256i*)((addr))=(*(__m256i*)((fromaddr)))
 
 
-
-namespace TR {
-    template<typename ADDR>
-    class MEM;
-    template<unsigned int MAX_TMP>
-    class EmuEnvironment;
-    template<typename ADDR>
-    class StateMEM;
-    template<typename ADDR>
-    class State;
-    class TRsolver;
-
-    typedef enum :unsigned int {
-        NewState = 0,
-        Running,
-        Fork,
-        Death,
-        Exit,
-        NoDecode,
-        Exception,
-        Dirty_ret
-    }State_Tag;
-
-    typedef enum :UChar {
-        unknowSystem = 0b00,
-        linux,
-        windows
-    }GuestSystem;
-
-
-    typedef enum :ULong {
-        CF_None = 0,
-        CF_ppStmts = 1ull,
-        CF_traceJmp = 1ull << 1,
-        CF_traceState = 1ull << 2,
-        CF_TraceSymbolic = 1ull << 3,
-        CF_PassSigSEGV = 1ull << 4,
-    }TRControlFlags;
-
-}
-
 //class spin_mutex {
 //    std::atomic<bool> flag = ATOMIC_VAR_INIT(false);
 //public:
@@ -214,7 +173,7 @@ namespace z3 {
 }
 
 
-//注：intel编译器对四个及四个一下的switch case会自动使用if else结构。
+//注：intel编译器对四个及四个一下的switch case会自动使用if else结构。勿喷用switch效率低下
 
 
 
@@ -253,9 +212,10 @@ namespace Expt {
         ExceptionTag m_errorId;
         ExceptionBase(ExceptionTag t) :m_errorId(t) {}
     public:
-        operator ExceptionTag() const{ return m_errorId; };
+        ExceptionTag errTag() const { return m_errorId; };
         virtual std::string msg() const { printf("GG"); exit(1); };
         virtual Addr64 addr() const { return 0; }
+        virtual IRJumpKind jkd() const { return Ijk_INVALID; }
     };
 
     class GuestMem :public ExceptionBase {
@@ -370,14 +330,15 @@ namespace Expt {
         std::string msg() const override {
             assert(m_errorId == GuestRuntime_exception);
             char buffer[50];
-            snprintf(buffer, 50, "Gest : Sig(%s) at (%p) :::  ", constStrIRJumpKind(m_jk), m_sig_addr);
+            snprintf(buffer, 50, "Guest : Sig(%s) at (%p) :::  ", constStrIRJumpKind(m_jk), m_sig_addr);
             std::string ret;
             return ret.assign(buffer);
         }
+        virtual IRJumpKind jkd() const override { return m_jk; }
     };
 };
 
-inline static std::ostream& operator<<(std::ostream& out, Expt::ExceptionBase const& e) { out << e.msg(); return out; }
+inline std::ostream& operator << (std::ostream& out, const Expt::ExceptionBase & e) { return out << e.msg(); }
 
 
 #define VPANIC(...) { throw Expt::IRfailureExit(__FILE__ ,__LINE__, __VA_ARGS__); }

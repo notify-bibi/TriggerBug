@@ -25,6 +25,8 @@ Revision History:
 #include <wmmintrin.h> //AES(include nmmintrin.h)
 #include <immintrin.h> //AVX(include wmmintrin.h)
 #include <intrin.h>    //(include immintrin.h)
+#include <Windows.h>
+
 
 #define fastMask(n) ((ULong)((((int)(n))<64)?((1ull << ((int)(n))) - 1):-1ll))
 #define fastMaskReverse(N) (~fastMask(N))
@@ -114,6 +116,9 @@ public:
 
     template<typename T>
     inline Vns(z3::context const &ctx, T v) : Vns((Z3_context)ctx, v) {};
+
+    template<typename T>
+    explicit inline Vns(T v)  : Vns((Z3_context)0, v) {};
 
     template<typename T>
     inline Vns(Z3_context ctx, T v, UShort size) :

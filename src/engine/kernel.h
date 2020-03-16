@@ -22,9 +22,6 @@ private:
     Kernel(Kernel const& father_kernel) : m_ctx(), m_vex_info(father_kernel.m_vex_info) {};
 
 public:
-    /*Vns const& sys_read() {
-
-    }*/
 
 public:
     static Vns T_Unop(z3::context& m_ctx, IROp, Vns const&);

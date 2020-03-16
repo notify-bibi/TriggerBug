@@ -333,6 +333,32 @@ UInt State<ADDR>::getStr(std::stringstream& st, ADDR addr)
     return -1u;
 }
 
+template<typename ADDR>
+DirtyCtx TR::State<ADDR>::getDirtyVexCtx()
+{
+    if (!m_dirty_vex_mode) {
+        m_dirty_vex_mode = true;
+        m_dctx = dirty_context(this);
+    }
+    return m_dctx;
+}
+
+template<typename ADDR>
+Vns TR::State<ADDR>::dirty_call(IRCallee* cee, IRExpr** exp_args, IRType ty)
+{
+    getDirtyVexCtx();
+    dirty_ccall<ADDR>(m_dctx, cee, exp_args);
+    return dirty_result<ADDR>(m_dctx, ty);
+}
+
+template<typename ADDR>
+Vns TR::State<ADDR>::dirty_call(const HChar* name, void* func, std::initializer_list<Vns> parms, IRType ty)
+{
+    getDirtyVexCtx();
+    dirty_call_np<ADDR>(m_dctx, name, func, parms);
+    return dirty_result<ADDR>(m_dctx, ty);
+}
+
 
 void TRsolver::add_assert(Vns const& t_assert, Bool ToF)
 {
@@ -469,12 +495,12 @@ void State<ADDR>::read_mem_dump(const char  *filename)
         unsigned long long length;
         unsigned long long dataoffset;
     }buf;
+    if (!filename) return;
     FILE *infile;
     infile = fopen(filename, "rb");
     if (!infile) {
-        printf("%s, %s", filename, "not exit/n");
-        getchar();
-        exit(1);
+        if (filename[0] == 0) { return; }
+        std::cerr << filename << "not exit/n" << std::endl; return;
     }
     unsigned long long length, fp, err, name_start_offset, name_end_offset, need_write_size = 0, write_count = 0;
     fread(&length, 8, 1, infile);
@@ -568,13 +594,36 @@ inline Vns State<ADDR>::tIRExpr(IRExpr* e)
         assert(ix.real());
         return regs.Iex_Get(e->Iex.GetI.descr->base + (((UInt)(e->Iex.GetI.bias + (int)(ix))) % e->Iex.GetI.descr->nElems)*ty2length(e->Iex.GetI.descr->elemTy), e->Iex.GetI.descr->elemTy);
     };
-    case Iex_GSPTR: { return Vns(m_ctx, gsptr());  };
+    case Iex_GSPTR: { return Vns(m_ctx, getGSPTR());  };
     case Iex_VECRET:
     case Iex_Binder:
     default:
         vex_printf("tIRExpr error:  %d", e->tag);
         VPANIC("not support");
     }
+}
+
+template<>
+Vns TR::State<Addr64>::vex_pop()
+{
+    Vns sp = regs.Iex_Get<Ity_I64>(m_vctx.gRegsSpOffset());
+    regs.Ist_Put(m_vctx.gRegsSpOffset(), sp + 0x8ull);
+    return mem.Iex_Load(sp, Ity_I64);
+}
+
+template<>
+Vns TR::State<Addr32>::vex_pop()
+{
+    Vns sp = regs.Iex_Get<Ity_I32>(m_vctx.gRegsSpOffset());
+    regs.Ist_Put(m_vctx.gRegsSpOffset(), sp + 0x4u);
+    return mem.Iex_Load(sp, Ity_I32);
+}
+
+template<typename ADDR>
+Vns TR::State<ADDR>::vex_stack_get(UInt n)
+{
+    Vns p = regs.Iex_Get<(IRType)(sizeof(ADDR) << 3)>(m_vctx.gRegsSpOffset());
+    return mem.Iex_Load<(IRType)(sizeof(ADDR) << 3)>(p + (n * sizeof(ADDR)));
 }
 
 template <typename ADDR>
@@ -597,7 +646,7 @@ bool State<ADDR>::vex_start() {
         goto For_Begin_NO_Trans;
     deal_bkp:
         {
-            m_status = call_back_hook(hs);
+            m_status = _call_back_hook(hs);
             if (m_status != Running) {
                 goto EXIT;
             }
@@ -798,7 +847,9 @@ bool State<ADDR>::vex_start() {
             break;
         }
         case Ijk_Boring: break;
-        case Ijk_Call: break;
+        case Ijk_Call:
+            m_InvokStack.push(tIRExpr(irsb->next), regs.Iex_Get<(IRType)(sizeof(ADDR) << 3)>(m_vctx.gRegsSpOffset()));
+            break;
         case Ijk_SigTRAP: {
             //software backpoint
             if (m_vctx.get_hook(hs, guest_start)) { goto deal_bkp; }
@@ -821,7 +872,7 @@ bool State<ADDR>::vex_start() {
         if (m_status == Fork) {
 
             State<ADDR>* prv = newBranch;
-            Vns& guard = prv->solv.get_asserts()[0];
+            const Vns& guard = prv->solv.get_asserts()[0];
             if (next.real()) {
                 newBranch = (State<ADDR>*)mkState((ADDR)next);
                 newBranch->solv.add_assert(guard, False);
@@ -880,7 +931,7 @@ Begin_try:
     catch (Expt::ExceptionBase & error) {
         mem.set(nullptr);
         m_ir_temp = nullptr;
-        switch ((Expt::ExceptionTag)error) {
+        switch (error.errTag()) {
         case Expt::GuestRuntime_exception:
         case Expt::GuestMem_read_err:
         case Expt::GuestMem_write_err: {
@@ -888,20 +939,20 @@ Begin_try:
                 cpu_exception(error);
             }
             catch (Expt::ExceptionBase & cpu_exception_error) {
-                std::cout << "Usage issues or simulation software problems.\nError message:" << std::endl;
-                std::cout << error << std::endl;
+                std::cerr << "Usage issues or simulation software problems.\nError message:" << std::endl;
+                std::cerr << error << std::endl;
                 m_status = Death;
             }
             break;
         }
         case Expt::IR_failure_exit: {
-            std::cout << "Sorry This could be my design error. (BUG)\nError message:" << std::endl;
-            std::cout << error << std::endl;
+            std::cerr << "Sorry This could be my design error. (BUG)\nError message:" << std::endl;
+            std::cerr << error << std::endl;
             exit(1);
         }
         case Expt::Solver_no_solution: {
-            std::cout << " There is no solution to this problem. But this COULD BE my design error (BUG).\nError message:" << std::endl;
-            std::cout << error << std::endl;
+            std::cerr << " There is no solution to this problem. But this COULD BE my design error (BUG).\nError message:" << std::endl;
+            std::cerr << error << std::endl;
             exit(1);
         }
         };

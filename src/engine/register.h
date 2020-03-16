@@ -107,16 +107,22 @@ namespace TR {
         template <int maxlength>
         friend class Register;
     public:
-        /* SETFAST macro Setfast overstepping the bounds is not thread-safe(heap), so +32 solves the hidden bug !*/
-        __declspec(align(32)) UChar m_fastindex[maxlength + 32];
+        z3::vcontext& m_ctx;
 #ifdef USE_HASH_AST_MANAGER
         AstManager m_ast;
 #else
-        __declspec(align(8)) Z3_ast m_ast[maxlength];
+        __declspec(align(8)) Z3_ast *m_ast;
 #endif
-        z3::vcontext& m_ctx;
+        /* SETFAST macro Setfast overstepping the bounds is not thread-safe(heap), so +32 solves the hidden bug !*/
+        __declspec(align(32)) UChar m_fastindex[maxlength + 32];
+
+
+
         inline Symbolic(z3::vcontext& ctx) : m_ctx(ctx) {
             memset(m_fastindex, 0, sizeof(m_fastindex));
+#ifndef USE_HASH_AST_MANAGER
+            m_ast = new Z3_ast[maxlength];
+#endif
         }
         inline Symbolic(z3::vcontext& ctx, Symbolic<maxlength>* father) : m_ctx(ctx) {
             memcpy(m_fastindex, father->m_fastindex, maxlength);
@@ -164,6 +170,9 @@ namespace TR {
                     _pcur = ALIGN(_pcur - 8, 8) + 7;
                 }
             };
+#ifndef USE_HASH_AST_MANAGER
+            delete m_ast;
+#endif
         }
     };
 
@@ -311,9 +320,9 @@ namespace TR {
     class Register : protected RegisterStatic {
     public:
         z3::vcontext& m_ctx;
-        __declspec(align(32)) UChar m_bytes[maxlength];
         Symbolic<maxlength>* symbolic;
         Record<maxlength>* record;
+        __declspec(align(32)) UChar m_bytes[maxlength];
 
         inline Register(z3::vcontext& ctx, Bool _need_record) :
             m_ctx(ctx),
