@@ -207,7 +207,7 @@ public:
     inline Vns(z3::expr const &exp, UShort n) : 
         Vns(exp.ctx(), (Z3_ast)exp, n) {};
 
-    inline Vns(Z3_context ctx, IRConst *con) :
+    inline Vns(Z3_context ctx, IRConst const *con) :
         m_ctx(ctx),
         m_kind(REAL)
     {
@@ -241,8 +241,12 @@ public:
             return (IRConstTag)bitn;
         }
     }
-    inline Vns(z3::context const &ctx, IRConst *con) :
+    inline Vns(z3::context const &ctx, IRConst const *con) :
         Vns((Z3_context)ctx, con) {};
+
+
+    inline Vns(z3::context const& ctx, IRConst* con) :
+        Vns((Z3_context)ctx, (IRConst const*)con) {};
 
     inline Vns(Z3_context ctx, bool tf) :
         Vns(ctx, tf, 1) {};

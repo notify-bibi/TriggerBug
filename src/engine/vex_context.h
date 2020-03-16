@@ -63,8 +63,20 @@ namespace TR {
     }Hook_struct;
 
 
+    class sys_params {
+        std::hash_map<std::string, ULong> m_symbols;
+    public:
+        void set(const char*key, ULong value) {
+            m_symbols[key] = value;
+        }
+        ULong get(const char* key) { return m_symbols[key]; }
+    };
+
+
+
     class vex_info{
         friend class vctx_base;
+        sys_params m_params;
         const char* m_bin;
         VexArch	m_guest;
         Int   m_iropt_level;
@@ -78,6 +90,7 @@ namespace TR {
 
         vex_info(VexArch guest, const char* filename);
     public:
+        sys_params& param() { return m_params; }
         static void init_vta_chunk(VexTranslateArgs& vta_chunk, VexGuestExtents& vge_chunk, VexArch guest, ULong traceflags);
         void init_vta_chunk(VexTranslateArgs& vta_chunk, VexGuestExtents& vge_chunk) { init_vta_chunk(vta_chunk, vge_chunk, m_guest, m_traceflags); }
         inline void set_system(GuestSystem s) { m_guest_system = s; }

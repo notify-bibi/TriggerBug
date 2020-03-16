@@ -210,6 +210,8 @@ namespace Expt {
         friend class RuntimeIrSig;
 
         ExceptionTag m_errorId;
+        /*！！！！在这里下个断！！！！*/
+        /*！！！！add a backpoint here！！！！*/
         ExceptionBase(ExceptionTag t) :m_errorId(t) {}
     public:
         ExceptionTag errTag() const { return m_errorId; };

@@ -1,14 +1,8 @@
 
-
-#include "tr_main.h"
+#include "test.h"
 
 using namespace TR;
 
-
-//#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\TriggerBug-asong.xml"
-//#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\Roads\\Roads.xml"
-//#define INIFILENAME "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\puzzle\\puzzle.xml"
-//#define INIFILENAME "C:\\Users\\bibi\\Desktop\\reverse\\c++symbol\\childRE.xml"
 
 
 //
@@ -128,7 +122,7 @@ State_Tag success_ret3(State<Addr64>* s) {
 
 
 
-#include "engine/guest_helper.h"
+#include "engine/guest_layout_helper.h"
 
 Vns flag_limit(Vns& flag) {
     char flags_char[] = "@_-{}1:() ^";
@@ -143,72 +137,138 @@ Vns flag_limit(Vns& flag) {
 }
 
 
-#include "test/example.hpp"
-#include "test/test.hpp"
-#include "test/solve/creakme.h"
 
+State_Tag test_ir_dirty_hook(State<Addr32>& state) {
+    UInt esp = 0x8000 - 532;
+    PWOW64_CONTEXT ContextRecord = (PWOW64_CONTEXT)(esp - sizeof(WOW64_CONTEXT));
+    PEXCEPTION_RECORD32 ExceptionRecord = (PEXCEPTION_RECORD32)(esp - sizeof(WOW64_CONTEXT) - sizeof(EXCEPTION_RECORD32));
+
+    if ((UInt)state.vex_stack_get(1) != (Addr32)(ULong)ContextRecord) return Death;
+    if ((UInt)state.vex_stack_get(2) != EXCEPTION_BREAKPOINT) return Death;
+    if ((UInt)state.vex_stack_get(22 + offsetof(WOW64_CONTEXT, Esp) / 4) != 0x8000) return Death;
+    return Exit;
+}
 
 bool test_ir_dirty() {
     ctx32 v(VexArchX86, "");
     v.set_system(windows);
     v.setFlag(CF_traceJmp);
     v.setFlag(CF_ppStmts);
-
+    v.param().set("ntdll_KiUserExceptionDispatcher", 0x2000);
 
     SP::X86 state(v, 0, True);
     state.mem.map(0x1000, 0x2000);
     state.mem.map(0x5000, 0x5000);
+    state.hook_add(0x2000, test_ir_dirty_hook);
     state.mem.Ist_Store(0x1000, 0xcc);
 
     state.regs.Ist_Put(X86_IR_OFFSET::ESP, 0x8000);
     state.regs.Ist_Put(X86_IR_OFFSET::EIP, 0x1000);
-    UInt esp = 0x8000;
-
-    PWOW64_CONTEXT ContextRecord = (PWOW64_CONTEXT)(esp - sizeof(WOW64_CONTEXT));
-    PEXCEPTION_RECORD32 ExceptionRecord = (PEXCEPTION_RECORD32)(esp - sizeof(WOW64_CONTEXT) - sizeof(EXCEPTION_RECORD32));
+    state.regs.Ist_Put(X86_IR_OFFSET::CC_OP, 0x0);
 
 
     state.start(0x1000);
 
-
-    vassert((UInt)state.vex_stack_get(1) == (Addr32)(ULong)ContextRecord);
-    vassert((UInt)state.vex_stack_get(2) == EXCEPTION_BREAKPOINT);
-    vassert((UInt)state.vex_stack_get(22 + offsetof(WOW64_CONTEXT, Esp) / 4) == esp);
-
-
-
+    return state.status() == Exit;
 }
 
-int main() {
-    test_ir_dirty();
-    vassert(creakme());
-    vassert(test_cmpress());
+bool creakme();
+bool asong();
+bool creakme_exception_test
 
-    testz3();
-    //test_dirty_cmpress();
-    vex_context<Addr64> v(VexArchAMD64, "C:\\Users\\bibi\\Desktop\\TriggerBug\\PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.xml");
-    
-    
-    
+bool test_cmpress() {
+    ctx64 v(VexArchAMD64, "");
     SP::AMD64 state(v, 0, True);
+
+    state.mem.map(0x602000, 0x2000);
+    state.mem.map(0x5000, 0x5000);
+
+    for (int i = 0; i < 4; i++) {
+        SP::AMD64* s = (SP::AMD64*)(state.ForkState(20));
+        Vns f1 = s->m_ctx.bv_const("a1", 8);
+        Vns f2 = s->m_ctx.bv_const("a2", 8);
+        s->solv.add_assert(f1 > i);
+        s->solv.add_assert(f2 < i);
+        s->mem.Ist_Store(0x602080, 1000 + i);
+        s->mem.Ist_Store(0x602088, 1000 + i);
+        if (i == 3)
+            s->set_status(Death);
+    }
+    std::cout << state << std::endl;
+    for (int i = 4; i < 5; i++) {
+        SP::AMD64* s = (SP::AMD64*)(state.ForkState(32));
+        Vns f1 = s->m_ctx.bv_const("aj", 8);
+        Vns f2 = s->m_ctx.bv_const("ak", 8);
+        s->solv.add_assert(f1 > i);
+        s->solv.add_assert(f2 < i);
+        s->set_status((State_Tag)88);
+    }
+
+    std::cout << state << std::endl;
+    UInt i = 0;
+    for (auto s : state.branch) {
+        i += 1;
+        if (i <= 3) { continue; }
+        SP::AMD64* s2 = (SP::AMD64*)(s->ForkState(20));
+        s->set_status(Fork);
+        Vns f = s2->m_ctx.bv_const("b", 8);
+        s2->solv.add_assert(f > i);
+        s2->mem.Ist_Store(0x602080, 100 + i);
+        s2->mem.Ist_Store(0x602081, 100ull + i + (1ull << 63));
+        if (i <= 4)
+            continue;
+        s2->m_InvokStack.push(787, 87);
+    }
+
+
     std::cout << state << std::endl;
 
-    Kernel& k = state;
 
-    State<Addr64>* pp = k;
+    cmpr::Context64 c = state.cmprContext(20, NewState);
+    c.add_avoid(Death);
+    c.add_avoid((State_Tag)88);
+
+    state.compress(c);
+    std::cout << state << std::endl;
+    return true;
+}
 
 
-    test(state);
-    //state.start();
+bool test_dirty_cmpress() {
+    ctx64 v(VexArchAMD64, PROJECT_DIR"PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.xml");
+    SP::AMD64 state(v, 0, True);
 
-    //TRGL::VexGuestAMD64State reg(state);
-    ///*for (int i = 0; i < 38; i++) {
-    //    auto flag = state.mk_int_const(8);
-    //    auto ao3 = flag >= 1 && flag <= 128;
-    //    state.mem.Ist_Store(reg.guest_RDI + i, flag);
-    //    state.solv.add_assert(ao3);
-    //}*/
-    //state.hook_add(0x400CC0, success_ret3);
+
+    //extern
+    //    IRDirty* unsafeIRDirty_0_N(Int regparms, const HChar * name, void* addr,
+    //        IRExpr * *args);
+
+    ///* Similarly, make a zero-annotation dirty call which returns a value,
+    //   and assign that to the given temp. */
+    //extern
+    //    IRDirty* unsafeIRDirty_1_N(IRTemp dst,
+    //        Int regparms, const HChar * name, void* addr,
+    //        IRExpr * *args);
+
+
+    UChar bf[] = { 0xD9 ,0x74 ,0x24 ,0xE2 };
+    for (int i = 0; i < sizeof(bf); i++) {
+        state.mem.Ist_Store(state.get_cpu_ip() + i, bf[i]);
+    }
+    Vns f = state.m_ctx.bv_const("b", 64);
+    state.solv.add_assert(f != 0);
+    state.regs.Ist_Put(AMD64_IR_OFFSET::FPTAG, f);
+    state.start();
+
+    std::cout << state << std::endl;
+    return true;
+}
+int main() {
+    //testz3();
+    //IR_TEST(test_ir_dirty);
+    IR_TEST(creakme);
+    IR_TEST(asong);
+    IR_TEST(test_cmpress);
 
 }
 

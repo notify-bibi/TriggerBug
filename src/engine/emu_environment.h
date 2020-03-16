@@ -52,7 +52,8 @@ namespace TR {
             memcpy(m_pap.swap, &hs.original.m64_u8, hs.nbytes);
             m_pap.start_swap = 2;
             m_pap.guest_max_insns = 1;
-            set_guest_bytes_addr((UChar*)(m_pap.swap), (Addr64)virtual_addr);
+            m_vta_chunk.guest_bytes = (UChar*)(m_pap.swap);
+            m_vta_chunk.guest_bytes_addr = virtual_addr;
         }
 
         //host

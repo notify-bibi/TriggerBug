@@ -496,22 +496,23 @@ void State<ADDR>::read_mem_dump(const char  *filename)
         unsigned long long dataoffset;
     }buf;
     if (!filename) return;
-    FILE *infile;
-    infile = fopen(filename, "rb");
-    if (!infile) {
+    std::ifstream infile;
+    infile.open(filename, std::ios::binary);
+    if (!infile.is_open()) {
         if (filename[0] == 0) { return; }
         std::cerr << filename << "not exit/n" << std::endl; return;
     }
-    unsigned long long length, fp, err, name_start_offset, name_end_offset, need_write_size = 0, write_count = 0;
-    fread(&length, 8, 1, infile);
-    fseek(infile, 24, SEEK_SET);
+    unsigned long long length, err, name_start_offset, name_end_offset, need_write_size = 0, write_count = 0;
+    infile.seekg(0, std::ios::beg);
+    infile.read((char*)&length, 8);
+    infile.seekg(24, std::ios::beg);
     name_start_offset = length;
-    fread(&name_end_offset, 8, 1, infile);
+    infile.read((char*)&name_end_offset, 8);
     length /= 32;
-    char *name_buff = (char *)malloc(name_end_offset-name_start_offset);
-    fseek(infile, name_start_offset, SEEK_SET);
-    fread(name_buff, 1, name_end_offset - name_start_offset, infile);
-    fseek(infile, 0, SEEK_SET);
+    char* name_buff = (char*)malloc(name_end_offset - name_start_offset);
+    infile.seekg(name_start_offset, std::ios::beg);
+    infile.read(name_buff, name_end_offset - name_start_offset);
+    infile.seekg(0, std::ios::beg);
     char *name;
     printf("Initializing Virtual Memory\n/------------------------------+--------------------+--------------------+------------\\\n");
     printf("|              SN              |         VA         |         FOA        |     LEN    |\n");
@@ -523,11 +524,11 @@ void State<ADDR>::read_mem_dump(const char  *filename)
     QueryPerformanceFrequency(&freq);                                                                                
     QueryPerformanceCounter(&beginPerformanceCount);
     for (unsigned int segnum = 0; segnum < length; segnum++) {
-        fread(&buf, 32, 1, infile);
-        unsigned char *data = (unsigned char *)malloc(buf.length);
-        fp = ftell(infile);
-        fseek(infile, buf.dataoffset, SEEK_SET);
-        fread(data, buf.length, 1, infile);
+        infile.read((char*)&buf, 32);
+        char *data = (char *)malloc(buf.length);
+        std::streampos fp = infile.tellg();
+        infile.seekg(buf.dataoffset, std::ios::beg);
+        infile.read(data, buf.length);
         name = &name_buff[buf.nameoffset - name_start_offset];
         if (GET8(name)== 0x7265747369676572) {
 #if 0
@@ -539,9 +540,9 @@ void State<ADDR>::read_mem_dump(const char  *filename)
             if (err = mem.map(buf.address, buf.length))
                 printf("warning %s had maped before length: %llx\n", name, err);
             need_write_size += buf.length;
-            write_count += mem.write_bytes(buf.address, buf.length, data);
+            write_count += mem.write_bytes(buf.address, buf.length,(unsigned char*) data);
         }
-        fseek(infile, fp, SEEK_SET);
+        infile.seekg(fp);
         free(data);
     }
     printf("\\-------------------------------------------------------------------------------------/\n");
@@ -551,7 +552,7 @@ void State<ADDR>::read_mem_dump(const char  *filename)
         "Need to write    %16lf MByte.\n"
         "Actually written %16lf MByte\n", (double)(closePerformanceCount.QuadPart - beginPerformanceCount.QuadPart) / freq.QuadPart, ((double)need_write_size) / 0x100000,((double)write_count)/0x100000);
     free(name_buff);
-    fclose(infile);
+    infile.close();
 }
 
 template <typename ADDR>
@@ -620,7 +621,7 @@ Vns TR::State<Addr32>::vex_pop()
 }
 
 template<typename ADDR>
-Vns TR::State<ADDR>::vex_stack_get(UInt n)
+Vns TR::State<ADDR>::vex_stack_get(Int n)
 {
     Vns p = regs.Iex_Get<(IRType)(sizeof(ADDR) << 3)>(m_vctx.gRegsSpOffset());
     return mem.Iex_Load<(IRType)(sizeof(ADDR) << 3)>(p + (n * sizeof(ADDR)));
@@ -628,6 +629,10 @@ Vns TR::State<ADDR>::vex_stack_get(UInt n)
 
 template <typename ADDR>
 bool State<ADDR>::vex_start() {
+    if (m_delta) {
+        guest_start = guest_start + m_delta;
+        m_delta = 0;
+    }
     Hook_struct hs;
     EmuEnvironment<MAX_IRTEMP> emu(info(), mem);
     setTemp(emu);
@@ -847,9 +852,10 @@ bool State<ADDR>::vex_start() {
             break;
         }
         case Ijk_Boring: break;
-        case Ijk_Call:
+        case Ijk_Call: {
             m_InvokStack.push(tIRExpr(irsb->next), regs.Iex_Get<(IRType)(sizeof(ADDR) << 3)>(m_vctx.gRegsSpOffset()));
-            break;
+            break; 
+        }
         case Ijk_SigTRAP: {
             //software backpoint
             if (m_vctx.get_hook(hs, guest_start)) { goto deal_bkp; }

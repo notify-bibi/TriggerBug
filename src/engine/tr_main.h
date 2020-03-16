@@ -110,20 +110,20 @@ namespace SP {
         void   traceStart() override {
             if (getFlag(CF_traceState)) {
                 pp_call_space();
-                std::cout << "\n+++++++++++++++ Thread ID: " << GetCurrentThreadId() << "  address: " << std::hex << guest_start << "  Started +++++++++++++++\n" << std::endl;
+                std::cout << "\n+++++++++++++++ Thread ID: " << GetCurrentThreadId() << "  address: " << std::hex << get_cpu_ip() << "  Started +++++++++++++++\n" << std::endl;
             };
         }
 
         void   traceFinish() override {
             if (getFlag(CF_traceState)) {
                 if (status() == Fork) {
-                    vex_printf("Fork from: %p to:{ ", guest_start);
+                    vex_printf("Fork from: %p to:{ ", get_cpu_ip());
                     for (auto bc : branch) {
                         vex_printf(" %p", bc->get_state_ep());
                     }
-                    vex_printf(" };", guest_start);
+                    vex_printf(" };", get_cpu_ip());
                 }
-                std::cout << "\n+++++++++++++++ Thread ID: " << GetCurrentThreadId() << "  address: " << std::hex << guest_start << "  OVER +++++++++++++++\n" << std::endl;
+                std::cout << "\n+++++++++++++++ Thread ID: " << GetCurrentThreadId() << "  address: " << std::hex << get_cpu_ip() << "  OVER +++++++++++++++\n" << std::endl;
             }
         }
 
@@ -147,7 +147,7 @@ namespace SP {
         void   traceIRSB(IRSB* bb) override {
             if (getFlag(CF_traceJmp)) {
                 pp_call_space();
-                vex_printf("Jmp: %llx \n", guest_start);
+                vex_printf("Jmp: %llx \n", get_cpu_ip());
             }
         };
 

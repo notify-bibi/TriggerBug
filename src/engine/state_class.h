@@ -290,8 +290,9 @@ namespace TR {
         friend class StateAnalyzer<ADDR>;
         friend class StateCmprsInterface<ADDR>;
 
+    public:
         vex_context<ADDR>& m_vctx;
-    protected:
+    private:
         //当前state的入口点
         ADDR        guest_start_ep;
         //客户机state的eip（计数器eip）
@@ -369,7 +370,7 @@ namespace TR {
 
         Vns vex_pop();
         //sp[n*size_t]
-        Vns vex_stack_get(UInt n);
+        Vns vex_stack_get(Int n);
 
         //interface :
 

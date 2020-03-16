@@ -484,7 +484,10 @@ private:
             case Ijk_Boring: {
                 break;
             }
-            case Ijk_Call:          break;
+            case Ijk_Call:{
+                m_InvokStack.push(tIRExpr(irsb->next), regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::RSP));
+                break;
+            }
             case Ijk_Ret: {
                 m_InvokStack.pop();
                 break;
