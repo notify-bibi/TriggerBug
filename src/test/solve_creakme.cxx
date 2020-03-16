@@ -12,7 +12,7 @@ State_Tag hoo(State<Addr32> &s) {
 
 
 
-bool creakme_exception_test() {
+bool creakme() {
     ctx32 v(VexArchX86, PROJECT_DIR"PythonFrontEnd\\examples\\SCTF-creakMe\\creakme.exe.dump");
     v.set_system(windows);
     v.setFlag(CF_traceJmp);

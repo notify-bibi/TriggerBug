@@ -14,6 +14,13 @@ Revision History:
 
 using namespace TR;
 
+template<typename ADDR>
+z3::expr crypto_finder(const TR::State<ADDR>& s, Addr64 base, Z3_ast index);
+
+HMODULE hMod_crypto_analyzer = LoadLibraryA("libcrypto_analyzer.dll");
+z3::expr(*c_crypto_find32)(const TR::State<Addr32>&, Addr64, Z3_ast) = (z3::expr(*)(const TR::State<Addr32>&, Addr64, Z3_ast))GetProcAddress(hMod_crypto_analyzer, "??$crypto_finder@I@@YA?AVexpr@z3@@AEBV?$State@I@TR@@_KPEAU_Z3_ast@@@Z");
+z3::expr(*c_crypto_find64)(const TR::State<Addr64>&, Addr64, Z3_ast) = (z3::expr(*)(const TR::State<Addr64>&, Addr64, Z3_ast))GetProcAddress(hMod_crypto_analyzer, "??$crypto_finder@_K@@YA?AVexpr@z3@@AEBV?$State@_K@TR@@_KPEAU_Z3_ast@@@Z");
+
 static Bool TR_initdone;
 static LARGE_INTEGER   freq_global = { 0 };
 static LARGE_INTEGER   beginPerformanceCount_global = { 0 };
@@ -150,6 +157,14 @@ int eval_all(std::vector<Vns>& result, z3::solver& solv, Z3_ast nia) {
     }
 }
 
+template<typename ADDR>
+Z3_ast StateMEM<ADDR>::idx2Value(Addr64 base, Z3_ast idx)
+{
+    z3::expr result = m_state.m_vctx.idx2value(m_state, base, idx);
+    Z3_inc_ref(result.ctx(), result);
+    if (result) return result;
+    return crypto_finder(m_state, base, idx);
+}
 
 //DES等加密算法需要配置tactic策略才能求解出答案。
 //z3::params m_params(m_ctx);
@@ -760,7 +775,7 @@ bool State<ADDR>::vex_start() {
                 break;
             };
             case Ist_AbiHint: { //====== AbiHint(t4, 128, 0x400936:I64) ====== call 0xxxxxxx
-                m_InvokStack.push(tIRExpr(s->Ist.AbiHint.nia), tIRExpr(s->Ist.AbiHint.base));
+                m_InvokStack.push(tIRExpr(s->Ist.AbiHint.nia), regs.Iex_Get<(IRType)(sizeof(ADDR) << 3)>(m_vctx.gRegsBpOffset()));
                 break;
             }
             case Ist_PutI: {
@@ -853,7 +868,7 @@ bool State<ADDR>::vex_start() {
         }
         case Ijk_Boring: break;
         case Ijk_Call: {
-            m_InvokStack.push(tIRExpr(irsb->next), regs.Iex_Get<(IRType)(sizeof(ADDR) << 3)>(m_vctx.gRegsSpOffset()));
+            m_InvokStack.push(tIRExpr(irsb->next), regs.Iex_Get<(IRType)(sizeof(ADDR) << 3)>(m_vctx.gRegsBpOffset()));
             break; 
         }
         case Ijk_SigTRAP: {
@@ -1561,6 +1576,24 @@ none:
 unsigned int TRCurrentThreadId() {
     return __readgsdword(0x30);
 }
+
+
+template<>
+z3::expr crypto_finder(const TR::State<Addr32>& s, Addr64 base, Z3_ast index) {
+    if (c_crypto_find32) {
+        return c_crypto_find32(s, base, index);
+    }
+    return z3::expr(s);
+}
+
+template<>
+z3::expr crypto_finder(const TR::State<Addr64>& s, Addr64 base, Z3_ast index) {
+    if (c_crypto_find64) {
+        return c_crypto_find64(s, base, index);
+    }
+    return z3::expr(s);
+}
+
 
 #undef CODEDEF1
 #undef CODEDEF2

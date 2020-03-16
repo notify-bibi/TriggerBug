@@ -412,7 +412,7 @@ private:
                     }
                     break;
                 };
-                case Ist_AbiHint: { m_InvokStack.push(tIRExpr(s->Ist.AbiHint.nia), tIRExpr(s->Ist.AbiHint.base)); break; }
+                case Ist_AbiHint: { m_InvokStack.push(tIRExpr(s->Ist.AbiHint.nia), regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::RBP)); break; }
                 case Ist_PutI: {
                     auto ix = tIRExpr(s->Ist.PutI.details->ix);
                     vassert(ix.real());
@@ -485,7 +485,7 @@ private:
                 break;
             }
             case Ijk_Call:{
-                m_InvokStack.push(tIRExpr(irsb->next), regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::RSP));
+                m_InvokStack.push(tIRExpr(irsb->next), regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::RBP));
                 break;
             }
             case Ijk_Ret: {

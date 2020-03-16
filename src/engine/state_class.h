@@ -23,6 +23,9 @@ Revision History:
 #include "engine/compress.h"
 #include "engine/emu_environment.h"
 #include "z3_target_call/z3_target_call.h"
+#include "crypto_analyzer/crypto_analyzer.h"
+#include <deque>
+
 
 extern void* funcDict(void*);
 extern void Func_Map_Init();
@@ -138,8 +141,8 @@ namespace TR {
     //Functional programming
     template<typename ADDR>
     class InvocationStack {
-        std::stack<ADDR> guest_call_stack;
-        std::stack<ADDR> guest_stack;
+        std::deque<ADDR> guest_call_stack;
+        std::deque<ADDR> guest_stack;
     public:
         inline InvocationStack() {}
         inline InvocationStack(InvocationStack<ADDR> const& fsk) {
@@ -147,13 +150,13 @@ namespace TR {
             guest_stack = fsk.guest_stack;
         }
         inline void push(ADDR call_ptr, ADDR bp/*Õ»µ×*/) {
-            guest_call_stack.push(call_ptr);
-            guest_stack.push(bp);
+            guest_call_stack.push_back(call_ptr);
+            guest_stack.push_back(bp);
         }
         inline void pop() {
             if (!guest_call_stack.empty()) {
-                guest_call_stack.pop();
-                guest_stack.pop();
+                guest_call_stack.pop_back();
+                guest_stack.pop_back();
             }
         }
         template<typename ADDR> friend bool operator==(InvocationStack<ADDR> const& a, InvocationStack<ADDR> const& b);
@@ -162,12 +165,13 @@ namespace TR {
             guest_stack = b.guest_stack;
         }
 
+        void clear() { guest_call_stack.clear(); guest_stack.clear(); }
         bool empty() const { return guest_call_stack.empty(); }
         UInt size() const { return guest_call_stack.size(); }
     };
 
     template<typename ADDR>
-    static inline bool operator==(InvocationStack<ADDR> const& a, InvocationStack<ADDR> const& b) {
+    inline bool operator==(InvocationStack<ADDR> const& a, InvocationStack<ADDR> const& b) {
         return (a.guest_call_stack == b.guest_call_stack) && (a.guest_stack == b.guest_stack);
     }
 
@@ -271,12 +275,7 @@ namespace TR {
         StateMEM(TR::vctx_base &vb, State<ADDR>& state, z3::solver& so, z3::vcontext& ctx, Bool _need_record) :MEM(vb, so, ctx, _need_record), m_state(state) {}
         StateMEM(State<ADDR>& state, z3::solver& so, z3::vcontext& ctx, StateMEM& father_mem, Bool _need_record) :MEM(so, ctx, father_mem, _need_record), m_state(state) {}
 
-        Z3_ast idx2Value(Addr64 base, Z3_ast idx) override {
-
-            //auto _where = m_tableIdxDict.find(base);
-            //Z3_ast(*CB) (State<ADDR>*, Addr64 /*base*/, Z3_ast /*idx*/) = (Z3_ast(*) (State<ADDR>*, Addr64 /*base*/, Z3_ast /*idx*/))_where->second;
-            //return (_where != m_tableIdxDict.end()) ? CB(&m_state, (Addr64)base, (Z3_ast)idx) : (Z3_ast)NULL;
-        }
+        Z3_ast idx2Value(Addr64 base, Z3_ast idx) override;
     };
 
 
@@ -343,6 +342,8 @@ namespace TR {
         UInt getStr(std::stringstream& st, ADDR addr);
         inline operator MEM<ADDR>& () { return mem; }
         inline operator Register<REGISTER_LEN>& () { return regs; }
+        inline operator z3::context& () const { return const_cast<State<ADDR>*>(this)->m_ctx; }
+        
         Addr64 get_cpu_ip() override { return guest_start; }
         inline ADDR get_state_ep() { return guest_start_ep; }
         inline State_Tag status() { return m_status; }
@@ -402,10 +403,8 @@ namespace TR {
 
 
         bool vex_start();
-
-
-
     };
+
 
 };
 

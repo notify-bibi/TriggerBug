@@ -64,6 +64,23 @@ UInt vex_info::gMaxThreadsNum() {
      }
  }
 
+ Int vex_info::gRegsBPOffset(VexArch arch) {
+     switch (arch) {
+     case VexArchX86:return offsetof(VexGuestX86State, guest_EBP);
+     case VexArchAMD64:return offsetof(VexGuestAMD64State, guest_RBP);
+     case VexArchARM:return offsetof(VexGuestARMState, guest_R11);
+     case VexArchARM64:return offsetof(VexGuestARM64State, guest_XSP);
+     case VexArchPPC32:return offsetof(VexGuestPPC32State, guest_GPR1);
+     case VexArchPPC64:return offsetof(VexGuestPPC64State, guest_GPR1);
+     case VexArchS390X:return offsetof(VexGuestS390XState, guest_r15);
+     case VexArchMIPS32:return offsetof(VexGuestMIPS32State, guest_r29);
+     case VexArchMIPS64:return offsetof(VexGuestPPC64State, guest_GPR1);
+     default:
+         std::cout << "Invalid arch in vex_prepare_vai.\n" << std::endl;
+         return -1;
+     }
+ }
+
  static void vex_hwcaps_vai(VexArch arch, VexArchInfo* vai) {
      switch (arch) {
      case VexArchX86:
@@ -204,6 +221,14 @@ namespace TR {
         }
     }
 
+    template<typename ADDR>
+    z3::expr vex_context<ADDR>::idx2value(const TR::State<ADDR>& state, Addr64 base, Z3_ast index)
+    {
+        auto _where = m_tableIdxDict.find(base);
+        z3::expr (*CB) (const State<ADDR>&, Addr64 /*base*/, Z3_ast /*idx*/) = (z3::expr(*) (const State<ADDR>&, Addr64 /*base*/, Z3_ast /*idx*/))_where->second;
+        return (_where != m_tableIdxDict.end()) ? CB(state, (Addr64)base, (Z3_ast)index) : z3::expr(state);
+    }
+
 
     vex_info::vex_info(VexArch guest, const char* filename) :
         m_bin(filename),
@@ -215,7 +240,7 @@ namespace TR {
         m_traceflags(0),
         m_maxThreadsNum(gMaxThreadsNum()),
         m_bpt_code(gsoftwareBpt(guest)),
-        m_IRoffset_IP(vex_info::gRegsIpOffset(guest)), m_IRoffset_SP(vex_info::gRegsSPOffset(guest))
+        m_IRoffset_IP(vex_info::gRegsIpOffset(guest)), m_IRoffset_SP(vex_info::gRegsSPOffset(guest)), m_IRoffset_BP(vex_info::gRegsBPOffset(guest))
     {
     }
 

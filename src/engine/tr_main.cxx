@@ -181,6 +181,7 @@ State_Tag TR::StateX86::Sys_syscall_linux()
 State_Tag TR::StateX86::Sys_syscall_windows()
 {
     goto_ptr(vex_pop());
+    m_InvokStack.pop();
     Vns eax = regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::EAX);
     Vns arg0 = vex_stack_get(1);
     Vns arg1 = vex_stack_get(2);
@@ -196,7 +197,7 @@ State_Tag TR::StateX86::Sys_syscall_windows()
             _In_      PROCESSINFOCLASS ProcessInformationClass = (PROCESSINFOCLASS)(DWORD)arg1;
             _Out_     PVOID            ProcessInformation = (PVOID)(DWORD)arg2;
             _In_      DWORD            ProcessInformationLength = arg3;
-            _Out_opt_ DWORD           ReturnLength = arg4;
+            _Out_opt_ DWORD            ReturnLength = arg4;
 
 
             regs.Ist_Put(X86_IR_OFFSET::EAX, 0);
@@ -206,6 +207,7 @@ State_Tag TR::StateX86::Sys_syscall_windows()
             PWOW64_CONTEXT ctx = (PWOW64_CONTEXT)(DWORD)arg0;
             Addr32 next = dirty_call("getExecptionCtx32", Kc32::getExecptionCtx, { Vns(ctx), Vns(getGSPTR()) }, Ity_I32);
             goto_ptr(next);
+            m_InvokStack.clear();
             regs.Ist_Put(X86_IR_OFFSET::EAX, 0);
             return Running;
         }

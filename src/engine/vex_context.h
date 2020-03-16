@@ -53,7 +53,7 @@ namespace TR {
 
     typedef State_Tag(*Hook_CB)(void*/*obj*/);
     //得到的ast无需Z3_inc_ref
-    typedef Z3_ast(*TableIdx_CB)(void*/*obj*/, Addr64 /*base*/, Z3_ast /*idx*/);
+    typedef z3::expr (*TableIdx_CB)(const void*&/*obj*/, Addr64 /*base*/, Z3_ast /*idx*/);
 
     typedef struct _Hook_ {
         Hook_CB         cb;
@@ -86,7 +86,7 @@ namespace TR {
         ULong m_traceflags;
         UInt  m_maxThreadsNum;
         IRConst m_bpt_code;
-        UInt m_IRoffset_IP, m_IRoffset_SP;
+        UInt m_IRoffset_IP, m_IRoffset_SP, m_IRoffset_BP;
 
         vex_info(VexArch guest, const char* filename);
     public:
@@ -107,6 +107,7 @@ namespace TR {
         static IRConst gsoftwareBpt(VexArch guest);
         static Int gRegsIpOffset(VexArch guest);
         static Int gRegsSPOffset(VexArch guest);
+        static Int gRegsBPOffset(VexArch guest);
         inline const char* gbin() const { return m_bin; }
         VexRegisterUpdates gRegisterUpdates() const { return m_iropt_register_updates_default; };
         inline VexArch gguest()const { return m_guest; }
@@ -117,7 +118,9 @@ namespace TR {
         inline ULong gtraceflags() const { return m_traceflags; }
         inline UInt gRegsIpOffset() const { return m_IRoffset_IP; }
         inline UInt gRegsSpOffset() const { return m_IRoffset_SP; }
+        inline UInt gRegsBpOffset() const { return m_IRoffset_BP; }
 
+        
         inline operator vex_context<Addr32>& () const { return *reinterpret_cast <vex_context<Addr32>*>(const_cast<vex_info*>(this)); };
         inline operator vex_context<Addr64>& () const { return *reinterpret_cast <vex_context<Addr64>*>(const_cast<vex_info*>(this)); };
         inline operator vex_context<Addr32>* () const { return reinterpret_cast <vex_context<Addr32>*>(const_cast<vex_info*>(this)); };
@@ -195,8 +198,10 @@ namespace TR {
             当求解这种表达式时在原理上是解不开的，需要您显式进行定义staticMagic的index与staticMagic[index]的转换关系（否则需要爆破255^4）
             所以请使用idx2Value_Decl_add添加回调函数，当模拟执行时访问staticMagic，回调函数被调用
         */
-        void idx2Value_Decl_add(Addr64 addr, Z3_ast(*_func) (State<ADDR>*, Addr64 /*base*/, Z3_ast /*idx*/)) { m_tableIdxDict[addr] = (TableIdx_CB)_func; };
+        void idx2Value_Decl_add(Addr64 addr, z3::expr(*_func) (const State<ADDR>&, Addr64 /*base*/, Z3_ast /*idx*/)) { m_tableIdxDict[addr] = (TableIdx_CB)_func; };
         void idx2Value_Decl_del(Addr64 addr) { m_tableIdxDict.erase(m_tableIdxDict.find(addr)); };
+        bool idx2Value_base_exist(Addr64 base) { return m_tableIdxDict.find(base) != m_tableIdxDict.end(); }
+        z3::expr idx2value(const TR::State<ADDR>& state, Addr64 base, Z3_ast index);
 
         UInt bit_wide() override { return (UInt)((sizeof(ADDR))<<3); }
     };

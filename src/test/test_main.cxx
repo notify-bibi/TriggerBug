@@ -174,7 +174,7 @@ bool test_ir_dirty() {
 
 bool creakme();
 bool asong();
-bool creakme_exception_test
+
 
 bool test_cmpress() {
     ctx64 v(VexArchAMD64, "");
