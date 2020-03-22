@@ -12,7 +12,6 @@ Revision History:
 #ifndef _STATE_CLASS_DEFS_
 #define _STATE_CLASS_DEFS_
 
-#include <stack>    
 #include "engine/engine.h"
 #include "engine/vex_context.h"
 #include "engine/variable.h"
@@ -168,6 +167,7 @@ namespace TR {
         void clear() { guest_call_stack.clear(); guest_stack.clear(); }
         bool empty() const { return guest_call_stack.empty(); }
         UInt size() const { return guest_call_stack.size(); }
+        operator std::string() const;
     };
 
     template<typename ADDR>
@@ -275,7 +275,7 @@ namespace TR {
         StateMEM(TR::vctx_base &vb, State<ADDR>& state, z3::solver& so, z3::vcontext& ctx, Bool _need_record) :MEM(vb, so, ctx, _need_record), m_state(state) {}
         StateMEM(State<ADDR>& state, z3::solver& so, z3::vcontext& ctx, StateMEM& father_mem, Bool _need_record) :MEM(so, ctx, father_mem, _need_record), m_state(state) {}
 
-        Z3_ast idx2Value(Addr64 base, Z3_ast idx) override;
+        z3::expr idx2Value(Addr64 base, Z3_ast idx) override;
     };
 
 
@@ -380,9 +380,10 @@ namespace TR {
         virtual inline void traceIRSB(IRSB*) { return; };
         virtual inline void traceIrsbEnd(IRSB*) { return; };
         virtual inline void traceIRStmtEnd(IRStmt*) { return; };
+        virtual inline void traceInvoke(ADDR call, ADDR bp) { return; };
 
         Kernel* mkState(ADDR ges) { return ForkState(ges); }
-        virtual Vns get_teb() { VPANIC("need to implement the method"); return Vns(); }
+        virtual Vns TEB() { VPANIC("need to implement the method"); return Vns(); }
         virtual Kernel* ForkState(ADDR ges) { VPANIC("need to implement the method"); return nullptr; }
     private:
         virtual State_Tag Ijk_call(IRJumpKind) { VPANIC("need to implement the method"); m_status = Death; };
@@ -411,8 +412,13 @@ namespace TR {
 
 
 template<typename ADDR>
-static inline std::ostream& operator<<(std::ostream& out, TR::State<ADDR> const& n) {
+static inline std::ostream& operator<<(std::ostream& out, const TR::State<ADDR> & n) {
     return out << (std::string)n;
+}
+
+template<typename ADDR>
+inline std::ostream& operator << (std::ostream& out, const TR::InvocationStack<ADDR>& e) {
+    return out << (std::string)e; 
 }
 
 #endif

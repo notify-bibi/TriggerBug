@@ -72,7 +72,10 @@ namespace TR {
             m_vta_chunk.guest_bytes_addr = host_virtual_addr;
         }
 
-        inline Vns& operator[](UInt idx) { return reinterpret_cast<Vns*>(&m_ir_temp_trunk)[idx]; }
+        inline Vns& operator[](UInt idx) { 
+            vassert(idx < MAX_TMP);
+            return reinterpret_cast<Vns*>(&m_ir_temp_trunk)[idx];
+        }
         inline Pap* operator->() { return &m_pap; }
         inline operator Pap* () { return &m_pap; }
         inline operator Vns* () { return (Vns*)m_ir_temp_trunk; }

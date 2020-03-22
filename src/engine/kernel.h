@@ -16,7 +16,7 @@ public:
     z3::vcontext        m_ctx;
     std::queue<Z3_ast>  io_buff;
 private:
-    TR::vex_info&           m_vex_info;
+    TR::vex_info&       m_vex_info;
     template<typename ADDR> friend class VexIRDirty;
     Kernel(TR::vex_info& vex_info) :m_ctx(), m_vex_info(vex_info) {}
     Kernel(Kernel const& father_kernel) : m_ctx(), m_vex_info(father_kernel.m_vex_info) {};
@@ -32,7 +32,6 @@ public:
     inline operator const z3::vcontext& () const { return m_ctx; }
     inline operator const Z3_context() const { return m_ctx; }
     inline const z3::vcontext& ctx() const { return m_ctx; }
-    inline Kernel& kernel() { return *this; }
     inline const TR::vex_info& info() const { return m_vex_info; }
     
 

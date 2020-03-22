@@ -24,7 +24,7 @@
 #define REGISTER_LEN 0x800
 
 //100条任意客户机指令所需要的最大 IR temp index。建议>=400
-#define MAX_IRTEMP 400
+#define MAX_IRTEMP 800
 
 //每个虚拟物理页存在ast时，使用hash保存每一个ast;否则使用Z3_ast[0x1000];前者耗费小，速度稍微慢，后者反之
 #define USE_HASH_AST_MANAGER
@@ -339,6 +339,7 @@ namespace Expt {
         virtual IRJumpKind jkd() const override { return m_jk; }
     };
 };
+
 
 inline std::ostream& operator << (std::ostream& out, const Expt::ExceptionBase & e) { return out << e.msg(); }
 

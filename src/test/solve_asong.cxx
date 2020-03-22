@@ -7,7 +7,7 @@ bool asong() {
 
 
 
-    SP::AMD64 state(v, 0, True);
+    SP::linux64 state(v, 0, True);
     std::cout << state << std::endl;
 
     Kernel& k = state;

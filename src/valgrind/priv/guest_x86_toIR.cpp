@@ -13536,6 +13536,7 @@ DisResult disInstr_X86_WRK (
    /* Get the primary opcode. */
    opc = getIByte(delta); delta++;
 
+   decode_restart:
    /* We get here if the current insn isn't SSE, or this CPU doesn't
       support SSE. */
 
@@ -14777,7 +14778,8 @@ DisResult disInstr_X86_WRK (
          break;
 
       default:
-         goto decode_failure;
+         opc = abyte;
+         goto decode_restart;
       }
       break;
    }

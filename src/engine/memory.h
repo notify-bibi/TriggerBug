@@ -242,7 +242,7 @@ namespace TR {
         MEM(z3::solver& so, z3::vcontext& ctx, MEM& father_mem, Bool _need_record);
         ~MEM() { recycle(); }
         void set(EmuEnvironment<MAX_IRTEMP>* e) { m_ee = e; }
-        virtual Z3_ast idx2Value(Addr64 base, Z3_ast idx) { return nullptr; };
+        virtual z3::expr idx2Value(Addr64 base, Z3_ast idx) { return z3::expr(m_ctx); };
         //清空写入记录
         void clearRecord();
         ULong find_block_forward(ULong start, ADDR size);
@@ -396,9 +396,10 @@ namespace TR {
                 printf("}\n");
                 //am.print_offset();
 #endif
-                reast = idx2Value(am.getBase(), am.getoffset());
+                z3::expr tast = idx2Value(am.getBase(), am.getoffset());
+                reast = tast;
                 if (reast) {
-                    return Vns(m_ctx, reast, no_inc{});
+                    return Vns(m_ctx, reast);
                 }
                 else {
                     if (kind == TR::addressingMode<ADDR>::support_bit_blast) {

@@ -3,10 +3,13 @@
 #define  _VEX_CONTEXT_
 #include "thread_pool/thread_pool.h"
 #include "engine/engine.h"
+#include "engine/variable.h"
 
 UInt gMaxThreadsNum();
 
 namespace TR {
+
+
     template<typename ADDR>
     class MEM;
     template<unsigned int MAX_TMP>
@@ -16,6 +19,9 @@ namespace TR {
     template<typename ADDR>
     class State;
     class TRsolver;
+
+    template<typename ADDR> Vns vex_read(State<ADDR>& s, const Vns& addr, const Vns& len);
+    template<typename ADDR> void vex_write(State<ADDR>& s, const Vns& addr, const Vns& len);
 
     typedef enum :unsigned int {
         NewState = 0,
@@ -42,6 +48,7 @@ namespace TR {
         CF_traceState = 1ull << 2,
         CF_TraceSymbolic = 1ull << 3,
         CF_PassSigSEGV = 1ull << 4,
+        CF_traceInvoke = 1ull << 5,
     }TRControlFlags;
 
 }
@@ -52,8 +59,6 @@ namespace TR {
     template<typename _> class vex_context;
 
     typedef State_Tag(*Hook_CB)(void*/*obj*/);
-    //得到的ast无需Z3_inc_ref
-    typedef z3::expr (*TableIdx_CB)(const void*&/*obj*/, Addr64 /*base*/, Z3_ast /*idx*/);
 
     typedef struct _Hook_ {
         Hook_CB         cb;
@@ -93,13 +98,10 @@ namespace TR {
         sys_params& param() { return m_params; }
         static void init_vta_chunk(VexTranslateArgs& vta_chunk, VexGuestExtents& vge_chunk, VexArch guest, ULong traceflags);
         void init_vta_chunk(VexTranslateArgs& vta_chunk, VexGuestExtents& vge_chunk) { init_vta_chunk(vta_chunk, vge_chunk, m_guest, m_traceflags); }
-        inline void set_system(GuestSystem s) { m_guest_system = s; }
-        inline ULong getFlags() const { return m_traceflags; }
-        inline ULong setFlag(ULong f) { return m_traceflags |= f; }
-        inline ULong delFlag(ULong f) { return m_traceflags &= ~f; }
-        inline ULong setFlag(TRControlFlags f) { return m_traceflags |= f; }
-        inline ULong delFlag(TRControlFlags f) { return m_traceflags &= ~f; }
+
+        inline void set_system(GuestSystem s) { m_guest_system = s; }    
         IRConst const* softwareBptConst() const { return &m_bpt_code; };
+
         void softwareBptStore(UChar* dst) { memcpy(dst, &m_bpt_code.Ico.U8, IRConstTag2nb(m_bpt_code.tag)); };
         //必须保留一个virtual
         virtual UInt bit_wide() { VPANIC("??"); }
@@ -154,24 +156,41 @@ namespace TR {
     template<typename ADDR>
     class vex_context :public vctx_base
     {
+    public:
+        //读
+        using Hook_Read = Vns (*)(State<ADDR> & , const Vns&, const Vns&);
+        //写
+        using Hook_Write = void(*)(State<ADDR> & , const Vns&, const Vns&);
+        //idx2v
+        using Hook_idx2Value = z3::expr(*) (State<ADDR>&, ADDR /*base*/, Z3_ast /*idx*/);
+
+    private:
         friend class vex_info;
         friend class State<ADDR>;
         State<ADDR>*    m_top_state;
         //模拟软件断点 software backpoint callback
         std::hash_map<Addr64, Hook_struct> m_callBackDict;
-        std::hash_map<Addr64/*static table base*/, TableIdx_CB> m_tableIdxDict;
+        std::hash_map<Addr64/*static table base*/, Hook_idx2Value> m_tableIdxDict;
+        Hook_Read m_hook_read;
+        Hook_Write m_hook_write;
 
         vex_context(vex_context const&) = delete;
         void operator = (vex_context const&) = delete;
         void set_top_state(State<ADDR>* s) { vassert(!m_top_state); m_top_state = s; }
         //backpoint add
         void hook_add(State<ADDR>&state, ADDR addr, State_Tag(*_func)(State<ADDR>&), TRControlFlags cflag);
-    public:
-        vex_context(VexArch guest, const char* filename) :vctx_base(guest, filename), m_top_state(nullptr) {};
-
         bool get_hook(Hook_struct& hs, ADDR addr);
+    public:
+        vex_context(VexArch guest, const char* filename) :vctx_base(guest, filename), m_top_state(nullptr) {
+            hook_read(vex_read<ADDR>);
+            hook_write(vex_write<ADDR>);
+        };
 
         void hook_del(ADDR addr);
+        void hook_read(Hook_Read read_call) { m_hook_read = (Hook_Read)read_call; }
+        void hook_write(Hook_Write write_call) { m_hook_write = (Hook_Write)write_call; }
+        Hook_Read get_hook_read() { return m_hook_read; }
+        Hook_Write get_hook_write() { return m_hook_write; }
 
         inline ThreadPool& pool() { return m_pool; };
 
@@ -198,10 +217,10 @@ namespace TR {
             当求解这种表达式时在原理上是解不开的，需要您显式进行定义staticMagic的index与staticMagic[index]的转换关系（否则需要爆破255^4）
             所以请使用idx2Value_Decl_add添加回调函数，当模拟执行时访问staticMagic，回调函数被调用
         */
-        void idx2Value_Decl_add(Addr64 addr, z3::expr(*_func) (const State<ADDR>&, Addr64 /*base*/, Z3_ast /*idx*/)) { m_tableIdxDict[addr] = (TableIdx_CB)_func; };
-        void idx2Value_Decl_del(Addr64 addr) { m_tableIdxDict.erase(m_tableIdxDict.find(addr)); };
-        bool idx2Value_base_exist(Addr64 base) { return m_tableIdxDict.find(base) != m_tableIdxDict.end(); }
-        z3::expr idx2value(const TR::State<ADDR>& state, Addr64 base, Z3_ast index);
+        void idx2Value_Decl_add(ADDR addr, Hook_idx2Value _func) { m_tableIdxDict[addr] = _func; };
+        void idx2Value_Decl_del(ADDR addr) { m_tableIdxDict.erase(m_tableIdxDict.find(addr)); };
+        bool idx2Value_base_exist(ADDR base) { return m_tableIdxDict.find(base) != m_tableIdxDict.end(); }
+        z3::expr idx2value(const TR::State<ADDR>& state, ADDR base, Z3_ast index);
 
         UInt bit_wide() override { return (UInt)((sizeof(ADDR))<<3); }
     };

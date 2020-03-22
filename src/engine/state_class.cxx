@@ -15,11 +15,12 @@ Revision History:
 using namespace TR;
 
 template<typename ADDR>
-z3::expr crypto_finder(const TR::State<ADDR>& s, Addr64 base, Z3_ast index);
+z3::expr crypto_finder(TR::State<ADDR>& s, Addr64 base, Z3_ast index);
 
 HMODULE hMod_crypto_analyzer = LoadLibraryA("libcrypto_analyzer.dll");
-z3::expr(*c_crypto_find32)(const TR::State<Addr32>&, Addr64, Z3_ast) = (z3::expr(*)(const TR::State<Addr32>&, Addr64, Z3_ast))GetProcAddress(hMod_crypto_analyzer, "??$crypto_finder@I@@YA?AVexpr@z3@@AEBV?$State@I@TR@@_KPEAU_Z3_ast@@@Z");
-z3::expr(*c_crypto_find64)(const TR::State<Addr64>&, Addr64, Z3_ast) = (z3::expr(*)(const TR::State<Addr64>&, Addr64, Z3_ast))GetProcAddress(hMod_crypto_analyzer, "??$crypto_finder@_K@@YA?AVexpr@z3@@AEBV?$State@_K@TR@@_KPEAU_Z3_ast@@@Z");
+
+TR::vex_context<Addr32>::Hook_idx2Value c_crypto_find32 = (TR::vex_context<Addr32>::Hook_idx2Value)GetProcAddress(hMod_crypto_analyzer, "?crypto_finder32@@YA?AVexpr@z3@@AEAV?$State@I@TR@@IPEAU_Z3_ast@@@Z");;
+TR::vex_context<Addr64>::Hook_idx2Value c_crypto_find64 = (TR::vex_context<Addr64>::Hook_idx2Value)GetProcAddress(hMod_crypto_analyzer, "?crypto_finder64@@YA?AVexpr@z3@@AEAV?$State@_K@TR@@_KPEAU_Z3_ast@@@Z");
 
 static Bool TR_initdone;
 static LARGE_INTEGER   freq_global = { 0 };
@@ -147,6 +148,9 @@ int eval_all(std::vector<Vns>& result, z3::solver& solv, Z3_ast nia) {
             Z3_model_dec_ref(ctx, m_model);
         }
         else {
+            if (b == Z3_L_UNDEF){
+                return -1;
+            }
 #if defined(OPSTR)
             for (auto s : result) std::cout << ", " << Z3_ast_to_string(ctx, s);
 #endif
@@ -158,12 +162,14 @@ int eval_all(std::vector<Vns>& result, z3::solver& solv, Z3_ast nia) {
 }
 
 template<typename ADDR>
-Z3_ast StateMEM<ADDR>::idx2Value(Addr64 base, Z3_ast idx)
+z3::expr StateMEM<ADDR>::idx2Value(Addr64 base, Z3_ast idx)
 {
     z3::expr result = m_state.m_vctx.idx2value(m_state, base, idx);
-    Z3_inc_ref(result.ctx(), result);
-    if (result) return result;
-    return crypto_finder(m_state, base, idx);
+    if ((Z3_ast)result) {
+        return result;
+    }
+    result = crypto_finder(m_state, base, idx);
+    return result;
 }
 
 //DES等加密算法需要配置tactic策略才能求解出答案。
@@ -258,8 +264,24 @@ template <typename ADDR> State<ADDR>::~State() {
     }
 }
 
+template<typename ADDR>
+InvocationStack<ADDR>::operator std::string() const {
+    std::string ret;
+    char buff[100];
+    UInt size = guest_call_stack.size();
+    auto gcs = guest_call_stack.rbegin();
+    auto gs = guest_stack.rbegin();
+    for (UInt idx = 0; idx < size; idx++) {
+        sprintf_s(buff, sizeof(buff), "0x%-16x :: 0x%-16x\n", *gcs, *gs);
+        ret.append(buff);
+        gcs++;
+        gs++;
+    }
+    return ret;
+}
 
-template <typename ADDR> State<ADDR>::operator std::string() const{
+template <typename ADDR>
+State<ADDR>::operator std::string() const{
     std::string str;
     char hex[30];
     std::string strContent;
@@ -655,6 +677,9 @@ bool State<ADDR>::vex_start() {
     IRSB* irsb = nullptr;
     State<ADDR>* newBranch = nullptr;
     bool call_stack_is_empty = false;
+
+    if (m_vctx.get_hook(hs, guest_start)) { goto bkp_pass; }
+
     for (;;) {
     For_Begin:
         mem.set_double_page(guest_start, emu);
@@ -739,9 +764,8 @@ bool State<ADDR>::vex_start() {
                     };
                 }
                 else {
-                    UInt eval_size = eval_all(guard_result, solv, guard);
-                    vassert(eval_size <= 2);
-                    if (eval_size == 0) { m_status = Death; goto EXIT; }
+                    Int eval_size = eval_all(guard_result, solv, guard);
+                    if (eval_size <= 0) {  throw Expt::SolverNoSolution("eval_size <= 0", solv); }
                     if (eval_size == 1) {
                         if (((UChar)guard_result[0].simplify()) & 1)
                             goto Exit_guard_true;
@@ -775,7 +799,10 @@ bool State<ADDR>::vex_start() {
                 break;
             };
             case Ist_AbiHint: { //====== AbiHint(t4, 128, 0x400936:I64) ====== call 0xxxxxxx
-                m_InvokStack.push(tIRExpr(s->Ist.AbiHint.nia), regs.Iex_Get<(IRType)(sizeof(ADDR) << 3)>(m_vctx.gRegsBpOffset()));
+                Vns nia = tIRExpr(s->Ist.AbiHint.nia);
+                Vns bp = regs.Iex_Get<(IRType)(sizeof(ADDR) << 3)>(m_vctx.gRegsBpOffset());
+                traceInvoke(nia, bp);
+                m_InvokStack.push(nia, bp);
                 break;
             }
             case Ist_PutI: {
@@ -868,7 +895,10 @@ bool State<ADDR>::vex_start() {
         }
         case Ijk_Boring: break;
         case Ijk_Call: {
-            m_InvokStack.push(tIRExpr(irsb->next), regs.Iex_Get<(IRType)(sizeof(ADDR) << 3)>(m_vctx.gRegsBpOffset()));
+            Vns next = tIRExpr(irsb->next);
+            Vns bp = regs.Iex_Get<(IRType)(sizeof(ADDR) << 3)>(m_vctx.gRegsBpOffset());
+            traceInvoke(next, bp);
+            m_InvokStack.push(next, bp);
             break; 
         }
         case Ijk_SigTRAP: {
@@ -900,8 +930,8 @@ bool State<ADDR>::vex_start() {
             }
             else {
                 std::vector<Vns> result;
-                UInt eval_size = eval_all(result, solv, next);
-                if (eval_size == 0) { m_status = Death; goto EXIT; }
+                Int eval_size = eval_all(result, solv, next);
+                if (eval_size <= 0) { throw Expt::SolverNoSolution("eval_size <= 0", solv); }
                 else if (eval_size == 1) { guest_start = result[0].simplify(); }
                 else {
                     for (auto re : result) {
@@ -920,8 +950,8 @@ bool State<ADDR>::vex_start() {
         }
         else {
             std::vector<Vns> result;
-            UInt eval_size = eval_all(result, solv, next);
-            if (eval_size == 0) { m_status = Death; goto EXIT; }
+            Int eval_size = eval_all(result, solv, next);
+            if (eval_size <= 0) { throw Expt::SolverNoSolution("eval_size <= 0", solv); }
             else if (eval_size == 1) { guest_start = result[0].simplify(); }
             else {
                 for (auto re : result) {
@@ -942,7 +972,9 @@ EXIT:
 
 template <typename ADDR>
 void State<ADDR>::start() {
-    vassert(this->m_status == NewState);
+    if (this->m_status != NewState) {
+        std::cout <<"war: this->m_status != NewState"<< std::endl;
+    }
     m_status = Running;
     traceStart();
 Begin_try:
@@ -1202,7 +1234,8 @@ void State<ADDR>::compress(cmpr::CmprsContext<State<ADDR>, State_Tag>& ctx)
 
 template TR::State<Addr32>;
 template TR::State<Addr64>;
-
+template TR::InvocationStack<Addr32>;
+template TR::InvocationStack<Addr64>;
 
 const char* constStrIRJumpKind(IRJumpKind kind)
 {
@@ -1579,7 +1612,7 @@ unsigned int TRCurrentThreadId() {
 
 
 template<>
-z3::expr crypto_finder(const TR::State<Addr32>& s, Addr64 base, Z3_ast index) {
+z3::expr crypto_finder( TR::State<Addr32>& s, Addr64 base, Z3_ast index) {
     if (c_crypto_find32) {
         return c_crypto_find32(s, base, index);
     }
@@ -1587,7 +1620,7 @@ z3::expr crypto_finder(const TR::State<Addr32>& s, Addr64 base, Z3_ast index) {
 }
 
 template<>
-z3::expr crypto_finder(const TR::State<Addr64>& s, Addr64 base, Z3_ast index) {
+z3::expr crypto_finder( TR::State<Addr64>& s, Addr64 base, Z3_ast index) {
     if (c_crypto_find64) {
         return c_crypto_find64(s, base, index);
     }

@@ -22,9 +22,10 @@ c2 = "<OpenMP>GenerateParallelCode</OpenMP>"
 c3 = "<LanguageStandard>stdcpp14</LanguageStandard>"
 c4 = "<Optimization>MaxSpeedHighLevel</Optimization>"
 c5 = "<BufferSecurityCheck>false</BufferSecurityCheck>"
+c6 = "<UseIntelOptimizedHeaders>true</UseIntelOptimizedHeaders>"
 
 
-print('add options:\n',c1,'\n',c2,'\n',c3,'\n',c4,'\n\n')
+print('add options:\n',c1,'\n',c2,'\n',c3,'\n',c4,'\n',c5,'\n',c6, ' \n\n')
 for filename in file_name(original_dir):
     DOMTree = xmldom.parse(filename)
     it = DOMTree.getElementsByTagName("ItemDefinitionGroup")
@@ -40,6 +41,11 @@ for filename in file_name(original_dir):
                 b.appendChild(DOMTree.createTextNode('%(AdditionalOptions) /Qopenmp'))
                 a.appendChild(b)
 
+            if not a.getElementsByTagName("UseIntelOptimizedHeaders"):
+                b = DOMTree.createElement("UseIntelOptimizedHeaders")
+                b.appendChild(DOMTree.createTextNode('true'))
+                a.appendChild(b)
+            
             if not a.getElementsByTagName("OpenMP"):
                 c = DOMTree.createElement("OpenMP")
                 c.appendChild(DOMTree.createTextNode('GenerateParallelCode'))
@@ -61,16 +67,21 @@ for filename in file_name(original_dir):
                 d.appendChild(DOMTree.createTextNode('stdcpp17'))
                 a.appendChild(d)
 
-            Optimization = a.getElementsByTagName("Optimization")
-            if  len(Optimization):
-                Optimization = Optimization[0]
-
-                if (Optimization.firstChild.nodeValue == "MaxSpeed"):
-                    a.removeChild(Optimization)
+            
+            
+            if(Item.getAttribute("Condition").split("==")[1]=="'Release|x64'"):
+                Optimization = a.getElementsByTagName("Optimization")
+                if  len(Optimization):
+                    Optimization = Optimization[0]
+                    if (Optimization.firstChild.nodeValue != "MaxSpeedHighLevel"):
+                        a.removeChild(Optimization)
+                        d = DOMTree.createElement("Optimization")
+                        d.appendChild(DOMTree.createTextNode('MaxSpeedHighLevel'))
+                        a.appendChild(d)
+                else:
                     d = DOMTree.createElement("Optimization")
                     d.appendChild(DOMTree.createTextNode('MaxSpeedHighLevel'))
                     a.appendChild(d)
-                
 
                 
                 

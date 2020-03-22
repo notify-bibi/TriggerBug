@@ -1,8 +1,10 @@
 #include "engine/vex_context.h"
 #include "engine/variable.h"
 #include "engine/memory.h"
+#include "engine/state_class.h"
 
 using namespace TR;
+
 
 UInt vex_info::gMaxThreadsNum() {
     SYSTEM_INFO SysInfo;
@@ -222,11 +224,10 @@ namespace TR {
     }
 
     template<typename ADDR>
-    z3::expr vex_context<ADDR>::idx2value(const TR::State<ADDR>& state, Addr64 base, Z3_ast index)
+    z3::expr vex_context<ADDR>::idx2value(const TR::State<ADDR>& state, ADDR base, Z3_ast index)
     {
-        auto _where = m_tableIdxDict.find(base);
-        z3::expr (*CB) (const State<ADDR>&, Addr64 /*base*/, Z3_ast /*idx*/) = (z3::expr(*) (const State<ADDR>&, Addr64 /*base*/, Z3_ast /*idx*/))_where->second;
-        return (_where != m_tableIdxDict.end()) ? CB(state, (Addr64)base, (Z3_ast)index) : z3::expr(state);
+        std::hash_map<Addr64, Hook_idx2Value>::iterator _where = m_tableIdxDict.find(base);
+        return (_where != m_tableIdxDict.end()) ? _where->second(state, base, index) : z3::expr(state);
     }
 
 
