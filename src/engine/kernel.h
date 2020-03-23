@@ -25,7 +25,13 @@ public:
 
 public:
     static Vns T_Unop(z3::context& m_ctx, IROp, Vns const&);
-    static Vns T_Binop(z3::context& m_ctx, IROp, Vns const&, Vns const&);
+    static tval tBinop(IROp, tval const&, tval const&);
+    static Vns T_Binop(z3::context& m_ctx, IROp op, Vns const&a, Vns const&b) {
+        tval ta(a, (ULong)a, a.bitn);
+        tval tb(b, (ULong)b, b.bitn);
+        tval r = tBinop(m_ctx, op, ta, tb);
+        return Vns(ta, (ULong)(cLong)r, r.nbits());
+    }
     static Vns T_Triop(z3::context& m_ctx, IROp, Vns const&, Vns const&, Vns const&);
     static Vns T_Qop(z3::context& m_ctx, IROp, Vns const&, Vns const&, Vns const&, Vns const&);
     inline operator const z3::context& () const { return m_ctx; }

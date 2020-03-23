@@ -3,7 +3,7 @@
 #include "engine/z3_target_call/z3_target_call.h"
 
 #ifdef _DEBUG
-//#define OUTPUT_STMTS
+#define OUTPUT_STMTS
 #endif
 
 using namespace TR;

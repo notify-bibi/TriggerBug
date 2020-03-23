@@ -30,8 +30,9 @@ Revision History:
 
 #define fastMask(n) ((ULong)((((int)(n))<64)?((1ull << ((int)(n))) - 1):-1ll))
 #define fastMaskReverse(N) (~fastMask(N))
+#define ALIGN(Value,size) ((Value) & ~((size) - 1))
 
-#if 0
+#if 1
 
 
 
@@ -1395,8 +1396,7 @@ namespace sv {
         }
 
         // [ctype] v = ctype_val
-        template<typename _Ty, TASSERT(!std::is_class<_Ty>::value), TASSERT(!std::is_reference<_Ty>::value)>
-        inline operator _Ty() const { return (_Ty)m_data; }
+        inline operator _Tty() const { return m_data; }
 
         // res
         template<typename _Ty1>
@@ -1945,7 +1945,8 @@ namespace sv{
         }
         template<bool _Ts, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BV_SORT)>
         inline auto operator !=(const symbolic<_Ts, _Tn, Z3_BV_SORT>& b) const noexcept {
-            return ! symbolic<false, 1, Z3_BOOL_SORT>((Z3_context)m_ctx, Z3_mk_eq((Z3_context)m_ctx, (Z3_ast)m_ast, (Z3_ast)b.m_ast));
+            symbolic<false, 1, Z3_BOOL_SORT> boolv((Z3_context)m_ctx, Z3_mk_eq((Z3_context)m_ctx, (Z3_ast)m_ast, (Z3_ast)b.m_ast));
+            return symbolic<false, 1, Z3_BOOL_SORT>((Z3_context)m_ctx, Z3_mk_not((Z3_context)m_ctx, (Z3_ast)boolv.m_ast));
         }
         TEMP_OPERATOR_BITWISHE_NO_ALIGN(== ); 
         TEMP_OPERATOR_BITWISHE_NO_ALIGN(!= ); 
@@ -1987,7 +1988,7 @@ namespace sv{
 #undef TEMP_OPERATOR_BITWISHE_COMPARE
 #undef TEMP_OPERATOR_BITWISHE_NO_ALIGN
 
-
+//-------------------------------fp------------------------------------
 
 #define TEMP_OPERATOR_FP(op, z3_op)\
         template<z3sk __Tk = _Tk, TASSERT(__Tk == Z3_FLOATING_POINT_SORT)>\
@@ -1999,12 +2000,33 @@ namespace sv{
             return this->op(rm, symbolic<true, _Tn, Z3_FLOATING_POINT_SORT>((Z3_context)m_ctx, v));\
         };\
 
+
+
+
         TEMP_OPERATOR_FP(add, Z3_mk_fpa_add);
         TEMP_OPERATOR_FP(sub, Z3_mk_fpa_sub);
         TEMP_OPERATOR_FP(mul, Z3_mk_fpa_mul);
         TEMP_OPERATOR_FP(div, Z3_mk_fpa_div);
 
 
+#define TEMP_OPERATOR_FP_COMPARE(op, z3_op)\
+        template<z3sk __Tk = _Tk, TASSERT(__Tk == Z3_FLOATING_POINT_SORT)>\
+        inline auto operator op(const symbolic<true, _Tn, Z3_FLOATING_POINT_SORT>& b) const noexcept {\
+            return symbolic<false, 1, Z3_BOOL_SORT>((Z3_context)m_ctx, z3_op((Z3_context)m_ctx, (Z3_ast)m_ast, (Z3_ast)b.m_ast));\
+        }\
+        template<class _Ty, TASSERT(std::is_floating_point<_Ty>::value), z3sk __Tk = _Tk, TASSERT(__Tk == Z3_FLOATING_POINT_SORT)>\
+        inline auto operator op(_Ty v) {\
+            return *this op symbolic<true, _Tn, Z3_FLOATING_POINT_SORT>((Z3_context)m_ctx, v);\
+        };\
+
+
+        TEMP_OPERATOR_FP_COMPARE(== , Z3_mk_fpa_eq);
+        TEMP_OPERATOR_FP_COMPARE(>, Z3_mk_fpa_gt);
+        TEMP_OPERATOR_FP_COMPARE(<, Z3_mk_fpa_lt);
+        TEMP_OPERATOR_FP_COMPARE(>=, Z3_mk_fpa_geq);
+        TEMP_OPERATOR_FP_COMPARE(<=, Z3_mk_fpa_leq);
+
+#undef TEMP_OPERATOR_FP_COMPARE
 #undef TEMP_OPERATOR_FP
 
 
@@ -2028,24 +2050,24 @@ namespace sv{
             return symbolic<false, _Tn, Z3_BV_SORT>((Z3_context)m_ctx, Z3_mk_fpa_to_ieee_bv((Z3_context)m_ctx, (Z3_ast)m_ast));
         };
         //  signed int bv -> fp
-        template<unsigned ebits, unsigned sbits, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BV_SORT)>
-        inline symbolic<true, ebits + sbits, Z3_FLOATING_POINT_SORT> sInteger2fpa(const sort& rm) const {
+        template<unsigned ebits, unsigned sbits, bool _ts = _Tsigned, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BV_SORT), TASSERT(_ts)>
+        inline symbolic<true, ebits + sbits, Z3_FLOATING_POINT_SORT> Integer2fpa(const sort& rm) const {
             return symbolic<true, ebits + sbits, Z3_FLOATING_POINT_SORT>((Z3_context)m_ctx, Z3_mk_fpa_to_fp_signed((Z3_context)m_ctx, rm, (Z3_ast)m_ast, fpa_sort(ebits, sbits)));
         };
         //unsigned int bv -> fp
-        template<unsigned ebits, unsigned sbits, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BV_SORT)>
-        inline symbolic<true, ebits + sbits, Z3_FLOATING_POINT_SORT> uInteger2fpa(const sort& rm) const {
+        template<unsigned ebits, unsigned sbits, bool _ts = _Tsigned, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BV_SORT), TASSERT(!_ts)>
+        inline symbolic<true, ebits + sbits, Z3_FLOATING_POINT_SORT> Integer2fpa(const sort& rm) const {
             return symbolic<true, ebits + sbits, Z3_FLOATING_POINT_SORT>((Z3_context)m_ctx, Z3_mk_fpa_to_fp_unsigned((Z3_context)m_ctx, rm, (Z3_ast)m_ast, fpa_sort(ebits, sbits)));
         };
         //fp ->   signed int(bv)
         template<z3sk __Tk = _Tk, TASSERT(__Tk == Z3_FLOATING_POINT_SORT)>
         inline symbolic<true , _Tn, Z3_BV_SORT> toInteger_sbv(const sort& rm) const {
-            return symbolic<true, _Tn, Z3_BV_SORT>((Z3_context)m_ctx, Z3_mk_fpa_to_sbv((Z3_context)m_ctx, rm, (Z3_ast)m_ast));
+            return symbolic<true, _Tn, Z3_BV_SORT>((Z3_context)m_ctx, Z3_mk_fpa_to_sbv((Z3_context)m_ctx, rm, (Z3_ast)m_ast, _Tn));
         };
         //fp -> unsigned int (bv)
         template<z3sk __Tk = _Tk, TASSERT(__Tk == Z3_FLOATING_POINT_SORT)>
         inline symbolic<false, _Tn, Z3_BV_SORT> toIinteger_ubv(const sort& rm) const {
-            return symbolic<false, _Tn, Z3_BV_SORT>((Z3_context)m_ctx, Z3_mk_fpa_to_ubv((Z3_context)m_ctx, rm, (Z3_ast)m_ast));
+            return symbolic<false, _Tn, Z3_BV_SORT>((Z3_context)m_ctx, Z3_mk_fpa_to_ubv((Z3_context)m_ctx, rm, (Z3_ast)m_ast, _Tn));
         };
         //fp -> fp
         template<unsigned ebits, unsigned sbits, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_FLOATING_POINT_SORT)>
@@ -2053,6 +2075,7 @@ namespace sv{
             return symbolic<true, ebits + sbits, Z3_FLOATING_POINT_SORT>((Z3_context)m_ctx, Z3_mk_fpa_to_fp_float((Z3_context)m_ctx, rm, (Z3_ast)m_ast, fpa_sort(ebits, sbits)));
         };
 
+//-----------------------------------bool------------------------------
 
 
 
@@ -2070,6 +2093,22 @@ namespace sv{
         template<bool _ts, int _tn, z3sk _tk, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BOOL_SORT)>
         symbolic<_ts, _tn, _tk> ite(const symbolic<_ts, _tn, _tk>& a, const symbolic<_ts, _tn, _tk>& b) const {
             return symbolic<_ts, _tn, _tk>((Z3_context)m_ctx, Z3_mk_ite((Z3_context)m_ctx, (Z3_ast)m_ast, (Z3_ast)a.m_ast, (Z3_ast)b.m_ast));
+        }
+
+        template<bool _ts, int _tn, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BV_SORT)>
+        inline symbolic<_ts, _Tn + _tn, _Tk> concat(const sv::symbolic<_ts, _tn, _Tk>& lo) const {
+            return sv::symbolic<_ts, _Tn + _tn, _Tk>((Z3_context)m_ctx, Z3_mk_concat((Z3_context)m_ctx, (Z3_ast)m_ast, (Z3_ast)lo.m_ast));
+        }
+
+        template<int hi, int lo, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BV_SORT)>
+        inline symbolic<_Tsigned, hi - lo + 1, _Tk> extract() const {
+            static_assert(lo >= 0 && hi < _Tn && lo <= hi, "????");
+            return sv::symbolic<_Tsigned, hi - lo + 1, _Tk>((Z3_context)m_ctx, Z3_mk_extract((Z3_context)m_ctx, hi, lo, (Z3_ast)m_ast));
+        }
+        template<int nbits, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BV_SORT)>
+        inline symbolic<_Tsigned, nbits, _Tk> extract(int hi, int lo) const {
+            assert(hi - lo == nbits - 1);
+            return sv::symbolic<_Tsigned, nbits, _Tk>((Z3_context)m_ctx, Z3_mk_extract((Z3_context)m_ctx, hi, lo, (Z3_ast)m_ast));
         }
 
         std::string str() const {
@@ -2146,6 +2185,10 @@ namespace sv{
             *(_Ty*)m_data = data;
             m_data_inuse = true;
         }
+
+        template<typename _Ty, TASSERT(sizeof(_Ty) > 8)>
+        inline tval(Z3_context ctx, const _Ty& data) :tval(ctx, data, sizeof(_Ty) << 3) { }
+
 
         inline tval(Z3_context ctx, bool data) :symbol(ctx, 1) {
             static_assert(offsetof(tval, m_data) == 0x10, "error");
@@ -2233,6 +2276,8 @@ namespace sv{
             }
         }
 
+        inline uint32_t nbits() const { return m_bits; }
+
         std::string str() const {
             if (real()) {
                 std::string str;
@@ -2270,13 +2315,69 @@ namespace sv{
 #endif
             }
         }
+
+
+        tval extract(UInt hi, UInt lo) const {
+            UShort size = hi - lo + 1;
+            if (symb()) 
+                return tval((Z3_context)m_ctx, Z3_mk_extract((Z3_context)m_ctx, hi, lo, (Z3_ast)m_ast), size);
+            
+            if (lo < 64 && hi < 64) 
+                return tval((Z3_context)m_ctx, m_data[0] >> lo, (hi - lo + 1));
+            
+            __m256i m32 = *(__m256i*)(&((char*)m_data)[lo >> 3]);
+            if (lo & 7) {
+                UChar _n = size >> 6;
+                UChar _s = (64 - (lo & 7));
+                for (int i = 0; i <= _n; i++) {
+                    m32.m256i_u64[i] = (m32.m256i_u64[i] >> (lo & 7)) | (m32.m256i_u64[i + 1] << _s);
+                }
+            }
+            return tval((Z3_context)m_ctx, m32, size);
+        }
+
+
+        tval concat(tval const& low) const {
+            assert((low.m_bits + m_bits) <= 256);
+            if (!low.m_bits) return *this;
+            if (!m_bits) return low;
+            if (real() && low.real()) {
+                if (low.m_bits & 7) {
+                    __m256i m32 = *(__m256i*)low.m_data;
+                    auto base = ((low.m_bits - 1) >> 6);
+                    m32.m256i_u64[base] &= fastMask(low.bitn & 63);
+                    auto shln = low.m_bits & 63;
+                    auto shrn = (64 - shln);
+                    m32.m256i_u64[base] |= m_data[0] << shln;
+                    for (int i = 1; i <= ((m_bits - 1) >> 6); i++) {
+                        m32.m256i_u64[base + i] = (m_data[i] << shln) | (m_data[i - 1] >> shrn);
+                    }
+                    return Vns((Z3_context)m_ctx, m32, low.m_bits + m_bits);
+                }
+                else {
+                    __m256i re = *(__m256i*)low.m_data;
+                    memcpy(&re.m256i_u8[(low.m_bits >> 3)], m_data, (this->m_bits) >> 3);
+                    return Vns((Z3_context)m_ctx, re, low.m_bits + m_bits);
+                }
+            }
+            else {
+                return tval((Z3_context)m_ctx, Z3_mk_concat((Z3_context)m_ctx, (Z3_ast)m_ast, low), low.m_bits + m_bits);
+            }
+        }
+
+
+        
+
+
+
+
     };
 };
 
 using cBool = sv::ctype_val<bool>;
 using cbool = sv::ctype_val<bool>;
 using cUChar = sv::ctype_val<UChar>;
-using cChar = sv::ctype_val<Char>;
+using cChar = sv::ctype_val<char>;
 using cUShort = sv::ctype_val<UShort>;
 using cShort = sv::ctype_val<Short>;
 using cint = sv::ctype_val<int>;
@@ -2289,9 +2390,25 @@ using cLong = sv::ctype_val<Long>;
 using csize_t = sv::ctype_val<size_t>;
 using cfloat = sv::ctype_val<float>;
 using cdouble = sv::ctype_val<double>;
+//sse
+using cM128i = sv::ctype_val<__m128i>;
+using cM128 = sv::ctype_val<__m128>;
+using cM128d = sv::ctype_val<__m128d>;
+
+using cM256i = sv::ctype_val<__m256i>;
+using cM256  = sv::ctype_val<__m256>;
+using cM256d = sv::ctype_val<__m256d>;
+
+using cdouble = sv::ctype_val<double>;
+
+
+
 using tval = sv::tval;
 
+
+
 using sbool = sv::symbolic<false, 1, Z3_BOOL_SORT>;
+template<bool is_signed, int nbits> using bval = sv::symbolic<is_signed, nbits, Z3_BV_SORT>;
 template<int nbits> using sbval = sv::symbolic< true, nbits, Z3_BV_SORT>;
 template<int nbits> using ubval = sv::symbolic<false, nbits, Z3_BV_SORT>;
 template<int nbits> using fpval = sv::symbolic< true, nbits, Z3_FLOATING_POINT_SORT>;
@@ -2301,12 +2418,22 @@ template<int nbits> using sdouble = sv::symbolic< true, 64, Z3_FLOATING_POINT_SO
 template<bool _ts, int _tn, sv::z3sk _tk>
 inline sv::symbolic<_ts, _tn, _tk> ite( const sbool& _if, const sv::symbolic<_ts, _tn, _tk>& a, /*else*/  const sv::symbolic<_ts, _tn, _tk>& b) { return _if.ite(a, b); }
 static inline sbool implies(sbool const& a, sbool const& b) { return a.implies(b); }
+template<bool _ts, int _tn1, int _tn2, sv::z3sk _tk, TASSERT(_tk == Z3_BV_SORT)>
+static inline sv::symbolic<_ts, _tn1 + _tn2, _tk> concat(const sv::symbolic<_ts, _tn1, _tk>& a, const sv::symbolic<_ts, _tn2, _tk>& b) { return a.concat(b); }
+template<int hi, int lo, bool _ts, int _tn, sv::z3sk _tk, TASSERT(_tk == Z3_BV_SORT)>
+inline auto extract(const sv::symbolic<_ts, _tn, _tk>& a) { return a.extract<hi, lo>(); }
 
 template<bool _ts, int _tn, sv::z3sk _tk> 
 static inline std::ostream& operator<<(std::ostream& out, sv::symbolic<_ts, _tn, _tk> const& n) { return out << n.str(); }
 template<class _Tty> 
 static inline std::ostream& operator<<(std::ostream& out, sv::ctype_val<_Tty> const& n) { return out << n.str(); }
 static inline std::ostream& operator<<(std::ostream& out, sv::tval const& n) { return out << n.str(); }
+static inline auto operator!(const sbool& b) {
+    return sv::symbolic<false, 1, Z3_BOOL_SORT>((Z3_context)b, Z3_mk_not((Z3_context)b, (Z3_ast)b));
+}
+
+static inline tval concat(const tval& a, const tval& b) { return a.concat(b); }
+
 
 
 #endif // _Vns_H_
