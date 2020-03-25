@@ -240,89 +240,92 @@ class GraphView {
             if (getEnd(guest_start)) {
                 goto End;
             }
-            m_mem.set_double_page(guest_start, emu);
-            emu.set_guest_bytes_addr(emu->t_page_addr, guest_start);
-            VexRegisterUpdates pxControl;
-            VexTranslateResult res;
-            IRSB* irsb = LibVEX_FrontEnd(emu, &res, &pxControl, emu);
-            
-            IRStmt* s = irsb->stmts[0];
-            UInt code_len = 0;
-            for (UInt stmtn = 0; stmtn < irsb->stmts_used;
-                s = irsb->stmts[++stmtn])
+            else
             {
-                //ppIRStmt(s);
-                //printf("\n");
-                switch (s->tag) {
-                case Ist_WrTmp: { emu[s->Ist.WrTmp.tmp] = tIRExpr(s->Ist.WrTmp.data, emu); break; };
-                case Ist_Exit: {
-                    if (s->Ist.Exit.jk != Ijk_SigSEGV) {
-                        add_block(block_start, guest_start, s->Ist.Exit.jk, emu);
-                        _jmp_to(guest_start, s->Ist.Exit.dst->Ico.U64);
-                        explore_block(block_task, s->Ist.Exit.dst->Ico.U64);
-                        fresh = true;
+                m_mem.set_double_page(guest_start, emu);
+                emu.set_guest_bytes_addr(emu->t_page_addr, guest_start);
+                VexRegisterUpdates pxControl;
+                VexTranslateResult res;
+                IRSB* irsb = LibVEX_FrontEnd(emu, &res, &pxControl, emu);
+
+                IRStmt* s = irsb->stmts[0];
+                UInt code_len = 0;
+                for (UInt stmtn = 0; stmtn < irsb->stmts_used;
+                    s = irsb->stmts[++stmtn])
+                {
+                    //ppIRStmt(s);
+                    //printf("\n");
+                    switch (s->tag) {
+                    case Ist_WrTmp: { emu[s->Ist.WrTmp.tmp] = tIRExpr(s->Ist.WrTmp.data, emu); break; };
+                    case Ist_Exit: {
+                        if (s->Ist.Exit.jk != Ijk_SigSEGV) {
+                            add_block(block_start, guest_start, s->Ist.Exit.jk, emu);
+                            _jmp_to(guest_start, s->Ist.Exit.dst->Ico.U64);
+                            explore_block(block_task, s->Ist.Exit.dst->Ico.U64);
+                            fresh = true;
+                        }
+                        break;
                     }
-                    break;
-                }
-                case Ist_AbiHint: {
-                    ADDR call_start = tIRExpr(s->Ist.AbiHint.nia, emu);
-                    if (call_start) {
-                        explore_block(block_task, call_start);
-                        _jmp_to(guest_start, call_start);
-                        explore_block(block_task, guest_start + code_len);
+                    case Ist_AbiHint: {
+                        ADDR call_start = tIRExpr(s->Ist.AbiHint.nia, emu);
+                        if (call_start) {
+                            explore_block(block_task, call_start);
+                            _jmp_to(guest_start, call_start);
+                            explore_block(block_task, guest_start + code_len);
+                        }
+                        // m_InvokStack.push(tIRExpr(s->Ist.AbiHint.nia), tIRExpr(s->Ist.AbiHint.base));
+                        break;
                     }
-                    // m_InvokStack.push(tIRExpr(s->Ist.AbiHint.nia), tIRExpr(s->Ist.AbiHint.base));
-                    break;
-                }
 
-                case Ist_IMark: {
-                    if (fresh) {
-                        fresh = false;
-                        _jmp_to(guest_start, s->Ist.IMark.addr);
-                        block_start = s->Ist.IMark.addr;
+                    case Ist_IMark: {
+                        if (fresh) {
+                            fresh = false;
+                            _jmp_to(guest_start, s->Ist.IMark.addr);
+                            block_start = s->Ist.IMark.addr;
+                        }
+                        guest_start = s->Ist.IMark.addr;
+                        code_len = s->Ist.IMark.len;
+                        break;
                     }
-                    guest_start = s->Ist.IMark.addr;
-                    code_len = s->Ist.IMark.len;
-                    break;
+                    };
+
+
                 }
-                };
 
 
-            }
-
-
-            ADDR next = tIRExpr(irsb->next, emu);
-            if (fresh) {
-                fresh = false;
-            }
-            else {
-                add_block(block_start, guest_start, irsb->jumpkind, emu);
-            }
-
-            if (next) {
-                switch (irsb->jumpkind) {
-                case Ijk_Sys_syscall:
-                case Ijk_Boring:
-                 {
-                    _jmp_to(guest_start, next);
-                    guest_start = next;
-                    block_start = next;
-                    break;
+                ADDR next = tIRExpr(irsb->next, emu);
+                if (fresh) {
+                    fresh = false;
                 }
-                case Ijk_Call:goto End;
-                default:
-//#ifdef OUTPUT
-                    ppIRJumpKind(irsb->jumpkind);
-                    printf("%p \n", guest_start);
-//#endif
+                else {
+                    add_block(block_start, guest_start, irsb->jumpkind, emu);
+                }
+
+                if (next) {
+                    switch (irsb->jumpkind) {
+                    case Ijk_Sys_syscall:
+                    case Ijk_Boring:
+                    {
+                        _jmp_to(guest_start, next);
+                        guest_start = next;
+                        block_start = next;
+                        break;
+                    }
+                    case Ijk_Call:goto End;
+                    default:
+                        //#ifdef OUTPUT
+                        ppIRJumpKind(irsb->jumpkind);
+                        printf("%p \n", guest_start);
+                        //#endif
+                        goto End;
+                    };
+
+                }
+                else {
                     goto End;
-                };
-
-            }
-            else {
-                goto End;
-            }
-            continue;
+                }
+                continue;
+            };
         End:
             if (block_task) {
                 guest_start = block_task;

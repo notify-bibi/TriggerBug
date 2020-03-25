@@ -1,5 +1,7 @@
 #pragma once
 #include "test.h"
+#include "engine/basic_var.h"
+
 
 using namespace TR;
 
@@ -13,17 +15,60 @@ void test1() {
     //sv::symbolic<false, 1, true> b5(c, false);
 
     //sv::tval bv(c);
-
     cUShort x1(c, 88);
     cunsigned x2(c, 8);
-    sv::ctype_val<char, 1> u1(c, 0);
+    sv::ctype_val<char, 1> u1(c, 1);
+    sv::ctype_val<char, 5> u5(c, 8);
+
     sv::ctype_val<bool> b1(c, 0);
+    sv::ctype_val<bool> b2(c, 1);
     sv::ctype_val<float> f1(c, 0.999);
     sv::ctype_val<double> d1(c, 0.999);
+    sv::ctype_val<uint64_t> ui64(c, 678);
+    sv::ctype_val<uint32_t> ui32(c, 32);
+    sv::ctype_val<int64_t> i64(c, -1);
+    sv::ctype_val<int32_t> i32(c, -2);
 
-    c.fpa_val(9.0);
 
+    __m128i sd1;
+    sd1.m128i_u64[0] = 898989;
+    __m256d sd2;
+    sd2.m256d_f64[0] = 0.676;
+    sv::Signed128 hj = { 233,4545 };
     
+    sv::ctype_val<__m128i> u128(c, sd1);
+    sv::ctype_val<sv::Signed128> s128(c, hj);
+    sv::ctype_val<__m256d> m256(c, sd2);
+    
+    sbval<128> sb128 = u128;
+
+    std::cout << sb128 << std::endl;
+    std::cout << (sbval<256>)u128 << std::endl;
+    std::cout << (sbval<256>)s128 << std::endl;
+
+
+    std::cout << u1 << std::endl;
+    std::cout << b1 << std::endl;
+    std::cout << f1 << std::endl;
+    std::cout << d1 << std::endl;
+
+
+
+    std::cout << (b1 || b2) << std::endl;
+
+    std::cout << u1 + 323 << std::endl;
+    std::cout << u1 + u5 << std::endl;
+    std::cout << u5 - u1 << std::endl;
+    std::cout << f1 + 0.1 << std::endl;
+    std::cout << f1 + -1ull << std::endl;
+    std::cout << d1 + 54 << std::endl;
+
+
+    std::cout << 323  + u1 << std::endl;
+    std::cout << 0.1  + f1 << std::endl;
+    std::cout << -1ull + f1 << std::endl;
+    std::cout << 54   + d1 << std::endl;
+
 
 
     Z3_ast ff = x1;
@@ -42,11 +87,26 @@ void test2() {
 
     sv::symbolic<true, 32, Z3_BV_SORT > d2(c, -5);
     sv::symbolic<false, 32, Z3_BV_SORT > d3(c, -5);
+
+
+
     sv::symbolic<false, 16, Z3_BV_SORT > d4(c, (UShort)-5);
 
     __m128i sd;
-    sv::sort f65 = sv::fpa_sort(c, 10, 55);
-    sv::symbolic<true, 65, Z3_FLOATING_POINT_SORT > d5(c, sd, f65);
+    sv::symbolic<true, 72, Z3_FLOATING_POINT_SORT > d5(c, sd, sv::fpa_sort(c, 10, 62));
+
+
+
+
+
+    tval tv4 = d4;
+
+    fpval<16>& fa = (fpval<16>&) tv4;
+
+    std::cout << fa << std::endl;
+
+    sbool sb(c, false);
+    sbool sb2(c, false);
 
     sv::sort rm = sv::fpRM(c, Irrm_NegINF);
     auto f1 = d5.fpa2fpa<5, 6>(rm);
@@ -60,12 +120,71 @@ void test2() {
     auto x7 = d2 + d4;
     auto x8 = d3 + d4;
 
-}
-//
-//int main() {
-//    test1();
-//    test2();
-//}
+    std::cout << f1 << std::endl;
+    std::cout << d5 << std::endl;
+    std::cout << d5.tobv().simplify() << std::endl;
+    std::cout << d2 << std::endl;
+
+
+
+    sv::symbolic<false, 240, Z3_BV_SORT > d6(c, c.bv_const("ug240", 240));
+    sv::symbolic<true, 240, Z3_BV_SORT > d7(c, c.bv_const("sg240", 240));
+    sv::symbolic<true, 32, Z3_BV_SORT > d8(c, c.bv_const("sg32", 32));
+    std::cout << d6 << std::endl;
+    std::cout << (sb ^ sb2) << std::endl;
+
+    uint64_t UI64 = 1;
+    uint32_t UI32 = 1;
+    int64_t I64 = -2;
+    uint32_t u32 = 2;
+    int32_t I32 = -2;
+
+    auto div = I64 / u32;
+    div = UI32 / I64;
+    div = UI64 / I32;
+    div = UI32 / UI64;
+
+    div = UI64 / I64;
+    div = I64 / UI64;
+
+
+
+    bool cmp64 = UI64 < I64;//true : 取决于 UI64
+    cmp64 = UI64 < I32;//true : 取决于 UI64
+
+    cmp64 = I64 > UI64;
+
+    cmp64 = I32 > UI64;
+
+
+
+    cmp64 = UI32 < I64;//false : 取决于 I64
+
+    cmp64 = UI32 < I32;//true : 取决于 UI32
+
+    cmp64 = I64 > UI32;//false
+
+    cmp64 = I32 > UI32;
+
+
+    std::cout << (d6 > -1ull) << std::endl;
+    std::cout << (d6 < -1) << std::endl;
+
+
+    std::cout << (d8 > -1ull) << std::endl;
+    std::cout << (d8 < -1) << std::endl;
+    std::cout << (d8 < -1ll) << std::endl;
+
+    std::cout << (d7 > 1ull) << std::endl;
+    std::cout << (d7 > 1) << std::endl;
+    std::cout << (d7 < -1) << std::endl;
+
+    sv::symbolic<true, 233, Z3_BV_SORT > d233(c, c.bv_const("sg233", 233));
+    sv::symbolic<false, 233, Z3_BV_SORT > ud233(c, c.bv_const("ug233", 233));
+    std::cout << (d6 >= d233) << std::endl;
+    std::cout << (d7 >= d233) << std::endl;
+    std::cout << (d7 > ud233) << std::endl;
+
 
 
 
@@ -134,6 +253,19 @@ void test2() {
     //std::cout << z3::expr(c, dd) << std::endl;
     //auto df1 = g4 + g2;
     //auto df2 = g33 + g2;
+
+
+
+    auto rb = sb.simplify();
+    auto rb2 = (d2 == d3).simplify();
+    auto rb3 = (d2 == d6 + 90).simplify();
+    auto rf = d5.simplify();
+
+
+
+
+}
+
 
 
 
@@ -387,7 +519,13 @@ bool test_dirty_cmpress() {
     std::cout << state << std::endl;
     return true;
 }
+
+
+
 int main() {
+    test1();
+    test2();
+
     //testz3();
     //IR_TEST(test_ir_dirty);
     IR_TEST(creakme);

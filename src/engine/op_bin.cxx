@@ -1,4 +1,5 @@
 #include "engine/op_header.h"
+#include "engine/basic_var.h"
 
 
 
@@ -68,7 +69,8 @@ case Iop_##IROPNAME##nb: {																			\
 
 
 
-tval Kernel::tBinop(IROp op, tval const& a, tval const& b) {
+
+tval tBinop(IROp op, tval const& a, tval const& b) {
     if (a.symb() || b.symb()){
         switch (op) {
             Z3caseIop_Arithmetic(Add, false, +);
@@ -120,19 +122,43 @@ tval Kernel::tBinop(IROp op, tval const& a, tval const& b) {
             case Iop_64HLto128:
             case Iop_64HLtoV128: dassert(a.nbits() == 64); dassert(b.nbits() == 64); return concat((ubval<64>&)a, (ubval<64>&)b);
 
-            case Iop_I32StoF32: { return ((sbval<32>&)b).Integer2fpa<8, 24>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+
+
+            case Iop_F64toI16S: { return ((fpval<64>&)b).toInteger_sbv<16>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+            case Iop_F64toI32S: { return ((fpval<64>&)b).toInteger_sbv<32>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+            case Iop_F64toI32U: { return ((fpval<64>&)b).toInteger_ubv<32>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+            case Iop_F64toI64S: { return ((fpval<64>&)b).toInteger_sbv<64>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+            case Iop_F64toI64U: { return ((fpval<64>&)b).toInteger_ubv<64>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+
+            case Iop_I32StoF64: { return ((sbval<32>&)b).Integer2fpa<11, 53>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+            case Iop_I32UtoF64: { return ((ubval<32>&)b).Integer2fpa<11, 53>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
             case Iop_I64StoF64: { return ((sbval<64>&)b).Integer2fpa<11, 53>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
-            case Iop_I32UtoF32: { return ((ubval<32>&)b).Integer2fpa<8, 24>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
             case Iop_I64UtoF64: { return ((ubval<64>&)b).Integer2fpa<11, 53>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
 
-            case Iop_F32toI32S: { return ((fpval<32>&)b).toInteger_sbv(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
-            case Iop_F64toI64S: { return ((fpval<64>&)b).toInteger_sbv(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
-            case Iop_F32toI32U: { return ((fpval<32>&)b).toInteger_sbv(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
-            case Iop_F64toI64U: { return ((fpval<64>&)b).toInteger_sbv(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+            case Iop_I32StoF32: { return ((sbval<32>&)b).Integer2fpa<8, 24>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+            case Iop_I32UtoF32: { return ((ubval<32>&)b).Integer2fpa<8, 24>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+            case Iop_I64StoF32: { return ((sbval<64>&)b).Integer2fpa<8, 24>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+            case Iop_I64UtoF32: { return ((ubval<64>&)b).Integer2fpa<8, 24>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+
+            case Iop_F32toI32S: { return ((fpval<32>&)b).toInteger_sbv<32>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+            case Iop_F32toI32U: { return ((fpval<32>&)b).toInteger_ubv<32>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+            case Iop_F32toI64S: { return ((fpval<32>&)b).toInteger_sbv<64>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+            case Iop_F32toI64U: { return ((fpval<32>&)b).toInteger_ubv<64>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
 
             case Iop_F64toF32: { return ((fpval<64>&)b).fpa2fpa<8, 24>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }
             case Iop_F32toF64: { return ((fpval<32>&)b).fpa2fpa<11, 53>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }
 
+
+
+            case Iop_CmpF128: {
+                fpval<128>& fa = (fpval<128>&)a;
+                fpval<128>& fb = (fpval<128>&)b;
+                return ite(fa == fb, ubval<32>(a, 0x40),
+                    ite(fa < fb, ubval<32>(a, 0x01),
+                        ite(fa > fb, ubval<32>(a, 0x00), ubval<32>(a, 0x45))
+                    )
+                );
+            }
             case Iop_CmpF64: {
                 fpval<64>& fa = (fpval<64>&)a;
                 fpval<64>& fb = (fpval<64>&)b;
@@ -141,6 +167,15 @@ tval Kernel::tBinop(IROp op, tval const& a, tval const& b) {
                                 ite(fa > fb, ubval<32>(a, 0x00), ubval<32>(a, 0x45) )
                                 )
                             );
+            }
+            case Iop_CmpF32: {
+                fpval<32>& fa = (fpval<32>&)a;
+                fpval<32>& fb = (fpval<32>&)b;
+                return ite(fa == fb, ubval<32>(a, 0x40),
+                    ite(fa < fb, ubval<32>(a, 0x01),
+                        ite(fa > fb, ubval<32>(a, 0x00), ubval<32>(a, 0x45))
+                    )
+                );
             }
             case Iop_DivModU128to64: {//ok
                 dassert(a.nbits() == 128); dassert(b.nbits() == 64);
@@ -179,24 +214,24 @@ tval Kernel::tBinop(IROp op, tval const& a, tval const& b) {
 
 #define BNxN(bits, op, N, Mask1, Mask2)\
 {   \
-    tval r = ite(((ubval<N*bits>&)a).extract<bits-1, 0>() op ((ubval<N*bits>&)b).extract<bits-1, 0>(), ubval<bits>(a, Mask1), ubval<bits>(a, Mask2));\
+    ubval<N*bits>& m1 = (ubval<N*bits>&)a;\
+    ubval<N*bits>& m2 = (ubval<N*bits>&)b;\
+    tval r = ite(m1.extract<bits-1, 0>() op m2.extract<bits-1, 0>(), ubval<bits>(a, Mask1), ubval<bits>(a, Mask2));\
     for (UInt i = 1; i < N; i++) {\
-        sbool v = ((ubval<N*bits>&)a).extract((i+1)*bits-1, i*bits) op ((ubval<N*bits>&)b).extract((i + 1) * bits - 1, i * bits);\
-        tval t = ite(,   ubval<bits>(a, Mask1), ubval<bits>(a, Mask2));\
-        r = concat(t, r)\
+        tval t = ite(m1.extract<bits>(i) op m2.extract<bits>(i), ubval<bits>(a, Mask1), ubval<bits>(a, Mask2));\
+        r = concat(t, r);\
     }\
-    return re;\
+    return r;\
 }
-            case Iop_CmpEQ8x32: BNxN(8, ==, 32, (unsigned char)0xFF, (unsigned char)0x0)
-            
-//        case Iop_CmpEQ16x16: BNxN(UShort, == , 16, 0xFFFF)
-//        case Iop_CmpEQ32x8: BNxN(UInt, == , 8, 0xFFFFFFFF)
-//        case Iop_CmpEQ64x4: BNxN(ULong, == , 4, 0xFFFFFFFFFFFFFFFF)
-//
-//        case Iop_CmpEQ8x16: BNxN(UChar, == , 16, 0xFF)
-//        case Iop_CmpEQ16x8: BNxN(UShort, == , 8, 0xFFFF)
-//        case Iop_CmpEQ32x4: BNxN(UInt, == , 4, 0xFFFFFFFF)
-//        case Iop_CmpEQ64x2: BNxN(ULong, == , 2, 0xFFFFFFFFFFFFFFFF)
+        case Iop_CmpEQ8x32: BNxN(8 , == , 32, (uint8_t )-1, (uint8_t)0x0);
+        case Iop_CmpEQ16x16:BNxN(16, == , 16, (uint16_t)-1, (uint8_t)0x0);
+        case Iop_CmpEQ32x8: BNxN(32, == , 8 , (uint32_t)-1, (uint8_t)0x0);
+        case Iop_CmpEQ64x4: BNxN(64, == , 4 , (uint64_t)-1, (uint8_t)0x0);
+
+        case Iop_CmpEQ8x16: BNxN(8 , == , 16, (uint8_t )-1, (uint8_t)0x0);
+        case Iop_CmpEQ16x8: BNxN(16, == , 8 , (uint16_t)-1, (uint8_t)0x0);
+        case Iop_CmpEQ32x4: BNxN(32, == , 4 , (uint32_t)-1, (uint8_t)0x0);
+        case Iop_CmpEQ64x2: BNxN(64, == , 2 , (uint64_t)-1, (uint8_t)0x0);
 
         };
     }else {
@@ -288,9 +323,9 @@ tval Kernel::tBinop(IROp op, tval const& a, tval const& b) {
 
 		
 
-	    case Iop_CmpGT8Ux16: goto FAILD;
-	    case Iop_CmpGT16Ux8: goto FAILD;
-	    case Iop_CmpGT32Ux4: goto FAILD;
+	    case Iop_CmpGT8Ux16: 
+	    case Iop_CmpGT16Ux8: 
+	    case Iop_CmpGT32Ux4: 
 	    case Iop_CmpGT64Ux2: goto FAILD;
 
         case Iop_CmpGT8Sx16: { return tval(a, _mm_cmpgt_epi8(ato(__m128i), bto(__m128i))); }//true
@@ -329,15 +364,26 @@ tval Kernel::tBinop(IROp op, tval const& a, tval const& b) {
         case Iop_64HLtoV128: { return tval(a, _mm_set_epi64x(ato(long long), bto(long long))); }//ok
 
 
-        case Iop_I32StoF32: { return ((Int)ato(Int) == 0) ? tval(a, (float)bto(Int)) : ((sbval<32>&)b).Integer2fpa<8, 24>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
-        case Iop_I64StoF64: { return ((Int)ato(Int) == 0) ? tval(a, (Double)bto(Long)) : ((sbval<64>&)b).Integer2fpa<11, 53>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
-        case Iop_I32UtoF32: { return ((Int)ato(Int) == 0) ? tval(a, (float)bto(UInt)) : ((ubval<32>&)b).Integer2fpa<8, 24>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
-        case Iop_I64UtoF64: { return ((Int)ato(Int) == 0) ? tval(a, (Double)bto(ULong)) : ((ubval<64>&)b).Integer2fpa<11, 53>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+        case Iop_F64toI16S: { return ((Int)ato(Int) == 0) ? tval(a, (int16_t)bto(double)) : ((fpval<64>&)b).toInteger_sbv<16>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+        case Iop_F64toI32S: { return ((Int)ato(Int) == 0) ? tval(a, (int32_t)bto(double)) : ((fpval<64>&)b).toInteger_sbv<32>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+        case Iop_F64toI32U: { return ((Int)ato(Int) == 0) ? tval(a, (uint32_t)bto(double)) : ((fpval<64>&)b).toInteger_ubv<32>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+        case Iop_F64toI64S: { return ((Int)ato(Int) == 0) ? tval(a, (int64_t)bto(double)) : ((fpval<64>&)b).toInteger_sbv<64>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+        case Iop_F64toI64U: { return ((Int)ato(Int) == 0) ? tval(a, (uint64_t)bto(double)) : ((fpval<64>&)b).toInteger_ubv<64>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
 
-        case Iop_F32toI32S: { return ((Int)ato(Int) == 0) ? tval(a, (Int)bto(float)) : ((fpval<32>&)b).toInteger_sbv(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
-        case Iop_F64toI64S: { return ((Int)ato(Int) == 0) ? tval(a, (Long)bto(double)) : ((fpval<64>&)b).toInteger_sbv(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
-        case Iop_F32toI32U: { return ((Int)ato(Int) == 0) ? tval(a, (UInt)bto(float)) : ((fpval<32>&)b).toInteger_sbv(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
-        case Iop_F64toI64U: { return ((Int)ato(Int) == 0) ? tval(a, (ULong)bto(double)) : ((fpval<64>&)b).toInteger_sbv(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+        case Iop_I32StoF64: { return ((Int)ato(Int) == 0) ? tval(a, (double)bto(int32_t)) : ((sbval<32>&)b).Integer2fpa<11, 53>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+        case Iop_I32UtoF64: { return ((Int)ato(Int) == 0) ? tval(a, (double)bto(uint32_t)) : ((ubval<32>&)b).Integer2fpa<11, 53>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+        case Iop_I64StoF64: { return ((Int)ato(Int) == 0) ? tval(a, (double)bto(int64_t)) : ((sbval<64>&)b).Integer2fpa<11, 53>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+        case Iop_I64UtoF64: { return ((Int)ato(Int) == 0) ? tval(a, (double)bto(uint64_t)) : ((ubval<64>&)b).Integer2fpa<11, 53>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+
+        case Iop_I32StoF32: { return ((Int)ato(Int) == 0) ? tval(a, (float)bto(int32_t)) : ((sbval<32>&)b).Integer2fpa<8, 24>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+        case Iop_I32UtoF32: { return ((Int)ato(Int) == 0) ? tval(a, (float)bto(uint32_t)) : ((ubval<32>&)b).Integer2fpa<8, 24>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+        case Iop_I64StoF32: { return ((Int)ato(Int) == 0) ? tval(a, (float)bto(int64_t)) : ((sbval<64>&)b).Integer2fpa<8, 24>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+        case Iop_I64UtoF32: { return ((Int)ato(Int) == 0) ? tval(a, (float)bto(uint64_t)) : ((ubval<64>&)b).Integer2fpa<8, 24>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+
+        case Iop_F32toI32S: { return ((Int)ato(Int) == 0) ? tval(a, (int32_t)bto(float)) : ((fpval<32>&)b).toInteger_sbv<32>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+        case Iop_F32toI32U: { return ((Int)ato(Int) == 0) ? tval(a, (uint32_t)bto(float)) : ((fpval<32>&)b).toInteger_ubv<32>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+        case Iop_F32toI64S: { return ((Int)ato(Int) == 0) ? tval(a, (int64_t)bto(float)) : ((fpval<32>&)b).toInteger_sbv<64>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
+        case Iop_F32toI64U: { return ((Int)ato(Int) == 0) ? tval(a, (uint64_t)bto(float)) : ((fpval<32>&)b).toInteger_ubv<64>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)); }//ok
 
         case Iop_F64toF32: { return ((Int)ato(Int) == 0) ? tval(a, (float)bto(double)) : ((fpval<64>&)b).fpa2fpa<8, 24>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)).simplify(); }
         case Iop_F32toF64: { return ((Int)ato(Int) == 0) ? tval(a, (double)bto(float)) : ((fpval<32>&)b).fpa2fpa<11, 53>(sv::fpRM(a, (IRRoundingMode)(int)(cInt&)a)).simplify(); }
@@ -358,6 +404,23 @@ tval Kernel::tBinop(IROp op, tval const& a, tval const& b) {
 			    return tval(a, 0x45u);
 		    }
 	    }
+
+        case Iop_CmpF32: {
+            float da = ato(float);
+            float db = bto(float);
+            if (da == db) {
+                return tval(a, 0x40u);
+            }
+            else if (da < db) {
+                return tval(a, 0x01u);
+            }
+            else if (da > db) {
+                return tval(a, 0x0u);
+            }
+            else {
+                return tval(a, 0x45u);
+            }
+        }
 	    case Iop_DivModS64to32: {
             dassert(a.nbits() == 64); 
             dassert(b.nbits() == 32);
@@ -516,3 +579,12 @@ FAILD:
     vpanic("tIRType");
 
 }
+
+Vns Kernel::T_Binop(z3::context& m_ctx, IROp op, Vns const& a, Vns const& b)
+{
+    tval ta(a, (ULong)a, a.bitn);
+    tval tb(b, (ULong)b, b.bitn);
+    tval r = tBinop(op, ta, tb);
+    return Vns(ta, (ULong)(cLong)r, r.nbits());
+}
+

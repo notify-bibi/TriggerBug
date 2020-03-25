@@ -12,20 +12,3 @@
 #include <intrin.h>    //(include immintrin.h)
 #include <dvec.h>
 
-using namespace z3;
-
-static inline Z3_ast bool2bv(Z3_context ctx, Z3_ast ast) {
-    Z3_inc_ref(ctx, ast);
-    Z3_sort sort = Z3_mk_bv_sort(ctx, 1);
-    Z3_inc_ref(ctx, (Z3_ast)sort);
-    Z3_ast zero = Z3_mk_int(ctx, 0, sort);
-    Z3_inc_ref(ctx, zero);
-    Z3_ast one = Z3_mk_int(ctx, 1, sort);
-    Z3_inc_ref(ctx, one);
-    Z3_ast result = Z3_mk_ite(ctx, ast, one, zero);
-    Z3_dec_ref(ctx, one);
-    Z3_dec_ref(ctx, zero);
-    Z3_dec_ref(ctx, ast);
-    Z3_dec_ref(ctx, (Z3_ast)sort);
-    return result;
-}

@@ -244,9 +244,10 @@ namespace cmpr {
         std::vector<CompressClass*> m_group;
         z3::vcontext& m_z3_target_ctx;
 
-        CmprsContext(const CmprsContext& ass) = delete;
-        void operator =(const CmprsContext& ass) = delete;
     public:
+        CmprsContext(const CmprsContext& ass) { static_assert(false, "not support"); };
+        void operator =(const CmprsContext& ass) { static_assert(false, "not support"); };
+
         CmprsContext(z3::vcontext& target_ctx, Addr64 target_addr, StateStatus ttag)
             :m_target_addr(target_addr), m_target_tag(ttag), m_z3_target_ctx(target_ctx)
         {
@@ -408,8 +409,8 @@ namespace cmpr {
                     m_c.treeCompress(m_changes, m_c.m_node, m_group);
                 }
             public:
-                StateRes(const StateRes& ass) = delete;
-                void operator =(const StateRes& ass) = delete;
+                StateRes(const StateRes& ass) { static_assert(false, "not support"); };
+                void operator =(const StateRes& ass) { static_assert(false, "not support"); };
                 inline std::hash_map<Addr64, GPMana> const& changes() { return m_changes; }
                 inline Vns conditions() const { return m_assert; }
             };
@@ -418,16 +419,16 @@ namespace cmpr {
             Iterator(Compress const& c) :m_c(const_cast<Compress&>(c)), m_it_group(0) {
                 m_group_max = m_c.m_ctx.group().size();
             }
-            Iterator(const Iterator& ass) = delete;
-            void operator =(const Iterator& ass) = delete;
+            Iterator(const Iterator& ass) { static_assert(false, "not support"); };
+            void operator =(const Iterator& ass) { static_assert(false, "not support"); };
             inline bool operator!=(const Iterator& src) { return m_it_group != src.m_group_max; }
             inline void operator++() { m_it_group++; }
             inline StateRes operator*() { return StateRes(m_c, m_it_group); }
             inline UInt group_max() { return m_group_max; }
         };
     private:
-        Compress(const Compress& ass) = delete;
-        void operator =(const Compress& ass) = delete;
+        Compress(const Compress& ass) { static_assert(false, "not support"); };
+        void operator =(const Compress& ass) { static_assert(false, "not support"); };
     public:
 
         Compress(
