@@ -2,11 +2,10 @@
 #ifndef KERNEL_HEAD_DEF
 #define KERNEL_HEAD_DEF
 
-#include "engine.h"
+#include "engine/engine.h"
 #include "engine/vex_context.h"
-#include "variable.h"
-#include "register.h"
-z3::sort translateRM(z3::context&, IRRoundingMode);
+#include "engine/variable.h"
+#include "engine/register.h"
 
 class Kernel {
     friend class TR::State<Addr32>;
@@ -24,10 +23,10 @@ private:
 public:
 
 public:
-    static Vns T_Unop(z3::context& m_ctx, IROp, Vns const&);
-    static Vns T_Binop(z3::context& m_ctx, IROp op, Vns const& a, Vns const& b);
-    static Vns T_Triop(z3::context& m_ctx, IROp, Vns const&, Vns const&, Vns const&);
-    static Vns T_Qop(z3::context& m_ctx, IROp, Vns const&, Vns const&, Vns const&, Vns const&);
+    /*static tval tUnop(IROp, tval const&);
+    static tval tBinop(IROp op, tval const& a, tval const& b);
+    static tval tTriop(IROp, tval const&, tval const&, tval const&);
+    static tval tQop(IROp, tval const&, tval const&, tval const&, tval const&);*/
     inline operator const z3::context& () const { return m_ctx; }
     inline operator const z3::vcontext& () const { return m_ctx; }
     inline operator const Z3_context() const { return m_ctx; }

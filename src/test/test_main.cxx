@@ -1,6 +1,6 @@
 #pragma once
 #include "test.h"
-#include "engine/basic_var.h"
+#include "engine/basic_var.hpp"
 
 
 using namespace TR;
@@ -12,77 +12,93 @@ using namespace TR;
 
 void test1() {
     z3::context c;
-    //sv::symbolic<false, 1, true> b5(c, false);
 
-    //sv::tval bv(c);
-    cUShort x1(c, 88);
-    cunsigned x2(c, 8);
-    sv::ctype_val<char, 1> u1(c, 1);
-    sv::ctype_val<char, 5> u5(c, 8);
+    cbool bo1(c, false);
+    cbool bo2(c, true);
 
-    sv::ctype_val<bool> b1(c, 0);
-    sv::ctype_val<bool> b2(c, 1);
-    sv::ctype_val<float> f1(c, 0.999);
-    sv::ctype_val<double> d1(c, 0.999);
-    sv::ctype_val<uint64_t> ui64(c, 678);
-    sv::ctype_val<uint32_t> ui32(c, 32);
-    sv::ctype_val<int64_t> i64(c, -1);
-    sv::ctype_val<int32_t> i32(c, -2);
+    std::cout << (bo1 ^ bo2) << std::endl;
+    std::cout << (bo1 ||  bo2) << std::endl;
+    std::cout << (bo1 && bo2) << std::endl;
 
+    rcval<uint16_t>  uint16(c, 0xffff);
+    rcval<int16_t>  int16(c, 0xffff);
+    rcval<int32_t>  int32(c, -1);
+    rcval<uint32_t>  uint32(c, -1ull);
+    sv::ctype_val< true, 48, Z3_BV_SORT> int48(c, 1ll << 47);
+    sv::ctype_val< false, 48, Z3_BV_SORT> uint48(c, 1ll << 47);
 
-    __m128i sd1;
-    sd1.m128i_u64[0] = 898989;
-    __m256d sd2;
-    sd2.m256d_f64[0] = 0.676;
-    sv::Signed128 hj = { 233,4545 };
-    
-    sv::ctype_val<__m128i> u128(c, sd1);
-    sv::ctype_val<sv::Signed128> s128(c, hj);
-    sv::ctype_val<__m256d> m256(c, sd2);
-    
-    sbval<128> sb128 = u128;
+    rcval<__m128i>  m128(c, _mm_set1_epi8(9));
+    rcval<__m256i>  m256(c, _mm256_set_epi64x(9, 6, 3, 1));
 
-    std::cout << sb128 << std::endl;
-    std::cout << (sbval<256>)u128 << std::endl;
-    std::cout << (sbval<256>)s128 << std::endl;
+    __m128i i128 = m128;
 
 
-    std::cout << u1 << std::endl;
-    std::cout << b1 << std::endl;
-    std::cout << f1 << std::endl;
-    std::cout << d1 << std::endl;
+    std::cout << int16 << std::endl;
+    std::cout << uint32 << std::endl;
+    std::cout << uint32 << std::endl;
+    std::cout << int48 << std::endl;
+    std::cout <<(int48 >> 8) << std::endl;
+    std::cout << (uint48 >> 8) << std::endl;
+    std::cout << (int48 > 0) << std::endl;
+    std::cout << (uint48 > 0) << std::endl;
 
 
 
-    std::cout << (b1 || b2) << std::endl;
-
-    std::cout << u1 + 323 << std::endl;
-    std::cout << u1 + u5 << std::endl;
-    std::cout << u5 - u1 << std::endl;
-    std::cout << f1 + 0.1 << std::endl;
-    std::cout << f1 + -1ull << std::endl;
-    std::cout << d1 + 54 << std::endl;
+    std::cout << (int16 >= 8) << std::endl;
+    std::cout << uint32 + 8989 << std::endl;
+    std::cout << uint32 - 89 << std::endl;
 
 
-    std::cout << 323  + u1 << std::endl;
-    std::cout << 0.1  + f1 << std::endl;
-    std::cout << -1ull + f1 << std::endl;
-    std::cout << 54   + d1 << std::endl;
+    std::cout << m128 << std::endl;
+    std::cout << m256 << std::endl;
 
 
-
-    Z3_ast ff = x1;
-    ff = b1;
-    ff = f1;
-    ff = d1;
-    auto fg = u1 + 1;
-    fg = fg + 1;
-    auto x3 = 8 + x1;
 
 }
 
+
+
+
 void test2() {
     z3::context c;
+    sv::symbolic<true, 32, Z3_BV_SORT > s32t(c, -5);
+    sv::symbolic<true, 16, Z3_BV_SORT > s16t(c, -5);
+
+    rsval<int>  hjk1(c, 8);
+    rsval<int>  hjk2(c, 8);
+    rsval<int>  sss1(s32t);
+    rsval<short>  sss2(s16t);
+    rsval<bool>  bo1(c, false);
+    rsval<bool>  bo2(c, true);
+    
+
+    std::cout << hjk1 + hjk2 << std::endl;
+    std::cout << hjk1 + sss1 << std::endl;
+    std::cout << hjk1 + sss2 + -1ull << std::endl;
+
+
+    std::cout << hjk1 + 45 - 67 / 54 * 66 + sss2 + -1ull << std::endl;
+
+    std::cout << (hjk1 + sss2 << 56u) << std::endl;
+    std::cout << ((((((sss2 + hjk1 >> 5u)) * 5 % 8 | 90) & 56ll) > 8989) && bo1 || bo2) << std::endl;
+
+    std::cout << sss2.concat(hjk1) << std::endl;
+    std::cout << sss2.extract<8, 6>() << std::endl;
+    std::cout << hjk1.extract<7, 2>() << std::endl;
+
+
+    //std::cout << (hjk1 + sss2 << 1ull) << std::endl;
+    //std::cout << (hjk1 + sss2 >> 1ull) << std::endl;
+
+
+
+
+
+
+
+
+
+
 
 
     sv::symbolic<true, 32, Z3_BV_SORT > d2(c, -5);
@@ -92,8 +108,8 @@ void test2() {
 
     sv::symbolic<false, 16, Z3_BV_SORT > d4(c, (UShort)-5);
 
-    __m128i sd;
-    sv::symbolic<true, 72, Z3_FLOATING_POINT_SORT > d5(c, sd, sv::fpa_sort(c, 10, 62));
+    __m128i sd = _mm_setr_epi32(1, 2, 3, 4);
+    sv::symbolic<true, 72, Z3_FLOATING_POINT_SORT > f10_62(c, sd, sv::fpa_sort(c, 10, 62));
 
 
 
@@ -109,7 +125,7 @@ void test2() {
     sbool sb2(c, false);
 
     sv::sort rm = sv::fpRM(c, Irrm_NegINF);
-    auto f1 = d5.fpa2fpa<5, 6>(rm);
+    auto f1 = f10_62.fpa2fpa<5, 6>(rm);
 
     auto x1 = d2 + 8;
     auto x2 = d3 + 8;
@@ -121,16 +137,16 @@ void test2() {
     auto x8 = d3 + d4;
 
     std::cout << f1 << std::endl;
-    std::cout << d5 << std::endl;
-    std::cout << d5.tobv().simplify() << std::endl;
+    std::cout << f10_62 << std::endl;
+    std::cout << f10_62.tobv().simplify() << std::endl;
     std::cout << d2 << std::endl;
 
 
 
-    sv::symbolic<false, 240, Z3_BV_SORT > d6(c, c.bv_const("ug240", 240));
-    sv::symbolic<true, 240, Z3_BV_SORT > d7(c, c.bv_const("sg240", 240));
-    sv::symbolic<true, 32, Z3_BV_SORT > d8(c, c.bv_const("sg32", 32));
-    std::cout << d6 << std::endl;
+    sv::symbolic<false, 240, Z3_BV_SORT > ug240(c, c.bv_const("ug240", 240));
+    sv::symbolic<true, 240, Z3_BV_SORT > sg240(c, c.bv_const("sg240", 240));
+    sv::symbolic<true, 32, Z3_BV_SORT > sg32(c, c.bv_const("sg32", 32));
+    std::cout << ug240 << std::endl;
     std::cout << (sb ^ sb2) << std::endl;
 
     uint64_t UI64 = 1;
@@ -139,52 +155,59 @@ void test2() {
     uint32_t u32 = 2;
     int32_t I32 = -2;
 
-    auto div = I64 / u32;
-    div = UI32 / I64;
-    div = UI64 / I32;
-    div = UI32 / UI64;
 
-    div = UI64 / I64;
-    div = I64 / UI64;
+    auto dd = I64 + UI32;
+    auto dd2 = I64 + UI64;
+
+    auto div1 = I64 / u32;//idiv  u32->I64
+    auto div2 = UI32 / I64;// idiv  UI32->I64
+    auto div3 = UI64 / I32;//div   I32->UI64
+    auto div4 = UI32 / UI64;// div 
+
+    auto div5 = UI64 / I64;// div 
+    auto div6 = I64 / UI64;// div 
 
 
 
     bool cmp64 = UI64 < I64;//true : 取决于 UI64
+    cmp64 = I32 > UI32;
+
     cmp64 = UI64 < I32;//true : 取决于 UI64
-
-    cmp64 = I64 > UI64;
-
     cmp64 = I32 > UI64;
+
+    cmp64 = I64 > UI64;//true
+    cmp64 = I64 > UI32;//false
+
 
 
 
     cmp64 = UI32 < I64;//false : 取决于 I64
-
     cmp64 = UI32 < I32;//true : 取决于 UI32
 
-    cmp64 = I64 > UI32;//false
-
-    cmp64 = I32 > UI32;
 
 
-    std::cout << (d6 > -1ull) << std::endl;
-    std::cout << (d6 < -1) << std::endl;
+
+    std::cout << (ug240 > -1ull) << std::endl;
+    std::cout << (ug240 < -1) << std::endl;
 
 
-    std::cout << (d8 > -1ull) << std::endl;
-    std::cout << (d8 < -1) << std::endl;
-    std::cout << (d8 < -1ll) << std::endl;
+    std::cout << (sg32 > -1ull) << std::endl;
+    std::cout << (sg32 < -1) << std::endl;
+    std::cout << (sg32 < -1ll) << std::endl;
 
-    std::cout << (d7 > 1ull) << std::endl;
-    std::cout << (d7 > 1) << std::endl;
-    std::cout << (d7 < -1) << std::endl;
+    std::cout << (sg240 > 1ull) << std::endl;
+    std::cout << (sg240 > 1) << std::endl;
+    std::cout << (sg240 < -1) << std::endl;
 
     sv::symbolic<true, 233, Z3_BV_SORT > d233(c, c.bv_const("sg233", 233));
     sv::symbolic<false, 233, Z3_BV_SORT > ud233(c, c.bv_const("ug233", 233));
-    std::cout << (d6 >= d233) << std::endl;
-    std::cout << (d7 >= d233) << std::endl;
-    std::cout << (d7 > ud233) << std::endl;
+    std::cout << (ug240 >= d233) << std::endl;
+    std::cout << (sg240 >= d233) << std::endl;
+    std::cout << (sg240 > ud233) << std::endl;
 
+
+
+}
 
 
 
@@ -256,15 +279,6 @@ void test2() {
 
 
 
-    auto rb = sb.simplify();
-    auto rb2 = (d2 == d3).simplify();
-    auto rb3 = (d2 == d6 + 90).simplify();
-    auto rf = d5.simplify();
-
-
-
-
-}
 
 
 

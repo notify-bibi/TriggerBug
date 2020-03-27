@@ -22,7 +22,6 @@ Revision History:
 #include "engine/compress.h"
 #include "engine/emu_environment.h"
 #include "z3_target_call/z3_target_call.h"
-#include "crypto_analyzer/crypto_analyzer.h"
 #include <deque>
 
 

@@ -50,19 +50,19 @@ namespace TR {
 #endif
 
 #ifdef USE_HASH_AST_MANAGER
-    extern Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX& m_ast, z3::vcontext& ctx);
-    extern Z3_ast Reg2AstSSE(Char nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX& m_ast, z3::vcontext& ctx);
+    extern Z3_ast Reg2Ast(int nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX& m_ast, z3::vcontext& ctx);
+    extern Z3_ast Reg2AstSSE(int nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX& m_ast, z3::vcontext& ctx);
 #else
-    extern Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, Z3_context ctx);
-    extern Z3_ast Reg2AstSSE(Char nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, Z3_context ctx);
+    extern Z3_ast Reg2Ast(int nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, Z3_context ctx);
+    extern Z3_ast Reg2AstSSE(int nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, Z3_context ctx);
 #endif
 
 #ifdef USE_HASH_AST_MANAGER
-    extern Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX& m_ast, z3::vcontext& ctx, z3::vcontext& toctx);
-    extern Z3_ast Reg2AstSSE(Char nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX& m_ast, z3::vcontext& ctx, z3::vcontext& toctx);
+    extern Z3_ast Reg2Ast(int nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX& m_ast, z3::vcontext& ctx, z3::vcontext& toctx);
+    extern Z3_ast Reg2AstSSE(int nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX& m_ast, z3::vcontext& ctx, z3::vcontext& toctx);
 #else
-    extern Z3_ast Reg2Ast(Char nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, Z3_context ctx, Z3_context toctx);
-    extern Z3_ast Reg2AstSSE(Char nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, Z3_context ctx, Z3_context toctx);
+    extern Z3_ast Reg2Ast(int nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, Z3_context ctx, Z3_context toctx);
+    extern Z3_ast Reg2AstSSE(int nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, Z3_context ctx, Z3_context toctx);
 #endif
 
 
