@@ -28,6 +28,13 @@ void test1() {
     sv::ctype_val< false, 48, Z3_BV_SORT> uint48(c, 1ll << 47);
 
     rcval<__m128i>  m128(c, _mm_set1_epi8(9));
+
+
+    sv::ctype_val<false, 128, Z3_BV_SORT>  m128a(c, 9);
+    sv::ctype_val<false, 256, Z3_BV_SORT>  m128b(c, 9);
+    sv::ctype_val<true, 256, Z3_BV_SORT>  m128d(c, -999);
+    sv::ctype_val<false, 78, Z3_BV_SORT>  m128c(c, 9);
+
     rcval<__m256i>  m256(c, _mm256_set_epi64x(9, 6, 3, 1));
 
     __m128i i128 = m128;
@@ -70,10 +77,14 @@ void test2() {
     rsval<short>  sss2(s16t);
     rsval<bool>  bo1(c, false);
     rsval<bool>  bo2(c, true);
-    
+
+    sv::rsval<true, 128, Z3_BV_SORT > s128t(c, _mm_setr_epi32(1, 2, 3, 4));
+    //sv::rsval<true, 128, Z3_FLOATING_POINT_SORT> fff128 = s128t;
+
 
     std::cout << hjk1 + hjk2 << std::endl;
     std::cout << hjk1 + sss1 << std::endl;
+    std::cout << hjk1.tos() << sss2 << std::endl;
     std::cout << hjk1 + sss2 + -1ull << std::endl;
 
 
@@ -85,6 +96,9 @@ void test2() {
     std::cout << sss2.concat(hjk1) << std::endl;
     std::cout << sss2.extract<8, 6>() << std::endl;
     std::cout << hjk1.extract<7, 2>() << std::endl;
+
+
+
 
 
     //std::cout << (hjk1 + sss2 << 1ull) << std::endl;
@@ -112,14 +126,13 @@ void test2() {
     sv::symbolic<true, 72, Z3_FLOATING_POINT_SORT > f10_62(c, sd, sv::fpa_sort(c, 10, 62));
 
 
+    sv::symbolic<false, 16, Z3_FLOATING_POINT_SORT > F16(c, (UShort)0x3f89, sv::fpa_sort(c, 5, 11));
 
+    tval tv4 = F16;
 
+    //sfpval<16>& fa = (sfpval<16>&) tv4;
 
-    tval tv4 = d4;
-
-    fpval<16>& fa = (fpval<16>&) tv4;
-
-    std::cout << fa << std::endl;
+    //std::cout << fa << std::endl;
 
     sbool sb(c, false);
     sbool sb2(c, false);
@@ -206,80 +219,26 @@ void test2() {
     std::cout << (sg240 > ud233) << std::endl;
 
 
+    
 
+    std::cout << Kernel::tUnop(Iop_Clz32, sv::rsval<true, 32, Z3_BV_SORT> (c, 0b1111100)) << std::endl;
+    std::cout << Kernel::tUnop(Iop_Ctz32, sv::rsval<true, 32, Z3_BV_SORT>(c, 0b1111100)) << std::endl;
+    std::cout << Kernel::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100)) << std::endl;
+    std::cout << Kernel::tUnop(Iop_Ctz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100)) << std::endl;
+
+    std::cout << Kernel::tUnop(Iop_Clz32, sv::rsval<true, 32, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 32, Z3_BV_SORT>().simplify() << std::endl;
+    std::cout << Kernel::tUnop(Iop_Ctz32, sv::rsval<true, 32, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 32, Z3_BV_SORT>().simplify() << std::endl;
+    std::cout << Kernel::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 64, Z3_BV_SORT>().simplify() << std::endl;
+    std::cout << Kernel::tUnop(Iop_Ctz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 64, Z3_BV_SORT>().simplify() << std::endl;
+
+    std::cout << Kernel::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0)) << std::endl;
+    std::cout << Kernel::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0).tos()).tos<true, 64, Z3_BV_SORT>().simplify() << std::endl;
+
+
+    tval hjj(c, 0);
+
+    //Z3_inc_ref(sg240, sg240);
 }
-
-
-
-    //cbool b1(c, 8);
-    //sv::ctype_val<const bool> b2(c, 8);
-    //x1 = 8;
-
-    //x1 = x1 + x2;
-    //auto add1 = x1 + 88;
-    //std::cout << z3::expr(c, add1) << std::endl;
-
-    //bv = x1;
-    //bv = b1;
-
-
-    //sval<8> s8_0(c, 88);
-    //auto add2 = s8_0 + 88;
-    //add2 = 78 + s8_0;
-
-    //std::cout << z3::expr(c, add2) << std::endl;
-
-    //uval<8> u8_0(c, 8);
-    //sbool b3(c, false);
-    //sbool b4(c, true);
-
-
-    //sval<32> s32_0(c, 88);
-
-    //bv = s32_0;
-
-    //__m256i m256i;
-    //__m256 m256;
-    //sval<256> s256_0(c, m256i);
-    //sval<256> s256_1(c, m256);
-
-    //std::cout << z3::expr(c, s256_0) << std::endl;
-
-
-    //sval<32> s32_1(c, (char)-1);
-
-    //uval<16> u16_0(c, 8ull);
-    //sval<16> s16_0(c, 8);
-    //uval<32> u32_0(c, 8);
-    //uval<64> u64_0(c, 8);
-    //sval<64> s64_0(c, 8);
-    ////auto v1 = b3 || b4;
-
-
-    //char charvalue = -2;
-    //sval<32> s32_2(c, charvalue);
-    //uval<32> u32_2(c, charvalue);
-
-    //std::cout << z3::expr(c, s32_1) << std::endl;
-    //std::cout << z3::expr(c, u32_0) << std::endl;
-    //std::cout << z3::expr(c, s32_2) << std::endl;
-    //std::cout << z3::expr(c, u32_2) << std::endl;
-
-    //auto v2 = u32_0 + s16_0;
-    //std::cout << z3::expr(c, s16_0) << std::endl;
-    //std::cout << z3::expr(c, v2) << std::endl;
-    //auto df0 = u16_0 + s32_0;
-
-
-    //auto dd = ite(u32_0 != s16_0, s32_1>>6, s32_0);
-
-    //std::cout << z3::expr(c, dd) << std::endl;
-    //auto df1 = g4 + g2;
-    //auto df2 = g33 + g2;
-
-
-
-
 
 
 
@@ -444,6 +403,22 @@ bool test_ir_dirty() {
     state.hook_add(0x2000, test_ir_dirty_hook);
     state.mem.Ist_Store(0x1000, 0xcc);
 
+ /*   std::cout << state.regs.get<Ity_I8>(X86_IR_OFFSET::ESP) << std::endl;
+    std::cout << state.regs.get<Ity_V128>(X86_IR_OFFSET::ESP) << std::endl;
+    std::cout << state.regs.get<Ity_V256>(X86_IR_OFFSET::ESP) << std::endl;
+
+    std::cout << state.regs.get<Ity_F128>(X86_IR_OFFSET::ESP) << std::endl;
+    std::cout << state.regs.get<Ity_F64>(X86_IR_OFFSET::ESP) << std::endl;
+    std::cout << state.regs.get<Ity_F32>(X86_IR_OFFSET::ESP) << std::endl;
+    std::cout << state.regs.get<Ity_F16>(X86_IR_OFFSET::ESP) << std::endl;
+*/
+
+
+
+
+
+
+
     state.regs.Ist_Put(X86_IR_OFFSET::ESP, 0x8000);
     state.regs.Ist_Put(X86_IR_OFFSET::EIP, 0x1000);
     state.regs.Ist_Put(X86_IR_OFFSET::CC_OP, 0x0);
@@ -541,7 +516,7 @@ int main() {
     test2();
 
     //testz3();
-    //IR_TEST(test_ir_dirty);
+    IR_TEST(test_ir_dirty);
     IR_TEST(creakme);
     IR_TEST(asong);
     IR_TEST(test_cmpress);

@@ -14,7 +14,7 @@ Revision History:
 
 #include "valgrind/pub/libvex_basictypes.h"
 #include "valgrind/pub/libvex_ir.h"
-#include "z3++.h"
+#include "engine/engine.h"
 #include <mmintrin.h>  //MMX
 #include <xmmintrin.h> //SSE(include mmintrin.h)
 #include <emmintrin.h> //SSE2(include xmmintrin.h)
@@ -25,7 +25,6 @@ Revision History:
 #include <wmmintrin.h> //AES(include nmmintrin.h)
 #include <immintrin.h> //AVX(include wmmintrin.h)
 #include <intrin.h>    //(include immintrin.h)
-#include <Windows.h>
 
 
 #define fastMask(n) ((ULong)((((int)(n))<64)?((1ull << ((int)(n))) - 1):-1ll))
@@ -44,7 +43,6 @@ typedef enum :UChar {
     SYMB = 0b11,
 }V_Kind;
 
-struct no_inc {};
 
 #define CP_DATA(a)                     \
 if ((a).bitn <= 64) {                  \

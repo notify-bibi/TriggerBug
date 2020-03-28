@@ -14,6 +14,7 @@ Revision History:
 
 #include "engine/engine.h"
 #include "engine/variable.h"
+#include "engine/basic_var.hpp"
 #include <Windows.h>
 
 
@@ -69,6 +70,7 @@ namespace TR {
 
 
 #define sse_check_zero_X256(data)  (_mm256_movemask_epi8(_mm256_cmpeq_epi64(_mm256_setzero_si256(), _mm256_loadu_si256((__m256i*)(data)))) != -1)
+#define sse_check_zero_X128(data)  (_mm_movemask_epi8(_mm_cmpeq_epi64(_mm_setzero_si128(), _mm_loadu_si128((__m128i*)(data)))) != -1)
 
 
     //Symbolic
@@ -347,6 +349,88 @@ namespace TR {
 
 #define m_fastindex symbolic->m_fastindex
 #define m_ast symbolic->m_ast
+
+
+
+
+#define lazydef(vectype, cmptype, ctype, nbit)                                                                   \
+        template<IRType ty, TASSERT(ty == Ity_##vectype##nbit)>                                                  \
+        inline rsval<ctype> get(UInt offset) {                                                                   \
+            if (symbolic && *(cmptype*)(m_fastindex + offset)) {                                                 \
+                return rsval<cmptype>(m_ctx, Reg2Ast(nbit>>3, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx), no_inc{}); \
+            }else{                                                                                               \
+                return rsval<cmptype>(m_ctx, *(ctype*)(m_bytes + offset));                                       \
+            }                                                                                                    \
+        }
+        lazydef(I, int8_t, int8_t, 8);
+        lazydef(I, int16_t, int16_t, 16);
+        lazydef(I, int32_t, int32_t, 32);
+        lazydef(I, int64_t, int64_t, 64);
+
+
+
+        template<IRType ty, TASSERT(ty == Ity_F16)>
+        inline sv::rsval<true, 16, Z3_FLOATING_POINT_SORT> get(UInt offset) {
+            if (symbolic && *(int16_t*)(m_fastindex + offset)) {
+                return subval<16>(m_ctx, Reg2AstSSE(2, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx), no_inc{}).tofpa();
+            }
+            else {
+                return sv::rsval<true, 16, Z3_FLOATING_POINT_SORT>(m_ctx, m_bytes + offset);
+            }
+        }
+        template<IRType ty, TASSERT(ty == Ity_F32)>
+        inline sv::rsval<true, 32, Z3_FLOATING_POINT_SORT> get(UInt offset) {
+            if (symbolic && *(int32_t*)(m_fastindex + offset)) {
+                return subval<32>(m_ctx, Reg2AstSSE(4, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx), no_inc{}).tofpa();
+            }
+            else {
+                return sv::rsval<true, 32, Z3_FLOATING_POINT_SORT>(m_ctx, m_bytes + offset);
+            }
+        }
+
+        template<IRType ty, TASSERT(ty == Ity_F64)>
+        inline sv::rsval<true, 64, Z3_FLOATING_POINT_SORT> get(UInt offset) {
+            if (symbolic && *(int64_t*)(m_fastindex + offset)) {
+                return subval<64>(m_ctx, Reg2AstSSE(8, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx), no_inc{}).tofpa();
+            }
+            else {
+                return sv::rsval<true, 64, Z3_FLOATING_POINT_SORT>(m_ctx, m_bytes + offset);
+            }
+        }
+        template<IRType ty, TASSERT(ty == Ity_F128)>
+        inline sv::rsval<true, 128, Z3_FLOATING_POINT_SORT> get(UInt offset) {
+            if (symbolic && sse_check_zero_X128(m_fastindex + offset)) {
+                return subval<128>(m_ctx, Reg2AstSSE(16, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx), no_inc{}).tofpa();
+            }
+            else {
+                return sv::rsval<true, 128, Z3_FLOATING_POINT_SORT>(m_ctx, m_bytes + offset);
+            }
+        }
+
+        template<IRType ty, TASSERT(ty == Ity_I128 || ty == Ity_V128)>
+        inline auto get(UInt offset) {
+            if (symbolic && sse_check_zero_X128(m_fastindex + offset)) {
+                return sv::rsval<true, 128>(m_ctx, Reg2AstSSE(16, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx), no_inc{});
+            }
+            else {
+                return sv::rsval<true, 128>(m_ctx, m_bytes + offset);
+            }
+        }
+
+
+        template<IRType ty, TASSERT(ty == Ity_V256)>
+        inline auto get(UInt offset) {
+            if (symbolic && sse_check_zero_X256(m_fastindex + offset)) {
+                return sv::rsval<true, 256>(m_ctx, Reg2AstSSE(32, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx), no_inc{});
+            }
+            else {
+                return sv::rsval<true, 256>(m_ctx, m_bytes + offset);
+            }
+        }
+
+
+#undef lazydef
+
 
 
 

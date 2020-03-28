@@ -23,10 +23,11 @@ private:
 public:
 
 public:
-    /*static tval tUnop(IROp, tval const&);
+    static tval tUnop(IROp, tval const&);
     static tval tBinop(IROp op, tval const& a, tval const& b);
     static tval tTriop(IROp, tval const&, tval const&, tval const&);
-    static tval tQop(IROp, tval const&, tval const&, tval const&, tval const&);*/
+    static tval tQop(IROp, tval const&, tval const&, tval const&, tval const&);
+
     inline operator const z3::context& () const { return m_ctx; }
     inline operator const z3::vcontext& () const { return m_ctx; }
     inline operator const Z3_context() const { return m_ctx; }

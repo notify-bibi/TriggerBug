@@ -17,18 +17,20 @@
 #include <dvec.h>
 
 
-#define atos(n) ((sbval<n>&)a)
-#define atou(n) ((ubval<n>&)a)
-#define btos(n) ((sbval<n>&)b)
-#define btou(n) ((ubval<n>&)b)
-#define ctos(n) ((sbval<n>&)c)
-#define ctou(n) ((ubval<n>&)c)
-#define dtos(n) ((sbval<n>&)d)
-#define dtou(n) ((ubval<n>&)d)
+#define atos(n) ((ssbval<n>&)a)
+#define atou(n) ((subval<n>&)a)
+#define btos(n) ((ssbval<n>&)b)
+#define btou(n) ((subval<n>&)b)
+#define ctos(n) ((ssbval<n>&)c)
+#define ctou(n) ((subval<n>&)c)
+#define dtos(n) ((ssbval<n>&)d)
+#define dtou(n) ((subval<n>&)d)
 
 
 
-#define ato(t) ((sv::ctype_val<t>&)a)
-#define bto(t) ((sv::ctype_val<t>&)b)
-#define cto(t) ((sv::ctype_val<t>&)c)
-#define dto(t) ((sv::ctype_val<t>&)a)
+#define ato(t) ((rcval<t>&)a)
+#define bto(t) ((rcval<t>&)b)
+#define cto(t) ((rcval<t>&)c)
+#define dto(t) ((rcval<t>&)a)
+
+#define atorm ((IRRoundingMode)(int)(rcval<int>&)a)
