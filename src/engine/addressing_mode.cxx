@@ -1,6 +1,7 @@
 #include "engine/addressing_mode.h"
 #include <intrin.h>    //(include immintrin.h)
 
+#define fastMask(n) ((ULong)((((int)(n))<64)?((1ull << ((int)(n))) - 1):-1ll))
 #define fastMaskI1(n) fastMask(((n)+1))
 #define fastMaskReverseI1(N) (~fastMaskI1(N))
 using namespace z3;
@@ -98,7 +99,7 @@ parse_sign:
 
 //a=b+c+d+e...+z -> b c d e
 template<typename ADDR>
-void TR::addressingMode<ADDR>::_offset2opAdd(std::deque<Vns>& ret, expr const& _e)
+void TR::addressingMode<ADDR>::_offset2opAdd(std::deque<expr>& ret, expr const& _e)
 {
     expr e = _e;
     context& c = e.ctx();

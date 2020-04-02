@@ -11,7 +11,7 @@ namespace TR {
         win32(StateX86* father_state, Addr32 gse) :StateX86(father_state, gse) {};
     public:
         win32(vex_context<Addr32>& vex_info, Addr32 gse, Bool _need_record) :StateX86(vex_info, gse, _need_record) {
-            //avoid_anti_debugging();
+            avoid_anti_debugging();
         };
 
         void avoid_anti_debugging();

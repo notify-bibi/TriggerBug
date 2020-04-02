@@ -27,13 +27,6 @@ static LARGE_INTEGER   freq_global = { 0 };
 static LARGE_INTEGER   beginPerformanceCount_global = { 0 };
 static LARGE_INTEGER   closePerformanceCount_global = { 0 };
 
-typedef Vns (*Z3_Function6)(Vns &, Vns &, Vns &, Vns &, Vns &, Vns &);
-typedef Vns (*Z3_Function5)(Vns &, Vns &, Vns &, Vns &, Vns &);
-typedef Vns (*Z3_Function4)(Vns &, Vns &, Vns &, Vns &);
-typedef Vns (*Z3_Function3)(Vns &, Vns &, Vns &);
-typedef Vns (*Z3_Function2)(Vns &, Vns &);
-typedef Vns (*Z3_Function1)(Vns &);
-
 //######################StateMEM START##############################
 
 template class StateMEM<Addr32>;
@@ -113,10 +106,9 @@ void IR_init(VexControl& vc) {
 }
 
 
-int eval_all(std::vector<Vns>& result, z3::solver& solv, Z3_ast nia) {
+int eval_all(std::list<tval>& result, z3::solver& solv, Z3_ast nia) {
     //std::cout << nia << std::endl;
     //std::cout << state.solv.assertions() << std::endl;
-    result.reserve(20);
     solv.push();
     //std::vector<Z3_model> mv;
     //mv.reserve(20);
@@ -130,7 +122,7 @@ int eval_all(std::vector<Vns>& result, z3::solver& solv, Z3_ast nia) {
             // mv.emplace_back(m_model);
             Z3_ast r = 0;
             bool status = Z3_model_eval(ctx, m_model, nia, /*model_completion*/true, &r);
-            result.emplace_back(Vns(ctx, r));
+            result.emplace_back(tval(ctx, r));
             Z3_ast_kind rkind = Z3_get_ast_kind(ctx, r);
             if (rkind != Z3_NUMERAL_AST) {
                 std::cout << rkind << Z3_ast_to_string(ctx, nia) << std::endl;
@@ -216,7 +208,7 @@ template <typename ADDR> State<ADDR>::State(vex_context<ADDR>& vctx, ADDR gse, B
     if (gse)
         guest_start_ep = gse;
     else {
-        guest_start_ep = regs.Iex_Get(info().gRegsIpOffset(), Ity_I64);
+        guest_start_ep = regs.get<ADDR>(info().gRegsIpOffset());
     }
     guest_start = guest_start_ep;
 
@@ -337,19 +329,19 @@ State<ADDR>::operator std::string() const{
 }
 
 template <typename ADDR>
-Vns State<ADDR>::mk_int_const(UShort nbit) {
+tval State<ADDR>::mk_int_const(UShort nbit) {
     std::unique_lock<std::mutex> lock(m_state_lock);
     auto res = m_z3_bv_const_n++;
     char buff[20];
     sprintf_s(buff, sizeof(buff), "p_%d", res);
-    return Vns(m_ctx.bv_const(buff, nbit), nbit);
+    return tval(m_ctx, m_ctx.bv_const(buff, nbit), nbit);
 }
 
 template <typename ADDR>
-Vns State<ADDR>::mk_int_const(UShort n, UShort nbit) {
+tval State<ADDR>::mk_int_const(UShort n, UShort nbit) {
     char buff[20];
     sprintf_s(buff, sizeof(buff), "p_%d", n);
-    return  Vns(m_ctx.bv_const(buff, nbit), nbit);
+    return  tval(m_ctx, m_ctx.bv_const(buff, nbit), nbit);
 }
 
 template <typename ADDR>
@@ -357,7 +349,7 @@ UInt State<ADDR>::getStr(std::stringstream& st, ADDR addr)
 {
     UInt p = 0;
     while (True) {
-        Vns b = mem.Iex_Load<Ity_I8>(addr++);
+        auto b = mem.load<Ity_I8>(addr++);
         if (b.real()) {
             p++;
             st << (UChar)b;
@@ -381,7 +373,7 @@ DirtyCtx TR::State<ADDR>::getDirtyVexCtx()
 }
 
 template<typename ADDR>
-Vns TR::State<ADDR>::dirty_call(IRCallee* cee, IRExpr** exp_args, IRType ty)
+tval TR::State<ADDR>::dirty_call(IRCallee* cee, IRExpr** exp_args, IRType ty)
 {
     getDirtyVexCtx();
     dirty_ccall<ADDR>(m_dctx, cee, exp_args);
@@ -389,7 +381,7 @@ Vns TR::State<ADDR>::dirty_call(IRCallee* cee, IRExpr** exp_args, IRType ty)
 }
 
 template<typename ADDR>
-Vns TR::State<ADDR>::dirty_call(const HChar* name, void* func, std::initializer_list<Vns> parms, IRType ty)
+tval TR::State<ADDR>::dirty_call(const HChar* name, void* func, std::initializer_list<rsval<Addr64>> parms, IRType ty)
 {
     getDirtyVexCtx();
     dirty_call_np<ADDR>(m_dctx, name, func, parms);
@@ -397,51 +389,43 @@ Vns TR::State<ADDR>::dirty_call(const HChar* name, void* func, std::initializer_
 }
 
 
-void TRsolver::add_assert(Vns const& t_assert, Bool ToF)
+
+void TR::TRsolver::add(sbool const& e)
+{
+    if (!m_solver_snapshot) {
+        m_solver_snapshot = true;
+        push();
+    }
+    add_assert(e);
+}
+
+void TR::TRsolver::check_if_forget_pop()
+{
+    if (m_solver_snapshot) {
+        m_solver_snapshot = false;
+        pop();
+    }
+}
+
+void TRsolver::add_assert(const sbool& t_assert)
 {
     if ((Z3_context)t_assert != (Z3_context)(*this)) {
-        add_assert(t_assert.translate(*this), ToF);
+        add_assert(t_assert.translate(*this));
         return;
     }
-    if(t_assert.is_bool()){
-        if (ToF) {
-            Z3_solver_assert(*this, *this, t_assert);
-            if (!is_snapshot()) {
-                m_asserts.push_back(t_assert);
-            }
-        }
-        else {
-            auto not = !t_assert;
-            Z3_solver_assert(*this, *this, not);
-            if (!is_snapshot()) {
-                m_asserts.push_back(not);
-            }
-        }
-    }
-    else {
-        auto ass = t_assert == Vns(operator Z3_context(), (ULong)ToF, t_assert.bitn);
-        Z3_solver_assert(*this, *this, ass);
-        if (!is_snapshot()) {
-            m_asserts.push_back(ass);
-        }
-    }
-}
-
-inline void TRsolver::add_assert_eq(Vns const& eqA, Vns const& eqB)
-{
-    if ((Z3_context)eqA != (Z3_context)(*this)) {
-        add_assert_eq(eqA.translate(*this), eqB); return;
-    }
-    if ((Z3_context)eqB != (Z3_context)(*this)) {
-        add_assert_eq(eqA, eqB.translate(*this)); return;
-    }
-    Vns ass = (eqA == eqB);
-    Z3_solver_assert(*this, *this, ass);
+    Z3_solver_assert(*this, *this, t_assert);
     if (!is_snapshot()) {
-        m_asserts.push_back(ass);
+        m_asserts.push_back(t_assert);
     }
 }
 
+
+typedef tval(*Z3_Function6)(tval&, tval&, tval&, tval&, tval&, tval&);
+typedef tval(*Z3_Function5)(tval&, tval&, tval&, tval&, tval&);
+typedef tval(*Z3_Function4)(tval&, tval&, tval&, tval&);
+typedef tval(*Z3_Function3)(tval&, tval&, tval&);
+typedef tval(*Z3_Function2)(tval&, tval&);
+typedef tval(*Z3_Function1)(tval&);
 
 typedef ULong(*Function_32_6)(UInt, UInt, UInt, UInt, UInt, UInt);
 typedef ULong(*Function_32_5)(UInt, UInt, UInt, UInt, UInt);
@@ -461,64 +445,64 @@ typedef ULong(*Function_64_0)();
 
 
 #define CDFCHECK(arg0)\
-if (arg0.symbolic()) {\
+if (arg0.symb()) {\
     z3_mode = True;\
     if (!cptr) { return dirty_call(cee, exp_args, ty); };\
 }
 
 template<>
-Vns State<Addr32>::CCall(IRCallee *cee, IRExpr **exp_args, IRType ty)
+tval State<Addr32>::CCall(IRCallee *cee, IRExpr **exp_args, IRType ty)
 {
     Int regparms = cee->regparms;
     UInt mcx_mask = cee->mcx_mask;
     UShort bitn = ty2bit(ty);
     Bool z3_mode = False;
-    if (!exp_args[0]) return Vns(m_ctx, ((Function_32_0)(cee->addr))(), bitn);
+    if (!exp_args[0]) return tval(m_ctx, ((Function_32_0)(cee->addr))(), bitn);
     void* cptr = funcDict(cee->addr);
     if (cptr == DIRTY_CALL_MAGIC) { 
         return dirty_call(cee, exp_args, ty);
     }
-    Vns arg0 = tIRExpr(exp_args[0]); CDFCHECK(arg0);
-    if (!exp_args[1]) return (z3_mode) ? ((Z3_Function1)(cptr))(arg0) : Vns(m_ctx, ((Function_32_1)(cee->addr))(arg0), bitn);
-    Vns arg1 = tIRExpr(exp_args[1]); CDFCHECK(arg1);
-    if (!exp_args[2]) return (z3_mode) ? ((Z3_Function2)(cptr))(arg0, arg1) : Vns(m_ctx, ((Function_32_2)(cee->addr))(arg0, arg1), bitn);
-    Vns arg2 = tIRExpr(exp_args[2]); CDFCHECK(arg2);
-    if (!exp_args[3]) return (z3_mode) ? ((Z3_Function3)(cptr))(arg0, arg1, arg2) : Vns(m_ctx, ((Function_32_3)(cee->addr))(arg0, arg1, arg2), bitn);
-    Vns arg3 = tIRExpr(exp_args[3]); CDFCHECK(arg3);
-    if (!exp_args[4]) return (z3_mode) ? ((Z3_Function4)(cptr))(arg0, arg1, arg2, arg3) : Vns(m_ctx, ((Function_32_4)(cee->addr))(arg0, arg1, arg2, arg3), bitn);
-    Vns arg4 = tIRExpr(exp_args[4]); CDFCHECK(arg4);
-    if (!exp_args[5]) return (z3_mode) ? ((Z3_Function5)(cptr))(arg0, arg1, arg2, arg3, arg4) : Vns(m_ctx, ((Function_32_5)(cee->addr))(arg0, arg1, arg2, arg3, arg4), bitn);
-    Vns arg5 = tIRExpr(exp_args[5]); CDFCHECK(arg5);
-    if (!exp_args[6]) return (z3_mode) ? ((Z3_Function6)(cptr))(arg0, arg1, arg2, arg3, arg4, arg5) : Vns(m_ctx, ((Function_32_6)(cee->addr))(arg0, arg1, arg2, arg3, arg4, arg5), bitn);
+    tval arg0 = tIRExpr(exp_args[0]); CDFCHECK(arg0);
+    if (!exp_args[1]) return (z3_mode) ? ((Z3_Function1)(cptr))(arg0) : tval(m_ctx, ((Function_32_1)(cee->addr))(arg0), bitn);
+    tval arg1 = tIRExpr(exp_args[1]); CDFCHECK(arg1);
+    if (!exp_args[2]) return (z3_mode) ? ((Z3_Function2)(cptr))(arg0, arg1) : tval(m_ctx, ((Function_32_2)(cee->addr))(arg0, arg1), bitn);
+    tval arg2 = tIRExpr(exp_args[2]); CDFCHECK(arg2);
+    if (!exp_args[3]) return (z3_mode) ? ((Z3_Function3)(cptr))(arg0, arg1, arg2) : tval(m_ctx, ((Function_32_3)(cee->addr))(arg0, arg1, arg2), bitn);
+    tval arg3 = tIRExpr(exp_args[3]); CDFCHECK(arg3);
+    if (!exp_args[4]) return (z3_mode) ? ((Z3_Function4)(cptr))(arg0, arg1, arg2, arg3) : tval(m_ctx, ((Function_32_4)(cee->addr))(arg0, arg1, arg2, arg3), bitn);
+    tval arg4 = tIRExpr(exp_args[4]); CDFCHECK(arg4);
+    if (!exp_args[5]) return (z3_mode) ? ((Z3_Function5)(cptr))(arg0, arg1, arg2, arg3, arg4) : tval(m_ctx, ((Function_32_5)(cee->addr))(arg0, arg1, arg2, arg3, arg4), bitn);
+    tval arg5 = tIRExpr(exp_args[5]); CDFCHECK(arg5);
+    if (!exp_args[6]) return (z3_mode) ? ((Z3_Function6)(cptr))(arg0, arg1, arg2, arg3, arg4, arg5) : tval(m_ctx, ((Function_32_6)(cee->addr))(arg0, arg1, arg2, arg3, arg4, arg5), bitn);
     VPANIC("not support");
 }
 
 
 
 template<>
-Vns State<Addr64>::CCall(IRCallee* cee, IRExpr** exp_args, IRType ty)
+tval State<Addr64>::CCall(IRCallee* cee, IRExpr** exp_args, IRType ty)
 {
     Int regparms = cee->regparms;
     UInt mcx_mask = cee->mcx_mask;
     UShort bitn = ty2bit(ty);
     Bool z3_mode = False;
-    if (!exp_args[0]) return Vns(m_ctx, ((Function_64_0)(cee->addr))(), bitn);
+    if (!exp_args[0]) return tval(m_ctx, ((Function_64_0)(cee->addr))(), bitn);
 
     void* cptr = funcDict(cee->addr); if (cptr == DIRTY_CALL_MAGIC) {
         return dirty_call(cee, exp_args, ty);
     }
-    Vns arg0 = tIRExpr(exp_args[0]); CDFCHECK(arg0);
-    if (!exp_args[1]) return (z3_mode) ? ((Z3_Function1)(cptr))(arg0) : Vns(m_ctx, ((Function_64_1)(cee->addr))(arg0), bitn);
-    Vns arg1 = tIRExpr(exp_args[1]); CDFCHECK(arg1);
-    if (!exp_args[2]) return (z3_mode) ? ((Z3_Function2)(cptr))(arg0, arg1) : Vns(m_ctx, ((Function_64_2)(cee->addr))(arg0, arg1), bitn);
-    Vns arg2 = tIRExpr(exp_args[2]); CDFCHECK(arg2);
-    if (!exp_args[3]) return (z3_mode) ? ((Z3_Function3)(cptr))(arg0, arg1, arg2) : Vns(m_ctx, ((Function_64_3)(cee->addr))(arg0, arg1, arg2), bitn);
-    Vns arg3 = tIRExpr(exp_args[3]); CDFCHECK(arg3);
-    if (!exp_args[4]) return (z3_mode) ? ((Z3_Function4)(cptr))(arg0, arg1, arg2, arg3) : Vns(m_ctx, ((Function_64_4)(cee->addr))(arg0, arg1, arg2, arg3), bitn);
-    Vns arg4 = tIRExpr(exp_args[4]); CDFCHECK(arg4);
-    if (!exp_args[5]) return (z3_mode) ? ((Z3_Function5)(cptr))(arg0, arg1, arg2, arg3, arg4) : Vns(m_ctx, ((Function_64_5)(cee->addr))(arg0, arg1, arg2, arg3, arg4), bitn);
-    Vns arg5 = tIRExpr(exp_args[5]); CDFCHECK(arg5);
-    if (!exp_args[6]) return (z3_mode) ? ((Z3_Function6)(cptr))(arg0, arg1, arg2, arg3, arg4, arg5) : Vns(m_ctx, ((Function_64_6)(cee->addr))(arg0, arg1, arg2, arg3, arg4, arg5), bitn);
+    tval arg0 = tIRExpr(exp_args[0]); CDFCHECK(arg0);
+    if (!exp_args[1]) return (z3_mode) ? ((Z3_Function1)(cptr))(arg0) : tval(m_ctx, ((Function_64_1)(cee->addr))(arg0), bitn);
+    tval arg1 = tIRExpr(exp_args[1]); CDFCHECK(arg1);
+    if (!exp_args[2]) return (z3_mode) ? ((Z3_Function2)(cptr))(arg0, arg1) : tval(m_ctx, ((Function_64_2)(cee->addr))(arg0, arg1), bitn);
+    tval arg2 = tIRExpr(exp_args[2]); CDFCHECK(arg2);
+    if (!exp_args[3]) return (z3_mode) ? ((Z3_Function3)(cptr))(arg0, arg1, arg2) : tval(m_ctx, ((Function_64_3)(cee->addr))(arg0, arg1, arg2), bitn);
+    tval arg3 = tIRExpr(exp_args[3]); CDFCHECK(arg3);
+    if (!exp_args[4]) return (z3_mode) ? ((Z3_Function4)(cptr))(arg0, arg1, arg2, arg3) : tval(m_ctx, ((Function_64_4)(cee->addr))(arg0, arg1, arg2, arg3), bitn);
+    tval arg4 = tIRExpr(exp_args[4]); CDFCHECK(arg4);
+    if (!exp_args[5]) return (z3_mode) ? ((Z3_Function5)(cptr))(arg0, arg1, arg2, arg3, arg4) : tval(m_ctx, ((Function_64_5)(cee->addr))(arg0, arg1, arg2, arg3, arg4), bitn);
+    tval arg5 = tIRExpr(exp_args[5]); CDFCHECK(arg5);
+    if (!exp_args[6]) return (z3_mode) ? ((Z3_Function6)(cptr))(arg0, arg1, arg2, arg3, arg4, arg5) : tval(m_ctx, ((Function_64_6)(cee->addr))(arg0, arg1, arg2, arg3, arg4, arg5), bitn);
     VPANIC("not support");
 }
 #undef CDFCHECK
@@ -593,7 +577,7 @@ void State<ADDR>::read_mem_dump(const char  *filename)
 }
 
 template <typename ADDR>
-inline Vns State<ADDR>::ILGop(IRLoadG *lg) {
+inline tval State<ADDR>::ILGop(IRLoadG *lg) {
     switch (lg->cvt) {
     case ILGop_IdentV128:{ return mem.Iex_Load(tIRExpr(lg->addr), Ity_V128);            }
     case ILGop_Ident64:  { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I64 );            }
@@ -608,23 +592,23 @@ inline Vns State<ADDR>::ILGop(IRLoadG *lg) {
 }
 
 template <typename ADDR>
-inline Vns State<ADDR>::tIRExpr(IRExpr* e)
+inline tval State<ADDR>::tIRExpr(IRExpr* e)
 {
     switch (e->tag) {
     case Iex_Get: { return regs.Iex_Get(e->Iex.Get.offset, e->Iex.Get.ty); }
     case Iex_RdTmp: { return m_ir_temp[e->Iex.RdTmp.tmp]; }
-    /*case Iex_Unop: { return tUnop(m_ctx, e->Iex.Unop.op, tIRExpr(e->Iex.Unop.arg)); }
-    case Iex_Binop: { return tBinop(m_ctx, e->Iex.Binop.op, tIRExpr(e->Iex.Binop.arg1), tIRExpr(e->Iex.Binop.arg2)); }
-    case Iex_Triop: { return tTriop(m_ctx, e->Iex.Triop.details->op, tIRExpr(e->Iex.Triop.details->arg1), tIRExpr(e->Iex.Triop.details->arg2), tIRExpr(e->Iex.Triop.details->arg3)); }
-    case Iex_Qop: { return tQop(m_ctx, e->Iex.Qop.details->op, tIRExpr(e->Iex.Qop.details->arg1), tIRExpr(e->Iex.Qop.details->arg2), tIRExpr(e->Iex.Qop.details->arg3), tIRExpr(e->Iex.Qop.details->arg4)); }*/
+    case Iex_Unop: { return tUnop(e->Iex.Unop.op, tIRExpr(e->Iex.Unop.arg)); }
+    case Iex_Binop: { return tBinop(e->Iex.Binop.op, tIRExpr(e->Iex.Binop.arg1), tIRExpr(e->Iex.Binop.arg2)); }
+    case Iex_Triop: { return tTriop(e->Iex.Triop.details->op, tIRExpr(e->Iex.Triop.details->arg1), tIRExpr(e->Iex.Triop.details->arg2), tIRExpr(e->Iex.Triop.details->arg3)); }
+    case Iex_Qop: { return tQop(e->Iex.Qop.details->op, tIRExpr(e->Iex.Qop.details->arg1), tIRExpr(e->Iex.Qop.details->arg2), tIRExpr(e->Iex.Qop.details->arg3), tIRExpr(e->Iex.Qop.details->arg4)); }
     case Iex_Load: { return mem.Iex_Load(tIRExpr(e->Iex.Load.addr), e->Iex.Get.ty); }
-    case Iex_Const: { return Vns(m_ctx, e->Iex.Const.con); }
+    case Iex_Const: { return tval(m_ctx, e->Iex.Const.con); }
     case Iex_ITE: {
-        Vns cond = tIRExpr(e->Iex.ITE.cond);
+       /* tval cond = tIRExpr(e->Iex.ITE.cond);
         return (cond.real()) ?
             ((UChar)cond & 0b1) ? tIRExpr(e->Iex.ITE.iftrue) : tIRExpr(e->Iex.ITE.iffalse)
             :
-            Vns(m_ctx, Z3_mk_ite(m_ctx, cond.toZ3Bool(), tIRExpr(e->Iex.ITE.iftrue), tIRExpr(e->Iex.ITE.iffalse)));
+            tval(m_ctx, Z3_mk_ite(m_ctx, cond.toZ3Bool(), tIRExpr(e->Iex.ITE.iftrue), tIRExpr(e->Iex.ITE.iffalse)));*/
     }
     case Iex_CCall: { return CCall(e->Iex.CCall.cee, e->Iex.CCall.args, e->Iex.CCall.retty); }
     case Iex_GetI: {
@@ -632,7 +616,7 @@ inline Vns State<ADDR>::tIRExpr(IRExpr* e)
         assert(ix.real());
         return regs.Iex_Get(e->Iex.GetI.descr->base + (((UInt)(e->Iex.GetI.bias + (int)(ix))) % e->Iex.GetI.descr->nElems)*ty2length(e->Iex.GetI.descr->elemTy), e->Iex.GetI.descr->elemTy);
     };
-    case Iex_GSPTR: { return Vns(m_ctx, getGSPTR());  };
+    case Iex_GSPTR: { return tval(m_ctx, getGSPTR());  };
     case Iex_VECRET:
     case Iex_Binder:
     default:
@@ -641,27 +625,27 @@ inline Vns State<ADDR>::tIRExpr(IRExpr* e)
     }
 }
 
-template<>
-Vns TR::State<Addr64>::vex_pop()
+template<typename ADDR>
+void TR::State<ADDR>::vex_push(const rsval<ADDR>& v)
 {
-    Vns sp = regs.Iex_Get<Ity_I64>(m_vctx.gRegsSpOffset());
-    regs.Ist_Put(m_vctx.gRegsSpOffset(), sp + 0x8ull);
-    return mem.Iex_Load(sp, Ity_I64);
-}
-
-template<>
-Vns TR::State<Addr32>::vex_pop()
-{
-    Vns sp = regs.Iex_Get<Ity_I32>(m_vctx.gRegsSpOffset());
-    regs.Ist_Put(m_vctx.gRegsSpOffset(), sp + 0x4u);
-    return mem.Iex_Load(sp, Ity_I32);
+    rsval<ADDR> sp = regs.get<ADDR>(m_vctx.gRegsSpOffset()) - sizeof(ADDR);
+    regs.set(m_vctx.gRegsSpOffset(), sp);
+    mem.store(sp, v);
 }
 
 template<typename ADDR>
-Vns TR::State<ADDR>::vex_stack_get(Int n)
+rsval<ADDR> TR::State<ADDR>::vex_pop()
 {
-    Vns p = regs.Iex_Get<(IRType)(sizeof(ADDR) << 3)>(m_vctx.gRegsSpOffset());
-    return mem.Iex_Load<(IRType)(sizeof(ADDR) << 3)>(p + (n * sizeof(ADDR)));
+    rsval<ADDR> sp = regs.get<ADDR>(m_vctx.gRegsSpOffset());
+    regs.set(m_vctx.gRegsSpOffset(), sp + 0x4u);
+    return mem.load<ADDR>(sp);
+}
+
+template<typename ADDR>
+rsval<ADDR> TR::State<ADDR>::vex_stack_get(int n)
+{
+    rsval<ADDR> sp = regs.get<ADDR>(m_vctx.gRegsSpOffset());
+    return mem.load<ADDR>(sp + (ADDR)(n * sizeof(ADDR)));
 }
 
 template <typename ADDR>
@@ -720,26 +704,25 @@ bool State<ADDR>::vex_start() {
             case Ist_CAS /*比较和交换*/: {//xchg    rax, [r10]
                 std::unique_lock<std::mutex> lock(m_state_lock);
                 IRCAS cas = *(s->Ist.CAS.details);
-                Vns addr = tIRExpr(cas.addr);//r10.value
-                Vns expdLo = tIRExpr(cas.expdLo);
-                Vns dataLo = tIRExpr(cas.dataLo);
+                tval addr = tIRExpr(cas.addr);//r10.value
+                tval expdLo = tIRExpr(cas.expdLo);
+                tval dataLo = tIRExpr(cas.dataLo);
                 if ((cas.oldHi != IRTemp_INVALID) && (cas.expdHi)) {//double
-                    Vns expdHi = tIRExpr(cas.expdHi);
-                    Vns dataHi = tIRExpr(cas.dataHi);
-                    emu[cas.oldHi] = mem.Iex_Load(addr, (IRType)(expdLo.bitn));
-                    emu[cas.oldLo] = mem.Iex_Load(addr, (IRType)(expdLo.bitn));
+                    tval expdHi = tIRExpr(cas.expdHi);
+                    tval dataHi = tIRExpr(cas.dataHi);
+                    emu[cas.oldHi] = mem.Iex_Load(addr, expdLo.nbits());
+                    emu[cas.oldLo] = mem.Iex_Load(addr, expdLo.nbits());
                     mem.Ist_Store(addr, dataLo);
-                    mem.Ist_Store(addr + (dataLo.bitn >> 3), dataHi);
+                    mem.Ist_Store(addr + (dataLo.nbits() >> 3), dataHi);
                 }
                 else {//single
-                    emu[cas.oldLo] = mem.Iex_Load(addr, (IRType)(expdLo.bitn));
+                    emu[cas.oldLo] = mem.Iex_Load(addr, expdLo.nbits());
                     mem.Ist_Store(addr, dataLo);
                 }
                 break;
             }
             case Ist_Exit: {
-                Vns guard = tIRExpr(s->Ist.Exit.guard).simplify();
-                std::vector<Vns> guard_result;
+                rsbool guard = tIRExpr(s->Ist.Exit.guard).tobool();
                 if (guard.real()) {
                     if ((UChar)guard & 1) {
                     Exit_guard_true:
@@ -764,6 +747,7 @@ bool State<ADDR>::vex_start() {
                     };
                 }
                 else {
+                    /*std::vector<tval> guard_result;
                     Int eval_size = eval_all(guard_result, solv, guard);
                     if (eval_size <= 0) {  throw Expt::SolverNoSolution("eval_size <= 0", solv); }
                     if (eval_size == 1) {
@@ -780,7 +764,7 @@ bool State<ADDR>::vex_start() {
                             newBranch->solv.add_assert(guard);
                             m_status = Fork;
                         }
-                    }
+                    }*/
                 }
                 break;
             }
@@ -789,7 +773,7 @@ bool State<ADDR>::vex_start() {
                 if (m_status == Fork) {
                     State<ADDR>* prv = newBranch;
                     newBranch = (State<ADDR>*)mkState((ADDR)s->Ist.IMark.addr);
-                    newBranch->solv.add_assert(prv->solv.get_asserts()[0], False);
+                    newBranch->solv.add_assert(!prv->solv.get_asserts()[0]);
                     goto EXIT;
                 }
                 guest_start = (ADDR)s->Ist.IMark.addr;
@@ -799,8 +783,8 @@ bool State<ADDR>::vex_start() {
                 break;
             };
             case Ist_AbiHint: { //====== AbiHint(t4, 128, 0x400936:I64) ====== call 0xxxxxxx
-                Vns nia = tIRExpr(s->Ist.AbiHint.nia);
-                Vns bp = regs.Iex_Get<(IRType)(sizeof(ADDR) << 3)>(m_vctx.gRegsBpOffset());
+                tval nia = tIRExpr(s->Ist.AbiHint.nia);
+                tval bp = regs.get<ADDR>(m_vctx.gRegsBpOffset());
                 traceInvoke(nia, bp);
                 m_InvokStack.push(nia, bp);
                 break;
@@ -827,8 +811,8 @@ bool State<ADDR>::vex_start() {
             case Ist_Dirty: {
                 traceIRStmtEnd(s);
                 IRDirty* dirty = s->Ist.Dirty.details;
-                Vns guard = tIRExpr(dirty->guard);
-                if (guard.symbolic()) {
+                rsbool guard = tIRExpr(dirty->guard).tobool();
+                if (guard.symb()) {
                     VPANIC("auto guard = m_state.tIRExpr(dirty->guard); symbolic");
                 }
                 if (((UChar)guard) & 1) {
@@ -842,18 +826,18 @@ bool State<ADDR>::vex_start() {
             }
             case Ist_LoadG: {
                 IRLoadG* lg = s->Ist.LoadG.details;
-                auto guard = tIRExpr(lg->guard);
+                auto guard = tIRExpr(lg->guard).tobool();
                 if (guard.real()) {
                     emu[lg->dst] = (((UChar)guard)) ? ILGop(lg) : tIRExpr(lg->alt);
                 }
                 else {
-                    emu[lg->dst] = ite(guard == 1, ILGop(lg), tIRExpr(lg->alt));
+                    //emu[lg->dst] = ite(guard, ILGop(lg), tIRExpr(lg->alt));
                 }
                 break;
             }
             case Ist_StoreG: {
                 IRStoreG* sg = s->Ist.StoreG.details;
-                auto guard = tIRExpr(sg->guard);
+                auto guard = tIRExpr(sg->guard).tobool();
                 if (guard.real()) {
                     if ((UChar)guard)
                         mem.Ist_Store(tIRExpr(sg->addr), tIRExpr(sg->data));
@@ -861,7 +845,7 @@ bool State<ADDR>::vex_start() {
                 else {
                     auto addr = tIRExpr(sg->addr);
                     auto data = tIRExpr(sg->data);
-                    mem.Ist_Store(addr, ite(guard == 1, mem.Iex_Load(addr, (IRType)(data.bitn)), data));
+                    //mem.Ist_Store(addr, ite(guard, mem.Iex_Load(addr, data.nbits()), data));
                 }
                 break;
             }
@@ -895,8 +879,8 @@ bool State<ADDR>::vex_start() {
         }
         case Ijk_Boring: break;
         case Ijk_Call: {
-            Vns next = tIRExpr(irsb->next);
-            Vns bp = regs.Iex_Get<(IRType)(sizeof(ADDR) << 3)>(m_vctx.gRegsBpOffset());
+            auto next = tIRExpr(irsb->next);
+            auto bp = regs.get<ADDR>(m_vctx.gRegsBpOffset());
             traceInvoke(next, bp);
             m_InvokStack.push(next, bp);
             break; 
@@ -919,28 +903,28 @@ bool State<ADDR>::vex_start() {
         }
         };
     Isb_next:
-        Vns next = tIRExpr(irsb->next);
+        tval next = tIRExpr(irsb->next);
         if (m_status == Fork) {
 
             State<ADDR>* prv = newBranch;
-            const Vns& guard = prv->solv.get_asserts()[0];
+            const sbool& guard = prv->solv.get_asserts()[0];
             if (next.real()) {
                 newBranch = (State<ADDR>*)mkState((ADDR)next);
-                newBranch->solv.add_assert(guard, False);
+                newBranch->solv.add_assert(!guard);
             }
             else {
-                std::vector<Vns> result;
-                Int eval_size = eval_all(result, solv, next);
-                if (eval_size <= 0) { throw Expt::SolverNoSolution("eval_size <= 0", solv); }
-                else if (eval_size == 1) { guest_start = result[0].simplify(); }
-                else {
-                    for (auto re : result) {
-                        ADDR GN = re.simplify();//guest next ip
-                        newBranch = (State<ADDR>*)mkState((ADDR)GN);
-                        newBranch->solv.add_assert(guard, False);
-                        newBranch->solv.add_assert_eq(next, re);
-                    }
-                }
+                //std::vector<tval> result;
+                //Int eval_size = eval_all(result, solv, next);
+                //if (eval_size <= 0) { throw Expt::SolverNoSolution("eval_size <= 0", solv); }
+                //else if (eval_size == 1) { guest_start = result[0].simplify(); }
+                //else {
+                //    for (auto re : result) {
+                //        ADDR GN = re.simplify();//guest next ip
+                //        newBranch = (State<ADDR>*)mkState((ADDR)GN);
+                //        newBranch->solv.add_assert(guard, False);
+                //        newBranch->solv.add_assert_eq(next, re);
+                //    }
+                //}
             }
             goto EXIT;
         }
@@ -949,19 +933,19 @@ bool State<ADDR>::vex_start() {
             guest_start = next;
         }
         else {
-            std::vector<Vns> result;
-            Int eval_size = eval_all(result, solv, next);
-            if (eval_size <= 0) { throw Expt::SolverNoSolution("eval_size <= 0", solv); }
-            else if (eval_size == 1) { guest_start = result[0].simplify(); }
-            else {
-                for (auto re : result) {
-                    ADDR GN = re.simplify();//guest next ip
-                    newBranch = (State<ADDR>*)mkState((ADDR)GN);
-                    newBranch->solv.add_assert_eq(next, re);
-                }
-                m_status = Fork;
-                goto EXIT;
-            }
+            //std::vector<tval> result;
+            //Int eval_size = eval_all(result, solv, next);
+            //if (eval_size <= 0) { throw Expt::SolverNoSolution("eval_size <= 0", solv); }
+            //else if (eval_size == 1) { guest_start = result[0].simplify(); }
+            //else {
+            //    for (auto re : result) {
+            //        ADDR GN = re.simplify();//guest next ip
+            //        newBranch = (State<ADDR>*)mkState((ADDR)GN);
+            //        newBranch->solv.add_assert_eq(next, re);
+            //    }
+            //    m_status = Fork;
+            //    goto EXIT;
+            //}
         }
     };
 
@@ -1036,7 +1020,7 @@ class StateCmprsInterface {
     cmpr::StateType m_type;
     cmpr::CmprsContext<State<ADDR>, State_Tag>& m_ctx;
     State<ADDR>& m_state;
-    Vns m_condition;
+    sbool m_condition;
     static bool StateCompression(State<ADDR>& a, State<ADDR> const& next) {
         bool ret = a.m_InvokStack == next.m_InvokStack;// 压缩条件
         return ret && a.StateCompression(next);//支持扩展条件
@@ -1047,7 +1031,7 @@ class StateCmprsInterface {
         a.StateCompressMkSymbol(newState);//支持
     }
 
-    std::vector<Vns> const & get_asserts() const { return m_state.solv.get_asserts(); };
+    std::vector<sbool> const & get_asserts() const { return m_state.solv.get_asserts(); };
 
 public:
     StateCmprsInterface(
@@ -1055,30 +1039,25 @@ public:
         State<ADDR>& self,
         cmpr::StateType type
     ) :
-        m_ctx(ctx), m_state(self), m_type(type), m_condition(ctx, 0, 0)
+        m_ctx(ctx), m_state(self), m_type(type), m_condition(cmpr::logic_and(get_asserts()).translate(m_ctx.ctx()))
     { };
 
     cmpr::CmprsContext<State<ADDR>, State_Tag>& cctx() { return m_ctx; }
     cmpr::StateType type() { return m_type; };
 
-    Vns const& get_assert() {
-        if (!m_condition.bitn) {
-            m_condition = cmpr::logic_and(get_asserts()).translate(m_ctx.ctx());
-        }
-        return m_condition;
-    }
+    sbool const& get_assert() { return m_condition; }
 
     void get_write_map(std::hash_map<Addr64, bool>& record) {
-        if (m_state.regs.record) {
-            for (auto offset : *m_state.regs.record) {
+        if (m_state.regs.getRecord()) {
+            for (auto offset : *m_state.regs.getRecord()) {
                 record[offset];
             }
         }
         for (auto mcm : m_state.mem.change_map()) {
-            vassert(mcm.second->record != NULL);
-            for (auto offset : *(mcm.second->record)) {
+            vassert(mcm.second->getRecord() != NULL);
+            for (auto offset : *(mcm.second->getRecord())) {
                 auto Address = mcm.first + offset;
-                auto p = m_state.mem.getMemPage(Address);
+                auto p = m_state.mem.get_mem_page(Address);
                 vassert(p);
                 vassert(p->get_user() == m_state.mem.get_user());
                 vassert(Address > REGISTER_LEN);
@@ -1118,15 +1097,15 @@ public:
         delete& m_state;
     }
 
-    Vns mem_Load(ADDR addr) {
-        return m_state.mem.Iex_Load<Ity_I64>(addr).translate(m_ctx.ctx());
+    PACK mem_Load(ADDR addr) {
+        return m_state.mem.load<Ity_I64>(addr).translate(m_ctx.ctx());
     }
 
-    Vns reg_Get(UInt offset) {
-        return m_state.regs.Iex_Get<Ity_I64>(offset).translate(m_ctx.ctx());
+    PACK reg_Get(UInt offset) {
+        return m_state.regs.get<Ity_I64>(offset).translate(m_ctx.ctx());
     }
 
-    Vns read(ADDR addr) {
+    PACK read(ADDR addr) {
         if (addr < REGISTER_LEN) {
             return reg_Get(addr);
         }
@@ -1165,7 +1144,7 @@ void State<ADDR>::compress(cmpr::CmprsContext<State<ADDR>, State_Tag>& ctx)
 
         for (cmpr::Compress<StateCmprsInterface<ADDR>, State<ADDR>, State_Tag>::Iterator::StateRes state : cmp) {
             State<ADDR>* nbranch = (State<ADDR>*)mkState(ctx.get_target_addr());
-            Vns condition = state.conditions().translate(*nbranch);
+            tval condition = state.conditions().translate(*nbranch);
 #ifdef  PPCMPR
             printf("%s\n", Z3_ast_to_string(condition, condition));
 #endif //  _DEBUG
@@ -1176,7 +1155,7 @@ void State<ADDR>::compress(cmpr::CmprsContext<State<ADDR>, State_Tag>& ctx)
 
             for (; itor != end; itor++) {
                 Addr64 addr = itor->first;
-                Vns value = itor->second.get().translate(*nbranch);
+                tval value = itor->second.get().translate(*nbranch);
 #ifdef  PPCMPR
                 printf("%p : {  %s  }\n", itor->first, Z3_ast_to_string(value, value));
 #endif //  _DEBUG
@@ -1197,7 +1176,7 @@ void State<ADDR>::compress(cmpr::CmprsContext<State<ADDR>, State_Tag>& ctx)
     }
     else {
         for (cmpr::Compress<StateCmprsInterface<ADDR>, State<ADDR>, State_Tag>::Iterator::StateRes state : cmp) {
-            Vns condition = state.conditions();
+            tval condition = state.conditions();
 #ifdef  PPCMPR
             printf("%s\n", Z3_ast_to_string(condition, condition));
 #endif //  _DEBUG
@@ -1208,7 +1187,7 @@ void State<ADDR>::compress(cmpr::CmprsContext<State<ADDR>, State_Tag>& ctx)
             cmp.clear_nodes();
             for (; itor != end; itor++) {
                 Addr64 addr = itor->first;
-                Vns value = itor->second.get();
+                tval value = itor->second.get();
 #ifdef  PPCMPR
                 printf("%p : {  %s  }\n", itor->first, Z3_ast_to_string(value, value));
 #endif //  _DEBUG

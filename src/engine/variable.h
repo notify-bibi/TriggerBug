@@ -9,7 +9,8 @@ Author:
     WXC 2019-05-31.
 Revision History:
 --*/
-#ifndef _Vns_H_
+
+#ifdef _Vns_H_
 #define _Vns_H_
 
 #include "valgrind/pub/libvex_basictypes.h"

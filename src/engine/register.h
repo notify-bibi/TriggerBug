@@ -116,7 +116,7 @@ namespace TR {
         __declspec(align(8)) Z3_ast *m_ast;
 #endif
         /* SETFAST macro Setfast overstepping the bounds is not thread-safe(heap), so +32 solves the hidden bug !*/
-        __declspec(align(32)) UChar m_fastindex[maxlength + 32];
+        __declspec(align(32)) unsigned char m_fastindex[maxlength + 32];
 
 
 
@@ -199,25 +199,25 @@ namespace TR {
 
         template<int nbytes>
         inline void write(int offset) {
-            if (nbytes == 1) {
-                m_flag[offset >> 6] |= 1 << ((offset >> 3) & 7);
-            }
-            else {
-                *(UShort*)(m_flag + (offset >> 6)) |=
-                    (UShort)
-                    (
-                    (offset + nbytes) < ALIGN(offset, 8) + 8
-                        ?
-                        (nbytes <= 8) ? 0x01u :
-                        (nbytes == 16) ? 0b11u :
-                        0b1111u
-                        :
-                        (nbytes <= 8) ? 0b11u :
-                        (nbytes == 16) ? 0b111u :
-                        0b11111u
-                        ) << ((offset >> 3) & 7);
-            }
+            *(UShort*)(m_flag + (offset >> 6)) |=
+                (UShort)
+                (
+                (offset + nbytes) < ALIGN(offset, 8) + 8
+                    ?
+                    (nbytes <= 8) ? 0x01u :
+                    (nbytes == 16) ? 0b11u :
+                    0b1111u
+                    :
+                    (nbytes <= 8) ? 0b11u :
+                    (nbytes == 16) ? 0b111u :
+                    0b11111u
+                ) << ((offset >> 3) & 7);
+            
         }
+
+        template<> inline void write<1>(int offset) { m_flag[offset >> 6] |= 1 << ((offset >> 3) & 7); }
+
+
 
         inline UInt get_count() {
             UInt write_count = 0;
@@ -298,17 +298,6 @@ namespace TR {
             ((nbytes)==8)? \
                 GET8(__VA_ARGS__):\
                 GET1(23333)//imPOSSIBLE
-#define SET_from_nbytes(nbytes, arg1, arg2 )    \
-((nbytes)==1)? \
-    SET1( arg1, arg2): \
-    ((nbytes)==2)? \
-        SET2( arg1, arg2):\
-        ((nbytes)==4)? \
-            SET4( arg1, arg2):\
-            ((nbytes)==8)? \
-                SET8( arg1, arg2):\
-                SET1(23333,0)//imPOSSIBLE
-
 
     class RegisterStatic {
         static __m256i m32_fast[33];
@@ -320,11 +309,15 @@ namespace TR {
 
     template<int maxlength>
     class Register : protected RegisterStatic {
-    public:
         z3::vcontext& m_ctx;
         Symbolic<maxlength>* symbolic;
         Record<maxlength>* record;
-        __declspec(align(32)) UChar m_bytes[maxlength];
+        __declspec(align(32))
+        UChar m_bytes[maxlength];
+
+        template<typename _> friend class MEM;
+        template<typename _> friend class State;
+    public:
 
         inline Register(z3::vcontext& ctx, Bool _need_record) :
             m_ctx(ctx),
@@ -346,344 +339,290 @@ namespace TR {
         };
 
         void clearRecord() { if (record) record->clearRecord(); };
-
-#define m_fastindex symbolic->m_fastindex
-#define m_ast symbolic->m_ast
+        inline Record<maxlength>* getRecord() { return record; }
 
 
+        template<int n>
+        inline bool fast_check(UInt offset);
+        template<> inline bool fast_check<8>(UInt offset) { return *(int8_t*)(symbolic->m_fastindex + offset); };
+        template<> inline bool fast_check<16>(UInt offset) { return *(int16_t*)(symbolic->m_fastindex + offset); };
+        template<> inline bool fast_check<32>(UInt offset) { return *(int32_t*)(symbolic->m_fastindex + offset); };
+        template<> inline bool fast_check<64>(UInt offset) { return *(int64_t*)(symbolic->m_fastindex + offset); };
+        template<> inline bool fast_check<128>(UInt offset) { return sse_check_zero_X128(symbolic->m_fastindex + offset); };
+        template<> inline bool fast_check<256>(UInt offset) { return sse_check_zero_X256(symbolic->m_fastindex + offset); };
 
 
-#define lazydef(vectype, cmptype, ctype, nbit)                                                                   \
-        template<IRType ty, TASSERT(ty == Ity_##vectype##nbit)>                                                  \
-        inline rsval<ctype> get(UInt offset) {                                                                   \
-            if (symbolic && *(cmptype*)(m_fastindex + offset)) {                                                 \
-                return rsval<cmptype>(m_ctx, Reg2Ast(nbit>>3, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx), no_inc{}); \
-            }else{                                                                                               \
-                return rsval<cmptype>(m_ctx, *(ctype*)(m_bytes + offset));                                       \
-            }                                                                                                    \
+        template<int n>
+        inline void fast_set_zero(UInt offset);
+        template<> inline void fast_set_zero<8>(UInt offset) { *(int8_t*)(symbolic->m_fastindex + offset) = 0; };
+        template<> inline void fast_set_zero<16>(UInt offset) { *(int16_t*)(symbolic->m_fastindex + offset) = 0; };
+        template<> inline void fast_set_zero<32>(UInt offset) { *(int32_t*)(symbolic->m_fastindex + offset) = 0; };
+        template<> inline void fast_set_zero<64>(UInt offset) { *(int64_t*)(symbolic->m_fastindex + offset) = 0; };
+        template<> inline void fast_set_zero<128>(UInt offset) { _mm_storeu_si128((__m128i*) & symbolic->m_fastindex[offset], _mm_setzero_si128()); };
+        template<> inline void fast_set_zero<256>(UInt offset) { _mm256_storeu_si256((__m256i*) & symbolic->m_fastindex[offset], _mm256_setzero_si256()); };
+
+
+        template<int n>
+        inline void fast_set(UInt offset);
+        template<> inline void fast_set<8>(UInt offset) { *(int8_t*)(symbolic->m_fastindex + offset) = 0x01; };
+        template<> inline void fast_set<16>(UInt offset) { *(int16_t*)(symbolic->m_fastindex + offset) = 0x0201; };
+        template<> inline void fast_set<32>(UInt offset) { *(int32_t*)(symbolic->m_fastindex + offset) = 0x04030201; };
+        template<> inline void fast_set<64>(UInt offset) { *(int64_t*)(symbolic->m_fastindex + offset) = 0x0807060504030201; };
+        template<> inline void fast_set<128>(UInt offset) { _mm_storeu_si128((__m128i*) & symbolic->m_fastindex[offset], _mm_set_epi64x(0x100f0e0d0c0b0a09, 0x0807060504030201)); };
+        template<> inline void fast_set<256>(UInt offset) { _mm256_storeu_si256((__m256i*) & symbolic->m_fastindex[offset], _mm256_set_epi64x(0x201f1e1d1c1b1a19, 0x1817161514131211, 0x100f0e0d0c0b0a09, 0x0807060504030201)); };
+
+
+        template<int nbytes, TASSERT(nbytes <= 8)>
+        inline Z3_ast reg2Ast(UInt offset) {
+            return Reg2Ast((int)nbytes, &m_bytes[offset], &symbolic->m_fastindex[offset], symbolic->m_ast + offset, m_ctx);
         }
-        lazydef(I, int8_t, int8_t, 8);
-        lazydef(I, int16_t, int16_t, 16);
-        lazydef(I, int32_t, int32_t, 32);
-        lazydef(I, int64_t, int64_t, 64);
 
+        template<int nbytes, TASSERT(nbytes > 8)>
+        inline Z3_ast reg2Ast(UInt offset) {
+            return Reg2AstSSE((int)nbytes, &m_bytes[offset], &symbolic->m_fastindex[offset], symbolic->m_ast + offset, m_ctx);
+        }
 
+        template<int nbytes, TASSERT(nbytes <= 8)>
+        inline Z3_ast reg2Ast(UInt offset, z3::vcontext& toctx) {
+            return Reg2Ast((int)nbytes, &m_bytes[offset], &symbolic->m_fastindex[offset], symbolic->m_ast + offset, m_ctx, toctx);
+        }
 
-        template<IRType ty, TASSERT(ty == Ity_F16)>
-        inline sv::rsval<true, 16, Z3_FLOATING_POINT_SORT> get(UInt offset) {
-            if (symbolic && *(int16_t*)(m_fastindex + offset)) {
-                return subval<16>(m_ctx, Reg2AstSSE(2, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx), no_inc{}).tofpa();
+        template<int nbytes, TASSERT(nbytes > 8)>
+        inline Z3_ast reg2Ast(UInt offset, z3::vcontext& toctx) {
+            return Reg2AstSSE((int)nbytes, &m_bytes[offset], &symbolic->m_fastindex[offset], symbolic->m_ast + offset, m_ctx, toctx);
+        }
+
+        //-------------------------------- get --------------------------------------
+
+        template<bool sign, int nbits, sv::z3sk sk, TASSERT(sk == Z3_BV_SORT)>
+        inline sv::rsval<sign, nbits, sk> get(UInt offset) {
+            if (symbolic && fast_check<nbits>(offset)) {
+                return sv::rsval<sign, nbits, Z3_BV_SORT>(m_ctx, reg2Ast< (nbits >> 3) >(offset), no_inc{});
             }
             else {
-                return sv::rsval<true, 16, Z3_FLOATING_POINT_SORT>(m_ctx, m_bytes + offset);
+                return sv::rsval<sign, nbits, Z3_BV_SORT>(m_ctx, &m_bytes[offset]);
             }
         }
-        template<IRType ty, TASSERT(ty == Ity_F32)>
-        inline sv::rsval<true, 32, Z3_FLOATING_POINT_SORT> get(UInt offset) {
-            if (symbolic && *(int32_t*)(m_fastindex + offset)) {
-                return subval<32>(m_ctx, Reg2AstSSE(4, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx), no_inc{}).tofpa();
+
+        template<bool sign, int nbits, sv::z3sk sk, TASSERT(sk == Z3_FLOATING_POINT_SORT)>
+        inline sv::rsval<sign, nbits, sk> get(UInt offset) {
+            if (symbolic && fast_check<nbits>(offset)) {
+                return sv::symbolic<sign, nbits, Z3_BV_SORT>(m_ctx, reg2Ast< (nbits >> 3) >(offset), no_inc{}).tofpa();
             }
             else {
-                return sv::rsval<true, 32, Z3_FLOATING_POINT_SORT>(m_ctx, m_bytes + offset);
+                return sv::rsval<sign, nbits, Z3_FLOATING_POINT_SORT>(m_ctx, &m_bytes[offset]);
             }
         }
 
-        template<IRType ty, TASSERT(ty == Ity_F64)>
-        inline sv::rsval<true, 64, Z3_FLOATING_POINT_SORT> get(UInt offset) {
-            if (symbolic && *(int64_t*)(m_fastindex + offset)) {
-                return subval<64>(m_ctx, Reg2AstSSE(8, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx), no_inc{}).tofpa();
+        template<IRType ty, class _svc = sv::IRty<ty>>
+        inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> get(UInt offset) { return get<_svc::is_signed, _svc::nbits, _svc::sk>(offset); }
+
+        template<typename ty, TASSERT(std::is_arithmetic<ty>::value), class _svc = sv::sv_cty<ty>>
+        inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> get(UInt offset) { return get<_svc::is_signed, _svc::nbits, _svc::sk>(offset); }
+
+
+
+        //-------------------------------- translate get --------------------------------------
+
+        template<bool sign, int nbits, sv::z3sk sk, TASSERT(sk == Z3_BV_SORT)>
+        inline sv::rsval<sign, nbits, sk> get(UInt offset, z3::vcontext& ctx) {
+            if (symbolic && fast_check<nbits>(offset)) {
+                return sv::rsval<sign, nbits, Z3_BV_SORT>(ctx, reg2Ast< (nbits >> 3) >(offset, ctx), no_inc{});
             }
             else {
-                return sv::rsval<true, 64, Z3_FLOATING_POINT_SORT>(m_ctx, m_bytes + offset);
+                return sv::rsval<sign, nbits, sk>(ctx, &m_bytes[offset]);
             }
         }
-        template<IRType ty, TASSERT(ty == Ity_F128)>
-        inline sv::rsval<true, 128, Z3_FLOATING_POINT_SORT> get(UInt offset) {
-            if (symbolic && sse_check_zero_X128(m_fastindex + offset)) {
-                return subval<128>(m_ctx, Reg2AstSSE(16, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx), no_inc{}).tofpa();
+
+        template<bool sign, int nbits, sv::z3sk sk, TASSERT(sk == Z3_FLOATING_POINT_SORT)>
+        inline sv::rsval<sign, nbits, sk> get(UInt offset, z3::vcontext& ctx) {
+            if (symbolic && fast_check<nbits>(offset)) {
+                return sv::symbolic<sign, nbits, Z3_BV_SORT>(ctx, reg2Ast< (nbits >> 3) >(offset, ctx), no_inc{}).tofpa();
             }
             else {
-                return sv::rsval<true, 128, Z3_FLOATING_POINT_SORT>(m_ctx, m_bytes + offset);
+                return sv::rsval<sign, nbits, sk>(ctx, &m_bytes[offset]);
             }
         }
 
-        template<IRType ty, TASSERT(ty == Ity_I128 || ty == Ity_V128)>
-        inline auto get(UInt offset) {
-            if (symbolic && sse_check_zero_X128(m_fastindex + offset)) {
-                return sv::rsval<true, 128>(m_ctx, Reg2AstSSE(16, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx), no_inc{});
-            }
-            else {
-                return sv::rsval<true, 128>(m_ctx, m_bytes + offset);
-            }
-        }
+        template<typename ty, TASSERT(std::is_arithmetic<ty>::value), class _svc = sv::sv_cty<ty>>
+        inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> get(UInt offset, z3::vcontext& ctx) { return get<_svc::is_signed, _svc::nbits, _svc::sk>(offset, ctx); }
 
-
-        template<IRType ty, TASSERT(ty == Ity_V256)>
-        inline auto get(UInt offset) {
-            if (symbolic && sse_check_zero_X256(m_fastindex + offset)) {
-                return sv::rsval<true, 256>(m_ctx, Reg2AstSSE(32, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx), no_inc{});
-            }
-            else {
-                return sv::rsval<true, 256>(m_ctx, m_bytes + offset);
-            }
-        }
-
-
-#undef lazydef
+        template<IRType ty, class _svc = sv::IRty<ty>>
+        inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> get(UInt offset, z3::vcontext& ctx) { return get<_svc::is_signed, _svc::nbits, _svc::sk>(offset, ctx); }
 
 
 
 
-        template<IRType ty>
-        inline Vns Iex_Get(UInt offset) {
-            switch (ty) {
-#define lazydef(vectype,nbit,nbytes,compare)                                                                \
-    case nbit:                                                                                              \
-    case Ity_##vectype##nbit:                                                                               \
-        if (symbolic&&compare) {                                                                            \
-            return Vns(m_ctx, Reg2Ast(nbytes,m_bytes+offset,m_fastindex+offset, m_ast+offset, m_ctx), nbit,  no_inc {}); \
-        }else{                                                                                              \
-            return Vns(m_ctx, GET##nbytes##(m_bytes + offset));                                             \
-        }
 
-                lazydef(I, 8, 1, GET1(m_fastindex + offset));
-                lazydef(I, 16, 2, GET2(m_fastindex + offset));
-            case Ity_F32:
-                lazydef(I, 32, 4, GET4(m_fastindex + offset));
-            case Ity_F64:
-                lazydef(I, 64, 8, GET8(m_fastindex + offset));
-#undef lazydef
-            case Ity_I128:
-            case Ity_V128: {
-                if (symbolic && ((GET8(m_fastindex + offset)) || (GET8(m_fastindex + offset + 8)))) {
-                    return Vns(m_ctx, Reg2AstSSE(16, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx), 128, no_inc{});
-                }
-                else {
-                    return Vns(m_ctx, GET16(m_bytes + offset));
-                }
-            }
-            case Ity_V256: {
-                if (symbolic && sse_check_zero_X256(m_fastindex + offset)) {
-                    return Vns(m_ctx, Reg2AstSSE(32, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx), 256, no_inc{});
-                }
-                else {
-                    return Vns(m_ctx, GET32(m_bytes + offset));
-                }
-            }
-            default: vex_printf("ty = 0x%x\n", (UInt)ty); vpanic("tIRType");
-            }
-            return Vns();
-        }
+        //---------------------------------------------- set numreal ---------------------------------------------------
 
-        // IRType or nbit
-        inline Vns Iex_Get(UInt offset, IRType ty) {
-            switch (ty) {
-#define lazydef(vectype,nbit)                                \
-    case nbit:                                               \
-    case Ity_##vectype##nbit:                                \
-        return     Iex_Get<Ity_##vectype##nbit>(offset); 
-                lazydef(I, 8);
-                lazydef(I, 16);
-            case Ity_F32:
-                lazydef(I, 32);
-            case Ity_F64:
-                lazydef(I, 64);
-            case Ity_V128:
-                lazydef(I, 128);
-                lazydef(V, 256);
-#undef lazydef
-            default: vex_printf("ty = 0x%x\n", (UInt)ty); vpanic("tIRType");
-            }
-            return Vns();
-        }
 
-        // <IRType> or <nbit>
-        template<IRType ty>
-        inline Vns Iex_Get(UInt offset, z3::vcontext& ctx) {
-            switch (ty) {
-#define lazydef(vectype,nbit,nbytes,compare)                                                                            \
-    case nbit:                                                                                                          \
-    case Ity_##vectype##nbit:                                                                                           \
-        if (symbolic&&compare) {                                                                                        \
-            return Vns(ctx, Reg2Ast(nbytes, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx, ctx), nbit,  no_inc {});\
-        }else{                                                                                                          \
-            return Vns(ctx, GET##nbytes##(m_bytes + offset));                                                           \
-        }                                                                            
-
-                lazydef(I, 8, 1, GET1(m_fastindex + offset));
-                lazydef(I, 16, 2, GET2(m_fastindex + offset));
-            case Ity_F32:
-                lazydef(I, 32, 4, GET4(m_fastindex + offset));
-            case Ity_F64:
-                lazydef(I, 64, 8, GET8(m_fastindex + offset));
-#undef lazydef
-            case Ity_I128:
-            case Ity_V128: {
-                auto fastindex = m_fastindex + offset;
-                if (symbolic && ((GET8(fastindex)) || (GET8(fastindex + 8)))) {
-                    return Vns(ctx, Reg2AstSSE(16, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx, ctx), 128, no_inc{});
-                }
-                else {
-                    return Vns(ctx, GET16(m_bytes + offset));
-                }
-            }
-            case Ity_V256: {
-                if (symbolic && sse_check_zero_X256(m_fastindex + offset)) {
-                    return Vns(ctx, Reg2AstSSE(32, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx, ctx), 256, no_inc{});
-                }
-                else {
-                    return Vns(ctx, GET32(m_bytes + offset));
-                }
-            }
-            default: vex_printf("ty = 0x%x\n", (UInt)ty); vpanic("tIRType");
-            }
-            return Vns();
-        }
-
-        //ty = (IRType)nbits or IRType
-        inline Vns Iex_Get(UInt offset, IRType ty, z3::vcontext& ctx) {
-            switch (ty) {
-#define lazydef(vectype,nbit)                                   \
-    case nbit:                                                  \
-    case Ity_##vectype##nbit:                                   \
-        return     Iex_Get<Ity_##vectype##nbit>(offset, ctx);
-                lazydef(I, 8);
-                lazydef(I, 16);
-            case Ity_F32:
-                lazydef(I, 32);
-            case Ity_F64:
-                lazydef(I, 64);
-            case Ity_V128:
-                lazydef(I, 128);
-                lazydef(V, 256);
-#undef lazydef
-            default: vex_printf("ty = 0x%x\n", (UInt)ty); vpanic("tIRType");
-            }
-            return Vns();
-        }
-
-        template<typename DataTy>
-        inline void Ist_Put(UInt offset, DataTy data) {
-            if (symbolic) {
-                if (GET_from_nbytes(sizeof(DataTy), m_fastindex + offset))
-                {
-                    clear(offset, sizeof(DataTy));
-                    SET_from_nbytes(sizeof(DataTy), m_fastindex + offset, 0);
-                }
+        template<typename DataTy, TASSERT(std::is_arithmetic<DataTy>::value && !sv::is_sse<DataTy>::value)>
+        void set(UInt offset, DataTy data) {
+            if (symbolic && fast_check<(sizeof(data) << 3)>(offset)) {
+                clear(offset, sizeof(DataTy));
+                fast_set_zero<(sizeof(DataTy) << 3)>(offset);
             }
             *(DataTy*)(m_bytes + offset) = data;
             if (record)  record->write<sizeof(DataTy)>(offset);
         }
 
 
-        //simd数据不会使用扩展寄存器传递。使用地址传递速度快点。
-#define B16_Ist_Put(DataTy)                                                                                     \
-inline void Ist_Put(UInt offset, DataTy const& data) {                                                                \
-    if (symbolic) {                                                                                             \
-        auto fastindex = m_fastindex + offset;                                                                  \
-        if ((GET8(fastindex )) || (GET8(fastindex + 8)))                                                        \
-        {                                                                                                       \
-            clear(offset, 16);                                                                                  \
-            *(__m128i*)(fastindex) = _mm_setzero_si128();                                                       \
-        }                                                                                                       \
-    }                                                                                                           \
-    *(DataTy*)(m_bytes + offset) = data;                                                                        \
-    if (record)  record->write<sizeof(DataTy)>(offset);                                                         \
-}
+        //simd 128
+        template<typename DataTy, TASSERT(sizeof(DataTy) == 16 && sv::is_sse<DataTy>::value)>
+        void set(UInt offset, const DataTy& data) {
+            if (symbolic && fast_check<128>(offset)) {
+                clear(offset, 16);
+                fast_set_zero<128>(offset);
+            }
+            _mm_storeu_si128((__m128i*)(m_bytes + offset), _mm_loadu_si128((__m128i*) & data));
+            if (record)  record->write<16>(offset);
+        }
 
-//simd数据不会使用扩展寄存器传递。使用地址传递速度快点。
-#define B32_Ist_Put(DataTy)                                                                                     \
-inline void Ist_Put(UInt offset, DataTy const& data) {                                                               \
-    if (symbolic) {                                                                                             \
-        if (sse_check_zero_X256(m_fastindex + offset))                                                          \
-        {                                                                                                       \
-            clear(offset, 32);                                                                                  \
-            *(__m256i*)(m_fastindex + offset) = _mm256_setzero_si256();                                         \
-        }                                                                                                       \
-    }                                                                                                           \
-    *(DataTy*)(m_bytes + offset) = data;                                                                        \
-    if (record)  record->write<sizeof(DataTy)>(offset);                                                         \
-}
-        B16_Ist_Put(__m128i);
-        B16_Ist_Put(__m128);
-        B16_Ist_Put(__m128d);
-        B32_Ist_Put(__m256i);
-        B32_Ist_Put(__m256);
-        B32_Ist_Put(__m256d);
+        //simd 256
+        template<typename DataTy, TASSERT(sizeof(DataTy) == 32 && sv::is_sse<DataTy>::value)>
+        void set(UInt offset, const DataTy& data) {
+            if (symbolic && fast_check<256>(offset)) {
+                clear(offset, 32);
+                fast_set_zero<256>(offset);
+            }
+            _mm256_storeu_si256((__m256i*)(m_bytes + offset), _mm256_loadu_si256((__m256i*) & data));
+            if (record)  record->write<32>(offset);
+        }
 
+        template<bool sign, int nbits, TASSERT(nbits <= 64)>
+        inline void set(UInt offset, const sv::ctype_val<sign, nbits, Z3_BV_SORT>& data) {
+            set(offset, data.value());
+        }
+
+        //---------------------------------------------- set ast ---------------------------------------------------
 
         // only n_bit 8, 16, 32, 64 ,128 ,256
-        template<unsigned int bitn>
-        inline void Ist_Put(UInt offset, Z3_ast _ast) {
-            if (!symbolic)
+        template<int nbits>
+        inline void set(UInt offset, Z3_ast _ast) {
+            if (!symbolic) 
                 symbolic = new Symbolic<maxlength>(m_ctx);
-            if (bitn < 65) {
-                if (GET_from_nbytes((bitn >> 3), m_fastindex + offset))
-                    clear(offset, (bitn >> 3));
+            if (fast_check<nbits>(offset)) {
+                clear(offset, (nbits >> 3));
             }
-            else {
-                UChar* fastindex = m_fastindex + offset;
-                if (bitn == 128) {
-                    if ((GET8(fastindex)) || (GET8(fastindex + 8)))
-                        clear(offset, 16);
-                }
-                else {
-                    if (sse_check_zero_X256(fastindex))
-                        clear(offset, 32);
-                }
-            }
-            if (bitn == 8)
-                SET1(m_fastindex + offset, 0x01);
-            else if (bitn == 16)
-                SET2(m_fastindex + offset, 0x0201);
-            else if (bitn == 32)
-                SET4(m_fastindex + offset, 0x04030201);
-            else if (bitn == 64)
-                SET8(m_fastindex + offset, 0x0807060504030201);
-            else if (bitn == 128) {
-                SET8(m_fastindex + offset, 0x0807060504030201);
-                SET8(m_fastindex + offset + 8, 0x100f0e0d0c0b0a09);
-            }
-            else if (bitn == 256)
-                SET32(m_fastindex + offset, _mm256_setr_epi64x(0x0807060504030201, 0x100f0e0d0c0b0a09, 0x1817161514131211, 0x201f1e1d1c1b1a19));
-            else {
-                vpanic("error len");
-            }
-            m_ast[offset] = _ast;
+            fast_set<nbits>(offset);
+            symbolic->m_ast[offset] = _ast;
             Z3_inc_ref(m_ctx, _ast);
             if (record)
-                record->write< (bitn >> 3) >(offset);
+                record->write<(nbits >> 3)>(offset);
+        }
+        
+        template<bool sign, int nbits>
+        inline void set(UInt offset, const sv::symbolic<sign, nbits, Z3_BV_SORT>& data) {
+            set<nbits>(offset, (Z3_ast)data);
         }
 
-        inline void Ist_Put(UInt offset, Vns const& ir) {
-            if (ir.symbolic()) {
-                switch (ir.bitn) {
-                case 8: Ist_Put<8>(offset, (Z3_ast)ir); break;
-                case 16:Ist_Put<16>(offset, (Z3_ast)ir); break;
-                case 32:Ist_Put<32>(offset, (Z3_ast)ir); break;
-                case 64:Ist_Put<64>(offset, (Z3_ast)ir); break;
-                case 128:Ist_Put<128>(offset, (Z3_ast)ir); break;
-                case 256:Ist_Put<256>(offset, (Z3_ast)ir); break;
+
+        template<bool sign, int nbits>
+        inline void set(UInt offset, const sv::rsval<sign, nbits, Z3_BV_SORT>& data) {
+            if (data.real()) {
+                set(offset, data.tor());
+            }else{
+                set(offset, data.tos());
+            }
+        }
+
+
+        inline void set(UInt offset, const tval& data) {
+            if (data.real()) {
+
+            }
+            else {
+
+            }
+        }
+
+        //---------------------------------------------- Iex_Get ---------------------------------------------------
+
+
+
+        // IRType or nbit
+        tval Iex_Get(UInt offset, IRType ty) {
+            switch (ty) {
+#define lazydef(vectype,nbit)                                \
+    case Ity_##vectype##nbit:                                \
+        return     get<Ity_##vectype##nbit>(offset);
+            lazydef(I, 8);
+            lazydef(I, 16);
+            lazydef(F, 32);
+            lazydef(I, 32);
+            lazydef(F, 64);
+            lazydef(I, 64);
+            lazydef(V, 128);
+            lazydef(I, 128);
+            lazydef(V, 256);
+#undef lazydef
+            default: 
+                vex_printf("ty = 0x%x\n", (UInt)ty); vpanic("tIRType");
+            }
+            return tval();
+        }
+
+
+        //---------------------------------------------- Iex_Get TRANSLATE ---------------------------------------------------
+
+        //ty = (IRType)nbits or IRType
+        inline tval Iex_Get(UInt offset, IRType ty, z3::vcontext& ctx) {
+            switch (ty) {
+#define lazydef(vectype,nbit)                                   \
+    case Ity_##vectype##nbit:                                   \
+        return     get<Ity_##vectype##nbit>(offset, ctx);
+            lazydef(I, 8);
+            lazydef(I, 16);
+            lazydef(F, 32);
+            lazydef(I, 32);
+            lazydef(F, 64);
+            lazydef(I, 64);
+            lazydef(V, 128);
+            lazydef(I, 128);
+            lazydef(V, 256);
+#undef lazydef
+            default: vex_printf("ty = 0x%x\n", (UInt)ty); vpanic("tIRType");
+            }
+            return Vns();
+        }
+
+
+        //---------------------------------------------- Ist_Put ---------------------------------------------------
+
+        inline void Ist_Put(UInt offset, tval const& ir) {
+            if (ir.symb()) {
+                switch (ir.nbits()) {
+                case 8: set(offset, ir.tos<true, 8, Z3_BV_SORT>()); break;
+                case 16:set(offset, ir.tos<true, 16, Z3_BV_SORT>()); break;
+                case 32:set(offset, ir.tos<true, 32, Z3_BV_SORT>()); break;
+                case 64:set(offset, ir.tos<true, 64, Z3_BV_SORT>()); break;
+                case 128:set(offset, ir.tos<true, 128, Z3_BV_SORT>()); break;
+                case 256:set(offset, ir.tos<true, 256, Z3_BV_SORT>()); break;
                 default:
-                    vpanic("error");
+                    VPANIC("error");
                 }
             }
             else {
-                switch (ir.bitn) {
-                case 8: Ist_Put(offset, (UChar)ir); break;
-                case 16:Ist_Put(offset, (UShort)ir); break;
-                case 32:Ist_Put(offset, (UInt)ir); break;
-                case 64:Ist_Put(offset, (ULong)ir); break;
-                case 128:Ist_Put(offset, (__m128i)ir); break;
-                case 256:Ist_Put(offset, (__m256i)ir); break;
+                switch (ir.nbits()) {
+                case 8: set(offset, (UChar)ir); break;
+                case 16:set(offset, (UShort)ir); break;
+                case 32:set(offset, (UInt)ir); break;
+                case 64:set(offset, (ULong)ir); break;
+                case 128:set(offset, (__m128i)ir); break;
+                case 256:set(offset, (__m256i)ir); break;
                 default:
-                    vpanic("error");
+                    VPANIC("error");
                 }
             }
         }
+
+#define m_fastindex symbolic->m_fastindex
+#define m_ast symbolic->m_ast
 
         //  slowly
         void Ist_Put(UInt offset, void* data, UInt nbytes) {
+            vassert(offset + nbytes <= maxlength);
             if (symbolic) { clear(offset, nbytes); memset(m_fastindex + offset, 0, nbytes); };
             memcpy(m_bytes + offset, data, nbytes);
             if (record) {
@@ -720,7 +659,7 @@ inline void Ist_Put(UInt offset, DataTy const& data) {                          
 
 
         //is slowly 
-        Vns Iex_Get(UInt offset, UInt nbytes) {
+        tval Iex_Get(UInt offset, UInt nbytes) {
             vassert(nbytes <= 32);
             if (this->symbolic) {
                 auto fastindex = m_fastindex + offset;
@@ -733,13 +672,13 @@ inline void Ist_Put(UInt offset, DataTy const& data) {                          
                 };
 
             }
-            return Vns(m_ctx, GET32(m_bytes + offset), nbytes << 3);
+            return tval(m_ctx, GET32(m_bytes + offset), nbytes << 3);
         has_sym:
-            return Vns(m_ctx, Reg2AstSSE(nbytes, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx), nbytes << 3, no_inc{});
+            return tval(m_ctx, Reg2AstSSE(nbytes, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx), nbytes << 3, no_inc{});
         }
 
         //is slowly 变长取值
-        Vns Iex_Get(UInt offset, UInt nbytes, z3::vcontext& ctx) {
+        tval Iex_Get(UInt offset, UInt nbytes, z3::vcontext& ctx) {
             vassert(nbytes <= 32);
             auto fastindex = m_fastindex + offset;
             auto _nbytes = nbytes;
@@ -749,10 +688,12 @@ inline void Ist_Put(UInt offset, DataTy const& data) {                          
                 else if (_nbytes >= 2) { _nbytes -= 2; if (GET2(fastindex + _nbytes)) { goto has_sym; }; }
                 else { _nbytes--; if (GET1(fastindex + _nbytes)) { goto has_sym; }; };
             }
-            return Vns(ctx, GET32(m_bytes + offset), nbytes << 3);
+            return tval(ctx, GET32(m_bytes + offset), nbytes << 3);
         has_sym:
-            return Vns(ctx, Reg2AstSSE(nbytes, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx, ctx), nbytes << 3, no_inc{});
+            return tval(ctx, Reg2AstSSE(nbytes, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx, ctx), nbytes << 3, no_inc{});
         }
+
+
         //将fastindex offset位置的ast清空（剪切&释放）
         void clear(UInt org_offset, Int LEN)
         {
@@ -842,6 +783,8 @@ inline void Ist_Put(UInt offset, DataTy const& data) {                          
     private:
         inline void Ist_Put(UInt, Z3_ast) = delete;
         inline void Ist_Put(UInt, Z3_ast&) = delete;
+        inline void set(UInt, Z3_ast) = delete;
+        inline void set(UInt, Z3_ast&) = delete;
         Register(const Register<maxlength>& father_regs) = delete;
         void operator = (Register<maxlength>& a) = delete;
     };
@@ -853,7 +796,6 @@ inline void Ist_Put(UInt offset, DataTy const& data) {                          
 #undef registercodedef
 #undef GETASTSIZE
 #undef GET_from_nbytes
-#undef SET_from_nbytes
 #undef B32_Ist_Put
 #undef B16_Ist_Put
 #endif

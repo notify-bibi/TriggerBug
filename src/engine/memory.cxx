@@ -117,7 +117,7 @@ ULong MEM<ADDR>::find_block_forward(ULong start, ADDR size) {
     start &= ~0xfffull;
     ADDR get_mem = 0;
     for (; get_mem < size; start += 0x1000) {
-        PAGE* p = getMemPage(start);
+        PAGE* p = get_mem_page(start);
         if (p) {
             get_mem = 0;
         }
@@ -136,7 +136,7 @@ ULong MEM<ADDR>::find_block_reverse(ULong start, ADDR size)
     start &= ~0xfffull;
     ADDR get_mem = 0;
     for (; get_mem < size; start -= 0x1000) {
-        PAGE* p = getMemPage(start);
+        PAGE* p = get_mem_page(start);
         if (p) {
             get_mem = 0;
         }
@@ -149,48 +149,68 @@ ULong MEM<ADDR>::find_block_reverse(ULong start, ADDR size)
 ;
 
 template<typename ADDR>
-Vns MEM<ADDR>::Iex_Load(ADDR address, IRType ty)
+tval MEM<ADDR>::Iex_Load(ADDR address, IRType ty)
 {
+
+
     switch (ty) {
-    case 8:
-    case Ity_I8: return Iex_Load<Ity_I8>(address);
-    case 16:
-    case Ity_I16: return Iex_Load<Ity_I16>(address);
-    case 32:
-    case Ity_F32:
-    case Ity_I32:return Iex_Load<Ity_I32>(address);
-    case 64:
-    case Ity_F64:
-    case Ity_I64:return Iex_Load<Ity_I64>(address);
-    case 128:
-    case Ity_I128:
-    case Ity_V128:return Iex_Load<Ity_V128>(address);
-    case 256:
-    case Ity_V256:return Iex_Load<Ity_V256>(address);
-    default:VPANIC("2333333");
+    case Ity_I8: return load<Ity_I8>(address);
+    case Ity_I16: return load<Ity_I16>(address);
+    case Ity_F32: return load<Ity_F32>(address);
+    case Ity_I32: return load<Ity_I32>(address);
+    case Ity_F64: return load<Ity_F64>(address);
+    case Ity_I64: return load<Ity_I64>(address);
+    case Ity_F128: return load<Ity_F128>(address);
+    case Ity_I128: return load<Ity_I128>(address);
+    case Ity_V128: return load<Ity_V128>(address);
+    case Ity_V256: return load<Ity_V256>(address);
+    default:VPANIC("error");
     }
 }
 
 template<typename ADDR>
-Vns MEM<ADDR>::Iex_Load(Z3_ast address, IRType ty) {
+inline tval TR::MEM<ADDR>::Iex_Load(const tval& address, IRType ty)
+{
+    using vc = sv::sv_cty<ADDR>;
+    if (address.real()) {
+        return Iex_Load((ADDR)address.tor<false, wide>(), ty);
+    }
+    else {
+        return Iex_Load((Z3_ast)address.tos<false, wide>(), ty);
+    }
+}
+
+template<typename ADDR>
+tval TR::MEM<ADDR>::Iex_Load(const tval& address, int nbytes)
+{
+    return tval();
+}
+
+template<typename ADDR>
+tval TR::MEM<ADDR>::Iex_Load(const sv::rsval<false, wide>& address, IRType ty)
+{
+    if (address.real()) {
+        return Iex_Load((ADDR)address.tor(), ty);
+    }
+    else {
+        return Iex_Load((Z3_ast)address.tos(), ty);
+    }
+}
+
+template<typename ADDR>
+tval MEM<ADDR>::Iex_Load(Z3_ast address, IRType ty) {
     switch (ty) {
-    case 8:
-    case Ity_I8: return Iex_Load<Ity_I8>(address);
-    case 16:
-    case Ity_I16:return Iex_Load<Ity_I16>(address);
-    case 32:
-    case Ity_F32:
-    case Ity_I32:return Iex_Load<Ity_I32>(address);
-    case 64:
-    case Ity_F64:
-    case Ity_I64:return Iex_Load<Ity_I64>(address);
-    case 128:
-    case Ity_I128:
-    case Ity_V128:return Iex_Load<Ity_V128>(address);
-    case 256:
-    case Ity_V256:return Iex_Load<Ity_V256>(address);
-    default:
-        VPANIC("2333333");
+    case Ity_I8: return load<Ity_I8>(address);
+    case Ity_I16: return load<Ity_I16>(address);
+    case Ity_F32: return load<Ity_F32>(address);
+    case Ity_I32: return load<Ity_I32>(address);
+    case Ity_F64: return load<Ity_F64>(address);
+    case Ity_I64: return load<Ity_I64>(address);
+    case Ity_F128: return load<Ity_F128>(address);
+    case Ity_I128: return load<Ity_I128>(address);
+    case Ity_V128: return load<Ity_V128>(address);
+    case Ity_V256: return load<Ity_V256>(address);
+    default:VPANIC("error");
     }
 }
 
@@ -260,14 +280,14 @@ UInt MEM<ADDR>::write_bytes(ULong address, ULong length, UChar* data) {
     if (length < 32) {
         {
             ULong max = address + length;
-            PAGE* p_page = getMemPage(address);
+            PAGE* p_page = get_mem_page(address);
             MEM_ACCESS_ASSERT_W(p_page, address);
             init_page(p_page, address);
             p_page->malloc_unit(m_ctx, need_record);
             UInt count = 0;
             while (address < max) {
                 if (!(address % 0x1000)) {
-                    p_page = getMemPage(address);
+                    p_page = get_mem_page(address);
                     MEM_ACCESS_ASSERT_W(p_page, address);
                     init_page(p_page, address);
                     p_page->malloc_unit(m_ctx, need_record);
@@ -286,7 +306,7 @@ UInt MEM<ADDR>::write_bytes(ULong address, ULong length, UChar* data) {
     if (align_l == 32) {
     }
     else {
-        PAGE* p_page = getMemPage(address);
+        PAGE* p_page = get_mem_page(address);
         MEM_ACCESS_ASSERT_W(p_page, address);
         init_page(p_page, address);
         pad = _mm256_set1_epi8(data[0]);
@@ -308,7 +328,7 @@ UInt MEM<ADDR>::write_bytes(ULong address, ULong length, UChar* data) {
     bool need_check = true;
     while (count < max) {
         if ((!((address + count) & 0xfff)) || (need_check)) {
-            p_page = getMemPage(address + count);
+            p_page = get_mem_page(address + count);
             MEM_ACCESS_ASSERT_W(p_page, address + count);
             init_page(p_page, address + count);
             ULong smax = (count + 0x1000 <= max) ? 0x1000 : max - count;
@@ -345,7 +365,7 @@ UInt MEM<ADDR>::write_bytes(ULong address, ULong length, UChar* data) {
     };
     if (align_r) {
         if ((!((address + count) & 0xfff)) || !p_page) {
-            p_page = getMemPage(address + count);
+            p_page = get_mem_page(address + count);
             MEM_ACCESS_ASSERT_W(p_page, address + count);
             init_page(p_page, address + count);
             pad = _mm256_set1_epi8(data[count]);

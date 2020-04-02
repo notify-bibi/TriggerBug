@@ -387,29 +387,7 @@ Z3_ast TR::Reg2Ast(int nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_
 
 
 static inline Z3_ast mk_large_int(Z3_context ctx, void* data, UInt nbit) {
-    Z3_ast reast;
-    if (nbit <= 64) {
-        auto zsort = Z3_mk_bv_sort(ctx, nbit);
-        Z3_inc_ref(ctx, reinterpret_cast<Z3_ast>(zsort));
-        reast = Z3_mk_unsigned_int64(ctx, GET8(data), zsort);
-        Z3_dec_ref(ctx, reinterpret_cast<Z3_ast>(zsort));
-        Z3_inc_ref(ctx, reast);
-    }
-    else if (nbit <= 128) {
-        Vns re(ctx, _mm_loadu_si128((__m128i*)data), nbit);
-        reast = re;
-        Z3_inc_ref(ctx, reast);
-    }
-    else if (nbit <= 256) {
-        Vns re(ctx, _mm256_loadu_si256((__m256i*)data), nbit);
-        reast = re;
-        Z3_inc_ref(ctx, reast);
-    }
-    else {
-        return nullptr;
-    }
-    //vassert(Z3_get_bv_sort_size(ctx, Z3_get_sort(ctx, reast)) == nbit);
-    return reast;
+    return sv::symbol::_mk_ast(ctx, (uint64_t*)data, nbit);
 }
 
 //取值函数。将多个ast和真值组合为一个ast

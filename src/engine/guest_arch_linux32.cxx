@@ -9,10 +9,10 @@ void TR::linux32::avoid_anti_debugging()
 
 State_Tag TR::linux32::Sys_syscall()
 {
-    Vns eax = regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::EAX);
-    Vns edi = regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::EDI);
-    Vns edx = regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::EDX);
-    Vns esi = regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::ESI);
+    auto eax = regs.get<Ity_I32>(X86_IR_OFFSET::EAX);
+    auto edi = regs.get<Ity_I32>(X86_IR_OFFSET::EDI);
+    auto edx = regs.get<Ity_I32>(X86_IR_OFFSET::EDX);
+    auto esi = regs.get<Ity_I32>(X86_IR_OFFSET::ESI);
     return Death;
 }
 

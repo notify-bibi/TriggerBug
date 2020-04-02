@@ -4,8 +4,8 @@ using namespace TR;
 
 State_Tag hoo(State<Addr32> &s) {
 
-    Vns eax = s.regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::EAX);
-    Vns esi = s.regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::ESI);
+    auto eax = s.regs.get<Ity_I32>(X86_IR_OFFSET::EAX);
+    auto esi = s.regs.get<Ity_I32>(X86_IR_OFFSET::ESI);
     
     return Exit;
 }
@@ -16,21 +16,21 @@ State_Tag hook2(State<Addr32>& s) {
     return Running;
 }
 
-
-
-static Vns read(State<Addr32>& s, const Vns&addr, const Vns& len) {
-    z3::context& ctx = s;
-    for (int n = 0; n < 27; n++) {
-        Vns FLAG = s.mk_int_const(8);
-        s.mem.Ist_Store(addr + n, FLAG);
-        auto ao1 = FLAG >= 'A' && FLAG <= 'Z';
-        auto ao2 = FLAG >= 'a' && FLAG <= 'z';
-        auto ao3 = FLAG >= '0' && FLAG <= '9';
-        s.solv.add_assert(ao1 || ao2 || ao3 || FLAG == '_' || FLAG == '{' || FLAG == '}', True);
-    }
-    s.mem.Ist_Store(addr + 27, '\n');
-    return Vns(ctx, 28);
-}
+//
+//
+//static rsval<Addr32> read(State<Addr32>& s, const rsval<Addr32>&addr, const rsval<Addr32>& len) {
+//    z3::context& ctx = s;
+//    for (int n = 0; n < 27; n++) {
+//        tval FLAG = s.mk_int_const(8);
+//        s.mem.Ist_Store(addr + n, FLAG);
+//        auto ao1 = FLAG >= 'A' && FLAG <= 'Z';
+//        auto ao2 = FLAG >= 'a' && FLAG <= 'z';
+//        auto ao3 = FLAG >= '0' && FLAG <= '9';
+//        s.solv.add_assert(ao1 || ao2 || ao3 || FLAG == '_' || FLAG == '{' || FLAG == '}', True);
+//    }
+//    s.mem.Ist_Store(addr + 27, '\n');
+//    return Vns(ctx, 28);
+//}
 
 
 bool creakme() {
@@ -38,7 +38,7 @@ bool creakme() {
     v.set_system(windows);
     //v.setFlag(CF_traceJmp);
     v.param().set("ntdll_KiUserExceptionDispatcher", 0x774F4200);
-    v.hook_read(read);
+    //v.hook_read(read);
 
 
     SP::win32 state(v, 0, True);
@@ -47,7 +47,7 @@ bool creakme() {
 
     state.setFlag(CF_ppStmts);
 
-    Vns sd = state.mem.Iex_Load(0x004023ec, Ity_I64);
+    auto sd = state.mem.load<Ity_I64>(0x004023ec);
 
     state.hook_add(0x04023EF, hoo);
     state.hook_add(0x0401264, hook2);

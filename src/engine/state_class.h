@@ -27,7 +27,7 @@ Revision History:
 
 extern void* funcDict(void*);
 extern void Func_Map_Init();
-extern int eval_all(std::vector<Vns>& result, z3::solver& solv, Z3_ast nia);
+extern int eval_all(std::list<tval>& result, z3::solver& solv, Z3_ast nia);
 extern std::string replace(const char* pszSrc, const char* pszOld, const char* pszNew);
 extern UInt arch_2_stack_sp_iroffset(VexArch arch);
 
@@ -53,7 +53,7 @@ namespace TR {
         friend class StateX86;
         friend class StateAMD64;
         bool                    m_solver_snapshot = false;//if solver::push() m_solver_snapshot = true
-        std::vector<Vns>        m_asserts;
+        std::vector<sbool>        m_asserts;
     public:
         TRsolver(z3::context& c) :
             z3::solver(mk_tactic_solver_default(c))
@@ -65,35 +65,13 @@ namespace TR {
         void push() { m_solver_snapshot = true; z3::solver::push(); }
         void pop() { z3::solver::pop(); m_solver_snapshot = false; }
         bool is_snapshot() { return m_solver_snapshot; }
-        std::vector<Vns> const& get_asserts() const { return m_asserts; };
+        std::vector<sbool> const& get_asserts() const { return m_asserts; };
         //不会保存assert到solver,因为在push之前会进行push
-        void add(z3::expr const& e) {
-            if (!m_solver_snapshot) {
-                m_solver_snapshot = true;
-                push();
-            }
-            add_assert(Vns(e, 1), True);
-        }
-        //不会保存assert到solver,因为在push之前会进行push
-        void add(Vns const& e) {
-            if (!m_solver_snapshot) {
-                m_solver_snapshot = true;
-                push();
-            }
-            add_assert(e, True);
-        }
-        void check_if_forget_pop() {
-            if (m_solver_snapshot) {
-                m_solver_snapshot = false;
-                pop();
-            }
-        }
-        void add_assert(Vns const& assert, Bool ToF);
-        inline void add_assert(Vns const& assert) { add_assert(assert, True); };
-        inline void add_assert_eq(Vns const& eqA, Vns const& eqB);
-        void add_assert(z3::expr const& assert, Bool ToF) { add_assert(assert, ToF); }
-        inline void add_assert(z3::expr const& assert) { add_assert(assert, True); };
-        inline void add_assert_eq(z3::expr const& eqA, z3::expr const& eqB) { add_assert_eq(Vns(eqA.ctx(), (Z3_ast)eqA), Vns(eqB.ctx(), (Z3_ast)eqB)); }
+        void add(sbool const& e);
+        void add(rsbool const& e) { add(e.tos()); }
+
+        void check_if_forget_pop();
+        void add_assert(const sbool& assert);
         inline operator Z3_context() { return ctx(); }
         static z3::solver mk_tactic_solver_default(z3::context& c) {
             /*Legal parameters are :
@@ -287,6 +265,7 @@ namespace TR {
         friend class MEM<ADDR>;
         friend class StateAnalyzer<ADDR>;
         friend class StateCmprsInterface<ADDR>;
+        using vsize_t = rsval<ADDR>;
 
     public:
         vex_context<ADDR>& m_vctx;
@@ -306,7 +285,7 @@ namespace TR {
         ADDR        m_delta;
         State_Tag   m_status;
     public:
-        Vns* m_ir_temp = nullptr;
+        tval* m_ir_temp = nullptr;
         InvocationStack<ADDR>   m_InvokStack;
         TRsolver                solv;
         //客户机寄存器
@@ -320,7 +299,7 @@ namespace TR {
         void read_mem_dump(const char*);
 
         ~State();
-        inline void setTemp(Vns* t) { m_ir_temp = t; }
+        inline void setTemp(tval* t) { m_ir_temp = t; }
         void start();
         void start(ADDR oep) { guest_start = oep; start(); }
         void branchGo();
@@ -332,12 +311,12 @@ namespace TR {
 
         cmpr::CmprsContext<State<ADDR>, State_Tag> cmprContext(ADDR target_addr, State_Tag tag) { return cmpr::CmprsContext<State<ADDR>, State_Tag>(m_ctx, target_addr, tag); }
         void compress(cmpr::CmprsContext<State<ADDR>, State_Tag>& ctx);//最大化缩合状态 
-        inline Vns tIRExpr(IRExpr*);
-        Vns CCall(IRCallee* cee, IRExpr** exp_args, IRType ty);
-        inline Vns ILGop(IRLoadG* lg);
+        inline tval tIRExpr(IRExpr*);
+        tval CCall(IRCallee* cee, IRExpr** exp_args, IRType ty);
+        inline tval ILGop(IRLoadG* lg);
 
-        Vns mk_int_const(UShort nbit);
-        Vns mk_int_const(UShort n, UShort nbit);
+        tval mk_int_const(UShort nbit);
+        tval mk_int_const(UShort n, UShort nbit);
         UInt getStr(std::stringstream& st, ADDR addr);
         inline operator MEM<ADDR>& () { return mem; }
         inline operator Register<REGISTER_LEN>& () { return regs; }
@@ -350,27 +329,17 @@ namespace TR {
         operator std::string() const;
 
         DirtyCtx getDirtyVexCtx();
-        Vns dirty_call(IRCallee* cee, IRExpr** exp_args, IRType ty);
-        Vns dirty_call(const HChar* name, void* func, std::initializer_list<Vns> parms, IRType ty);
+        tval dirty_call(IRCallee* cee, IRExpr** exp_args, IRType ty);
+        tval dirty_call(const HChar* name, void* func, std::initializer_list<rsval<Addr64>> parms, IRType ty);
         Addr64 getGSPTR() { return dirty_get_gsptr<ADDR>(getDirtyVexCtx()); }
 
-        template<typename T>
-        void vex_push(T v) {
-            Vns sp = regs.Iex_Get<(IRType)(sizeof(ADDR) << 3)>(m_vctx.gRegsSpOffset()) - sizeof(ADDR);
-            regs.Ist_Put(m_vctx.gRegsSpOffset(), sp);
-            mem.Ist_Store(sp, (ADDR)v);
-        }
+        void vex_push(const rsval<ADDR>& v);
+        template<typename T, TASSERT(std::is_arithmetic<T>::value)>
+        void vex_push(T v) { vex_push(rsval<ADDR>(m_ctx, v)); }
 
-        template<>
-        void vex_push(Vns const& v) {
-            Vns sp = regs.Iex_Get<(IRType)(sizeof(ADDR)<<3)>(m_vctx.gRegsSpOffset()) - sizeof(ADDR);
-            regs.Ist_Put(m_vctx.gRegsSpOffset(), sp);
-            mem.Ist_Store(sp, v);
-        }
-
-        Vns vex_pop();
+        rsval<ADDR> vex_pop();
         //sp[n*size_t]
-        Vns vex_stack_get(Int n);
+        rsval<ADDR> vex_stack_get(int n);
 
         //interface :
 
@@ -382,7 +351,7 @@ namespace TR {
         virtual inline void traceInvoke(ADDR call, ADDR bp) { return; };
 
         Kernel* mkState(ADDR ges) { return ForkState(ges); }
-        virtual Vns TEB() { VPANIC("need to implement the method"); return Vns(); }
+        virtual rsval<ADDR> TEB() { VPANIC("need to implement the method"); }
         virtual Kernel* ForkState(ADDR ges) { VPANIC("need to implement the method"); return nullptr; }
     private:
         virtual State_Tag Ijk_call(IRJumpKind) { VPANIC("need to implement the method"); m_status = Death; };

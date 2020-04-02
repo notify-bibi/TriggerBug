@@ -35,6 +35,14 @@ void test1() {
     sv::ctype_val<true, 256, Z3_BV_SORT>  m128d(c, -999);
     sv::ctype_val<false, 78, Z3_BV_SORT>  m128c(c, 9);
 
+    sv::ctype_val<true, 63, Z3_BV_SORT>  sm78(c, -1);
+    sv::ctype_val<false, 63, Z3_BV_SORT>  um78(c, -1);
+
+    std::cout << sv::ctype_val<false, 64, Z3_BV_SORT>(sm78) << std::endl;
+    std::cout << sv::ctype_val<false, 64, Z3_BV_SORT>(um78) << std::endl;
+
+
+
     rcval<__m256i>  m256(c, _mm256_set_epi64x(9, 6, 3, 1));
 
     __m128i i128 = m128;
@@ -125,6 +133,7 @@ void test2() {
     __m128i sd = _mm_setr_epi32(1, 2, 3, 4);
     sv::symbolic<true, 72, Z3_FLOATING_POINT_SORT > f10_62(c, sd, sv::fpa_sort(c, 10, 62));
 
+    sv::rsval<true, 128, Z3_BV_SORT > jk(c, 89);
 
     sv::symbolic<false, 16, Z3_FLOATING_POINT_SORT > F16(c, (UShort)0x3f89, sv::fpa_sort(c, 5, 11));
 
@@ -231,11 +240,9 @@ void test2() {
     std::cout << Kernel::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 64, Z3_BV_SORT>().simplify() << std::endl;
     std::cout << Kernel::tUnop(Iop_Ctz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 64, Z3_BV_SORT>().simplify() << std::endl;
 
-    std::cout << Kernel::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0)) << std::endl;
-    std::cout << Kernel::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0).tos()).tos<true, 64, Z3_BV_SORT>().simplify() << std::endl;
+    std::cout << Kernel::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 1)) << std::endl;
+    std::cout << Kernel::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 1).tos()).tos<true, 64, Z3_BV_SORT>().simplify() << std::endl;
 
-
-    tval hjj(c, 0);
 
     //Z3_inc_ref(sg240, sg240);
 }
@@ -292,32 +299,32 @@ void test2() {
 //
 
 
-
-
-State_Tag success_ret3(State<Addr64>* s) {
-    s->solv.push();
-    UChar bf[] = { 0xEC, 0x29, 0xE3, 0x41, 0xE1, 0xF7, 0xAA, 0x1D, 0x29, 0xED, 0x29, 0x99, 0x39, 0xF3, 0xB7, 0xA9, 0xE7, 0xAC, 0x2B, 0xB7, 0xAB, 0x40, 0x9F, 0xA9, 0x31, 0x35, 0x2C, 0x29, 0xEF, 0xA8, 0x3D, 0x4B, 0xB0, 0xE9, 0xE1, 0x68, 0x7B, 0x41 };
-
-    auto enc = s->regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::RDI);
-    for (int i = 0; i < 38; i++) {
-        Vns e = s->mem.Iex_Load<Ity_I8>(enc + i);
-        s->solv.add(e == (UChar)bf[i]);
-    }
-    vex_printf("checking\n\n");
-    auto dfdfs = s->solv.check();
-    if (dfdfs == z3::sat) {
-        vex_printf("issat");
-        auto m = s->solv.get_model();
-        std::cout << m << std::endl;
-        exit(0);
-    }
-    else {
-        vex_printf("unsat??????????\n\n%d", dfdfs);
-    }
-    
-    s->solv.pop();
-    return Death;
-}
+//
+//
+//State_Tag success_ret3(State<Addr64>* s) {
+//    s->solv.push();
+//    UChar bf[] = { 0xEC, 0x29, 0xE3, 0x41, 0xE1, 0xF7, 0xAA, 0x1D, 0x29, 0xED, 0x29, 0x99, 0x39, 0xF3, 0xB7, 0xA9, 0xE7, 0xAC, 0x2B, 0xB7, 0xAB, 0x40, 0x9F, 0xA9, 0x31, 0x35, 0x2C, 0x29, 0xEF, 0xA8, 0x3D, 0x4B, 0xB0, 0xE9, 0xE1, 0x68, 0x7B, 0x41 };
+//
+//    auto enc = s->regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::RDI);
+//    for (int i = 0; i < 38; i++) {
+//        Vns e = s->mem.Iex_Load<Ity_I8>(enc + i);
+//        s->solv.add(e == (UChar)bf[i]);
+//    }
+//    vex_printf("checking\n\n");
+//    auto dfdfs = s->solv.check();
+//    if (dfdfs == z3::sat) {
+//        vex_printf("issat");
+//        auto m = s->solv.get_model();
+//        std::cout << m << std::endl;
+//        exit(0);
+//    }
+//    else {
+//        vex_printf("unsat??????????\n\n%d", dfdfs);
+//    }
+//    
+//    s->solv.pop();
+//    return Death;
+//}
 //
 //
 //State_Tag success_ret33(State* s) {
@@ -364,27 +371,27 @@ State_Tag success_ret3(State<Addr64>* s) {
 
 
 #include "engine/guest_layout_helper.h"
-
-Vns flag_limit(Vns& flag) {
-    char flags_char[] = "@_-{}1:() ^";
-    Vns re = Vns(flag, flags_char[0]) == flag;
-    for (int i = 1; i < sizeof(flags_char); i++) {
-        re = re || (Vns(flag, flags_char[i]) == flag);
-    }
-    auto ao1 = flag >= 'a' && flag <= 'z';
-    auto ao2 = flag >= 'A' && flag <= 'Z';
-    auto ao3 = flag >= '0' && flag <= '9';
-    return re || ao1 || ao2 || ao3;
-}
-
+//
+//Vns flag_limit(Vns& flag) {
+//    char flags_char[] = "@_-{}1:() ^";
+//    Vns re = Vns(flag, flags_char[0]) == flag;
+//    for (int i = 1; i < sizeof(flags_char); i++) {
+//        re = re || (Vns(flag, flags_char[i]) == flag);
+//    }
+//    auto ao1 = flag >= 'a' && flag <= 'z';
+//    auto ao2 = flag >= 'A' && flag <= 'Z';
+//    auto ao3 = flag >= '0' && flag <= '9';
+//    return re || ao1 || ao2 || ao3;
+//}
+//
 
 
 State_Tag test_ir_dirty_hook(State<Addr32>& state) {
     UInt esp = 0x8000 - 532;
     PWOW64_CONTEXT ContextRecord = (PWOW64_CONTEXT)(esp - sizeof(WOW64_CONTEXT));
     PEXCEPTION_RECORD32 ExceptionRecord = (PEXCEPTION_RECORD32)(esp - sizeof(WOW64_CONTEXT) - sizeof(EXCEPTION_RECORD32));
-
-    if ((UInt)state.vex_stack_get(1) != (Addr32)(ULong)ContextRecord) return Death;
+    
+    if ((Addr32) state.vex_stack_get(1) != (Addr32)(ULong)ContextRecord) return Death;
     if ((UInt)state.vex_stack_get(2) != EXCEPTION_BREAKPOINT) return Death;
     if ((UInt)state.vex_stack_get(22 + offsetof(WOW64_CONTEXT, Esp) / 4) != 0x8000) return Death;
     return Exit;
@@ -401,7 +408,14 @@ bool test_ir_dirty() {
     state.mem.map(0x1000, 0x2000);
     state.mem.map(0x5000, 0x5000);
     state.hook_add(0x2000, test_ir_dirty_hook);
-    state.mem.Ist_Store(0x1000, 0xcc);
+    state.mem.store(0x1000, 0xcc);
+
+
+
+    sv::sv_cty<Addr32> h;
+    h.is_signed;
+    h.nbits;
+    h.sk;
 
  /*   std::cout << state.regs.get<Ity_I8>(X86_IR_OFFSET::ESP) << std::endl;
     std::cout << state.regs.get<Ity_V128>(X86_IR_OFFSET::ESP) << std::endl;
@@ -419,9 +433,9 @@ bool test_ir_dirty() {
 
 
 
-    state.regs.Ist_Put(X86_IR_OFFSET::ESP, 0x8000);
-    state.regs.Ist_Put(X86_IR_OFFSET::EIP, 0x1000);
-    state.regs.Ist_Put(X86_IR_OFFSET::CC_OP, 0x0);
+    state.regs.set(X86_IR_OFFSET::ESP, 0x8000);
+    state.regs.set(X86_IR_OFFSET::EIP, 0x1000);
+    state.regs.set(X86_IR_OFFSET::CC_OP, 0x0);
 
 
     state.start(0x1000);
@@ -442,36 +456,36 @@ bool test_cmpress() {
 
     for (int i = 0; i < 4; i++) {
         SP::linux64* s = (SP::linux64*)(state.ForkState(20));
-        Vns f1 = s->m_ctx.bv_const("a1", 8);
-        Vns f2 = s->m_ctx.bv_const("a2", 8);
+        z3::expr f1 = s->m_ctx.bv_const("a1", 8);
+        z3::expr f2 = s->m_ctx.bv_const("a2", 8);
         s->solv.add_assert(f1 > i);
         s->solv.add_assert(f2 < i);
-        s->mem.Ist_Store(0x602080, 1000 + i);
-        s->mem.Ist_Store(0x602088, 1000 + i);
+        s->mem.store(0x602080, 1000 + i);
+        s->mem.store(0x602088, 1000 + i);
         if (i == 3)
             s->set_status(Death);
     }
     std::cout << state << std::endl;
     for (int i = 4; i < 5; i++) {
         SP::linux64* s = (SP::linux64*)(state.ForkState(32));
-        Vns f1 = s->m_ctx.bv_const("aj", 8);
-        Vns f2 = s->m_ctx.bv_const("ak", 8);
+        z3::expr f1 = s->m_ctx.bv_const("aj", 8);
+        z3::expr f2 = s->m_ctx.bv_const("ak", 8);
         s->solv.add_assert(f1 > i);
         s->solv.add_assert(f2 < i);
         s->set_status((State_Tag)88);
     }
 
     std::cout << state << std::endl;
-    UInt i = 0;
+    Int i = 0;
     for (auto s : state.branch) {
         i += 1;
         if (i <= 3) { continue; }
         SP::linux64* s2 = (SP::linux64*)(s->ForkState(20));
         s->set_status(Fork);
-        Vns f = s2->m_ctx.bv_const("b", 8);
+        z3::expr f = s2->m_ctx.bv_const("b", 8);
         s2->solv.add_assert(f > i);
-        s2->mem.Ist_Store(0x602080, 100 + i);
-        s2->mem.Ist_Store(0x602081, 100ull + i + (1ull << 63));
+        s2->mem.store(0x602080, 100 + i);
+        s2->mem.store(0x602081, 100ull + i + (1ull << 63));
         if (i <= 4)
             continue;
         s2->m_InvokStack.push(787, 87);
@@ -490,25 +504,25 @@ bool test_cmpress() {
     return true;
 }
 
-
-bool test_dirty_cmpress() {
-    ctx64 v(VexArchAMD64, PROJECT_DIR"PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.xml");
-    SP::linux64 state(v, 0, True);
-
-
-    UChar bf[] = { 0xD9 ,0x74 ,0x24 ,0xE2 };
-    for (int i = 0; i < sizeof(bf); i++) {
-        state.mem.Ist_Store(state.get_cpu_ip() + i, bf[i]);
-    }
-    Vns f = state.m_ctx.bv_const("b", 64);
-    state.solv.add_assert(f != 0);
-    state.regs.Ist_Put(AMD64_IR_OFFSET::FPTAG, f);
-    state.start();
-
-    std::cout << state << std::endl;
-    return true;
-}
-
+//
+//bool test_dirty_cmpress() {
+//    ctx64 v(VexArchAMD64, PROJECT_DIR"PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.xml");
+//    SP::linux64 state(v, 0, True);
+//
+//
+//    UChar bf[] = { 0xD9 ,0x74 ,0x24 ,0xE2 };
+//    for (int i = 0; i < sizeof(bf); i++) {
+//        state.mem.Ist_Store(state.get_cpu_ip() + i, bf[i]);
+//    }
+//    Vns f = state.m_ctx.bv_const("b", 64);
+//    state.solv.add_assert(f != 0);
+//    state.regs.Ist_Put(AMD64_IR_OFFSET::FPTAG, f);
+//    state.start();
+//
+//    std::cout << state << std::endl;
+//    return true;
+//}
+//
 
 
 int main() {

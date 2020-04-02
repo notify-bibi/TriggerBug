@@ -9,11 +9,11 @@ namespace TR {
     }
 
     State_Tag linux64::Sys_syscall() {
-        Vns al = regs.Iex_Get<Ity_I8>(AMD64_IR_OFFSET::RAX);
+        auto al = regs.get<Ity_I8>(AMD64_IR_OFFSET::RAX);
         if (al.real()) {
-            Vns rdi = regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::RDI);
-            Vns rdx = regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::RDX);
-            Vns rsi = regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::RSI);
+            auto rdi = regs.get<Ity_I64>(AMD64_IR_OFFSET::RDI);
+            auto rdx = regs.get<Ity_I64>(AMD64_IR_OFFSET::RDX);
+            auto rsi = regs.get<Ity_I64>(AMD64_IR_OFFSET::RSI);
             switch ((UChar)al) {
             case 0:// //LINUX - sys_read
                 if (rdi == 0) {
@@ -35,27 +35,27 @@ namespace TR {
                     return Running;
                 }
             case 1: {//LINUX - sys_write
-                for (ULong n = 0; n < rdx; n++) {
+                /*for (ULong n = 0; n < rdx; n++) {
                     UChar chr = mem.Iex_Load<Ity_I8>(rsi + n);
                     vex_printf("%c", chr);
-                }
-                regs.Ist_Put(AMD64_IR_OFFSET::RAX, rdx);
+                }*/
+                regs.set(AMD64_IR_OFFSET::RAX, rdx);
                 return Running;
             }
 
             case 0x3: {//LINUX - sys_close
                 vex_printf("system call: sys_close description:0x%x\n", rdi);
-                regs.Ist_Put(AMD64_IR_OFFSET::RAX, 1);
+                regs.set(AMD64_IR_OFFSET::RAX, 1);
                 break;
             }
             case 0x5: {//LINUX - sys_newfstat
                 vex_printf("system call: sys_newfstat\tfd:0x%x 	struct stat __user *statbuf:0x%x", (ULong)rdi, (ULong)rsi);
-                regs.Ist_Put(AMD64_IR_OFFSET::RAX, 0ull);
+                regs.set(AMD64_IR_OFFSET::RAX, 0ull);
                 return Running;
             }
 
             case 0xC: {//LINUX - sys_brk
-                ULong rbx = regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::RBX);
+                ULong rbx = regs.get<Ity_I64>(AMD64_IR_OFFSET::RBX);
                 vex_printf("system call: brk address:0x%x\n", rbx);
                 ULong brk = rbx;
                 if (brk) {
@@ -72,7 +72,7 @@ namespace TR {
                         g_brk = ALIGN(brk, 32);
                     }
                 }
-                regs.Ist_Put(AMD64_IR_OFFSET::RAX, g_brk);
+                regs.set(AMD64_IR_OFFSET::RAX, g_brk);
                 return Running;
             }
             case 0x23: {//LINUX - sys_nanosleep

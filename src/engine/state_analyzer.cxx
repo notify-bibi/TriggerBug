@@ -209,7 +209,7 @@ class GraphView {
     std::map<ADDR, blockEnd> m_block_end;
     ThreadPool m_pool;
     
-    inline ADDR tIRExpr(IRExpr* e, Vns* ir_temp)
+    inline ADDR tIRExpr(IRExpr* e, tval* ir_temp)
     {
         switch (e->tag) {
         case Iex_RdTmp: { return ir_temp[e->Iex.RdTmp.tmp]; }
@@ -218,8 +218,8 @@ class GraphView {
             ADDR addr = tIRExpr(e->Iex.Load.addr, ir_temp);
             if (!addr) return 0;
             try {
-                Vns v = m_mem.Iex_Load(addr, e->Iex.Get.ty);
-                if (v.symbolic()) return 0;
+                tval v = m_mem.Iex_Load(addr, e->Iex.Get.ty);
+                if (v.symb()) return 0;
                 return v;
             }
             catch (Expt::ExceptionBase & error) {

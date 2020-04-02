@@ -190,7 +190,7 @@ tval Kernel::tUnop(IROp op, tval const& a) {
             if (!_BitScanForward64(&result, ato(uint64_t)))  result = 64;
             return tval(a, (uint64_t)result);
         };//ok bsf
-        case Iop_GetMSBs8x16: { return Vns(a, (UShort)_mm_movemask_epi8(ato(__m128i))); }//OK pmovmskb
+        case Iop_GetMSBs8x16: { return tval(a, (UShort)_mm_movemask_epi8(ato(__m128i))); }//OK pmovmskb
 
         case Iop_Abs64Fx2:
         case Iop_Neg64Fx2:

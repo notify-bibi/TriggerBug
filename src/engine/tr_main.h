@@ -30,7 +30,7 @@ namespace TR {
         virtual bool  StateCompression(State<Addr32> const& next) override { return true; }
         virtual void  StateCompressMkSymbol(State<Addr32> const& newState) override {  };
         //Thread Environment Block
-        Vns TEB() override;
+        rsval<Addr32> TEB() override;
     };
 
 
@@ -55,7 +55,7 @@ namespace TR {
         virtual bool  StateCompression(State<Addr64> const& next) override { return true; }
         virtual void  StateCompressMkSymbol(State<Addr64> const& newState) override {  };
         //Thread Environment Block
-        Vns TEB() override { return regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::FS_CONST); }
+        rsval<Addr64> TEB() override { return regs.get<Ity_I64>(AMD64_IR_OFFSET::FS_CONST); }
     };
 
 

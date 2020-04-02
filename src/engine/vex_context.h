@@ -3,9 +3,8 @@
 #define  _VEX_CONTEXT_
 #include "thread_pool/thread_pool.h"
 #include "engine/engine.h"
-#include "engine/variable.h"
+#include "engine/basic_var.hpp"
 
-UInt gMaxThreadsNum();
 
 namespace TR {
 
@@ -20,8 +19,8 @@ namespace TR {
     class State;
     class TRsolver;
 
-    template<typename ADDR> Vns vex_read(State<ADDR>& s, const Vns& addr, const Vns& len);
-    template<typename ADDR> void vex_write(State<ADDR>& s, const Vns& addr, const Vns& len);
+    template<typename ADDR> rsval<ADDR> vex_read(State<ADDR>& s, const rsval<ADDR>& addr, const rsval<ADDR>& len);
+    template<typename ADDR> void vex_write(State<ADDR>& s, const rsval<ADDR>& addr, const rsval<ADDR>& len);
 
     typedef enum :unsigned int {
         NewState = 0,
@@ -158,9 +157,9 @@ namespace TR {
     {
     public:
         //¶Á
-        using Hook_Read = Vns (*)(State<ADDR> & , const Vns&, const Vns&);
+        using Hook_Read = rsval<ADDR> (*)(State<ADDR> & , const rsval<ADDR>&, const rsval<ADDR>&);
         //Ð´
-        using Hook_Write = void(*)(State<ADDR> & , const Vns&, const Vns&);
+        using Hook_Write = void(*)(State<ADDR> & , const rsval<ADDR>&, const rsval<ADDR>&);
         //idx2v
         using Hook_idx2Value = z3::expr(*) (State<ADDR>&, ADDR /*base*/, Z3_ast /*idx*/);
 

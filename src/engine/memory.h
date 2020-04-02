@@ -18,7 +18,7 @@ Revision History:
 
 #include <Windows.h>
 #include "engine/engine.h"
-#include "engine/variable.h"
+#include "engine/basic_var.hpp"
 #include "engine/register.h"
 #include "engine/state_class.h"
 #include "engine/addressing_mode.h"
@@ -73,7 +73,7 @@ public:
         if (P->m_is_pad) {// 该页是填充区，则开始分配该页
             vassert(P->m_unit == NULL);
             m_unit = new TR::Register<0x1000>(ctx, nr);
-            memset(m_unit->m_bytes, P->m_pad, 0x1000);
+            //memset(m_unit->m_bytes, P->m_pad, 0x1000);
         }
         else {
             m_unit = new TR::Register<0x1000>(*(P->m_unit), ctx, nr);
@@ -85,7 +85,7 @@ public:
         if (m_is_pad) {
             vassert(m_unit == NULL);
             m_unit = new TR::Register<0x1000>(ctx, nr);
-            memset(m_unit->m_bytes, m_pad, 0x1000);
+            //memset(m_unit->m_bytes, m_pad, 0x1000);
             m_is_pad = false;
         }
     }
@@ -150,22 +150,24 @@ namespace TR {
         friend class State<ADDR>;
         template<typename _> friend class vex_context;
         friend class DMEM;
+        //wide
+        static constexpr int wide = sizeof(ADDR) << 3;
     public:
+
         class Itaddress {
         private:
             z3::solver& m_solver;
             z3::context& m_ctx;
             Z3_ast m_addr;
             Z3_ast last_avoid_addr;
-            UShort m_nbit;
             //std::vector<Z3_model> v_model;
         public:
             Z3_lbool m_lbool;
-            inline Itaddress(z3::solver& s, Z3_ast addr) :m_ctx(m_solver.ctx()), m_solver(s), m_addr(addr), m_nbit(Z3_get_bv_sort_size(m_ctx, Z3_get_sort(m_ctx, m_addr))) {
+            inline Itaddress(z3::solver& s, Z3_ast addr) :m_ctx(m_solver.ctx()), m_solver(s), m_addr(addr) {
                 m_addr = Z3_simplify(s.ctx(), m_addr);
                 Z3_inc_ref(m_ctx, m_addr);
                 m_solver.push();
-                Z3_ast so = Z3_mk_bvugt(m_ctx, m_addr, m_ctx.bv_val(1ull, m_nbit));
+                Z3_ast so = Z3_mk_bvugt(m_ctx, m_addr, m_ctx.bv_val(1ull, wide));
                 Z3_inc_ref(m_ctx, so);
                 Z3_solver_assert(m_ctx, m_solver, so);
                 Z3_dec_ref(m_ctx, so);
@@ -189,7 +191,7 @@ namespace TR {
                 Z3_dec_ref(m_ctx, last_avoid_addr);
             }
 
-            inline Vns operator*()
+            rsval<ADDR> operator*()
             {
                 Z3_model m_model = Z3_solver_get_model(m_ctx, m_solver); vassert(m_model);
                 Z3_model_inc_ref(m_ctx, m_model);
@@ -202,7 +204,7 @@ namespace TR {
                 vassert(Z3_get_ast_kind(m_ctx, r) == Z3_NUMERAL_AST);
                 vassert(Z3_get_numeral_uint64(m_ctx, r, &ret));
                 Z3_model_dec_ref(m_ctx, m_model);
-                return Vns(m_ctx, ret, m_nbit);
+                return rsval<ADDR>(m_ctx, ret, r);
             }
             inline ~Itaddress() {
                 Z3_dec_ref(m_ctx, m_addr);
@@ -253,141 +255,125 @@ namespace TR {
         inline void set_double_page(ADDR address, Pap& addrlst) {
             addrlst.guest_addr = address;
             addrlst.Surplus = 0x1000 - (address & 0xfff);
-            PAGE* P = getMemPage(address);
+            PAGE* P = get_mem_page(address);
             MEM_ACCESS_ASSERT_R(P, address);
             addrlst.t_page_addr = (UChar*)(*P)->m_bytes + (address & 0xfff);
         }
 
 
         inline UChar* get_next_page(Addr32 address) {
-            PAGE* P = getMemPage(address + 0x1000);
+            PAGE* P = get_mem_page(address + 0x1000);
             return P ? (*P)->m_bytes : nullptr;
         }
 
         inline UChar* get_next_page(Addr64 address) {
-            PAGE* P = getMemPage(address + 0x1000);
+            PAGE* P = get_mem_page(address + 0x1000);
             return P ? (*P)->m_bytes : nullptr;
         }
         Itaddress addr_begin(z3::solver& s, Z3_ast addr) { return Itaddress(s, addr); }
 
     private:
-        Vns _Iex_Load_a(PAGE* P, ADDR address, UShort size) {
-            PAGE* nP = getMemPage(address + 0x1000);
+       /* Vns _Iex_Load_a(PAGE* P, ADDR address, UShort size) {
+            PAGE* nP = get_mem_page(address + 0x1000);
             MEM_ACCESS_ASSERT_R(nP, address + 0x1000);
             UInt plength = 0x1000 - ((UShort)address & 0xfff);
             return (*nP)->Iex_Get(0, size - plength).translate(m_ctx).Concat((*P)->Iex_Get(((UShort)address & 0xfff), plength));
         }
 
         Vns _Iex_Load_b(PAGE* P, ADDR address, UShort size) {
-            PAGE* nP = getMemPage(address + 0x1000);
+            PAGE* nP = get_mem_page(address + 0x1000);
             MEM_ACCESS_ASSERT_R(nP, address + 0x1000);
             UInt plength = 0x1000 - ((UShort)address & 0xfff);
             return (*nP)->Iex_Get(0, size - plength).translate(m_ctx).Concat((*P)->Iex_Get(((UShort)address & 0xfff), plength, m_ctx));
-        }
+        }*/
 
-        template<IRType ty>
-        inline Vns Pad2Value(UChar pad) {
-            switch (ty) {
-            case 8:
-            case Ity_I8:  return Vns(m_ctx, (UChar)pad);
-            case 16:
-            case Ity_I16: {return Vns(m_ctx, (UShort)((((UShort)pad) << 8) | pad)); }
-            case 32:
-            case Ity_F32:
-            case Ity_I32: {return Vns(m_ctx, _mm_set1_epi8(pad).m128i_u32[0]); }
-            case 64:
-            case Ity_F64:
-            case Ity_I64: {return Vns(m_ctx, _mm_set1_epi8(pad).m128i_u64[0]); }
-            case 128:
-            case Ity_I128:
-            case Ity_V128: {return Vns(m_ctx, _mm_set1_epi8(pad)); }
-            case 256:
-            case Ity_V256: {return Vns(m_ctx, _mm256_set1_epi8(pad)); }
-            default:vpanic("error IRType");
-            }
-        }
+        //template<IRType ty>
+        //inline Vns Pad2Value(UChar pad) {
+        //    switch (ty) {
+        //    case 8:
+        //    case Ity_I8:  return Vns(m_ctx, (UChar)pad);
+        //    case 16:
+        //    case Ity_I16: {return Vns(m_ctx, (UShort)((((UShort)pad) << 8) | pad)); }
+        //    case 32:
+        //    case Ity_F32:
+        //    case Ity_I32: {return Vns(m_ctx, _mm_set1_epi8(pad).m128i_u32[0]); }
+        //    case 64:
+        //    case Ity_F64:
+        //    case Ity_I64: {return Vns(m_ctx, _mm_set1_epi8(pad).m128i_u64[0]); }
+        //    case 128:
+        //    case Ity_I128:
+        //    case Ity_V128: {return Vns(m_ctx, _mm_set1_epi8(pad)); }
+        //    case 256:
+        //    case Ity_V256: {return Vns(m_ctx, _mm256_set1_epi8(pad)); }
+        //    default:vpanic("error IRType");
+        //    }
+        //}
 
     public:
-        // ty  IRType || n_bits
-        template<IRType ty>
-        inline Vns Iex_Load(ADDR address)
-        {
-            PAGE* P = getMemPage(address);
-            MEM_ACCESS_ASSERT_R(P, address);
-            UShort offset = (UShort)address & 0xfff;
-            if (P->is_pad()) {
+
+        //----------------------- real address -----------------------
+
+        template<bool sign, int nbits, sv::z3sk sk>
+        inline sv::rsval<sign, nbits, sk> load(ADDR address) {
+            static_assert((nbits & 7) == 0, "err load");
+            PAGE* page = get_mem_page(address);
+            MEM_ACCESS_ASSERT_R(page, address);
+            /*if (P->is_pad()) {
                 return Pad2Value<ty>(P->get_pad());
-            };
-            if (user == P->get_user()) {//WNC
-                switch (ty) {
-                case 8:
-                case Ity_I8:  return (*P)->Iex_Get<Ity_I8>(offset);
-                case 16:
-                case Ity_I16: {
-                    if (offset >= 0xfff) { return _Iex_Load_a(P, address, 2); }return (*P)->Iex_Get<Ity_I16>(offset);
-                }
-                case 32:
-                case Ity_F32:
-                case Ity_I32: {
-                    if (offset >= 0xffd) { return _Iex_Load_a(P, address, 4); }return (*P)->Iex_Get<Ity_I32>(offset);
-                }
-                case 64:
-                case Ity_F64:
-                case Ity_I64: {
-                    if (offset >= 0xff9) { return _Iex_Load_a(P, address, 8); }return (*P)->Iex_Get<Ity_I64>(offset);
-                }
-                case 128:
-                case Ity_I128:
-                case Ity_V128: {
-                    if (offset >= 0xff1) { return _Iex_Load_a(P, address, 16); }return (*P)->Iex_Get<Ity_V128>(offset);
-                }
-                case 256:
-                case Ity_V256: {
-                    if (offset >= 0xfe1) { return _Iex_Load_a(P, address, 32); }return (*P)->Iex_Get<Ity_V256>(offset);
-                }
-                default:vpanic("error IRType");
-                }
+            };*/
+
+            if ((address & 0xfff) >= (0x1001 - (nbits >> 3))) {
+                //return _Iex_Load_a(P, address, 2);
+            }
+
+            if (user == page->get_user()) {//WNC
+                return (*page)->get<sign, nbits, sk>(address & 0xfff);
             }
             else {
-                switch (ty) {
-                case 8:
-                case Ity_I8: {
-                    return (*P)->Iex_Get<Ity_I8 >(offset, m_ctx);
-                }
-                case 16:
-                case Ity_I16: {
-                    if (offset >= 0xfff) { return _Iex_Load_b(P, address, 2); }; return (*P)->Iex_Get<Ity_I16>(offset, m_ctx);
-                }
-                case 32:
-                case Ity_F32:
-                case Ity_I32: {
-                    if (offset >= 0xffd) { return _Iex_Load_b(P, address, 4); }; return (*P)->Iex_Get<Ity_I32>(offset, m_ctx);
-                }
-                case 64:
-                case Ity_F64:
-                case Ity_I64: {
-                    if (offset >= 0xff9) { return _Iex_Load_b(P, address, 8); }; return (*P)->Iex_Get<Ity_I64>(offset, m_ctx);
-                }
-                case 128:
-                case Ity_I128:
-                case Ity_V128: {
-                    if (offset >= 0xff1) { return _Iex_Load_b(P, address, 16); }; return (*P)->Iex_Get<Ity_V128>(offset, m_ctx);
-                }
-                case 256:
-                case Ity_V256: {
-                    if (offset >= 0xfe1) { return _Iex_Load_b(P, address, 32); }; return (*P)->Iex_Get<Ity_V256>(offset, m_ctx);
-                }
-                default:vpanic("error IRType");
-                }
+                return (*page)->get<sign, nbits, sk >(address & 0xfff, m_ctx);
             }
         }
 
-        Vns Iex_Load(ADDR address, IRType ty);
+        // IRType 
+        template<IRType ty, class _svc = sv::IRty<ty>>
+        inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> load(ADDR address) {
+            return load<_svc::is_signed, _svc::nbits, _svc::sk>(address);
+        }
 
-        template<IRType ty>
-        Vns Iex_Load(Z3_ast address) {
+        // load arithmetic
+        template<typename ty, class _svc = sv::sv_cty<ty>, TASSERT(sv::is_ret_type<ty>::value)>
+        inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> load(ADDR address) {
+            return load<_svc::is_signed, _svc::nbits, _svc::sk>(address);
+        }
+
+
+        //----------------------- ast address -----------------------
+
+        template<bool sign, int nbits, sv::z3sk sk>
+        sv::rsval<sign, nbits, sk> load_all(const sval<ADDR>& address) {
+            sv::symbolic<sign, nbits, sk> ret(m_ctx);
+            bool first = true;
+            Itaddress it = this->addr_begin(m_solver, address);
+            while (it.check()) {
+                rsval<ADDR> addr = *it;
+                sv::rsval<sign, nbits, sk>  data = load<sign, nbits, sk>((ADDR)addr.tor());
+                if (first) {
+                    first = false;
+                    ret = data.tos();
+                }
+                else {
+                    ret = ite(address == addr.tos(), data.tos(), ret);
+                }
+                it++;
+            };
+            return ret;
+        }
+
+
+        template<bool sign, int nbits, sv::z3sk sk>
+        inline sv::rsval<sign, nbits, sk> load(Z3_ast address) {
+            static_assert((nbits & 7) == 0, "err load");
             TR::addressingMode<ADDR> am(z3::expr(m_ctx, address));
-            Z3_ast reast = nullptr;
             auto kind = am.analysis_kind();
             if (kind != TR::addressingMode<ADDR>::cant_analysis) {
 #ifdef TRACE_AM
@@ -397,92 +383,114 @@ namespace TR {
                 //am.print_offset();
 #endif
                 z3::expr tast = idx2Value(am.getBase(), am.getoffset());
-                reast = tast;
-                if (reast) {
-                    return Vns(m_ctx, reast);
+                if ((Z3_ast)tast) {
+                    return sv::rsval<sign, nbits, sk>(m_ctx, tast);
                 }
                 else {
                     if (kind == TR::addressingMode<ADDR>::support_bit_blast) {
+                        sv::symbolic<sign, nbits, sk> ret(m_ctx);
+                        bool first = true;
                         for (TR::addressingMode<ADDR>::iterator off_it = am.begin();
                             off_it.check();
                             off_it.next()) {
-                            auto offset = *off_it;
-                            Vns data = Iex_Load<ty>(am.getBase() + offset);
-                            if (!reast) {
-                                reast = data;
-                                Z3_inc_ref(m_ctx, reast);
-                                continue;
+                            ADDR offset = *off_it;
+                            sv::rsval<sign, nbits, sk> data = load<sign, nbits, sk>(am.getBase() + offset);
+
+                            if (first) {
+                                first = false;
+                                ret = data.tos();
                             }
-                            auto eq = Z3_mk_eq(m_ctx, am.getoffset(), Vns(m_ctx, (ADDR)offset));
-                            Z3_inc_ref(m_ctx, eq);
-                            auto ift = Z3_mk_ite(m_ctx, eq, data, reast);
-                            Z3_inc_ref(m_ctx, ift);
-                            Z3_dec_ref(m_ctx, reast);
-                            Z3_dec_ref(m_ctx, eq);
-                            reast = ift;
+                            else {
+                                sbool _if = subval<wide>(am.getoffset()) == offset;
+                                ret = ite(_if, data.tos(), ret);
+                            }
                         }
-                        return Vns(m_ctx, reast, no_inc{});
+                        return ret;
                     }
                 }
             }
-            Itaddress it = this->addr_begin(m_solver, address);
-            uint64_t Z3_RE;
-            while (it.check()) {
-                auto addr = *it;
-                if (!Z3_get_numeral_uint64(m_ctx, addr, &Z3_RE)) vassert(0);
-                Vns data = Iex_Load<ty>(Z3_RE);
-                if (reast) {
-                    auto eq = Z3_mk_eq(m_ctx, address, addr);
-                    Z3_inc_ref(m_ctx, eq);
-                    auto ift = Z3_mk_ite(m_ctx, eq, data, reast);
-                    Z3_inc_ref(m_ctx, ift);
-                    Z3_dec_ref(m_ctx, reast);
-                    Z3_dec_ref(m_ctx, eq);
-                    reast = ift;
-                }
-                else {
-                    reast = data;
-                    Z3_inc_ref(m_ctx, reast);
-                }
-                it++;
-            };
-            return Vns(m_ctx, reast, no_inc{});
+            return load_all<sign, nbits, sk>(sval<ADDR>(m_ctx, address));
         }
 
-        Vns Iex_Load(Z3_ast address, IRType ty);
+        // IRType 
+        template<IRType ty, class _svc = sv::IRty<ty>>
+        inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> load(Z3_ast address) {
+            return load<_svc::is_signed, _svc::nbits, _svc::sk>(address);
+        }
 
-        template<IRType ty>
-        inline Vns Iex_Load(Vns const& address) {
+        // load arithmetic
+        template<typename ty, class _svc = sv::sv_cty<ty>, TASSERT(sv::is_ret_type<ty>::value)>
+        inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> load(Z3_ast address) {
+            return load<_svc::is_signed, _svc::nbits, _svc::sk>(address);
+        }
+
+        //--------------------------- load -----------------------------
+
+
+
+        // load rsval
+        template<IRType ty, bool _Ts, class _svc = sv::IRty<ty>>
+        inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> load(const sv::rsval<_Ts, wide, Z3_BV_SORT>& address) {
             if (address.real()) {
-                return Iex_Load<ty>((ADDR)address);
+                return load<_svc::is_signed, _svc::nbits, _svc::sk>((ADDR)address);
             }
             else {
-                return Iex_Load<ty>((Z3_ast)address);
+                return load<_svc::is_signed, _svc::nbits, _svc::sk>((Z3_ast)address);
             }
         }
 
-
-        inline Vns Iex_Load(Vns const& address, IRType ty)
-        {
+        // load rsval
+        template<typename ty, bool _Ts, class _svc = sv::sv_cty<ty>, TASSERT(sv::is_ret_type<ty>::value)>
+        inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> load(const sv::rsval<_Ts, wide, Z3_BV_SORT>& address) {
             if (address.real()) {
-                return Iex_Load((ADDR)address, ty);
+                return load<_svc::is_signed, _svc::nbits, _svc::sk>((ADDR)address.tor());
             }
             else {
-                return Iex_Load((Z3_ast)address, ty);
+                return load<_svc::is_signed, _svc::nbits, _svc::sk>((Z3_ast)address.tos());
             }
         }
 
-        template<typename DataTy>
-        void Ist_Store(ADDR address, DataTy data) {
+        // load tval
+        template<IRType ty, class _svc = sv::IRty<ty> >
+        inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> load(tval const& address) {
+            if (address.real()) {
+                return load<_svc::is_signed, _svc::nbits, _svc::sk>((ADDR)address.tor<false, wide>());
+            }
+            else {
+                return load<_svc::is_signed, _svc::nbits, _svc::sk>((Z3_ast)address.tos<false, wide>());
+            }
+        }
+
+        // load tval
+        template<typename ty, class _svc = sv::sv_cty<ty>, TASSERT(sv::is_ret_type<ty>::value)>
+        inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> load(tval const& address) {
+            if (address.real()) {
+                return load<_svc::is_signed, _svc::nbits, _svc::sk>((ADDR)address.tor<false, wide>());
+            }
+            else {
+                return load<_svc::is_signed, _svc::nbits, _svc::sk>((Z3_ast)address.tos<false, wide>());
+            }
+        }
+
+        tval Iex_Load(Z3_ast address, IRType ty);
+        tval Iex_Load(ADDR address, IRType ty);
+        tval Iex_Load(const tval& address, IRType ty);
+        tval Iex_Load(const tval& address, int nbytes);
+        tval Iex_Load(const sv::rsval<false, wide>& address, IRType ty);
+
+        //----------------------- real addr store real -----------------------
+
+        template<typename DataTy, TASSERT(std::is_arithmetic<DataTy>::value)>
+        void store(ADDR address, DataTy data) {
             CODEBLOCKISWRITECHECK(address);
-            PAGE* P = getMemPage(address);
+            PAGE* P = get_mem_page(address);
             MEM_ACCESS_ASSERT_W(P, address);
             CheckSelf(P, address);
             vassert(P->get_user() == user);
             P->check_ref_cound();
             UShort offset = address & 0xfff;
             if (fastalignD1[sizeof(data) << 3] > 0xFFF - offset) {
-                PAGE* nP = getMemPage(address + 0x1000);
+                PAGE* nP = get_mem_page(address + 0x1000);
                 MEM_ACCESS_ASSERT_W(nP, address + 0x1000);
                 CheckSelf(nP, address + 0x1000);
                 UInt plength = (0x1000 - offset);
@@ -490,77 +498,71 @@ namespace TR {
                 (*nP)->Ist_Put(0, ((UChar*)((void*)&data)) + plength, (sizeof(data) - plength));
             }
             else {
-                (*P)->Ist_Put(offset, data);
+                (*P)->set(offset, data);
             }
         }
 
 
-    private:
-        template<typename DataTy>
-        void Ist_Store_bpt(ADDR address, DataTy data) {
+        //----------------------- real addr store simd -----------------------
+
+        template<typename DataTy, TASSERT(sv::is_sse<DataTy>::value)>
+        void store(ADDR address, const DataTy& data) {
             CODEBLOCKISWRITECHECK(address);
-            PAGE* P = getMemPage(address);
-            MEM_ACCESS_ASSERT_W(P, address);
-            CheckSelf(P, address);
-            vassert(P->get_user() == user);
+            PAGE* page = get_mem_page(address);
+            MEM_ACCESS_ASSERT_W(page, address);
+            CheckSelf(page, address);
+            vassert(page->get_user() == user);
+            page->check_ref_cound();
             UShort offset = address & 0xfff;
             if (fastalignD1[sizeof(data) << 3] > 0xFFF - offset) {
-                PAGE* nP = getMemPage(address + 0x1000);
-                MEM_ACCESS_ASSERT_W(nP, address + 0x1000);
-                CheckSelf(nP, address + 0x1000);
+                PAGE* npage = get_mem_page(address + 0x1000);
+                MEM_ACCESS_ASSERT_W(npage, address + 0x1000);
+                CheckSelf(npage, address + 0x1000);
                 UInt plength = (0x1000 - offset);
-                (*P)->Ist_Put(offset, (void*)&data, plength);
-                (*nP)->Ist_Put(0, ((UChar*)((void*)&data)) + plength, (sizeof(data) - plength));
+                (*page)->Ist_Put(offset, (void*)&data, plength);
+                (*npage)->Ist_Put(0, ((UChar*)((void*)&data)) + plength, (sizeof(data) - plength));
             }
             else {
-                (*P)->Ist_Put(offset, data);
-            }
-        }
-        void Ist_Store_bpt(ADDR address, Vns const& data) {
-            if (data.real()) {
-                switch (data.bitn) {
-                case 8:  Ist_Store_bpt(address, (UChar)data); break;
-                case 16: Ist_Store_bpt(address, (UShort)data); break;
-                case 32: Ist_Store_bpt(address, (UInt)data); break;
-                case 64: Ist_Store_bpt(address, (ULong)data); break;
-                default: VPANIC("ERR");
-                }
+                (*page)->set(offset, data);
             }
         }
 
-    public:
+        //----------------------- real addr store ast -----------------------
 
-
-        template<unsigned int bitn>
-        void Ist_Store(ADDR address, Z3_ast data) {
+        // only n_bit 8, 16, 32, 64 ,128 ,256
+        template<int nbits>
+        inline void store(ADDR address, Z3_ast data) {
+            static_assert((nbits & 7) == 0, "err store");
             CODEBLOCKISWRITECHECK(address);
-            PAGE* P = getMemPage(address);
-            MEM_ACCESS_ASSERT_W(P, address);
-            CheckSelf(P, address);
-            vassert(P->get_user() == user);
-            P->check_ref_cound();
+            PAGE* page = get_mem_page(address);
+            MEM_ACCESS_ASSERT_W(page, address);
+            CheckSelf(page, address);
+            vassert(page->get_user() == user);
+            page->check_ref_cound();
             UShort offset = address & 0xfff;
-            if (fastalignD1[bitn] > 0xFFF - offset) {
-                PAGE* nP = getMemPage(address + 0x1000);
-                MEM_ACCESS_ASSERT_W(nP, address + 0x1000);
-                CheckSelf(nP, address + 0x1000);
+            if (fastalignD1[nbits] > 0xFFF - offset) {
+                PAGE* npage = get_mem_page(address + 0x1000);
+                MEM_ACCESS_ASSERT_W(npage, address + 0x1000);
+                CheckSelf(npage, address + 0x1000);
                 UInt plength = (0x1000 - offset);
                 Z3_ast Low = Z3_mk_extract(m_ctx, (plength << 3) - 1, 0, data);
                 Z3_inc_ref(m_ctx, Low);
-                Z3_ast HI = Z3_mk_extract(m_ctx, bitn - 1, plength << 3, data);
+                Z3_ast HI = Z3_mk_extract(m_ctx, nbits - 1, plength << 3, data);
                 Z3_inc_ref(m_ctx, HI);
-                (*nP)->Ist_Put(offset, Low, plength);
-                (*nP)->Ist_Put(0, HI, (bitn >> 3) - plength);
+                (*npage)->Ist_Put(offset, Low, plength);
+                (*npage)->Ist_Put(0, HI, (nbits >> 3) - plength);
                 Z3_dec_ref(m_ctx, Low);
                 Z3_dec_ref(m_ctx, HI);
             }
             else {
-                (*P)->Ist_Put<bitn>(offset, data);
+                (*page)->set<nbits>(offset, data);
             }
         }
 
-        template<typename DataTy>
-        void Ist_Store(Z3_ast address, DataTy data) {
+        //-----------------------  ast addr store real&&simd  -----------------------
+
+        template<typename DataTy, TASSERT(std::is_arithmetic<DataTy>::value || sv::is_sse<DataTy>::value)>
+        void store(Z3_ast address, DataTy data) {
             TR::addressingMode<ADDR> am(z3::expr(m_ctx, address));
             auto kind = am.analysis_kind();
             if (kind == TR::addressingMode<ADDR>::support_bit_blast) {
@@ -574,177 +576,235 @@ namespace TR {
                     off_it.next()) {
                     auto offset = *off_it;
                     ADDR raddr = am.getBase() + offset;
-                    auto oData = Iex_Load<(IRType)(sizeof(DataTy) << 3)>(raddr);
-                    auto eq = Z3_mk_eq(m_ctx, am.getoffset(), Vns(m_ctx, offset));
-                    Z3_inc_ref(m_ctx, eq);
-                    auto n_Data = Z3_mk_ite(m_ctx, eq, Vns(m_ctx, data), oData);
-                    Z3_inc_ref(m_ctx, n_Data);
-                    Ist_Store<(IRType)(sizeof(DataTy) << 3)>(raddr, n_Data);
-                    Z3_dec_ref(m_ctx, n_Data);
-                    Z3_dec_ref(m_ctx, eq);
+                    auto oData = load<DataTy>(raddr);
+                    auto rData = ite(subval<wide>(am.getoffset()) == offset, sval<DataTy>(m_ctx, data), oData.tos());
+                    store(raddr, rData);
                 }
             }
             else {
                 Itaddress it = this->addr_begin(m_solver, address);
                 while (it.check()) {
-                    Vns addr = *it;
+                    rsval<ADDR> addr = *it;
                     ADDR addr_re = addr;
-                    auto oData = Iex_Load<(IRType)(sizeof(DataTy) << 3)>(addr_re);
-                    auto eq = Z3_mk_eq(m_ctx, address, addr);
-                    Z3_inc_ref(m_ctx, eq);
-                    auto n_Data = Z3_mk_ite(m_ctx, eq, Vns(m_ctx, data), oData);
-                    Z3_inc_ref(m_ctx, n_Data);
-                    Ist_Store<(IRType)(sizeof(DataTy) << 3)>(addr_re, n_Data);
-                    Z3_dec_ref(m_ctx, n_Data);
-                    Z3_dec_ref(m_ctx, eq);
+                    auto oData = load<DataTy>(addr_re);
+                    auto rData = ite(subval<wide>(m_ctx, address) == addr.tos(), sval<DataTy>(m_ctx, data), oData.tos());
+                    store(addr, rData);
                     it++;
                 }
             }
         }
 
-        //n_bit
-        template<unsigned int bitn>
-        void Ist_Store(Z3_ast address, Z3_ast data) {
-            uint64_t Z3_RE;
-            bool suspend_solve = true;
-            LARGE_INTEGER   freq = { 0 };
-            LARGE_INTEGER   beginPerformanceCount = { 0 };
-            LARGE_INTEGER   closePerformanceCount = { 0 };
-            QueryPerformanceFrequency(&freq);
-            QueryPerformanceCounter(&beginPerformanceCount);
-        redo:
-            {
+        //-----------------------  ast addr store ast -----------------------
+
+        template<int nbits>
+        void store(Z3_ast address, Z3_ast data) {
+            static_assert((nbits & 7) == 0, "err store");
+            TR::addressingMode<ADDR> am(z3::expr(m_ctx, address));
+            auto kind = am.analysis_kind();
+            if (kind == TR::addressingMode<ADDR>::support_bit_blast) {
+#ifdef TRACE_AM
+                printf("Ist_Store base: %p {\n", am.getBase());
+                am.print();
+                printf("}\n");
+#endif
+                for (TR::addressingMode<ADDR>::iterator off_it = am.begin();
+                    off_it.check();
+                    off_it.next()) {
+                    ADDR offset = *off_it;
+                    ADDR raddr = am.getBase() + offset;
+                    auto oData = load<(IRType)nbits>(raddr);
+                    auto rData = ite(subval<wide>(am.getoffset()) == offset, subval<nbits>(m_ctx, data), oData.tos());
+                    store(raddr, rData);
+                }
+            }
+            else {
                 Itaddress it = this->addr_begin(m_solver, address);
                 while (it.check()) {
-                    if (suspend_solve) {
-                        QueryPerformanceCounter(&closePerformanceCount);
-                        double delta_seconds = (double)(closePerformanceCount.QuadPart - beginPerformanceCount.QuadPart) / freq.QuadPart;
-                        if (delta_seconds > ANALYZER_TIMEOUT) {
-                            break;
-                        }
-                        else {
-                            suspend_solve = false;
-                        }
-                    }
-                    auto addr = *it;
-                    if (!Z3_get_numeral_uint64(m_ctx, addr, &Z3_RE)) vassert(0);
-                    auto oData = Iex_Load<(IRType)bitn>(Z3_RE);
-                    auto eq = Z3_mk_eq(m_ctx, address, addr);
-                    Z3_inc_ref(m_ctx, eq);
-                    auto n_Data = Z3_mk_ite(m_ctx, eq, data, oData);
-                    Z3_inc_ref(m_ctx, n_Data);
-                    Ist_Store<(IRType)bitn>(Z3_RE, n_Data);
-                    Z3_dec_ref(m_ctx, n_Data);
-                    Z3_dec_ref(m_ctx, eq);
+                    rsval<ADDR> addr = *it;
+                    auto oData = load<(IRType)nbits>(addr);
+                    auto rData = ite(subval<wide>(m_ctx, address) == addr.tos(), subval<nbits>(m_ctx, data), oData.tos());
+                    store(addr, rData);
                     it++;
                 }
             }
-            if (suspend_solve) {
-                TR::addressingMode<ADDR> am(z3::expr(m_ctx, address));
-                auto kind = am.analysis_kind();
-                if (kind == TR::addressingMode<ADDR>::support_bit_blast) {
-#ifdef TRACE_AM
-                    printf("Ist_Store base: %p {\n", am.getBase());
-                    am.print();
-                    printf("}\n");
-#endif
-
-                    for (TR::addressingMode<ADDR>::iterator off_it = am.begin();
-                        off_it.check();
-                        off_it.next()) {
-                        auto offset = *off_it;
-                        ADDR raddr = am.getBase() + offset;
-                        auto oData = Iex_Load<(IRType)bitn>(raddr);
-                        auto eq = Z3_mk_eq(m_ctx, am.getoffset(), Vns(m_ctx, offset));
-                        Z3_inc_ref(m_ctx, eq);
-                        auto n_Data = Z3_mk_ite(m_ctx, eq, data, oData);
-                        Z3_inc_ref(m_ctx, n_Data);
-                        Ist_Store<(IRType)bitn>(raddr, n_Data);
-                        Z3_dec_ref(m_ctx, n_Data);
-                        Z3_dec_ref(m_ctx, eq);
-                    }
-                }
-                else {
-                    suspend_solve = false;
-                    goto redo;
-                }
-            }
         }
 
-        inline void Ist_Store(ADDR address, Vns const& data) {
+
+        template<bool sign, int nbits, TASSERT(nbits <= 64)>
+        inline void store(ADDR address, const sv::ctype_val<sign, nbits, Z3_BV_SORT>& data) {
+            store(address, data.value());
+        }
+
+        template<bool sign, int nbits, TASSERT((nbits & 0x7) == 0)>
+        inline void store(ADDR address, const sv::symbolic<sign, nbits, Z3_BV_SORT>& data) {
+            store<nbits>(address, (Z3_ast)data);
+        }
+
+        template<bool sign, int nbits, TASSERT((nbits & 0x7) == 0)>
+        inline void store(ADDR address, const sv::rsval<sign, nbits, Z3_BV_SORT>& data) {
             if (data.real()) {
-                switch (data.bitn) {
-                case 8:  Ist_Store(address, (UChar)data); break;
-                case 16: Ist_Store(address, (UShort)data); break;
-                case 32: Ist_Store(address, (UInt)data); break;
-                case 64: Ist_Store(address, (ULong)data); break;
-                default:
-                    if (data.bitn == 128) Ist_Store(address, (__m128i)data);
-                    else {
-                        vassert(data.bitn == 256);
-                        Ist_Store(address, (__m256i)data);
-                    }
-                }
+                store(address, data.tor());
             }
             else {
-                switch (data.bitn) {
-                case 8:  Ist_Store<8>(address, (Z3_ast)data); break;
-                case 16: Ist_Store<16>(address, (Z3_ast)data); break;
-                case 32: Ist_Store<32>(address, (Z3_ast)data); break;
-                case 64: Ist_Store<64>(address, (Z3_ast)data); break;
-                default:
-                    if (data.bitn == 128)
-                        Ist_Store<128>(address, (Z3_ast)data);
-                    else {
-                        vassert(data.bitn == 256);
-                        Ist_Store<256>(address, (Z3_ast)data); break;
-                    }
-                }
+                store<nbits>(address, (Z3_ast)data.tos());
             }
         }
 
-
-        template<typename DataTy>
-        inline void Ist_Store(Vns const& address, DataTy data) {
-            if (address.real()) {
-                Ist_Store((ADDR)address, data);
-            }
-            else {
-                Ist_Store((Z3_ast)address, data);
-            }
-        }
-
-        inline void MEM::Ist_Store(Z3_ast address, Vns const& data) {
+        template<bool sign, int nbits, TASSERT((nbits & 0x7) == 0)>
+        inline void store(Z3_ast address, const sv::rsval<sign, nbits, Z3_BV_SORT>& data) {
             if (data.real()) {
-                switch (data.bitn) {
-                case 8: return Ist_Store(address, (UChar)data);
-                case 16:return Ist_Store(address, (UShort)data);
-                case 32:return Ist_Store(address, (UInt)data);
-                case 64:return Ist_Store(address, (ULong)data);
-                case 128:return Ist_Store(address, (__m128i)data);
-                case 256:return Ist_Store(address, (__m256i)data);
-                default:vpanic("2333333");
-                }
+                store(address, data.tor().value());
             }
             else {
-                switch (data.bitn) {
-                case 8: return Ist_Store<8>(address, (Z3_ast)data);
-                case 16:return Ist_Store<16>(address, (Z3_ast)data);
-                case 32:return Ist_Store<32>(address, (Z3_ast)data);
-                case 64:return Ist_Store<64>(address, (Z3_ast)data);
-                case 128:return Ist_Store<128>(address, (Z3_ast)data);
-                case 256:return Ist_Store<256>(address, (Z3_ast)data);
-                default:vpanic("2333333");
-                }
+                store<nbits>(address, (Z3_ast)data.tos());
             }
         }
 
-        inline void MEM::Ist_Store(Vns const& address, Vns const& data) {
+        template<bool sign, int nbits, TASSERT((nbits & 0x7) == 0)>
+        inline void store(const sv::rsval<false, wide, Z3_BV_SORT>& address, const sv::rsval<sign, nbits, Z3_BV_SORT>& data) {
             if (address.real()) {
-                Ist_Store((ADDR)address, data);
+                store((ADDR)address.tor(), data);
             }
             else {
-                Ist_Store((Z3_ast)address, data);
+                store((Z3_ast)address.tos(), data);
+            }
+        }
+
+
+        template<typename DataTy, TASSERT(std::is_arithmetic<DataTy>::value || sv::is_sse<DataTy>::value)>
+        inline void store(const sv::rsval<false, wide, Z3_BV_SORT>& address, DataTy data) {
+            if (address.real()) {
+                store((ADDR)address.tor(), data);
+            }
+            else {
+                store((Z3_ast)address.tos(), data);
+            }
+        }
+
+
+
+    private:
+        template<typename DataTy, TASSERT(std::is_arithmetic<DataTy>::value)>
+        void Ist_Store_bpt(ADDR address, DataTy data) {
+            /*CODEBLOCKISWRITECHECK(address);
+            PAGE* P = get_mem_page(address);
+            MEM_ACCESS_ASSERT_W(P, address);
+            CheckSelf(P, address);
+            vassert(P->get_user() == user);
+            UShort offset = address & 0xfff;
+            if (fastalignD1[sizeof(data) << 3] > 0xFFF - offset) {
+                PAGE* nP = get_mem_page(address + 0x1000);
+                MEM_ACCESS_ASSERT_W(nP, address + 0x1000);
+                CheckSelf(nP, address + 0x1000);
+                UInt plength = (0x1000 - offset);
+                (*P)->Ist_Put(offset, (void*)&data, plength);
+                (*nP)->Ist_Put(0, ((UChar*)((void*)&data)) + plength, (sizeof(data) - plength));
+            }
+            else {
+                (*P)->Ist_Put(offset, data);
+            }*/
+        }
+        void Ist_Store_bpt(ADDR address, tval const& data) {
+            /*if (data.real()) {
+                switch (data.bitn) {
+                case 8:  Ist_Store_bpt(address, (UChar)data); break;
+                case 16: Ist_Store_bpt(address, (UShort)data); break;
+                case 32: Ist_Store_bpt(address, (UInt)data); break;
+                case 64: Ist_Store_bpt(address, (ULong)data); break;
+                default: VPANIC("ERR");
+                }
+            }*/
+        }
+
+    public:
+
+//
+//
+//
+//
+//        inline void Ist_Store(ADDR address, tval const& data) {
+//            if (data.real()) {
+//                switch (data.nbits()) {
+//                case 8:  Ist_Store(address, (UChar)data); break;
+//                case 16: Ist_Store(address, (UShort)data); break;
+//                case 32: Ist_Store(address, (UInt)data); break;
+//                case 64: Ist_Store(address, (ULong)data); break;
+//                default:
+//                    if (data.bitn == 128) Ist_Store(address, (__m128i)data);
+//                    else {
+//                        vassert(data.bitn == 256);
+//                        Ist_Store(address, (__m256i)data);
+//                    }
+//                }
+//            }
+//            else {
+//                switch (data.nbits()) {
+//                case 8:  Ist_Store<8>(address, (Z3_ast)data); break;
+//                case 16: Ist_Store<16>(address, (Z3_ast)data); break;
+//                case 32: Ist_Store<32>(address, (Z3_ast)data); break;
+//                case 64: Ist_Store<64>(address, (Z3_ast)data); break;
+//                default:
+//                    if (data.bitn == 128)
+//                        Ist_Store<128>(address, (Z3_ast)data);
+//                    else {
+//                        vassert(data.bitn == 256);
+//                        Ist_Store<256>(address, (Z3_ast)data); break;
+//                    }
+//                }
+//            }
+//        }
+//
+//
+//        template<typename DataTy>
+//        inline void Ist_Store(tval const& address, DataTy data) {
+//            if (address.real()) {
+//                Ist_Store((ADDR)address, data);
+//            }
+//            else {
+//                Ist_Store((Z3_ast)address, data);
+//            }
+//        }
+//
+//        inline void MEM::Ist_Store(Z3_ast address, tval const& data) {
+//            if (data.real()) {
+//                switch (data.bitn) {
+//                case 8: return Ist_Store(address, (UChar)data);
+//                case 16:return Ist_Store(address, (UShort)data);
+//                case 32:return Ist_Store(address, (UInt)data);
+//                case 64:return Ist_Store(address, (ULong)data);
+//                case 128:return Ist_Store(address, (__m128i)data);
+//                case 256:return Ist_Store(address, (__m256i)data);
+//                default:vpanic("err");
+//                }
+//            }
+//            else {
+//                switch (data.bitn) {
+//                case 8: return Ist_Store<8>(address, (Z3_ast)data);
+//                case 16:return Ist_Store<16>(address, (Z3_ast)data);
+//                case 32:return Ist_Store<32>(address, (Z3_ast)data);
+//                case 64:return Ist_Store<64>(address, (Z3_ast)data);
+//                case 128:return Ist_Store<128>(address, (Z3_ast)data);
+//                case 256:return Ist_Store<256>(address, (Z3_ast)data);
+//                default:vpanic("err");
+//                }
+//            }
+//        }
+
+        inline void MEM::Ist_Store(tval const& address, tval const& data) {
+            if (address.real()) {
+                //Ist_Store((ADDR)address, data);
+            }
+            else {
+                //Ist_Store((Z3_ast)address, data);
+            }
+        }
+
+        inline void MEM::Ist_Store(ADDR address, tval const& data) {
+            if (data.real()) {
+                //store((address, data);
+            }
+            else {
+                //store(address, data);
             }
         }
 
@@ -753,24 +813,6 @@ namespace TR {
         inline z3::vcontext& ctx() { return m_ctx; };
         ;;
     private:
-
-        //template<>
-        //void Ist_Store(ADDR address, Vns data) = delete;
-        //template<>
-        //void Ist_Store(ADDR address, Vns &data) = delete;
-        //template<>
-        //void Ist_Store(ADDR address, Vns const &data) = delete;
-        //template<>
-        //void Ist_Store(ADDR address, Z3_ast data) = delete;
-        //template<>
-        //void Ist_Store(ADDR address, Z3_ast &data) = delete;
-
-        //template<>
-        //void Ist_Store(Z3_ast address, Vns data) = delete;
-        //template<>
-        //void Ist_Store(Z3_ast address, Vns &data) = delete;
-        //template<>
-        //void Ist_Store(Z3_ast address, Vns const &data) = delete;
 
     };
 };

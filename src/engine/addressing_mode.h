@@ -107,7 +107,7 @@ namespace TR {
             m_symbolic(a.m_symbolic)
         { }
 
-        void offset2opAdd(std::deque<Vns>& ret) {  _offset2opAdd(ret, m_offset); }
+        void offset2opAdd(std::deque<z3::expr>& ret) {  _offset2opAdd(ret, m_offset); }
 
     private:
         // ast(symbolic address) = numreal(base) + symbolic(offset) 
@@ -160,7 +160,7 @@ namespace TR {
 
         static sbit_struct _check_is_extract(z3::expr const& e, UInt idx);
         //a=b+c+d+e...+z -> b c d e
-        static void _offset2opAdd(std::deque<Vns>& ret, z3::expr const& e);
+        static void _offset2opAdd(std::deque<z3::expr>& ret, z3::expr const& e);
         static bool _check_add_no_overflow(z3::expr const& e1, z3::expr const& e2);
     };
 

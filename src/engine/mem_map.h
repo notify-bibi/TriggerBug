@@ -120,12 +120,12 @@ namespace TR {
             return nullptr;
         };
 
-        inline ST* getMemPage(Addr32 address) {
+        inline ST* get_mem_page(Addr32 address) {
             ST** r = get_pointer_of_mem_page(address);
             return (r) ? r[0] : nullptr;
         }
 
-        inline ST* getMemPage(Addr64 address) {
+        inline ST* get_mem_page(Addr64 address) {
             ST** r = get_pointer_of_mem_page(address);
             return (r) ? r[0] : nullptr;
         }

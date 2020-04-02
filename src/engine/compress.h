@@ -8,30 +8,32 @@
 
 Z3_context& thread_get_z3_ctx();
 
+#define PACK rsval<uint64_t>
+
 
 namespace cmpr {
     struct ignore {};
 
-    static Vns logic_and(std::vector<Vns> const& v) {
+    static sbool logic_and(std::vector<sbool> const& v) {
         Z3_context ctx = v[0];
         UInt size = v.size();
         vassert(size > 0);
         if (size == 1) return v[0];
         Z3_ast* list = new Z3_ast[size];
         Z3_ast* ptr = list;
-        for (Vns const& ass : v) { *ptr++ = ass; }
-        return Vns(ctx, Z3_mk_and(ctx, size, list), 1);
+        for (sbool const& ass : v) { *ptr++ = ass; }
+        return sbool(ctx, Z3_mk_and(ctx, size, list));
     }
 
-    static Vns logic_or(std::vector<Vns> const& v) {
+    static sbool logic_or(std::vector<sbool> const& v) {
         Z3_context ctx = v[0];
         UInt size = v.size();
         vassert(size > 0);
         if (size == 1) return v[0];
         Z3_ast* list = new Z3_ast[size];
         Z3_ast* ptr = list;
-        for (Vns const& ass : v) { *ptr++ = ass; }
-        return Vns(ctx, Z3_mk_or(ctx, size, list), 1);
+        for (sbool const& ass : v) { *ptr++ = ass; }
+        return sbool(ctx, Z3_mk_or(ctx, size, list));
     }
 
     class GPMana {
@@ -48,15 +50,18 @@ namespace cmpr {
         UInt m_idx = 0;
         UInt m_size;
 
-        Vns vec2ast(struct _m_vec_* v) const {
-            return v->is_ast ? Vns(m_ctx, v->value.ast, 64) : Vns(m_ctx, v->value.data);
+        PACK vec2ast(struct _m_vec_* v) const {
+            return v->is_ast ? PACK(m_ctx, v->value.ast) : PACK(m_ctx, v->value.data);
         }
 
-        Vns _get(struct _m_vec_* vec) const {
+        PACK _get(struct _m_vec_* vec) const {
             vassert(vec->m_maps_ass_idx > 0);
-            Vns guard = Vns(m_ctx, vec->m_maps_ass_idx == 1 ? vec->m_maps_ass[0] : Z3_mk_or(m_ctx, vec->m_maps_ass_idx, vec->m_maps_ass), 1);
+            sbool guard(m_ctx, vec->m_maps_ass_idx == 1 ? vec->m_maps_ass[0] : Z3_mk_or(m_ctx, vec->m_maps_ass_idx, vec->m_maps_ass));
 
-            return vec->sort ? ite(guard, vec2ast(vec), _get(vec->sort)) : vec2ast(vec);
+            if (vec->sort) {
+                return ite(guard, vec2ast(vec).tos(), _get(vec->sort).tos());
+            }
+            return vec2ast(vec);
         }
 
         void check() {
@@ -120,7 +125,7 @@ namespace cmpr {
         }
 
 
-        void add(Vns const& ass, Vns const& v) {
+        void add(sbool const& ass, PACK const& v) {
             if (v.real()) add((Z3_ast)ass, (ULong)v); else  add((Z3_ast)ass, (Z3_ast)v);
         }
 
@@ -208,7 +213,7 @@ namespace cmpr {
         }
 
 
-        Vns get() const {
+        PACK get() const {
             vassert(m_idx > 0);
             return (m_idx == 1) ? vec2ast(m_sort) : _get(m_sort);
         }
@@ -400,11 +405,11 @@ namespace cmpr {
                 friend class Compress::Iterator;
                 Compress& m_c;
                 UInt m_group;
-                Vns m_assert;
+                sbool m_assert;
                 std::hash_map<Addr64, GPMana> m_changes;
 
                 StateRes(Compress const& c, UInt group) :m_c(const_cast<Compress&>(c)), m_group(group),
-                    m_assert(m_c.avoid_asserts(m_c.m_node, m_group))
+                    m_assert(m_c.avoid_asserts(m_c.m_node, m_group).tos())
                 {
                     m_c.treeCompress(m_changes, m_c.m_node, m_group);
                 }
@@ -412,7 +417,7 @@ namespace cmpr {
                 StateRes(const StateRes& ass) { static_assert(false, "not support"); };
                 void operator =(const StateRes& ass) { static_assert(false, "not support"); };
                 inline std::hash_map<Addr64, GPMana> const& changes() { return m_changes; }
-                inline Vns conditions() const { return m_assert; }
+                inline sbool conditions() const { return m_assert; }
             };
         public:
 
@@ -477,7 +482,7 @@ namespace cmpr {
               1  0  0
               0  x  x
         */
-        Vns avoid_asserts(CmprsFork<STATEinterface>& node, Int group) {
+        rsbool avoid_asserts(CmprsFork<STATEinterface>& node, Int group) {
             UInt avoid_num = 0;
             UInt target_num = 0;
             for (STATEinterface* sNode : node.child_nodes()) {
@@ -501,9 +506,9 @@ namespace cmpr {
             if (target_num <= avoid_num) {
                 // P2 ¡ú (Q1 ¡Å Q2)
                 if (!target_num) {
-                    return Vns(m_ctx.ctx(), 0, 1);
+                    return rsbool(m_ctx.ctx(), false);
                 }
-                std::vector<Vns> aasv;
+                std::vector<sbool> aasv;
                 for (STATEinterface* sNode : node.child_nodes()) {
                     switch (sNode->type()) {
                     case Avoid_Node:
@@ -511,13 +516,13 @@ namespace cmpr {
                     case Fork_Node: {
                         if (sNode->get_fork_node().target_counts(group) == 0)
                             continue;
-                        Vns aas_tmp = avoid_asserts(sNode->get_fork_node(), group);
-                        Vns top = sNode->get_assert();
+                        rsbool aas_tmp = avoid_asserts(sNode->get_fork_node(), group);
+                        sbool top = sNode->get_assert();
                         if (aas_tmp.real()) {
                             aasv.emplace_back(top);
                             continue;
                         }
-                        aasv.emplace_back(implies(top, aas_tmp));
+                        aasv.emplace_back(implies(top, aas_tmp.tos()));
                         break;
                     }
                     default: {
@@ -532,22 +537,22 @@ namespace cmpr {
             else {
                 // P2 ¡ú ©´(q1 ¡Å q2)
                 if (!avoid_num) {
-                    return Vns(m_ctx.ctx(), 0, 1);
+                    return rsbool(m_ctx.ctx(), false);
                 }
-                std::vector<Vns> aasv;
+                std::vector<sbool> aasv;
                 for (STATEinterface* sNode : node.child_nodes()) {
                     switch (sNode->type()) {
                     case Fork_Node: {
-                        Vns top = sNode->get_assert();
+                        sbool top = sNode->get_assert();
                         if (sNode->get_fork_node().target_counts(group) == 0) {
                             aasv.emplace_back(top);
                             continue;
                         }
-                        Vns aas_tmp = avoid_asserts(sNode->get_fork_node(), group);
+                        rsbool aas_tmp = avoid_asserts(sNode->get_fork_node(), group);
                         if (aas_tmp.real()) {
                             continue;
                         }
-                        aasv.emplace_back(implies(top, aas_tmp));
+                        aasv.emplace_back(implies(top, aas_tmp.tos()));
                         break;
                     }
                     case Survive_Node:
@@ -574,18 +579,18 @@ namespace cmpr {
 
         class __struct_cmaps__ {
             STATEinterface* m_node;
-            std::hash_map<Addr64, Vns> m_cm;
+            std::hash_map<Addr64, PACK> m_cm;
             UInt m_size;
         public:
             __struct_cmaps__(STATEinterface* node, UInt size) :m_node(node), m_size(size) {
                 m_cm.reserve(m_size);
             }
 
-            void add(Addr64 addr, Vns const& m) {
+            void add(Addr64 addr, PACK const& m) {
                 m_cm[addr] = m;
             }
 
-            operator std::hash_map<Addr64, Vns>& () {
+            operator std::hash_map<Addr64, PACK>& () {
                 return m_cm;
             }
 
@@ -600,20 +605,20 @@ namespace cmpr {
             void load(std::hash_map<Addr64, GPMana>& cm_ret, std::hash_map<Addr64, bool>& maps) {
                 auto it_end = maps.end();
                 auto it_start = maps.begin();
-                Vns ass = m_node->get_assert();
+                sbool ass = m_node->get_assert();
                 for (; it_start != it_end; it_start++) {
                     Addr64 addr = it_start->first;
                     if (exist(addr)) {
                         cm_ret[addr].add(ass, m_cm[addr]);
                     }
                     else {
-                        Vns data = m_node->read(addr);
+                        PACK data = m_node->read(addr);
                         cm_ret[addr].add(ass, data);
                     }
                 }
             }
 
-            Vns& operator[](UInt idx) {
+            PACK& operator[](UInt idx) {
                 return m_cm[idx];
             }
 
@@ -639,14 +644,14 @@ namespace cmpr {
             std::hash_map<Addr64, bool> record;
             for (__struct_cmaps__& changes_node : changes) {
                 STATEinterface* sNode = changes_node;
-                Vns top = sNode->get_assert();
+                ///sbool top = sNode->get_assert();
                 if (Fork_Node == sNode->type() && sNode->get_fork_node().target_counts(group)) {
                     sNode->get_write_map(record);
                     std::hash_map<Addr64, GPMana> cm_ret_tmp;
                     treeCompress(cm_ret_tmp, sNode->get_fork_node(), group);
                     auto it_end = cm_ret_tmp.end();
                     auto it_start = cm_ret_tmp.begin();
-                    std::hash_map<Addr64, Vns>& fork_cm = changes_node;
+                    std::hash_map<Addr64, PACK>& fork_cm = changes_node;
                     for (; it_start != it_end; it_start++) {
                         changes_node.add(it_start->first, it_start->second.get());
                         record[it_start->first];
@@ -673,7 +678,6 @@ namespace cmpr {
     using Context64 = CmprsContext<TR::State<Addr64>, TR::State_Tag>;
 
 };
-
 
 
 

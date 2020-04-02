@@ -343,3 +343,20 @@ namespace sv {
 //    }
 //    return (Z3_ast)-1;
 //}
+
+void HexToStr(unsigned char* pbDest, unsigned char* pbSrc, int nLen)
+
+{
+    char ddl, ddh;
+    int i;
+    pbDest[nLen * 2] = '\0';
+    nLen--;
+    for (i = 0; i <= nLen; i++)
+    {
+        ddh = 48 + pbSrc[i] / 16;
+        ddl = 48 + pbSrc[i] % 16;
+        if (ddh > 57) ddh = ddh + 7;
+        if (ddl > 57) ddl = ddl + 7;
+        ((short*)pbDest)[(nLen - i)] = ((short)ddl << 8) | ddh;
+    }
+};

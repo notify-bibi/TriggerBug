@@ -24,7 +24,7 @@ public:
 
 public:
     static tval tUnop(IROp, tval const&);
-    static tval tBinop(IROp op, tval const& a, tval const& b);
+    static tval tBinop(IROp, tval const&, tval const&);
     static tval tTriop(IROp, tval const&, tval const&, tval const&);
     static tval tQop(IROp, tval const&, tval const&, tval const&, tval const&);
 
