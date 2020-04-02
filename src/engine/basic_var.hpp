@@ -253,7 +253,10 @@ namespace sv {
         inline sort(Z3_context ctx, Z3_sort sort) : m_ctx(ctx), m_sort(reinterpret_cast<Z3_ast>(sort)) { Z3_inc_ref(m_ctx, m_sort); }
         inline operator Z3_ast () const { return m_sort; }
         inline operator Z3_sort () const { return reinterpret_cast<Z3_sort>(m_sort); }
+        inline Z3_sort_kind sort_kind() const { return Z3_get_sort_kind(m_ctx, *this); };
         inline ~sort() { Z3_dec_ref(m_ctx, m_sort); }
+        inline sort(const sort& b) : sort(b.m_ctx, b.m_sort) {    };
+        inline void operator =(const sort& b) { this->~sort(); this->sort::sort(b); }
     };
 
     inline sort bool_sort(Z3_context m_ctx) { return sort((Z3_context)m_ctx, Z3_mk_bool_sort((Z3_context)m_ctx)); }
@@ -990,6 +993,8 @@ namespace sv{
         template<bool _ts, int _tn, z3sk _tk> friend class symbolic;
         friend class tval;
     public:
+        inline symbolic(Z3_context ctx) :symbol(ctx) { }
+
         inline symbolic(Z3_context ctx, Z3_ast ast) :symbol(ctx, ast) { }
 
         inline symbolic(Z3_context ctx, Z3_ast ast, no_inc) : symbol(ctx, ast, no_inc{}) { }
@@ -1527,7 +1532,7 @@ namespace sv{
         }
     public:
         inline sort get_sort() const { return sort((Z3_context)m_ctx, Z3_get_sort((Z3_context)m_ctx, (Z3_ast)m_ast)); }
-        inline Z3_sort_kind sort_kind() const { return Z3_get_sort_kind(m_ctx, get_sort()); }
+        inline Z3_sort_kind sort_kind() const { return get_sort().sort_kind(); }
 
 
 
@@ -2011,6 +2016,7 @@ template<class ctype_name, class svt = sv::sv_cty<ctype_name>>
 using sval = sv::symbolic<svt::is_signed, svt::nbits, svt::sk>;
 
 using rsbool = rsval<bool>;
+using rbool = rcval<bool>;
 
 
 static inline auto operator!(const rsbool& b) { return b.bool_not(); }
@@ -2027,6 +2033,8 @@ inline sv::rsval<_ts, _tn, _tk> ite(const rsbool& _if, const sv::rsval<_ts, _tn,
 namespace sv{
 
 
+    tval ite(const sbool& cond, const tval& iftrue, const tval& iffalse);
+
     class tval :protected symbol {
         uint64_t m_data[4];
     public:
@@ -2035,12 +2043,12 @@ namespace sv{
 
         //----------------------symbolic-----------------------------
 
-        inline tval(Z3_context ctx, Z3_ast s, int bits) noexcept : symbol(ctx, s) {
-            m_bits = bits; m_data_inuse = false;
+        inline tval(Z3_context ctx, Z3_ast s, z3sk sk, int bits) noexcept : symbol(ctx, s) {
+            m_bits = bits; m_data_inuse = false; m_sk = sk;
         }
 
-        inline tval(Z3_context ctx, Z3_ast s, int bits, no_inc) noexcept : symbol(ctx, s, no_inc{}) {
-            m_bits = bits; m_data_inuse = false;
+        inline tval(Z3_context ctx, Z3_ast s, z3sk sk, int bits, no_inc) noexcept : symbol(ctx, s, no_inc{}) {
+            m_bits = bits; m_data_inuse = false; m_sk = sk;
         }
 
         inline tval(const tval& b) : symbol((Z3_context)b.m_ctx) {
@@ -2050,7 +2058,7 @@ namespace sv{
             if (m_ast) 
                 Z3_inc_ref((Z3_context)m_ctx, (Z3_ast)m_ast);
             if (m_data_inuse) {
-                if (m_bits <= 16)
+                if (m_bits <= 128)
                     *(__m128i*)m_data = _mm_load_si128((__m128i*)b.m_data);
                 else
                     *(__m256i*)m_data = _mm256_load_si256((__m256i*)b.m_data);
@@ -2067,7 +2075,7 @@ namespace sv{
             * (__m128i*)this = _mm_load_si128((__m128i*) & b);
             if (b.m_data_inuse) {
                 if (m_ast) m_ast = 0;
-                if (m_bits <= 16)
+                if (m_bits <= 128)
                     *(__m128i*)m_data = _mm_load_si128((__m128i*)b.m_data);
                 else
                     *(__m256i*)m_data = _mm256_load_si256((__m256i*)b.m_data);
@@ -2084,15 +2092,21 @@ namespace sv{
             m_bits = sizeof(_Ty) << 3;
             m_data_inuse = true;
             *(_Ty*)m_data = data;
+            m_sk = sv::sv_cty<_Ty>::sk;
         }
+
+        template<typename _Ty, TASSERT(is_sse<_Ty>::value)>
+        inline tval(Z3_context ctx, const _Ty& data) :tval(ctx, data, (int)(sizeof(_Ty) << 3)) { }
+
 
         //real && symbolic
         template<typename _Ty, std::enable_if_t<std::is_arithmetic<_Ty>::value> * = nullptr>
-        inline tval(Z3_context ctx, _Ty data, Z3_ast ast, int bits) :symbol(ctx, ast) {
+        inline tval(Z3_context ctx, _Ty data, Z3_ast ast, z3sk sk, int bits) :symbol(ctx, ast) {
             static_assert(offsetof(tval, m_data) == 0x10, "error");
             m_bits = bits;
             m_data_inuse = true;
             *(_Ty*)m_data = data;
+            m_sk = sk;
         }
 
         //real with nbits
@@ -2102,6 +2116,7 @@ namespace sv{
             m_bits = bits;
             m_data_inuse = true;
             *(_Ty*)m_data = data;
+            m_sk = sv::sv_cty<_Ty>::sk;
         }
 
         //simd real data with nbits
@@ -2112,26 +2127,26 @@ namespace sv{
             m_bits = bits;
             m_data_inuse = true;
             *(_Ty*)m_data = data;
+            m_sk = sv::sv_cty<_Ty>::sk;
         }
 
         //simd real data  && symbolic
         template<typename _Ty, TASSERT(is_sse<_Ty>::value)>
-        inline tval(Z3_context ctx, const _Ty& data, Z3_ast ast, int bits) :symbol(ctx, ast) {
+        inline tval(Z3_context ctx, const _Ty& data, Z3_ast ast, z3sk sk, int bits) :symbol(ctx, ast) {
             static_assert(offsetof(tval, m_data) == 0x10, "error");
             static_assert(sizeof(_Ty) <= 0x20, "error _TY");
             m_bits = bits;
             m_data_inuse = true;
             *(_Ty*)m_data = data;
+            m_sk = sk;
         }
-
-        template<typename _Ty, TASSERT(sizeof(_Ty) > 8)>
-        inline tval(Z3_context ctx, const _Ty& data) :tval(ctx, data, (int)(sizeof(_Ty) << 3)) { }
 
 
         inline tval(Z3_context ctx, bool data) :symbol(ctx) {
             m_bits = 1;
             m_data_inuse = true;
             *(bool*)m_data = data;
+            m_sk = Z3_BOOL_SORT;
         }
 
         template<bool _ts, int _tn, z3sk _tk>
@@ -2140,12 +2155,14 @@ namespace sv{
             m_bits = _tn;
             m_data_inuse = true;
             b.get(m_data);
+            m_sk = _tk;
         }
 
         template<bool _ts, int _tn, z3sk _tk>
         inline tval(const symbolic<_ts, _tn, _tk>& b) : symbol((Z3_context)b.m_ctx, (Z3_ast)b.m_ast) {
             m_bits = _tn;
             m_data_inuse = false;
+            m_sk = _tk;
         }
 
         template<bool _ts, int _tn, z3sk _tk>
@@ -2156,27 +2173,7 @@ namespace sv{
                 this->tval::tval(b.tos());
         }
 
-        inline tval(Z3_context ctx, const IRConst* con) :symbol(ctx)
-        {
-            m_data_inuse = true;
-            switch (con->tag) {
-            case Ico_U1:   m_bits = 1;  *(bool*)m_data = *(bool*)&(con->Ico.U1); return;
-            case Ico_U8:   m_bits = 8;  *(uint8_t*)m_data= *(uint8_t*)&(con->Ico.U8); return;
-            case Ico_U16:  m_bits = 16; *(uint16_t*)m_data = *(uint16_t*)&(con->Ico.U16); return;
-
-            case Ico_U32:  
-            case Ico_F32:  
-            case Ico_F32i: m_bits = 32; *(uint32_t*)m_data = con->Ico.U32; return;
-
-            case Ico_F64:  
-            case Ico_F64i: 
-            case Ico_U64:  m_bits = 64; *(uint64_t*)m_data = *(uint64_t*)&(con->Ico.U64); return;
-
-            case Ico_V128: m_bits = 128; *(__m128i*)m_data = _mm_set1_epi16(con->Ico.V128); break;
-            case Ico_V256: m_bits = 256; *(__m256i*)m_data = _mm256_set1_epi32(con->Ico.V256); break;
-            default: VPANIC("tIRConst");
-            }
-        }
+        tval(Z3_context ctx, const IRConst* con);
         //reinterpret_cast
         template<class T, TASSERT(is_ret_type<T>::value)>
         inline operator T() const { return *(T*)m_data; }
@@ -2213,15 +2210,13 @@ namespace sv{
         inline void operator =(const T& a) { 
             Z3_context ctx = (Z3_context)m_ctx;
             this->~tval();
-            m_ast = 0;
             this->tval::tval(ctx, a);
         }
 
         template<class T, TASSERT(std::is_arithmetic<T>::value)>
-        inline void operator =(const T& a) {
+        inline void operator =(T a) {
             Z3_context ctx = (Z3_context)m_ctx;
             this->~tval();
-            m_ast = 0;
             this->tval::tval(ctx, a);
         }
 
@@ -2272,6 +2267,9 @@ namespace sv{
         }
 
 
+        inline sort get_sort() const { return sort((Z3_context)m_ctx, Z3_get_sort((Z3_context)m_ctx, (Z3_ast)m_ast)); }
+        inline Z3_sort_kind sort_kind() const { return (Z3_sort_kind)m_sk; }
+
         tval extract(int hi, int lo) const;
         tval concat(tval const& low) const;
         /* bitn  */
@@ -2285,8 +2283,12 @@ namespace sv{
 
         std::string str() const;
 
+
     private:
         Z3_ast mk_bv_ast() const;
+        Z3_ast mk_bool_ast() const;
+        Z3_ast mk_fpa_ast(unsigned ebits, unsigned sbits) const;
+        friend tval ite(const sbool& cond, const tval& iftrue, const tval& iffalse);
     };
 };
 
@@ -2321,7 +2323,5 @@ static inline auto operator!(const cbool& b) {
 }
 
 static inline tval concat(const tval& a, const tval& b) { return a.concat(b); }
-
-
 
 #endif

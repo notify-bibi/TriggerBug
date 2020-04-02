@@ -528,15 +528,6 @@ namespace TR {
         }
 
 
-        inline void set(UInt offset, const tval& data) {
-            if (data.real()) {
-
-            }
-            else {
-
-            }
-        }
-
         //---------------------------------------------- Iex_Get ---------------------------------------------------
 
 
@@ -623,7 +614,10 @@ namespace TR {
         //  slowly
         void Ist_Put(UInt offset, void* data, UInt nbytes) {
             vassert(offset + nbytes <= maxlength);
-            if (symbolic) { clear(offset, nbytes); memset(m_fastindex + offset, 0, nbytes); };
+            if (symbolic) { 
+                clear(offset, nbytes);
+                memset(m_fastindex + offset, 0, nbytes); 
+            };
             memcpy(m_bytes + offset, data, nbytes);
             if (record) {
                 auto _nbytes = nbytes;

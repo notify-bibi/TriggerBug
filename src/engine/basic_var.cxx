@@ -1,6 +1,23 @@
 #include "engine/basic_var.hpp"
 
 
+
+static Z3_ast bool2bv(Z3_context ctx, Z3_ast ast) {
+    Z3_inc_ref(ctx, ast);
+    Z3_sort sort = Z3_mk_bv_sort(ctx, 1);
+    Z3_inc_ref(ctx, (Z3_ast)sort);
+    Z3_ast zero = Z3_mk_int(ctx, 0, sort);
+    Z3_inc_ref(ctx, zero);
+    Z3_ast one = Z3_mk_int(ctx, 1, sort);
+    Z3_inc_ref(ctx, one);
+    Z3_ast result = Z3_mk_ite(ctx, ast, one, zero);
+    Z3_dec_ref(ctx, one);
+    Z3_dec_ref(ctx, zero);
+    Z3_dec_ref(ctx, ast);
+    Z3_dec_ref(ctx, (Z3_ast)sort);
+    return result;
+}
+
 namespace sv {
     symbol::symbol(Z3_context ctx, uint64_t v, unsigned nbits)
         : m_ctx((_CTX_)ctx)
@@ -115,10 +132,32 @@ namespace sv {
 #endif
         }
     }
+    tval::tval(Z3_context ctx, const IRConst* con)
+        :symbol(ctx)
+    {
+        m_data_inuse = true;
+        switch (con->tag) {
+        case Ico_U1:   m_bits = 1;  *(bool*)m_data = *(bool*)&(con->Ico.U1); m_sk = Z3_BOOL_SORT; return;
+        case Ico_U8:   m_bits = 8;  *(uint8_t*)m_data = *(uint8_t*)&(con->Ico.U8); m_sk = Z3_BV_SORT; return;
+        case Ico_U16:  m_bits = 16; *(uint16_t*)m_data = *(uint16_t*)&(con->Ico.U16); m_sk = Z3_BV_SORT; return;
+
+        case Ico_U32:  m_bits = 32; *(uint32_t*)m_data = con->Ico.U32; m_sk = Z3_BV_SORT; return;
+        case Ico_F32:  m_bits = 32; *(uint32_t*)m_data = con->Ico.U32; m_sk = Z3_FLOATING_POINT_SORT; return;
+        case Ico_F32i: m_bits = 32; *(uint32_t*)m_data = con->Ico.U32; m_sk = Z3_FLOATING_POINT_SORT; return;
+
+        case Ico_U64:  m_bits = 64; *(uint64_t*)m_data = *(uint64_t*)&(con->Ico.U64); m_sk = Z3_BV_SORT;  return;
+        case Ico_F64:  m_bits = 64; *(uint64_t*)m_data = *(uint64_t*)&(con->Ico.U64); m_sk = Z3_FLOATING_POINT_SORT; return;
+        case Ico_F64i: m_bits = 64; *(uint64_t*)m_data = *(uint64_t*)&(con->Ico.U64); m_sk = Z3_FLOATING_POINT_SORT; return;
+
+        case Ico_V128: m_bits = 128; *(__m128i*)m_data = _mm_set1_epi16(con->Ico.V128); m_sk = Z3_BV_SORT; break;
+        case Ico_V256: m_bits = 256; *(__m256i*)m_data = _mm256_set1_epi32(con->Ico.V256); m_sk = Z3_BV_SORT; break;
+        default: VPANIC("tIRConst");
+        }
+    }
     tval tval::extract(int hi, int lo) const {
         UShort size = hi - lo + 1;
         if (symb())
-            return tval((Z3_context)m_ctx, Z3_mk_extract((Z3_context)m_ctx, hi, lo, (Z3_ast)m_ast), size);
+            return tval((Z3_context)m_ctx, Z3_mk_extract((Z3_context)m_ctx, hi, lo, (Z3_ast)m_ast), Z3_BV_SORT, size);
 
         if (lo < 64 && hi < 64)
             return tval((Z3_context)m_ctx, m_data[0] >> lo, (hi - lo + 1));
@@ -159,7 +198,7 @@ namespace sv {
             }
         }
         else {
-            return tval((Z3_context)m_ctx, Z3_mk_concat((Z3_context)m_ctx, (Z3_ast)m_ast, low.mk_bv_ast()), low.m_bits + m_bits);
+            return tval((Z3_context)m_ctx, Z3_mk_concat((Z3_context)m_ctx, (Z3_ast)m_ast, low.mk_bv_ast()), Z3_BV_SORT, low.m_bits + m_bits);
         }
     }
     tval tval::shl(int shn) const
@@ -190,7 +229,7 @@ namespace sv {
             }
         }
         else {
-            return tval((Z3_context)m_ctx, Z3_mk_bvshl((Z3_context)m_ctx, *this, tval((Z3_context)m_ctx, shn, m_bits)), m_bits);
+            return tval((Z3_context)m_ctx, Z3_mk_bvshl((Z3_context)m_ctx, *this, tval((Z3_context)m_ctx, shn, m_bits)), Z3_BV_SORT, m_bits);
         }
     }
     tval tval::lshr(int shn) const
@@ -205,7 +244,7 @@ namespace sv {
             }
         }
         else {
-            return tval((Z3_context)m_ctx, Z3_mk_bvlshr((Z3_context)m_ctx, *this, tval((Z3_context)m_ctx, shn, m_bits)), m_bits);
+            return tval((Z3_context)m_ctx, Z3_mk_bvlshr((Z3_context)m_ctx, *this, tval((Z3_context)m_ctx, shn, m_bits)), Z3_BV_SORT, m_bits);
         }
     }
 
@@ -216,7 +255,7 @@ namespace sv {
             return extract(m_bits - 1, shn).sext(shn);
         }
         else {
-            return tval((Z3_context)m_ctx, Z3_mk_bvashr((Z3_context)m_ctx, *this, tval((Z3_context)m_ctx, shn, m_bits)), m_bits);
+            return tval((Z3_context)m_ctx, Z3_mk_bvashr((Z3_context)m_ctx, *this, tval((Z3_context)m_ctx, shn, m_bits)), Z3_BV_SORT, m_bits);
         }
     }
     tval tval::zext(int i) const
@@ -225,7 +264,7 @@ namespace sv {
         if (i < 0)
             return extract(m_bits + i - 1, 0);
         if (symb()) {
-            return tval((Z3_context)m_ctx, Z3_mk_zero_ext((Z3_context)m_ctx, i, (Z3_ast)m_ast), m_bits + i);
+            return tval((Z3_context)m_ctx, Z3_mk_zero_ext((Z3_context)m_ctx, i, (Z3_ast)m_ast), Z3_BV_SORT, m_bits + i);
         }
         auto m32 = *(__m256i*)(m_data);
         if (m_bits & 7) {
@@ -239,7 +278,7 @@ namespace sv {
         if (i < 0)
             return extract(m_bits + i - 1, 0);
         if (symb()) {
-            return tval((Z3_context)m_ctx, Z3_mk_sign_ext((Z3_context)m_ctx, i, (Z3_ast)m_ast), m_bits + i);
+            return tval((Z3_context)m_ctx, Z3_mk_sign_ext((Z3_context)m_ctx, i, (Z3_ast)m_ast), Z3_BV_SORT, m_bits + i);
         }
         auto m32 = *(__m256i*)(&this->m_data);
         if ((((uint8_t*)m_data)[(m_bits - 1) >> 3] >> ((m_bits - 1) & 7)) & 1) {
@@ -256,6 +295,7 @@ namespace sv {
         }
         return tval((Z3_context)m_ctx, m32, m_bits + i);
     }
+
     Z3_ast tval::mk_bv_ast() const
     {
         if (m_data_inuse && !m_ast) {
@@ -267,82 +307,66 @@ namespace sv {
             return (Z3_ast)m_ast;
         }
         return (Z3_ast)-1;
-
     }
+
+    inline Z3_ast tval::mk_bool_ast() const {
+        vassert(m_bits == 1);
+        if (m_data_inuse && !m_ast) {
+            const_cast<tval*>(this)->m_ast = (_AST_)(((*(int*)m_data) & 1) ? Z3_mk_true((Z3_context)m_ctx) : Z3_mk_false((Z3_context)m_ctx));
+            const_cast<tval*>(this)->m_sk = (_CTX_)Z3_BOOL_SORT;
+            return (Z3_ast)m_ast;
+        }
+        if (m_sk == Z3_BOOL_SORT) {
+            return (Z3_ast)m_ast;
+        }
+        if (m_sk == Z3_BV_SORT) {
+            Z3_sort sort = Z3_mk_bv_sort((Z3_context)m_ctx, 1);
+            Z3_inc_ref((Z3_context)m_ctx, (Z3_ast)sort);
+            Z3_ast one = Z3_mk_int((Z3_context)m_ctx, 1, sort);
+            Z3_inc_ref((Z3_context)m_ctx, one);
+            Z3_ast b = Z3_mk_eq((Z3_context)m_ctx, (Z3_ast)m_ast, one);
+            Z3_inc_ref((Z3_context)m_ctx, b);
+            Z3_dec_ref((Z3_context)m_ctx, one);
+            Z3_dec_ref((Z3_context)m_ctx, (Z3_ast)sort);
+            Z3_dec_ref((Z3_context)m_ctx, (Z3_ast)m_ast);
+            const_cast<tval*>(this)->m_ast = (_AST_)b;
+            const_cast<tval*>(this)->m_sk = (_CTX_)Z3_BOOL_SORT;
+            return b;
+        }
+        return (Z3_ast)-1;
+    }
+
+    inline Z3_ast tval::mk_fpa_ast(unsigned ebits, unsigned sbits) const {
+        vassert(ebits + sbits == m_bits);
+        if (m_data_inuse && !m_ast) {
+            const_cast<tval*>(this)->m_ast = (_AST_)_mk_ast((Z3_context)m_ctx, (uint64_t*)&m_data, m_bits);
+            sort s = sv::fpa_sort((Z3_context)m_ctx, ebits, sbits);
+            Z3_ast fpa = Z3_mk_fpa_to_fp_bv((Z3_context)m_ctx, (Z3_ast)m_ast, s);
+            Z3_inc_ref((Z3_context)m_ctx, fpa);
+            Z3_dec_ref((Z3_context)m_ctx, (Z3_ast)m_ast);
+            const_cast<tval*>(this)->m_ast = (_AST_)fpa;
+            _simpify();
+            const_cast<tval*>(this)->m_sk = (_CTX_)Z3_FLOATING_POINT_SORT;
+            return fpa;
+        }
+        if (m_sk == Z3_FLOATING_POINT_SORT) {
+            return (Z3_ast)m_ast;
+        }
+        if (m_sk == Z3_BV_SORT) {
+            sort s = sv::fpa_sort((Z3_context)m_ctx, ebits, sbits);
+            Z3_ast fpa = Z3_mk_fpa_to_fp_bv((Z3_context)m_ctx, (Z3_ast)m_ast, s);
+            Z3_inc_ref((Z3_context)m_ctx, fpa);
+            Z3_dec_ref((Z3_context)m_ctx, (Z3_ast)m_ast);
+            const_cast<tval*>(this)->m_sk = (_CTX_)Z3_FLOATING_POINT_SORT;
+            const_cast<tval*>(this)->m_ast = (_AST_)fpa;
+            return fpa;
+        }
+        return (Z3_ast)-1;
+    }
+
 };
 
 
-//static Z3_ast bool2bv(Z3_context ctx, Z3_ast ast) {
-//    Z3_inc_ref(ctx, ast);
-//    Z3_sort sort = Z3_mk_bv_sort(ctx, 1);
-//    Z3_inc_ref(ctx, (Z3_ast)sort);
-//    Z3_ast zero = Z3_mk_int(ctx, 0, sort);
-//    Z3_inc_ref(ctx, zero);
-//    Z3_ast one = Z3_mk_int(ctx, 1, sort);
-//    Z3_inc_ref(ctx, one);
-//    Z3_ast result = Z3_mk_ite(ctx, ast, one, zero);
-//    Z3_dec_ref(ctx, one);
-//    Z3_dec_ref(ctx, zero);
-//    Z3_dec_ref(ctx, ast);
-//    Z3_dec_ref(ctx, (Z3_ast)sort);
-//    return result;
-//}
-
-//inline Z3_ast mk_bool_ast() const {
-//    vassert(m_bits == 1);
-//    if (m_data_inuse && !m_ast) {
-//        const_cast<tval*>(this)->m_ast = (_AST_)(((*(int*)m_data) & 1) ? Z3_mk_true((Z3_context)m_ctx) : Z3_mk_false((Z3_context)m_ctx));
-//        const_cast<tval*>(this)->m_sk = (_CTX_)Z3_BOOL_SORT;
-//        return (Z3_ast)m_ast;
-//    }
-//    if (m_sk == Z3_BOOL_SORT) {
-//        return (Z3_ast)m_ast;
-//    }
-//    if (m_sk == Z3_BV_SORT) {
-//        Z3_sort sort = Z3_mk_bv_sort((Z3_context)m_ctx, 1);
-//        Z3_inc_ref((Z3_context)m_ctx, (Z3_ast)sort);
-//        Z3_ast one = Z3_mk_int((Z3_context)m_ctx, 1, sort);
-//        Z3_inc_ref((Z3_context)m_ctx, one);
-//        Z3_ast b = Z3_mk_eq((Z3_context)m_ctx, (Z3_ast)m_ast, one);
-//        Z3_inc_ref((Z3_context)m_ctx, b);
-//        Z3_dec_ref((Z3_context)m_ctx, one);
-//        Z3_dec_ref((Z3_context)m_ctx, (Z3_ast)sort);
-//        Z3_dec_ref((Z3_context)m_ctx, (Z3_ast)m_ast);
-//        const_cast<tval*>(this)->m_ast = (_AST_)b;
-//        const_cast<tval*>(this)->m_sk = (_CTX_)Z3_BOOL_SORT;
-//        return b;
-//    }
-//    return (Z3_ast)-1;
-//}
-//template<unsigned ebits, unsigned sbits>
-//inline Z3_ast mk_fpa_ast() const {
-//    static_assert(ebits > 0 && sbits > 0 && (sbits + ebits <= 256), "gg size");
-//    vassert(ebits + sbits == m_bits);
-//    if (m_data_inuse && !m_ast) {
-//        const_cast<tval*>(this)->m_ast = (_AST_)_mk_ast((Z3_context)m_ctx, (uint64_t*)&m_data, m_bits);
-//        sort s = sv::fpa_sort((Z3_context)m_ctx, ebits, sbits);
-//        Z3_ast fpa = Z3_mk_fpa_to_fp_bv((Z3_context)m_ctx, (Z3_ast)m_ast, s);
-//        Z3_inc_ref((Z3_context)m_ctx, fpa);
-//        Z3_dec_ref((Z3_context)m_ctx, (Z3_ast)m_ast);
-//        const_cast<tval*>(this)->m_ast = (_AST_)fpa;
-//        _simpify();
-//        const_cast<tval*>(this)->m_sk = (_CTX_)Z3_FLOATING_POINT_SORT;
-//        return fpa;
-//    }
-//    if (m_sk == Z3_FLOATING_POINT_SORT) {
-//        return (Z3_ast)m_ast;
-//    }
-//    if (m_sk == Z3_BV_SORT) {
-//        sort s = sv::fpa_sort((Z3_context)m_ctx, ebits, sbits);
-//        Z3_ast fpa = Z3_mk_fpa_to_fp_bv((Z3_context)m_ctx, (Z3_ast)m_ast, s);
-//        Z3_inc_ref((Z3_context)m_ctx, fpa);
-//        Z3_dec_ref((Z3_context)m_ctx, (Z3_ast)m_ast);
-//        const_cast<tval*>(this)->m_sk = (_CTX_)Z3_FLOATING_POINT_SORT;
-//        const_cast<tval*>(this)->m_ast = (_AST_)fpa;
-//        return fpa;
-//    }
-//    return (Z3_ast)-1;
-//}
 
 void HexToStr(unsigned char* pbDest, unsigned char* pbSrc, int nLen)
 
@@ -359,4 +383,30 @@ void HexToStr(unsigned char* pbDest, unsigned char* pbSrc, int nLen)
         if (ddl > 57) ddl = ddl + 7;
         ((short*)pbDest)[(nLen - i)] = ((short)ddl << 8) | ddh;
     }
-};
+}
+tval sv::ite(const sbool& cond, const tval& iftrue, const tval& iffalse)
+{
+    Z3_context ctx = cond;
+    vassert(iftrue.nbits() == iffalse.nbits());
+    vassert(iftrue.sort_kind() == iffalse.sort_kind());
+    if (iftrue.sort_kind() == Z3_BOOL_SORT) {
+        return tval(ctx, Z3_mk_ite(ctx, cond, iftrue.mk_bool_ast(), iffalse.mk_bool_ast()), Z3_BOOL_SORT, 1);
+    }
+    if (iftrue.sort_kind() == Z3_BV_SORT) {
+        return tval(ctx, Z3_mk_ite(ctx, cond, iftrue.mk_bv_ast(), iffalse.mk_bv_ast()), Z3_BV_SORT, iftrue.nbits());
+    }
+    if (iftrue.sort_kind() == Z3_FLOATING_POINT_SORT) {
+        unsigned eb, sb;
+        switch (iftrue.nbits()) {
+        case 16: eb = fpaES<16>::ebits; sb = fpaES<16>::sbits;
+        case 32: eb = fpaES<32>::ebits; sb = fpaES<32>::sbits;
+        case 64: eb = fpaES<64>::ebits; sb = fpaES<64>::sbits;
+        case 128: eb = fpaES<128>::ebits; sb = fpaES<128>::sbits;
+        default:
+            VPANIC("fp err");
+        }
+        return tval(ctx, Z3_mk_ite(ctx, cond, iftrue.mk_fpa_ast(eb, sb), iffalse.mk_fpa_ast(eb, sb)), Z3_FLOATING_POINT_SORT, iftrue.nbits());
+    }
+    VPANIC("GG");
+}
+;

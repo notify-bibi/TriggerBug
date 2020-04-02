@@ -53,6 +53,8 @@ static inline int CountLeadingZeros64(uint64_t n) {
 #define Z3Iop_ZEXT(T1, T2) { return ((subval<T1>&)a).ext<false, T2>(); }
 #define Z3Iop_SEXT(T1, T2) { return ((ssbval<T1>&)a).ext<true , T2>(); }
 
+#define Z3Iop_1_ZEXT(T2) { return (subval<T2>((sbool&)a)).ext<false, T2>(); }
+#define Z3Iop_1_SEXT(T2) { return (ssbval<T2>((sbool&)a)).ext<true , T2>(); }
 
 #define Iop_to(T1, T2) { return tval(a, (T2) (T1)ato(T1)); }
 
@@ -60,15 +62,15 @@ tval Kernel::tUnop(IROp op, tval const& a) {
     //a.tostr();
     if (a.symb()) {
         switch (op) {
-        case Iop_1Uto8:  Z3Iop_ZEXT(1, 8);
-        case Iop_1Uto32: Z3Iop_ZEXT(1, 32);
-        case Iop_1Uto64: Z3Iop_ZEXT(1, 64);
-        case Iop_1Sto8:  Z3Iop_SEXT(1, 8);
-        case Iop_1Sto16: Z3Iop_SEXT(1, 16);
-        case Iop_1Sto32: Z3Iop_SEXT(1, 32);
-        case Iop_1Sto64: Z3Iop_SEXT(1, 64);
+        case Iop_1Uto8:  Z3Iop_1_ZEXT(8);
+        case Iop_1Uto32: Z3Iop_1_ZEXT(32);
+        case Iop_1Uto64: Z3Iop_1_ZEXT(64);
+        case Iop_1Sto8:  Z3Iop_1_SEXT(8);
+        case Iop_1Sto16: Z3Iop_1_SEXT(16);
+        case Iop_1Sto32: Z3Iop_1_SEXT(32);
+        case Iop_1Sto64: Z3Iop_1_SEXT(64);
 
-        case Iop_Not1:  { return ~atou(1); }
+        case Iop_Not1:  { return !(sbool&)a; }
         case Iop_Not8:  { return ~atou(8); }
         case Iop_Not16: { return ~atou(16);}
         case Iop_Not32: { return ~atou(32);}
@@ -89,8 +91,8 @@ tval Kernel::tUnop(IROp op, tval const& a) {
         case Iop_32UtoV128:Z3Iop_ZEXT(32, 128);
         case Iop_64UtoV128:Z3Iop_ZEXT(64, 128);
 
-        case Iop_32to1:     { return atou(32 ).extract<0 , 0 >(); }
-        case Iop_64to1:     { return atou(64 ).extract<0 , 0 >(); }
+        case Iop_32to1:     { return sbool(atou(32 ).extract<0 , 0 >()); }
+        case Iop_64to1:     { return sbool(atou(64 ).extract<0 , 0 >()); }
         case Iop_32to8:     { return atou(32 ).extract<7 , 0 >(); }
         case Iop_64to8:     { return atou(64 ).extract<7 , 0 >(); }
         case Iop_64to16:    { return atou(64 ).extract<15, 0 >(); }
@@ -129,10 +131,10 @@ tval Kernel::tUnop(IROp op, tval const& a) {
         case Iop_1Sto32: { return rcval<uint32_t>((sv::ctype_val<true, 1, Z3_BV_SORT>&)a); }
         case Iop_1Sto64: { return rcval<uint64_t>((sv::ctype_val<true, 1, Z3_BV_SORT>&)a); }
 
-        case Iop_32to1:
-        case Iop_64to1: { return ((sv::ctype_val<false, 1, Z3_BV_SORT>&)a); }
+        case Iop_32to1: { return rbool(ato(uint32_t)); }
+        case Iop_64to1: { return rbool(ato(uint64_t)); }
 
-        case Iop_Not1:    { return ~((sv::ctype_val<false, 1, Z3_BV_SORT>&)a);}
+        case Iop_Not1:    { return !ato(bool);}
         case Iop_Not8:    { return ~ato(uint8_t);}
         case Iop_Not16:   { return ~ato(uint16_t);}
         case Iop_Not32:   { return ~ato(uint32_t);}

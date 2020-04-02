@@ -42,10 +42,9 @@ bool creakme() {
 
 
     SP::win32 state(v, 0, True);
+    state.avoid_anti_debugging();
 
-
-
-    state.setFlag(CF_ppStmts);
+    //state.setFlag(CF_ppStmts);
 
     auto sd = state.mem.load<Ity_I64>(0x004023ec);
 

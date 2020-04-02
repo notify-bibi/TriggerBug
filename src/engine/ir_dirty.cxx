@@ -3,7 +3,7 @@
 #include "engine/z3_target_call/z3_target_call.h"
 
 #ifdef _DEBUG
-#define OUTPUT_STMTS
+//#define OUTPUT_STMTS
 #endif
 
 using namespace TR;
@@ -209,7 +209,7 @@ public:
                     mem.Ist_Store(stack_ret + (ULong)(i << 3), base_tIRExpr(exp_args[i]));
                 }
                 else {
-                    regs.set(assembly_args[i], base_tIRExpr(exp_args[i]));
+                    regs.Ist_Put(assembly_args[i], base_tIRExpr(exp_args[i]));
                 }
             };
             vassert(i <= MAX_GUEST_DIRTY_CALL_PARARM_NUM);
@@ -333,7 +333,7 @@ private:
                 ppIRStmt(s);
 #endif
                 switch (s->tag) {
-                case Ist_Put: { regs.set(s->Ist.Put.offset, tIRExpr(s->Ist.Put.data)); break; }
+                case Ist_Put: { regs.Ist_Put(s->Ist.Put.offset, tIRExpr(s->Ist.Put.data)); break; }
                 case Ist_Store: { mem.Ist_Store(tIRExpr(s->Ist.Store.addr), tIRExpr(s->Ist.Store.data)); break; };
                 case Ist_WrTmp: {
                     emu[s->Ist.WrTmp.tmp] = tIRExpr(s->Ist.WrTmp.data);
@@ -363,7 +363,7 @@ private:
                 case Ist_Exit: {
                     rsbool guard = tIRExpr(s->Ist.Exit.guard).tobool();
                     if (guard.real()) {
-                        if ((UChar)guard & 1) {
+                        if (guard) {
                         Exit_guard_true:
                             vassert(s->Ist.Exit.jk == Ijk_Boring);
                             m_host_addr = (UChar*)s->Ist.Exit.dst->Ico.U64;
@@ -371,25 +371,25 @@ private:
                         };
                     }
                     else {
-                        //std::vector<Vns> guard_result;
-                       /* UInt eval_size = eval_all(guard_result, m_solv, guard);
+                        std::deque<tval> guard_result;
+                        UInt eval_size = eval_all(guard_result, m_solv, guard);
                         vassert(eval_size <= 2);
                         if (eval_size == 0) { m_status = Death; goto EXIT; }
                         if (eval_size == 1) {
-                            if (((UChar)guard_result[0].simplify()) & 1)
+                            if (guard_result[0].tobool())
                                 goto Exit_guard_true;
                         }
                         if (eval_size == 2) {
                             if (s->Ist.Exit.jk != Ijk_Boring) {
-                                m_solv.add_assert(guard, False);
+                                m_solv.add_assert(!guard.tos());
                             }
                             else {
                                 vassert(s->Ist.Exit.jk == Ijk_Boring);
                                 newBranch = mkState(s->Ist.Exit.dst->Ico.U64);
-                                newBranch->m_solv.add_assert(guard);
+                                newBranch->m_solv.add_assert(guard.tos());
                                 m_status = Fork;
                             }
-                        }*/
+                        }
                     }
                     break;
                 }
@@ -416,7 +416,7 @@ private:
                 case Ist_PutI: {
                     auto ix = tIRExpr(s->Ist.PutI.details->ix);
                     vassert(ix.real());
-                    regs.set(
+                    regs.Ist_Put(
                         s->Ist.PutI.details->descr->base + (((UInt)((s->Ist.PutI.details->bias + (int)(ix)))) % s->Ist.PutI.details->descr->nElems) * ty2length(s->Ist.PutI.details->descr->elemTy),
                         tIRExpr(s->Ist.PutI.details->data)
                     );
@@ -440,18 +440,18 @@ private:
                 }
                 case Ist_LoadG: {
                     IRLoadG* lg = s->Ist.LoadG.details;
-                    auto guard = tIRExpr(lg->guard).tobool();
+                    rsbool guard = tIRExpr(lg->guard).tobool();
                     if (guard.real()) {
                         emu[lg->dst] = (((UChar)guard & 1)) ? ILGop(lg) : tIRExpr(lg->alt);
                     }
                     else {
-                        //emu[lg->dst] = ite(guard, ILGop(lg), tIRExpr(lg->alt));
+                        emu[lg->dst] = ite(guard.tos(), ILGop(lg), tIRExpr(lg->alt));
                     }
                     break;
                 }
                 case Ist_StoreG: {
                     IRStoreG* sg = s->Ist.StoreG.details;
-                    auto guard = tIRExpr(sg->guard).tobool();
+                    rsbool guard = tIRExpr(sg->guard).tobool();
                     if (guard.real()) {
                         if ((UChar)guard)
                             mem.Ist_Store(tIRExpr(sg->addr), tIRExpr(sg->data));
@@ -459,7 +459,7 @@ private:
                     else {
                         auto addr = tIRExpr(sg->addr);
                         auto data = tIRExpr(sg->data);
-                        //mem.Ist_Store(addr, ite(guard , mem.Iex_Load(addr, data.nbits()), data));
+                        mem.Ist_Store(addr, ite(guard.tos() , mem.Iex_Load(addr, data.nbits()), data));
                     }
                     break;
                 }
@@ -506,18 +506,23 @@ private:
                     newBranch->m_solv.add_assert(!guard);
                 }
                 else {
-                    //std::vector<tval> result;
-                    //UInt eval_size = eval_all(result, m_solv, next);
-                    //if (eval_size == 0) { m_status = Death; goto EXIT; }
-                    //else if (eval_size == 1) { m_host_addr = result[0].simplify(); }
-                    //else {
-                    //    for (auto re : result) {
-                    //        Addr64 GN = re.simplify();//guest next ip
-                    //        newBranch = mkState(GN);
-                    //        newBranch->m_solv.add_assert(guard, False);
-                    //        newBranch->m_solv.add_assert(next, re);
-                    //    }
-                    //}
+                    std::deque<tval> result;
+                    UInt eval_size = eval_all(result, m_solv, next);
+                    if (eval_size == 0) {
+                        m_status = Death; 
+                        goto EXIT; 
+                    }
+                    else if (eval_size == 1) {
+                        m_host_addr = (UChar*)(size_t)result[0].tor<false, 64>(); 
+                    }
+                    else {
+                        for (auto re : result) {
+                            auto GN = re.tor<false, 64>();//guest next ip
+                            newBranch = mkState(GN);
+                            newBranch->m_solv.add_assert(!guard);
+                            newBranch->m_solv.add_assert(next.tos() == (size_t)GN);
+                        }
+                    }
                 }
                 goto EXIT;
             }
@@ -526,19 +531,21 @@ private:
                 m_host_addr = (UChar*)(size_t)next.tor();
             }
             else {
-                //std::vector<tval> result;
-                //UInt eval_size = eval_all(result, m_solv, next);
-                //if (eval_size == 0) { m_status = Death; goto EXIT; }
-                //else if (eval_size == 1) { m_host_addr = result[0].simplify(); }
-                //else {
-                //    for (auto re : result) {
-                //        Addr64 GN = re.simplify();//guest next ip
-                //        newBranch = mkState(GN);
-                //        newBranch->m_solv.add_assert_eq(next, re);
-                //    }
-                //    m_status = Fork;
-                //    goto EXIT;
-                //}
+                std::deque<tval> result;
+                UInt eval_size = eval_all(result, m_solv, next);
+                if (eval_size == 0) { m_status = Death; goto EXIT; }
+                else if (eval_size == 1) {
+                    m_host_addr = (UChar*)(size_t)result[0].tor<false, 64>();
+                }
+                else {
+                    for (auto re : result) {
+                        auto GN = re.tor<false, 64>();//guest next ip
+                        newBranch = mkState(GN);
+                        newBranch->m_solv.add_assert(next.tos() == (size_t)GN);
+                    }
+                    m_status = Fork;
+                    goto EXIT;
+                }
             }
 
         }
@@ -702,19 +709,21 @@ tval DState::tIRExpr(IRExpr* e)
     case Iex_Get: { return regs.Iex_Get(e->Iex.Get.offset, e->Iex.Get.ty); }
     case Iex_RdTmp: { return m_irtemp[e->Iex.RdTmp.tmp]; }
 
-    //case Iex_Unop: { return Kernel::tUnop(e->Iex.Unop.op, tIRExpr(e->Iex.Unop.arg)); }
-    //case Iex_Binop: { return  Kernel::tBinop(e->Iex.Binop.op, tIRExpr(e->Iex.Binop.arg1), tIRExpr(e->Iex.Binop.arg2)); }
-    //case Iex_Triop: { return  Kernel::tTriop(e->Iex.Triop.details->op, tIRExpr(e->Iex.Triop.details->arg1), tIRExpr(e->Iex.Triop.details->arg2), tIRExpr(e->Iex.Triop.details->arg3)); }
-    //case Iex_Qop: { return  Kernel::tQop(e->Iex.Qop.details->op, tIRExpr(e->Iex.Qop.details->arg1), tIRExpr(e->Iex.Qop.details->arg2), tIRExpr(e->Iex.Qop.details->arg3), tIRExpr(e->Iex.Qop.details->arg4)); }
+    case Iex_Unop: { return Kernel::tUnop(e->Iex.Unop.op, tIRExpr(e->Iex.Unop.arg)); }
+    case Iex_Binop: { return  Kernel::tBinop(e->Iex.Binop.op, tIRExpr(e->Iex.Binop.arg1), tIRExpr(e->Iex.Binop.arg2)); }
+    case Iex_Triop: { return  Kernel::tTriop(e->Iex.Triop.details->op, tIRExpr(e->Iex.Triop.details->arg1), tIRExpr(e->Iex.Triop.details->arg2), tIRExpr(e->Iex.Triop.details->arg3)); }
+    case Iex_Qop: { return  Kernel::tQop(e->Iex.Qop.details->op, tIRExpr(e->Iex.Qop.details->arg1), tIRExpr(e->Iex.Qop.details->arg2), tIRExpr(e->Iex.Qop.details->arg3), tIRExpr(e->Iex.Qop.details->arg4)); }
 
     case Iex_Load: { return mem.Iex_Load(tIRExpr(e->Iex.Load.addr), e->Iex.Get.ty); }
     case Iex_Const: { return tval(m_ctx, e->Iex.Const.con); }
     case Iex_ITE: {
-        rsbool cond = tIRExpr(e->Iex.ITE.cond).tobool();
-        /*return (cond.real()) ?
-            ((UChar)cond & 0b1) ? tIRExpr(e->Iex.ITE.iftrue) : tIRExpr(e->Iex.ITE.iffalse)
-            :
-            Vns(m_ctx, Z3_mk_ite(m_ctx, cond.toZ3Bool(), tIRExpr(e->Iex.ITE.iftrue), tIRExpr(e->Iex.ITE.iffalse)));*/
+        auto cond = tIRExpr(e->Iex.ITE.cond).tobool();
+        if (cond.real()) {
+            return cond ? tIRExpr(e->Iex.ITE.iftrue) : tIRExpr(e->Iex.ITE.iffalse);
+        }
+        else {
+            return ite(cond.tos(), tIRExpr(e->Iex.ITE.iftrue), tIRExpr(e->Iex.ITE.iffalse));
+        }
     }
     case Iex_CCall: { return CCall(e->Iex.CCall.cee, e->Iex.CCall.args, e->Iex.CCall.retty); }
     case Iex_GetI: {
@@ -759,13 +768,16 @@ public:
         DState& self,
         cmpr::StateType type
     ) :
-        m_ctx(ctx), m_state(self), m_type(type), m_condition(cmpr::logic_and(get_asserts()).translate(m_ctx.ctx()))
+        m_ctx(ctx), m_state(self), m_type(type), m_condition(m_ctx.ctx())
     { };
 
     cmpr::CmprsContext<DState, State_Tag>& cctx() { return m_ctx; }
     cmpr::StateType type() { return m_type; };
 
     sbool const& get_assert() {
+        if (!(Z3_ast)m_condition) {
+            m_condition = logic_and(get_asserts()).translate(m_ctx.ctx());
+        }
         return m_condition;
     }
 

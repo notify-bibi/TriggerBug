@@ -151,8 +151,6 @@ ULong MEM<ADDR>::find_block_reverse(ULong start, ADDR size)
 template<typename ADDR>
 tval MEM<ADDR>::Iex_Load(ADDR address, IRType ty)
 {
-
-
     switch (ty) {
     case Ity_I8: return load<Ity_I8>(address);
     case Ity_I16: return load<Ity_I16>(address);
@@ -181,9 +179,18 @@ inline tval TR::MEM<ADDR>::Iex_Load(const tval& address, IRType ty)
 }
 
 template<typename ADDR>
-tval TR::MEM<ADDR>::Iex_Load(const tval& address, int nbytes)
+tval TR::MEM<ADDR>::Iex_Load(const tval& address, int nbits)
 {
-    return tval();
+    switch (nbits) {
+    case 8: return load<Ity_I8>(address);
+    case 16: return load<Ity_I16>(address);
+    case 32: return load<Ity_I32>(address);
+    case 64: return load<Ity_I64>(address);
+    case 128: return load<Ity_I128>(address);
+    case 256: return load<Ity_V256>(address);
+    default:
+        VPANIC("not support");
+    }
 }
 
 template<typename ADDR>
@@ -213,6 +220,72 @@ tval MEM<ADDR>::Iex_Load(Z3_ast address, IRType ty) {
     default:VPANIC("error");
     }
 }
+
+template<typename ADDR>
+void TR::MEM<ADDR>::Ist_Store(ADDR address, tval const& data)
+{
+    if (data.real()) {
+        switch (data.nbits()) {
+        case 8: store(address, (uint8_t)data); return;
+        case 16: store(address, (uint16_t)data); return;
+        case 32: store(address, (uint32_t)data); return;
+        case 64: store(address, (uint64_t)data); return;
+        case 128:store(address, (__m128i)data); return;
+        case 256:store(address, (__m256i)data); return;
+        default:
+            VPANIC("not support");
+        };
+    }
+    else {
+        switch (data.nbits()) {
+        case 8: store<8>(address, (Z3_ast)data); return;
+        case 16: store<16>(address, (Z3_ast)data); return;
+        case 32: store<32>(address, (Z3_ast)data); return;
+        case 64: store<64>(address, (Z3_ast)data); return;
+        case 128:store<128>(address, (Z3_ast)data); return;
+        case 256:store<256>(address, (Z3_ast)data); return;
+        default:
+            VPANIC("not support");
+        };
+    }
+
+
+}
+
+template<typename ADDR>
+void TR::MEM<ADDR>::Ist_Store(Z3_ast address, tval const& data)
+{
+    if (data.real()) {
+        switch (data.nbits()) {
+        case 1: store(address, (uint8_t)data); return;
+        case 2: store(address, (uint16_t)data); return;
+        case 4: store(address, (uint32_t)data); return;
+        case 8: store(address, (uint64_t)data); return;
+        case 16:store(address, (__m128i)data); return;
+        case 32:store(address, (__m256i)data); return;
+        default:
+            VPANIC("not support");
+        };
+    }
+    else {
+        switch (data.nbits()) {
+        case 1: store<8>(address, (Z3_ast)data); return;
+        case 2: store<16>(address, (Z3_ast)data); return;
+        case 4: store<32>(address, (Z3_ast)data); return;
+        case 8: store<64>(address, (Z3_ast)data); return;
+        case 16:store<128>(address, (Z3_ast)data); return;
+        case 32:store<256>(address, (Z3_ast)data); return;
+        default:
+            VPANIC("not support");
+        };
+    }
+
+}
+
+
+
+
+
 
 template<typename ADDR>
 void MEM<ADDR>::CheckSelf(PAGE*& P, ADDR address)

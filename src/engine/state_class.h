@@ -13,8 +13,8 @@ Revision History:
 #define _STATE_CLASS_DEFS_
 
 #include "engine/engine.h"
+#include "engine/basic_var.hpp"
 #include "engine/vex_context.h"
-#include "engine/variable.h"
 #include "engine/register.h"
 #include "engine/memory.h"
 #include "engine/kernel.h"
@@ -24,10 +24,14 @@ Revision History:
 #include "z3_target_call/z3_target_call.h"
 #include <deque>
 
+namespace cmpr {
+    using Context32 = CmprsContext<TR::State<Addr32>, TR::State_Tag>;
+    using Context64 = CmprsContext<TR::State<Addr64>, TR::State_Tag>;
+};
 
 extern void* funcDict(void*);
 extern void Func_Map_Init();
-extern int eval_all(std::list<tval>& result, z3::solver& solv, Z3_ast nia);
+extern int eval_all(std::deque<tval>& result, z3::solver& solv, Z3_ast nia);
 extern std::string replace(const char* pszSrc, const char* pszOld, const char* pszNew);
 extern UInt arch_2_stack_sp_iroffset(VexArch arch);
 
@@ -266,6 +270,7 @@ namespace TR {
         friend class StateAnalyzer<ADDR>;
         friend class StateCmprsInterface<ADDR>;
         using vsize_t = rsval<ADDR>;
+        static constexpr int wide = sizeof(ADDR) << 3;
 
     public:
         vex_context<ADDR>& m_vctx;

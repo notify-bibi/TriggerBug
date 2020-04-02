@@ -134,6 +134,12 @@ public:
         vassert(m_ref_cound == 1);
     }
 
+    template<bool sign, int nbits, sv::z3sk sk>
+    inline sv::rsval<sign, nbits, sk> value(Z3_context ctx) {
+        __m256i pad = _mm256_set1_epi8(m_pad);
+        return sv::rsval<sign, nbits, sk>(ctx, pad.m256i_i8);
+    };
+
     ~PAGE() {
         vassert(m_ref_cound == 0); 
         if (m_unit) {
@@ -287,27 +293,6 @@ namespace TR {
             return (*nP)->Iex_Get(0, size - plength).translate(m_ctx).Concat((*P)->Iex_Get(((UShort)address & 0xfff), plength, m_ctx));
         }*/
 
-        //template<IRType ty>
-        //inline Vns Pad2Value(UChar pad) {
-        //    switch (ty) {
-        //    case 8:
-        //    case Ity_I8:  return Vns(m_ctx, (UChar)pad);
-        //    case 16:
-        //    case Ity_I16: {return Vns(m_ctx, (UShort)((((UShort)pad) << 8) | pad)); }
-        //    case 32:
-        //    case Ity_F32:
-        //    case Ity_I32: {return Vns(m_ctx, _mm_set1_epi8(pad).m128i_u32[0]); }
-        //    case 64:
-        //    case Ity_F64:
-        //    case Ity_I64: {return Vns(m_ctx, _mm_set1_epi8(pad).m128i_u64[0]); }
-        //    case 128:
-        //    case Ity_I128:
-        //    case Ity_V128: {return Vns(m_ctx, _mm_set1_epi8(pad)); }
-        //    case 256:
-        //    case Ity_V256: {return Vns(m_ctx, _mm256_set1_epi8(pad)); }
-        //    default:vpanic("error IRType");
-        //    }
-        //}
 
     public:
 
@@ -318,9 +303,9 @@ namespace TR {
             static_assert((nbits & 7) == 0, "err load");
             PAGE* page = get_mem_page(address);
             MEM_ACCESS_ASSERT_R(page, address);
-            /*if (P->is_pad()) {
-                return Pad2Value<ty>(P->get_pad());
-            };*/
+            if (page->is_pad()) {
+                return page->value<sign, nbits, sk>(m_ctx);
+            };
 
             if ((address & 0xfff) >= (0x1001 - (nbits >> 3))) {
                 //return _Iex_Load_a(P, address, 2);
@@ -483,22 +468,22 @@ namespace TR {
         template<typename DataTy, TASSERT(std::is_arithmetic<DataTy>::value)>
         void store(ADDR address, DataTy data) {
             CODEBLOCKISWRITECHECK(address);
-            PAGE* P = get_mem_page(address);
-            MEM_ACCESS_ASSERT_W(P, address);
-            CheckSelf(P, address);
-            vassert(P->get_user() == user);
-            P->check_ref_cound();
+            PAGE* page = get_mem_page(address);
+            MEM_ACCESS_ASSERT_W(page, address);
+            CheckSelf(page, address);
+            vassert(page->get_user() == user);
+            page->check_ref_cound();
             UShort offset = address & 0xfff;
             if (fastalignD1[sizeof(data) << 3] > 0xFFF - offset) {
-                PAGE* nP = get_mem_page(address + 0x1000);
-                MEM_ACCESS_ASSERT_W(nP, address + 0x1000);
-                CheckSelf(nP, address + 0x1000);
+                PAGE* npage = get_mem_page(address + 0x1000);
+                MEM_ACCESS_ASSERT_W(npage, address + 0x1000);
+                CheckSelf(npage, address + 0x1000);
                 UInt plength = (0x1000 - offset);
-                (*P)->Ist_Put(offset, (void*)&data, plength);
-                (*nP)->Ist_Put(0, ((UChar*)((void*)&data)) + plength, (sizeof(data) - plength));
+                (*page)->Ist_Put(offset, (void*)&data, plength);
+                (*npage)->Ist_Put(0, ((UChar*)((void*)&data)) + plength, (sizeof(data) - plength));
             }
             else {
-                (*P)->set(offset, data);
+                (*page)->set(offset, data);
             }
         }
 
@@ -681,132 +666,17 @@ namespace TR {
             }
         }
 
-
-
-    private:
-        template<typename DataTy, TASSERT(std::is_arithmetic<DataTy>::value)>
-        void Ist_Store_bpt(ADDR address, DataTy data) {
-            /*CODEBLOCKISWRITECHECK(address);
-            PAGE* P = get_mem_page(address);
-            MEM_ACCESS_ASSERT_W(P, address);
-            CheckSelf(P, address);
-            vassert(P->get_user() == user);
-            UShort offset = address & 0xfff;
-            if (fastalignD1[sizeof(data) << 3] > 0xFFF - offset) {
-                PAGE* nP = get_mem_page(address + 0x1000);
-                MEM_ACCESS_ASSERT_W(nP, address + 0x1000);
-                CheckSelf(nP, address + 0x1000);
-                UInt plength = (0x1000 - offset);
-                (*P)->Ist_Put(offset, (void*)&data, plength);
-                (*nP)->Ist_Put(0, ((UChar*)((void*)&data)) + plength, (sizeof(data) - plength));
-            }
-            else {
-                (*P)->Ist_Put(offset, data);
-            }*/
-        }
-        void Ist_Store_bpt(ADDR address, tval const& data) {
-            /*if (data.real()) {
-                switch (data.bitn) {
-                case 8:  Ist_Store_bpt(address, (UChar)data); break;
-                case 16: Ist_Store_bpt(address, (UShort)data); break;
-                case 32: Ist_Store_bpt(address, (UInt)data); break;
-                case 64: Ist_Store_bpt(address, (ULong)data); break;
-                default: VPANIC("ERR");
-                }
-            }*/
-        }
-
-    public:
-
-//
-//
-//
-//
-//        inline void Ist_Store(ADDR address, tval const& data) {
-//            if (data.real()) {
-//                switch (data.nbits()) {
-//                case 8:  Ist_Store(address, (UChar)data); break;
-//                case 16: Ist_Store(address, (UShort)data); break;
-//                case 32: Ist_Store(address, (UInt)data); break;
-//                case 64: Ist_Store(address, (ULong)data); break;
-//                default:
-//                    if (data.bitn == 128) Ist_Store(address, (__m128i)data);
-//                    else {
-//                        vassert(data.bitn == 256);
-//                        Ist_Store(address, (__m256i)data);
-//                    }
-//                }
-//            }
-//            else {
-//                switch (data.nbits()) {
-//                case 8:  Ist_Store<8>(address, (Z3_ast)data); break;
-//                case 16: Ist_Store<16>(address, (Z3_ast)data); break;
-//                case 32: Ist_Store<32>(address, (Z3_ast)data); break;
-//                case 64: Ist_Store<64>(address, (Z3_ast)data); break;
-//                default:
-//                    if (data.bitn == 128)
-//                        Ist_Store<128>(address, (Z3_ast)data);
-//                    else {
-//                        vassert(data.bitn == 256);
-//                        Ist_Store<256>(address, (Z3_ast)data); break;
-//                    }
-//                }
-//            }
-//        }
-//
-//
-//        template<typename DataTy>
-//        inline void Ist_Store(tval const& address, DataTy data) {
-//            if (address.real()) {
-//                Ist_Store((ADDR)address, data);
-//            }
-//            else {
-//                Ist_Store((Z3_ast)address, data);
-//            }
-//        }
-//
-//        inline void MEM::Ist_Store(Z3_ast address, tval const& data) {
-//            if (data.real()) {
-//                switch (data.bitn) {
-//                case 8: return Ist_Store(address, (UChar)data);
-//                case 16:return Ist_Store(address, (UShort)data);
-//                case 32:return Ist_Store(address, (UInt)data);
-//                case 64:return Ist_Store(address, (ULong)data);
-//                case 128:return Ist_Store(address, (__m128i)data);
-//                case 256:return Ist_Store(address, (__m256i)data);
-//                default:vpanic("err");
-//                }
-//            }
-//            else {
-//                switch (data.bitn) {
-//                case 8: return Ist_Store<8>(address, (Z3_ast)data);
-//                case 16:return Ist_Store<16>(address, (Z3_ast)data);
-//                case 32:return Ist_Store<32>(address, (Z3_ast)data);
-//                case 64:return Ist_Store<64>(address, (Z3_ast)data);
-//                case 128:return Ist_Store<128>(address, (Z3_ast)data);
-//                case 256:return Ist_Store<256>(address, (Z3_ast)data);
-//                default:vpanic("err");
-//                }
-//            }
-//        }
-
-        inline void MEM::Ist_Store(tval const& address, tval const& data) {
+        inline void Ist_Store(tval const& address, tval const& data) {
             if (address.real()) {
-                //Ist_Store((ADDR)address, data);
+                Ist_Store((ADDR)address.tor<false, wide>(), data);
             }
             else {
-                //Ist_Store((Z3_ast)address, data);
+                Ist_Store((Z3_ast)address.tos<false, wide>(), data);
             }
         }
 
-        inline void MEM::Ist_Store(ADDR address, tval const& data) {
-            if (data.real()) {
-                //store((address, data);
-            }
-            else {
-                //store(address, data);
-            }
-        }
+        void Ist_Store(ADDR address, tval const& data);
+        void Ist_Store(Z3_ast address, tval const& data);
 
         inline operator Z3_context() const { return m_ctx; };
         inline operator z3::vcontext& () { return m_ctx; };

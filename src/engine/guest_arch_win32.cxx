@@ -245,17 +245,19 @@ void TR::win32::cpu_exception(Expt::ExceptionBase const& e)
     }
 
 
-    //std::cout << " SEH Exceptions at:" << std::hex << guest_start << " \nGoto handel:" << seh_exception_method << std::endl;
+    std::cout << " SEH Exception ID:[" << std::hex << ExceptionCode << "] at:" << std::hex << get_cpu_ip() << std::endl;
 
-   /* Vns eflags = z3_x86g_calculate_eflags_all(regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::CC_OP), regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::CC_DEP1), regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::CC_DEP2), regs.Iex_Get<Ity_I32>(X86_IR_OFFSET::CC_NDEP));
+    //tval eflags = z3_x86g_calculate_eflags_all(regs.get<Ity_I32>(X86_IR_OFFSET::CC_OP), regs.get<Ity_I32>(X86_IR_OFFSET::CC_DEP1), regs.get<Ity_I32>(X86_IR_OFFSET::CC_DEP2), regs.get<Ity_I32>(X86_IR_OFFSET::CC_NDEP));
+    
+    rcval<int> eflags(m_ctx, 0);
     dirty_call("putExecptionCtx32", Kc32::putExecptionCtx,
         {
-            Vns(ExceptionRecord), Vns(ContextRecord),
-            Vns(gst), eflags,
-            Vns(ExceptionCode), Vns(ExceptionAddress), Vns(ExceptionFlags),Vns(NumberParameters), Vns(nextExceptionRecord),
-            Vns(info0), Vns(info1), Vns(info2)
+            rcval<Addr32>(m_ctx, (size_t)ExceptionRecord), rcval<Addr32>(m_ctx, (size_t)ContextRecord),
+            rcval<Addr64>(m_ctx, gst), eflags,
+            rcval<int>(m_ctx, ExceptionCode), rcval<Addr32>(m_ctx, ExceptionAddress), rcval<int>(m_ctx, ExceptionFlags),rcval<int>(m_ctx, NumberParameters), rcval<Addr32>(m_ctx, nextExceptionRecord),
+            rcval<Addr32>(m_ctx, info0), rcval<Addr32>(m_ctx, info1), rcval<Addr32>(m_ctx, info2)
         },
-        Ity_I32);*/
+        Ity_I32);
 
     regs.set(X86_IR_OFFSET::ESP, esp - stack_size);
     vex_push((Addr32)(ULong)ContextRecord);

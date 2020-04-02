@@ -189,7 +189,7 @@ namespace TR {
             auto o = state.mem.load<Ity_I64>(addr);
             vassert(o.real());
             m_callBackDict[addr] = Hook_struct{ func , IRConstTag2nb(state.info().softwareBptConst()->tag) , o , cflag };
-            //state.mem.Ist_Store_bpt(addr, Vns(state.m_ctx, state.info().softwareBptConst()));
+            state.mem.Ist_Store(addr, tval(state.m_ctx, state.info().softwareBptConst()));
         }
         else {
             if (func) {
@@ -218,7 +218,7 @@ namespace TR {
         if (m_callBackDict.find(addr) != m_callBackDict.end()) {
             //pool->wait();
             std::hash_map<Addr64, Hook_struct>::iterator h = m_callBackDict.find(addr);
-            //m_top_state->mem.Ist_Store_bpt(addr, Vns(m_top_state->m_ctx, h->second.original, h->second.nbytes));
+            m_top_state->mem.Ist_Store(addr, tval(m_top_state->m_ctx, h->second.original, h->second.nbytes));
             m_callBackDict.erase(h);
         }
     }

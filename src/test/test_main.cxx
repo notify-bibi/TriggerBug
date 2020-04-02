@@ -404,34 +404,11 @@ bool test_ir_dirty() {
 
     SP::win32 state(v, 0, True);
     state.setFlag(CF_traceJmp);
-    state.setFlag(CF_ppStmts);
+    //state.setFlag(CF_ppStmts);
     state.mem.map(0x1000, 0x2000);
     state.mem.map(0x5000, 0x5000);
     state.hook_add(0x2000, test_ir_dirty_hook);
     state.mem.store(0x1000, 0xcc);
-
-
-
-    sv::sv_cty<Addr32> h;
-    h.is_signed;
-    h.nbits;
-    h.sk;
-
- /*   std::cout << state.regs.get<Ity_I8>(X86_IR_OFFSET::ESP) << std::endl;
-    std::cout << state.regs.get<Ity_V128>(X86_IR_OFFSET::ESP) << std::endl;
-    std::cout << state.regs.get<Ity_V256>(X86_IR_OFFSET::ESP) << std::endl;
-
-    std::cout << state.regs.get<Ity_F128>(X86_IR_OFFSET::ESP) << std::endl;
-    std::cout << state.regs.get<Ity_F64>(X86_IR_OFFSET::ESP) << std::endl;
-    std::cout << state.regs.get<Ity_F32>(X86_IR_OFFSET::ESP) << std::endl;
-    std::cout << state.regs.get<Ity_F16>(X86_IR_OFFSET::ESP) << std::endl;
-*/
-
-
-
-
-
-
 
     state.regs.set(X86_IR_OFFSET::ESP, 0x8000);
     state.regs.set(X86_IR_OFFSET::EIP, 0x1000);

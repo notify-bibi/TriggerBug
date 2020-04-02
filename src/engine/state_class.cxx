@@ -106,7 +106,7 @@ void IR_init(VexControl& vc) {
 }
 
 
-int eval_all(std::list<tval>& result, z3::solver& solv, Z3_ast nia) {
+int eval_all(std::deque<tval>& result, z3::solver& solv, Z3_ast nia) {
     //std::cout << nia << std::endl;
     //std::cout << state.solv.assertions() << std::endl;
     solv.push();
@@ -334,14 +334,14 @@ tval State<ADDR>::mk_int_const(UShort nbit) {
     auto res = m_z3_bv_const_n++;
     char buff[20];
     sprintf_s(buff, sizeof(buff), "p_%d", res);
-    return tval(m_ctx, m_ctx.bv_const(buff, nbit), nbit);
+    return tval(m_ctx, m_ctx.bv_const(buff, nbit), Z3_BV_SORT, nbit);
 }
 
 template <typename ADDR>
 tval State<ADDR>::mk_int_const(UShort n, UShort nbit) {
     char buff[20];
     sprintf_s(buff, sizeof(buff), "p_%d", n);
-    return  tval(m_ctx, m_ctx.bv_const(buff, nbit), nbit);
+    return  tval(m_ctx, m_ctx.bv_const(buff, nbit), Z3_BV_SORT, nbit);
 }
 
 template <typename ADDR>
@@ -604,11 +604,13 @@ inline tval State<ADDR>::tIRExpr(IRExpr* e)
     case Iex_Load: { return mem.Iex_Load(tIRExpr(e->Iex.Load.addr), e->Iex.Get.ty); }
     case Iex_Const: { return tval(m_ctx, e->Iex.Const.con); }
     case Iex_ITE: {
-       /* tval cond = tIRExpr(e->Iex.ITE.cond);
-        return (cond.real()) ?
-            ((UChar)cond & 0b1) ? tIRExpr(e->Iex.ITE.iftrue) : tIRExpr(e->Iex.ITE.iffalse)
-            :
-            tval(m_ctx, Z3_mk_ite(m_ctx, cond.toZ3Bool(), tIRExpr(e->Iex.ITE.iftrue), tIRExpr(e->Iex.ITE.iffalse)));*/
+        auto cond = tIRExpr(e->Iex.ITE.cond).tobool();
+        if (cond.real()) {
+            return cond ? tIRExpr(e->Iex.ITE.iftrue) : tIRExpr(e->Iex.ITE.iffalse);
+        }
+        else {
+            return ite(cond.tos(), tIRExpr(e->Iex.ITE.iftrue), tIRExpr(e->Iex.ITE.iffalse));
+        }
     }
     case Iex_CCall: { return CCall(e->Iex.CCall.cee, e->Iex.CCall.args, e->Iex.CCall.retty); }
     case Iex_GetI: {
@@ -724,7 +726,7 @@ bool State<ADDR>::vex_start() {
             case Ist_Exit: {
                 rsbool guard = tIRExpr(s->Ist.Exit.guard).tobool();
                 if (guard.real()) {
-                    if ((UChar)guard & 1) {
+                    if (guard.tor()) {
                     Exit_guard_true:
                         if (s->Ist.Exit.jk != Ijk_Boring)
                         {
@@ -747,24 +749,24 @@ bool State<ADDR>::vex_start() {
                     };
                 }
                 else {
-                    /*std::vector<tval> guard_result;
+                    std::deque<tval> guard_result;
                     Int eval_size = eval_all(guard_result, solv, guard);
                     if (eval_size <= 0) {  throw Expt::SolverNoSolution("eval_size <= 0", solv); }
                     if (eval_size == 1) {
-                        if (((UChar)guard_result[0].simplify()) & 1)
+                        if (guard_result[0].tobool().tor())
                             goto Exit_guard_true;
                     }
                     if (eval_size == 2) {
                         if (s->Ist.Exit.jk != Ijk_Boring) {
-                            solv.add_assert(guard, False);
+                            solv.add_assert(!guard.tos());
                         }
                         else {
                             vassert(s->Ist.Exit.jk == Ijk_Boring);
                             newBranch = (State<ADDR>*)mkState(s->Ist.Exit.dst->Ico.U64);
-                            newBranch->solv.add_assert(guard);
+                            newBranch->solv.add_assert(guard.tos());
                             m_status = Fork;
                         }
-                    }*/
+                    }
                 }
                 break;
             }
@@ -815,7 +817,7 @@ bool State<ADDR>::vex_start() {
                 if (guard.symb()) {
                     VPANIC("auto guard = m_state.tIRExpr(dirty->guard); symbolic");
                 }
-                if (((UChar)guard) & 1) {
+                if (guard.tor()) {
                     getDirtyVexCtx();
                     dirty_run<ADDR>(m_dctx, dirty);
                     if (dirty->tmp != IRTemp_INVALID) {
@@ -831,7 +833,7 @@ bool State<ADDR>::vex_start() {
                     emu[lg->dst] = (((UChar)guard)) ? ILGop(lg) : tIRExpr(lg->alt);
                 }
                 else {
-                    //emu[lg->dst] = ite(guard, ILGop(lg), tIRExpr(lg->alt));
+                    emu[lg->dst] = ite(guard.tos(), ILGop(lg), tIRExpr(lg->alt));
                 }
                 break;
             }
@@ -839,13 +841,13 @@ bool State<ADDR>::vex_start() {
                 IRStoreG* sg = s->Ist.StoreG.details;
                 auto guard = tIRExpr(sg->guard).tobool();
                 if (guard.real()) {
-                    if ((UChar)guard)
+                    if (guard.tor())
                         mem.Ist_Store(tIRExpr(sg->addr), tIRExpr(sg->data));
                 }
                 else {
                     auto addr = tIRExpr(sg->addr);
                     auto data = tIRExpr(sg->data);
-                    //mem.Ist_Store(addr, ite(guard, mem.Iex_Load(addr, data.nbits()), data));
+                    mem.Ist_Store(addr, ite(guard.tos(), mem.Iex_Load(addr, data.nbits()), data));
                 }
                 break;
             }
@@ -903,7 +905,7 @@ bool State<ADDR>::vex_start() {
         }
         };
     Isb_next:
-        tval next = tIRExpr(irsb->next);
+        sv::rsval<false, wide> next = tIRExpr(irsb->next).tors<false, wide>();
         if (m_status == Fork) {
 
             State<ADDR>* prv = newBranch;
@@ -913,18 +915,18 @@ bool State<ADDR>::vex_start() {
                 newBranch->solv.add_assert(!guard);
             }
             else {
-                //std::vector<tval> result;
-                //Int eval_size = eval_all(result, solv, next);
-                //if (eval_size <= 0) { throw Expt::SolverNoSolution("eval_size <= 0", solv); }
-                //else if (eval_size == 1) { guest_start = result[0].simplify(); }
-                //else {
-                //    for (auto re : result) {
-                //        ADDR GN = re.simplify();//guest next ip
-                //        newBranch = (State<ADDR>*)mkState((ADDR)GN);
-                //        newBranch->solv.add_assert(guard, False);
-                //        newBranch->solv.add_assert_eq(next, re);
-                //    }
-                //}
+                std::deque<tval> result;
+                Int eval_size = eval_all(result, solv, next);
+                if (eval_size <= 0) { throw Expt::SolverNoSolution("eval_size <= 0", solv); }
+                else if (eval_size == 1) { guest_start = result[0].tor<false, wide>(); }
+                else {
+                    for (auto re : result) {
+                        auto GN = re.tor<false, wide>();//guest next ip
+                        newBranch = (State<ADDR>*)mkState((ADDR)GN);
+                        newBranch->solv.add_assert(!guard);
+                        newBranch->solv.add_assert(next.tos() == (ADDR)GN);
+                    }
+                }
             }
             goto EXIT;
         }
@@ -933,19 +935,23 @@ bool State<ADDR>::vex_start() {
             guest_start = next;
         }
         else {
-            //std::vector<tval> result;
-            //Int eval_size = eval_all(result, solv, next);
-            //if (eval_size <= 0) { throw Expt::SolverNoSolution("eval_size <= 0", solv); }
-            //else if (eval_size == 1) { guest_start = result[0].simplify(); }
-            //else {
-            //    for (auto re : result) {
-            //        ADDR GN = re.simplify();//guest next ip
-            //        newBranch = (State<ADDR>*)mkState((ADDR)GN);
-            //        newBranch->solv.add_assert_eq(next, re);
-            //    }
-            //    m_status = Fork;
-            //    goto EXIT;
-            //}
+            std::deque<tval> result;
+            Int eval_size = eval_all(result, solv, next);
+            if (eval_size <= 0) { 
+                throw Expt::SolverNoSolution("eval_size <= 0", solv); 
+            }
+            else if (eval_size == 1) {
+                guest_start = result[0].tor<false, wide>(); 
+            }
+            else {
+                for (auto re : result) {
+                    auto GN = re.tor<false, wide>();//guest next ip
+                    newBranch = (State<ADDR>*)mkState((ADDR)GN);
+                    newBranch->solv.add_assert(next.tos() == (ADDR)GN);
+                }
+                m_status = Fork;
+                goto EXIT;
+            }
         }
     };
 
@@ -1039,13 +1045,18 @@ public:
         State<ADDR>& self,
         cmpr::StateType type
     ) :
-        m_ctx(ctx), m_state(self), m_type(type), m_condition(cmpr::logic_and(get_asserts()).translate(m_ctx.ctx()))
+        m_ctx(ctx), m_state(self), m_type(type), m_condition(m_ctx.ctx())
     { };
 
     cmpr::CmprsContext<State<ADDR>, State_Tag>& cctx() { return m_ctx; }
     cmpr::StateType type() { return m_type; };
 
-    sbool const& get_assert() { return m_condition; }
+    sbool const& get_assert() { 
+        if (!(Z3_ast)m_condition) {
+            m_condition = logic_and(get_asserts()).translate(m_ctx.ctx());
+        }
+        return m_condition;
+    }
 
     void get_write_map(std::hash_map<Addr64, bool>& record) {
         if (m_state.regs.getRecord()) {
