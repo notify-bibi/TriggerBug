@@ -1,15 +1,16 @@
 extern "C" {
 #include "guest_amd64_defs.h"
 }
-#include "engine/variable.h"
+#include "engine/basic_var.hpp"
 #include "z3_target_defs.h"
 
-Vns z3_amd64g_calculate_rflags_cf(ULong cc_op, Vns& cc_dep1_formal, Vns& cc_dep2_formal, Vns& cc_ndep_formal);
-Vns z3_amd64g_calculate_rflags_pf(ULong cc_op, Vns& cc_dep1_formal, Vns& cc_dep2_formal, Vns& cc_ndep_formal);
-Vns z3_amd64g_calculate_rflags_af(ULong cc_op, Vns& cc_dep1_formal, Vns& cc_dep2_formal, Vns& cc_ndep_formal);
-Vns z3_amd64g_calculate_rflags_zf(ULong cc_op, Vns& cc_dep1_formal, Vns& cc_dep2_formal, Vns& cc_ndep_formal);
-Vns z3_amd64g_calculate_rflags_sf(ULong cc_op, Vns& cc_dep1_formal, Vns& cc_dep2_formal, Vns& cc_ndep_formal);
-Vns z3_amd64g_calculate_rflags_of(ULong cc_op, Vns& cc_dep1_formal, Vns& cc_dep2_formal, Vns& cc_ndep_formal);
-Vns z3_amd64g_calculate_condition(Vns/*AMD64Condcode*/& cond, Vns& cc_op, Vns& cc_dep1, Vns& cc_dep2, Vns& cc_ndep);
-Vns z3_amd64g_calculate_rflags_c(Vns& cc_op, Vns& cc_dep1, Vns& cc_dep2, Vns& cc_ndep);
-Vns z3_amd64g_calculate_rflags_all(Vns& cc_op, Vns& cc_dep1, Vns& cc_dep2, Vns& cc_ndep);
+rsbool z3_amd64g_calculate_rflags_cf(ULong cc_op, const rsval<uint64_t>& cc_dep1_formal, const rsval<uint64_t>& cc_dep2_formal, const rsval<uint64_t>& cc_ndep_formal);
+rsbool z3_amd64g_calculate_rflags_pf(ULong cc_op, const rsval<uint64_t>& cc_dep1_formal, const rsval<uint64_t>& cc_dep2_formal, const rsval<uint64_t>& cc_ndep_formal);
+rsbool z3_amd64g_calculate_rflags_af(ULong cc_op, const rsval<uint64_t>& cc_dep1_formal, const rsval<uint64_t>& cc_dep2_formal, const rsval<uint64_t>& cc_ndep_formal);
+rsbool z3_amd64g_calculate_rflags_zf(ULong cc_op, const rsval<uint64_t>& cc_dep1_formal, const rsval<uint64_t>& cc_dep2_formal, const rsval<uint64_t>& cc_ndep_formal);
+rsbool z3_amd64g_calculate_rflags_sf(ULong cc_op, const rsval<uint64_t>& cc_dep1_formal, const rsval<uint64_t>& cc_dep2_formal, const rsval<uint64_t>& cc_ndep_formal);
+rsbool z3_amd64g_calculate_rflags_of(ULong cc_op, const rsval<uint64_t>& cc_dep1_formal, const rsval<uint64_t>& cc_dep2_formal, const rsval<uint64_t>& cc_ndep_formal);
+
+ rsval<uint64_t> z3_amd64g_calculate_condition(const rsval<uint64_t>/*AMD64Condcode*/& cond, const rsval<uint64_t>& cc_op, const rsval<uint64_t>& cc_dep1, const rsval<uint64_t>& cc_dep2, const rsval<uint64_t>& cc_ndep);
+ rsval<uint64_t> z3_amd64g_calculate_rflags_c(const rsval<uint64_t>& cc_op, const rsval<uint64_t>& cc_dep1, const rsval<uint64_t>& cc_dep2, const rsval<uint64_t>& cc_ndep);
+ rsval<uint64_t> z3_amd64g_calculate_rflags_all(const rsval<uint64_t>& cc_op, const rsval<uint64_t>& cc_dep1, const rsval<uint64_t>& cc_dep2, const rsval<uint64_t>& cc_ndep);

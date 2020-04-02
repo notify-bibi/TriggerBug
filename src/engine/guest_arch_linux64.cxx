@@ -17,28 +17,12 @@ namespace TR {
             switch ((UChar)al) {
             case 0:// //LINUX - sys_read
                 if (rdi == 0) {
-                    /*for (ULong n = 0; n < rdx; n++) {
-                        if (flag_count >= flag_max_count) {
-                            mem.Ist_Store(rsi + n, '\n');
-                        }
-                        else {
-                            Vns FLAG = mk_int_const(8);
-                            mem.Ist_Store(rsi + n, FLAG);
-                            auto ao1 = FLAG >= 'A' && FLAG <= 'Z';
-                            auto ao2 = FLAG >= 'a' && FLAG <= 'z';
-                            auto ao3 = FLAG >= '0' && FLAG <= '9';
-                            solv.add_assert(ao1 || ao2 || ao3 || FLAG == '_' || FLAG == '{' || FLAG == '}', True);
-                        }
-                    }
-                    regs.Ist_Put(AMD64_IR_OFFSET::RAX, rdx);
-                    flag_count += rdx;*/
+                    rsval<Addr64> count = m_vctx.get_hook_read()(*this, rsi, rdx);
+                    regs.set(AMD64_IR_OFFSET::RAX, count);
                     return Running;
                 }
             case 1: {//LINUX - sys_write
-                /*for (ULong n = 0; n < rdx; n++) {
-                    UChar chr = mem.Iex_Load<Ity_I8>(rsi + n);
-                    vex_printf("%c", chr);
-                }*/
+                m_vctx.get_hook_write()(*this, rsi, rdx);
                 regs.set(AMD64_IR_OFFSET::RAX, rdx);
                 return Running;
             }

@@ -86,8 +86,8 @@ State_Tag TR::win32::Sys_syscall()
         }
         case 0x43: {
             PWOW64_CONTEXT ctx = (PWOW64_CONTEXT)(DWORD)arg0;
-            //Addr32 next = dirty_call("getExecptionCtx32", Kc32::getExecptionCtx, { Vns(ctx), Vns(getGSPTR()) }, Ity_I32);
-            //goto_ptr(next);
+            Addr32 next = dirty_call("getExecptionCtx32", Kc32::getExecptionCtx, { rsval<Addr64>(m_ctx, (size_t)ctx), rsval<Addr64>(m_ctx, getGSPTR()) }, Ity_I32);
+            goto_ptr(next);
             m_InvokStack.clear();
             regs.set(X86_IR_OFFSET::EAX, 0);
             return Running;
@@ -109,7 +109,7 @@ State_Tag TR::win32::Sys_syscall()
 
 
             rsval<Addr32> count = m_vctx.get_hook_read()(*this, arg5, arg6);
-            //mem.store(arg4, count.concat(rsval<int>(m_ctx, 0)));
+            mem.store(arg4, count.concat(rsval<int>(m_ctx, 0)));
             regs.set(X86_IR_OFFSET::EAX, 1);
             return Running;
         }
@@ -129,7 +129,7 @@ State_Tag TR::win32::Sys_syscall()
             */
 
             m_vctx.get_hook_write()(*this, arg5, arg6);
-            //mem.Ist_Store(arg4, arg6.Concat(Vns(0)));
+            mem.store(arg4, arg6.concat(rsval<int>(m_ctx, 0)));
             regs.set(X86_IR_OFFSET::EAX, 0);
             return Running;
         }

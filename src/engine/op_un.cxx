@@ -50,11 +50,11 @@ static inline int CountLeadingZeros64(uint64_t n) {
 }
 
 
-#define Z3Iop_ZEXT(T1, T2) { return ((subval<T1>&)a).ext<false, T2>(); }
-#define Z3Iop_SEXT(T1, T2) { return ((ssbval<T1>&)a).ext<true , T2>(); }
+#define Z3Iop_ZEXT(T1, T2) { return ((subval<T1>&)a).ext<false, T2-T1>(); }
+#define Z3Iop_SEXT(T1, T2) { return ((ssbval<T1>&)a).ext<true , T2-T1>(); }
 
-#define Z3Iop_1_ZEXT(T2) { return (subval<T2>((sbool&)a)).ext<false, T2>(); }
-#define Z3Iop_1_SEXT(T2) { return (ssbval<T2>((sbool&)a)).ext<true , T2>(); }
+#define Z3Iop_1_ZEXT(T2) { return (subval<T2>((sbool&)a)); }
+#define Z3Iop_1_SEXT(T2) { return (ssbval<T2>((sbool&)a)); }
 
 #define Iop_to(T1, T2) { return tval(a, (T2) (T1)ato(T1)); }
 
@@ -165,9 +165,9 @@ tval Kernel::tUnop(IROp op, tval const& a) {
         case Iop_32to8:  Iop_to(UInt, UChar);
 
 
-        case Iop_V128to32: { return ato(uint32_t); }//OK
-        case Iop_V128to64: { return ato(uint64_t); }//OK
-        case Iop_128to64:  { return ato(uint64_t); }//OK
+        case Iop_V128to32: { return tval(a, ((uint32_t*)a.cptr())[0]); }//OK
+        case Iop_V128to64: { return tval(a, ((uint64_t*)a.cptr())[0]); }//OK
+        case Iop_128to64:  { return tval(a, ((uint64_t*)a.cptr())[0]); }//OK
         case Iop_V256toV128_0: { return ato(__m128i); }
         case Iop_V256toV128_1: { return tval(a, ((__m128i*)a.cptr())[1]); };
 

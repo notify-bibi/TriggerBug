@@ -371,13 +371,11 @@ private:
                         };
                     }
                     else {
-                        std::deque<tval> guard_result;
-                        UInt eval_size = eval_all(guard_result, m_solv, guard);
+                        UInt eval_size = eval_all_bool(m_solv, guard);
                         vassert(eval_size <= 2);
                         if (eval_size == 0) { m_status = Death; goto EXIT; }
                         if (eval_size == 1) {
-                            if (guard_result[0].tobool())
-                                goto Exit_guard_true;
+                            goto Exit_guard_true;
                         }
                         if (eval_size == 2) {
                             if (s->Ist.Exit.jk != Ijk_Boring) {
@@ -719,7 +717,10 @@ tval DState::tIRExpr(IRExpr* e)
     case Iex_ITE: {
         auto cond = tIRExpr(e->Iex.ITE.cond).tobool();
         if (cond.real()) {
-            return cond ? tIRExpr(e->Iex.ITE.iftrue) : tIRExpr(e->Iex.ITE.iffalse);
+            if (cond)
+                return tIRExpr(e->Iex.ITE.iftrue);
+            else
+                return tIRExpr(e->Iex.ITE.iffalse);
         }
         else {
             return ite(cond.tos(), tIRExpr(e->Iex.ITE.iftrue), tIRExpr(e->Iex.ITE.iffalse));

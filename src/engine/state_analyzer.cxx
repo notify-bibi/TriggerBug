@@ -84,42 +84,42 @@ void find_fork_state(State<ADDR>& state, std::hash_map<ADDR, UInt>& Fork_addr) {
 
 template<typename ADDR>
 bool task_explorer(State<ADDR>* top) {
+    vex_context<ADDR>& vctx = top->vctx();
+    while (true) {
+        std::hash_map<ADDR, UInt> Fork_addr;
+        std::vector<State<ADDR>*> explore;
+        find_fork_state(*top, Fork_addr);
+        find_explore_state(*top, explore, Fork_addr);
 
-    //while (true) {
-    //    std::hash_map<ADDR, UInt> Fork_addr;
-    //    std::vector<State<ADDR>*> explore;
-    //    find_fork_state(*top, Fork_addr);
-    //    find_explore_state(*top, explore, Fork_addr);
+        if (!explore.empty()) {
+            std::cout << *top << std::endl;
+            for (State<ADDR>* nstate : explore) {
+                vctx.pool().enqueue([nstate] {
+                    nstate->start();
+                    });
+            }
+            vctx.pool().wait();
+            std::cout << *top << std::endl;
+        }
+        else {
+            if(Fork_addr.empty())
+                return false;
+            std::cout << *top << std::endl;
+            for (auto SD : Fork_addr) {
+                printf("%p  %d ", SD.first, SD.second);
+                if (SD.second) {
+                    std::vector<State_Tag> avoid;
+                    avoid.emplace_back(Death);
+                    //top->compress(SD.first, Fork, avoid);
+                    std::cout << *top << std::endl;
+                }
+            }
+        }
+    };
 
-    //    if (!explore.empty()) {
-    //        std::cout << *top << std::endl;
-    //        for (State<ADDR>* nstate : explore) {
-    //            Kernel::pool->enqueue([nstate] {
-    //                nstate->start();
-    //                });
-    //        }
-    //        Kernel::pool->wait();
-    //        std::cout << *top << std::endl;
-    //    }
-    //    else {
-    //        if(Fork_addr.empty())
-    //            return false;
-    //        std::cout << *top << std::endl;
-    //        for (auto SD : Fork_addr) {
-    //            printf("%p  %d ", SD.first, SD.second);
-    //            if (SD.second) {
-    //                std::vector<State_Tag> avoid;
-    //                avoid.emplace_back(Death);
-    //                //top->compress(SD.first, Fork, avoid);
-    //                std::cout << *top << std::endl;
-    //            }
-    //        }
-    //    }
-    //};
+    return false;
 
-    //return false;
-
-    //std::vector<State*> ForkTree;
+    //std::vector<State<ADDR>*> ForkTree;
     //ForkTree.emplace_back(top);
     //std::hash_map<ADDR, UInt> Fork_addr;
     //std::hash_map<ADDR, UInt> CompStates;
@@ -138,10 +138,10 @@ bool task_explorer(State<ADDR>* top) {
     //        }
     //    }
 
-    //    for (State* s : ForkTree) {
+    //    for (State<ADDR>* s : ForkTree) {
     //        s->branchGo();
     //    }
-    //    State::pool->wait();
+    //    State<ADDR>::pool->wait();
     //    std::cout << *top << std::endl;
     //    printf("}----2-----\n");
 
@@ -174,7 +174,7 @@ bool task_explorer(State<ADDR>* top) {
     //        return ret;
     //    }
     //};
-    return false;
+    //return false;
 }
 
 template<typename ADDR>
@@ -689,8 +689,8 @@ public:
 
 
 void test(State<Addr64>& m_state) {
-    /*StateAnalyzer<Addr64> gv(m_state);
-    gv.Run();*/
+    StateAnalyzer<Addr64> gv(m_state);
+    gv.Run();
 
     TESTCODE(
         PathExplorer<Addr64> SS(m_state.info(), m_state.mem, m_state.get_cpu_ip());

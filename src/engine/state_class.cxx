@@ -110,8 +110,6 @@ int eval_all(std::deque<tval>& result, z3::solver& solv, Z3_ast nia) {
     //std::cout << nia << std::endl;
     //std::cout << state.solv.assertions() << std::endl;
     solv.push();
-    //std::vector<Z3_model> mv;
-    //mv.reserve(20);
     Z3_context ctx = solv.ctx();
     vassert(Z3_get_sort_kind(ctx, Z3_get_sort(ctx, nia)) == Z3_BV_SORT);
     for (int nway = 0; ; nway++) {
@@ -127,7 +125,7 @@ int eval_all(std::deque<tval>& result, z3::solver& solv, Z3_ast nia) {
             if (rkind != Z3_NUMERAL_AST) {
                 std::cout << rkind << Z3_ast_to_string(ctx, nia) << std::endl;
                 std::cout << solv.assertions() << std::endl;
-                vassert(0);
+                return -1;
             }
             Z3_ast eq = Z3_mk_eq(ctx, nia, r);
             Z3_inc_ref(ctx, eq);
@@ -152,6 +150,64 @@ int eval_all(std::deque<tval>& result, z3::solver& solv, Z3_ast nia) {
         }
     }
 }
+
+//-1 err. 0 false. 1 true. 2 false || true.
+int eval_all_bool(z3::solver& solv, Z3_ast nia) {
+    //std::cout << nia << std::endl;
+    //std::cout << state.solv.assertions() << std::endl;
+    int ret = -1;
+    solv.push();
+    Z3_context ctx = solv.ctx();
+    vassert(Z3_get_sort_kind(ctx, Z3_get_sort(ctx, nia)) == Z3_BOOL_SORT);
+
+
+    Z3_lbool b1 = Z3_solver_check(ctx, solv);
+    if (b1 == Z3_L_UNDEF) {
+        ret = -1; 
+        goto End;
+    }
+    if (b1 == Z3_L_FALSE) {
+        ret = 0;
+        goto End;
+    };
+
+    Z3_model m_model = Z3_solver_get_model(ctx, solv);
+    Z3_model_inc_ref(ctx, m_model);
+    Z3_ast r = 0;
+    bool status = Z3_model_eval(ctx, m_model, nia, /*model_completion*/true, &r);
+    {
+        rsbool erb = sbool(ctx, r).simplify();
+        if (erb.real()) {
+            ret = erb.tor();
+        }
+        else {
+            Z3_model_dec_ref(ctx, m_model);
+            std::cout << Z3_ast_to_string(ctx, nia) << std::endl;
+            std::cout << solv.assertions() << std::endl;
+            return -1;
+        }
+    }
+    Z3_ast neq = Z3_mk_not(ctx, nia);
+    Z3_inc_ref(ctx, neq);
+    Z3_solver_assert(ctx, solv, neq);
+    Z3_dec_ref(ctx, neq);
+    Z3_model_dec_ref(ctx, m_model);
+
+    Z3_lbool b2 = Z3_solver_check(ctx, solv);
+    if (b2 == Z3_L_UNDEF) ret = -1;
+    if (b2 == Z3_L_TRUE) ret = 2;
+End:
+    solv.pop();
+    return ret;
+}
+
+
+
+
+
+
+
+
 
 template<typename ADDR>
 z3::expr StateMEM<ADDR>::idx2Value(Addr64 base, Z3_ast idx)
@@ -606,7 +662,10 @@ inline tval State<ADDR>::tIRExpr(IRExpr* e)
     case Iex_ITE: {
         auto cond = tIRExpr(e->Iex.ITE.cond).tobool();
         if (cond.real()) {
-            return cond ? tIRExpr(e->Iex.ITE.iftrue) : tIRExpr(e->Iex.ITE.iffalse);
+            if (cond)
+                return tIRExpr(e->Iex.ITE.iftrue);
+            else
+                return tIRExpr(e->Iex.ITE.iffalse);
         }
         else {
             return ite(cond.tos(), tIRExpr(e->Iex.ITE.iftrue), tIRExpr(e->Iex.ITE.iffalse));
@@ -749,12 +808,10 @@ bool State<ADDR>::vex_start() {
                     };
                 }
                 else {
-                    std::deque<tval> guard_result;
-                    Int eval_size = eval_all(guard_result, solv, guard);
+                    Int eval_size = eval_all_bool(solv, guard);
                     if (eval_size <= 0) {  throw Expt::SolverNoSolution("eval_size <= 0", solv); }
                     if (eval_size == 1) {
-                        if (guard_result[0].tobool().tor())
-                            goto Exit_guard_true;
+                        goto Exit_guard_true;
                     }
                     if (eval_size == 2) {
                         if (s->Ist.Exit.jk != Ijk_Boring) {

@@ -38,7 +38,17 @@ namespace Expt {
         ExceptionTag m_errorId;
         /*！！！！在这里下个断！！！！*/
         /*！！！！add a backpoint here！！！！*/
-        ExceptionBase(ExceptionTag t) :m_errorId(t) {}
+        ExceptionBase(ExceptionTag t) :m_errorId(t) {
+            //错误过滤器 error filter
+            ExceptionTag dbg;
+            switch (t) {
+            case GuestMem_read_err:dbg = t; break;
+            case GuestMem_write_err:dbg = t; break;
+            case GuestRuntime_exception:dbg = t; break;
+            case IR_failure_exit:dbg = t; break;
+            case Solver_no_solution:dbg = t; break;
+            }
+        }
     public:
         ExceptionTag errTag() const { return m_errorId; };
         virtual std::string msg() const { printf("GG"); exit(1); };

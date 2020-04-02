@@ -299,34 +299,6 @@ void test2() {
 //
 
 
-//
-//
-//State_Tag success_ret3(State<Addr64>* s) {
-//    s->solv.push();
-//    UChar bf[] = { 0xEC, 0x29, 0xE3, 0x41, 0xE1, 0xF7, 0xAA, 0x1D, 0x29, 0xED, 0x29, 0x99, 0x39, 0xF3, 0xB7, 0xA9, 0xE7, 0xAC, 0x2B, 0xB7, 0xAB, 0x40, 0x9F, 0xA9, 0x31, 0x35, 0x2C, 0x29, 0xEF, 0xA8, 0x3D, 0x4B, 0xB0, 0xE9, 0xE1, 0x68, 0x7B, 0x41 };
-//
-//    auto enc = s->regs.Iex_Get<Ity_I64>(AMD64_IR_OFFSET::RDI);
-//    for (int i = 0; i < 38; i++) {
-//        Vns e = s->mem.Iex_Load<Ity_I8>(enc + i);
-//        s->solv.add(e == (UChar)bf[i]);
-//    }
-//    vex_printf("checking\n\n");
-//    auto dfdfs = s->solv.check();
-//    if (dfdfs == z3::sat) {
-//        vex_printf("issat");
-//        auto m = s->solv.get_model();
-//        std::cout << m << std::endl;
-//        exit(0);
-//    }
-//    else {
-//        vex_printf("unsat??????????\n\n%d", dfdfs);
-//    }
-//    
-//    s->solv.pop();
-//    return Death;
-//}
-//
-//
 //State_Tag success_ret33(State* s) {
 //    s->solv.push();
 //    UChar bf[] = { 133, 67, 104, 133, 245, 38, 60, 61, 39, 245, 51, 104, 62, 60, 118, 38, 245, 118, 165, 245, 19, 165, 61, 245, 62, 165, 45, 61, 245, 7, 60, 118, 29, 60, 15, 0, 133, 169 };

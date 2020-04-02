@@ -31,7 +31,9 @@ namespace cmpr {
 
 extern void* funcDict(void*);
 extern void Func_Map_Init();
-extern int eval_all(std::deque<tval>& result, z3::solver& solv, Z3_ast nia);
+extern int eval_all(std::deque<tval>& result, z3::solver& solv, Z3_ast bv);
+//-1 err. 0 false. 1 true. 2 false || true.
+int eval_all_bool(z3::solver& solv, Z3_ast nia);
 extern std::string replace(const char* pszSrc, const char* pszOld, const char* pszNew);
 extern UInt arch_2_stack_sp_iroffset(VexArch arch);
 
@@ -313,6 +315,7 @@ namespace TR {
         inline void goto_ptr(ADDR addr) { m_delta = addr - guest_start; };
         //backpoint add
         void hook_add(ADDR addr, State_Tag(*_func)(State<ADDR>&), TRControlFlags cflag = CF_None) { m_vctx.hook_add(*this, addr, _func, cflag); }
+        vex_context<ADDR>& vctx() { return m_vctx; }
 
         cmpr::CmprsContext<State<ADDR>, State_Tag> cmprContext(ADDR target_addr, State_Tag tag) { return cmpr::CmprsContext<State<ADDR>, State_Tag>(m_ctx, target_addr, tag); }
         void compress(cmpr::CmprsContext<State<ADDR>, State_Tag>& ctx);//最大化缩合状态 
