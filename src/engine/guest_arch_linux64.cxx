@@ -14,9 +14,9 @@ namespace TR {
             auto rdi = regs.get<Ity_I64>(AMD64_IR_OFFSET::RDI);
             auto rdx = regs.get<Ity_I64>(AMD64_IR_OFFSET::RDX);
             auto rsi = regs.get<Ity_I64>(AMD64_IR_OFFSET::RSI);
-            switch ((UChar)al) {
+            switch ((UChar)al.tor()) {
             case 0:// //LINUX - sys_read
-                if (rdi == 0) {
+                if (rdi.tor() == 0) {
                     rsval<Addr64> count = m_vctx.get_hook_read()(*this, rsi, rdx);
                     regs.set(AMD64_IR_OFFSET::RAX, count);
                     return Running;
@@ -33,13 +33,13 @@ namespace TR {
                 break;
             }
             case 0x5: {//LINUX - sys_newfstat
-                vex_printf("system call: sys_newfstat\tfd:0x%x 	struct stat __user *statbuf:0x%x", (ULong)rdi, (ULong)rsi);
+                vex_printf("system call: sys_newfstat\tfd:0x%x 	struct stat __user *statbuf:0x%x", (ULong)rdi.tor(), (ULong)rsi.tor());
                 regs.set(AMD64_IR_OFFSET::RAX, 0ull);
                 return Running;
             }
 
             case 0xC: {//LINUX - sys_brk
-                ULong rbx = regs.get<Ity_I64>(AMD64_IR_OFFSET::RBX);
+                ULong rbx = regs.get<Ity_I64>(AMD64_IR_OFFSET::RBX).tor();
                 vex_printf("system call: brk address:0x%x\n", rbx);
                 ULong brk = rbx;
                 if (brk) {
@@ -71,9 +71,9 @@ namespace TR {
                 // rsi filename   rdx flag
                 std::stringstream filename;
                 if (rsi.real()) {
-                    UInt p = getStr(filename, rsi);
+                    UInt p = getStr(filename, rsi.tor());
                     if (p == -1) {
-                        vex_printf("system call: sync_file_range\tname:%s flag:0x%x", filename.str().c_str(), (ULong)rdx);
+                        vex_printf("system call: sync_file_range\tname:%s flag:0x%x", filename.str().c_str(), (ULong)rdx.tor());
 
                         //result = state.file_system.sync_file_range(filename = filename, flags = rdx)
                         //setRax(state, result)
@@ -83,7 +83,7 @@ namespace TR {
             }
 
             }
-            vex_printf("system call: sys_ %d\n", (UChar)al);
+            std::cout << "system call: sys_" << al << std::endl;
         }
 
         return Death;

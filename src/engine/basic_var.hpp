@@ -1714,6 +1714,7 @@ namespace sv {
         }
 
         inline rclass& tor() const {
+            vassert(m_data_inuse);
             return *(const_cast<rsval*>(this));
         }
 
@@ -1985,8 +1986,21 @@ namespace sv {
 
         inline bool symb() const { return !m_data_inuse; }
         inline bool real() const { return m_data_inuse; }
-        //inline operator Z3_ast() const { return tos(); }
         inline operator Z3_context() const { return this->ctype_val::operator Z3_context(); }
+
+
+    private:
+        //私有的ctype_val基类模板函数居然还能类外访问？。
+        //{
+        template<class Ty, TASSERT(std::is_arithmetic<Ty>::value)>
+        inline operator Ty() const;
+
+        //reinterpret_cast
+        template<class Ty, TASSERT(is_sse<Ty>::value)>
+        inline operator Ty() const;
+
+        inline operator Z3_ast() const;
+        //}
     };
 
 
@@ -2146,7 +2160,7 @@ namespace sv{
         }
 
 
-        inline tval(Z3_context ctx, bool data) :symbol(ctx) {
+        explicit inline tval(Z3_context ctx, bool data) :symbol(ctx) {
             m_bits = 1;
             m_data_inuse = true;
             *(bool*)m_data = data;
@@ -2227,7 +2241,8 @@ namespace sv{
         //-----------------------------------------------
         template<bool _ts, int _tn, z3sk _tk = Z3_BV_SORT>
         inline ctype_val<_ts, _tn, _tk>& tor() const {
-            dassert(m_bits == _tn && m_data_inuse);
+            vassert(m_data_inuse);
+            dassert(m_bits == _tn);
             return *reinterpret_cast<ctype_val<_ts, _tn, _tk>*>(const_cast<tval*>(this));
         }
 
@@ -2323,7 +2338,7 @@ static inline auto operator!(const sbool& b) {
     return sv::symbolic<false, 1, Z3_BOOL_SORT>((Z3_context)b, Z3_mk_not((Z3_context)b, (Z3_ast)b));
 }
 static inline auto operator!(const cbool& b) {
-    return cbool((Z3_context)b, (bool)b);
+    return cbool((Z3_context)b, !(bool)b);
 }
 
 static inline tval concat(const tval& a, const tval& b) { return a.concat(b); }

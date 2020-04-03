@@ -516,7 +516,7 @@
 
 #define z3_amd64g_calculate_rflags_(FLAG)                                                \
 rsbool z3_amd64g_calculate_rflags_##FLAG(                                                \
-    ULong cc_op,                                                                         \
+    int cc_op,                                                                         \
     const rsval<uint64_t> &cc_dep1_formal,                                                 \
     const rsval<uint64_t> &cc_dep2_formal,                                                 \
     const rsval<uint64_t> &cc_ndep_formal)                                                 \
@@ -643,8 +643,8 @@ z3_amd64g_calculate_rflags_(of);
 /* returns 1 or 0 */
 
 
-static inline rsbool _z3_amd64g_calculate_condition(ULong/*AMD64Condcode*/ cond,
-    ULong cc_op,
+static inline rsbool _z3_amd64g_calculate_condition(AMD64Condcode/*AMD64Condcode*/ cond,
+    int cc_op,
     const rsval<uint64_t> &cc_dep1,
     const rsval<uint64_t> &cc_dep2,
     const rsval<uint64_t> &cc_ndep)
@@ -701,8 +701,8 @@ rsval<uint64_t> z3_amd64g_calculate_condition(const rsval<uint64_t>/*AMD64Condco
     const rsval<uint64_t> &cc_dep2,
     const rsval<uint64_t> &cc_ndep)
 {
-    auto flag = _z3_amd64g_calculate_condition(cond, cc_op, cc_dep1, cc_dep2, cc_ndep);
-    if (((ULong)cond & 1)) {
+    auto flag = _z3_amd64g_calculate_condition((AMD64Condcode)(int)cond.tor(), (int)cc_op.tor(), cc_dep1, cc_dep2, cc_ndep);
+    if (((int)cond.tor() & 1)) {
         flag = !flag;
     }
     return flag;
@@ -715,7 +715,7 @@ rsval<uint64_t> z3_amd64g_calculate_rflags_c(const rsval<uint64_t>&cc_op,
     const rsval<uint64_t>& cc_ndep)
 {
     /* Fast-case some common ones. */
-    switch ((int)cc_op) {
+    switch ((int)cc_op.tor()) {
     case AMD64G_CC_OP_LOGICQ:
     case AMD64G_CC_OP_LOGICL:
     case AMD64G_CC_OP_LOGICW:
@@ -725,7 +725,7 @@ rsval<uint64_t> z3_amd64g_calculate_rflags_c(const rsval<uint64_t>&cc_op,
         break;
     }
 
-    return z3_amd64g_calculate_rflags_cf(cc_op, cc_dep1, cc_dep2, cc_ndep);;
+    return z3_amd64g_calculate_rflags_cf(cc_op.tor(), cc_dep1, cc_dep2, cc_ndep);;
 }
 
 rsval<uint64_t> z3_amd64g_calculate_rflags_all(const rsval<uint64_t>& cc_op,
@@ -733,12 +733,12 @@ rsval<uint64_t> z3_amd64g_calculate_rflags_all(const rsval<uint64_t>& cc_op,
     const rsval<uint64_t>& cc_dep2,
     const rsval<uint64_t>& cc_ndep)
 {
-    auto of = ite(z3_amd64g_calculate_rflags_of(cc_op, cc_dep1, cc_dep2, cc_ndep), rsval<uint64_t>(cc_op, 0ull), rsval<uint64_t>(cc_op, AMD64G_CC_MASK_O));
-    auto sf = ite(z3_amd64g_calculate_rflags_sf(cc_op, cc_dep1, cc_dep2, cc_ndep), rsval<uint64_t>(cc_op, 0ull), rsval<uint64_t>(cc_op, AMD64G_CC_MASK_S));
-    auto zf = ite(z3_amd64g_calculate_rflags_zf(cc_op, cc_dep1, cc_dep2, cc_ndep), rsval<uint64_t>(cc_op, 0ull), rsval<uint64_t>(cc_op, AMD64G_CC_MASK_Z));
-    auto af = ite(z3_amd64g_calculate_rflags_af(cc_op, cc_dep1, cc_dep2, cc_ndep), rsval<uint64_t>(cc_op, 0ull), rsval<uint64_t>(cc_op, AMD64G_CC_MASK_A));
-    auto cf = ite(z3_amd64g_calculate_rflags_cf(cc_op, cc_dep1, cc_dep2, cc_ndep), rsval<uint64_t>(cc_op, 0ull), rsval<uint64_t>(cc_op, AMD64G_CC_MASK_C));
-    auto pf = ite(z3_amd64g_calculate_rflags_pf(cc_op, cc_dep1, cc_dep2, cc_ndep), rsval<uint64_t>(cc_op, 0ull), rsval<uint64_t>(cc_op, AMD64G_CC_MASK_P));
+    auto of = ite(z3_amd64g_calculate_rflags_of(cc_op.tor(), cc_dep1, cc_dep2, cc_ndep), rsval<uint64_t>(cc_op, AMD64G_CC_MASK_O), rsval<uint64_t>(cc_op, 0ull));
+    auto sf = ite(z3_amd64g_calculate_rflags_sf(cc_op.tor(), cc_dep1, cc_dep2, cc_ndep), rsval<uint64_t>(cc_op, AMD64G_CC_MASK_S), rsval<uint64_t>(cc_op, 0ull));
+    auto zf = ite(z3_amd64g_calculate_rflags_zf(cc_op.tor(), cc_dep1, cc_dep2, cc_ndep), rsval<uint64_t>(cc_op, AMD64G_CC_MASK_Z), rsval<uint64_t>(cc_op, 0ull));
+    auto af = ite(z3_amd64g_calculate_rflags_af(cc_op.tor(), cc_dep1, cc_dep2, cc_ndep), rsval<uint64_t>(cc_op, AMD64G_CC_MASK_A), rsval<uint64_t>(cc_op, 0ull));
+    auto cf = ite(z3_amd64g_calculate_rflags_cf(cc_op.tor(), cc_dep1, cc_dep2, cc_ndep), rsval<uint64_t>(cc_op, AMD64G_CC_MASK_C), rsval<uint64_t>(cc_op, 0ull));
+    auto pf = ite(z3_amd64g_calculate_rflags_pf(cc_op.tor(), cc_dep1, cc_dep2, cc_ndep), rsval<uint64_t>(cc_op, AMD64G_CC_MASK_P), rsval<uint64_t>(cc_op, 0ull));
     return of | sf | zf | af | cf | pf;
 }
 

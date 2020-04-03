@@ -106,43 +106,38 @@ void IR_init(VexControl& vc) {
 }
 
 
-int eval_all(std::deque<tval>& result, z3::solver& solv, Z3_ast nia) {
+int eval_all(std::deque<tval>& result, z3::solver& solv, Z3_ast _exp) {
     //std::cout << nia << std::endl;
     //std::cout << state.solv.assertions() << std::endl;
+    z3::context& ctx = solv.ctx();
+    z3::expr exp(ctx, _exp);
     solv.push();
-    Z3_context ctx = solv.ctx();
-    vassert(Z3_get_sort_kind(ctx, Z3_get_sort(ctx, nia)) == Z3_BV_SORT);
+
+    auto sk = exp.get_sort().sort_kind();
+    vassert(sk == Z3_BV_SORT);
+    int nbits = exp.get_sort().bv_size();
+
     for (int nway = 0; ; nway++) {
-        Z3_lbool b = Z3_solver_check(ctx, solv);
-        if (b == Z3_L_TRUE) {
-            Z3_model m_model = Z3_solver_get_model(ctx, solv);
-            Z3_model_inc_ref(ctx, m_model);
-            // mv.emplace_back(m_model);
-            Z3_ast r = 0;
-            bool status = Z3_model_eval(ctx, m_model, nia, /*model_completion*/true, &r);
-            result.emplace_back(tval(ctx, r));
-            Z3_ast_kind rkind = Z3_get_ast_kind(ctx, r);
-            if (rkind != Z3_NUMERAL_AST) {
-                std::cout << rkind << Z3_ast_to_string(ctx, nia) << std::endl;
+        auto ck = solv.check();
+        if (ck == z3::unknown) return -1;
+        if (ck == z3::sat) {
+            z3::model m = solv.get_model();
+            z3::expr re = m.eval(exp);
+            uint64_t u64 = 0;
+            if (re.is_numeral_u64(u64)) {
+                result.emplace_back(tval(ctx, u64, nbits));
+                solv.add(exp != ctx.bv_val(u64, nbits));
+            }
+            else {
+                std::cout << exp << std::endl;
                 std::cout << solv.assertions() << std::endl;
+                solv.pop();
                 return -1;
             }
-            Z3_ast eq = Z3_mk_eq(ctx, nia, r);
-            Z3_inc_ref(ctx, eq);
-            Z3_ast neq = Z3_mk_not(ctx, eq);
-            Z3_inc_ref(ctx, neq);
-            Z3_solver_assert(ctx, solv, neq);
-            Z3_dec_ref(ctx, eq);
-            Z3_dec_ref(ctx, neq);
-
-            Z3_model_dec_ref(ctx, m_model);
         }
         else {
-            if (b == Z3_L_UNDEF){
-                return -1;
-            }
 #if defined(OPSTR)
-            for (auto s : result) std::cout << ", " << Z3_ast_to_string(ctx, s);
+            for (auto s : result) std::cout << ", " << s;
 #endif
             solv.pop();
             //for (auto m : mv) Z3_model_dec_ref(ctx, m);
@@ -152,53 +147,49 @@ int eval_all(std::deque<tval>& result, z3::solver& solv, Z3_ast nia) {
 }
 
 //-1 err. 0 false. 1 true. 2 false || true.
-int eval_all_bool(z3::solver& solv, Z3_ast nia) {
-    //std::cout << nia << std::endl;
-    //std::cout << state.solv.assertions() << std::endl;
-    int ret = -1;
+int eval_all_bool(z3::solver& solv, Z3_ast _exp) {
+    int ret = -1; 
+    z3::context& ctx = solv.ctx();
+    z3::expr exp(ctx, _exp);
     solv.push();
-    Z3_context ctx = solv.ctx();
-    vassert(Z3_get_sort_kind(ctx, Z3_get_sort(ctx, nia)) == Z3_BOOL_SORT);
-
-
-    Z3_lbool b1 = Z3_solver_check(ctx, solv);
-    if (b1 == Z3_L_UNDEF) {
-        ret = -1; 
-        goto End;
-    }
-    if (b1 == Z3_L_FALSE) {
-        ret = 0;
-        goto End;
-    };
-
-    Z3_model m_model = Z3_solver_get_model(ctx, solv);
-    Z3_model_inc_ref(ctx, m_model);
-    Z3_ast r = 0;
-    bool status = Z3_model_eval(ctx, m_model, nia, /*model_completion*/true, &r);
     {
-        rsbool erb = sbool(ctx, r).simplify();
-        if (erb.real()) {
-            ret = erb.tor();
+        auto sk = exp.get_sort().sort_kind();
+        vassert(sk == Z3_BOOL_SORT);
+
+        auto b1 = solv.check();
+        if (b1 == z3::unknown) {
+            goto faild;
+        }
+        if (b1 == z3::unsat) {
+            solv.pop();
+            return 0;
+        };
+        z3::model m1 = solv.get_model();
+        z3::expr e1 = m1.eval(exp);
+        auto dk = e1.decl().decl_kind();
+        if (!(dk == Z3_OP_TRUE || dk == Z3_OP_FALSE))
+            goto faild;
+
+        ret = dk == Z3_OP_TRUE;
+
+        //----------not-----------
+        solv.add(!exp);
+        auto b2 = solv.check();
+        if (b2 == z3::unsat) {
+            solv.pop();
+            return ret;
         }
         else {
-            Z3_model_dec_ref(ctx, m_model);
-            std::cout << Z3_ast_to_string(ctx, nia) << std::endl;
-            std::cout << solv.assertions() << std::endl;
-            return -1;
+            solv.pop();
+            return 2;
         }
     }
-    Z3_ast neq = Z3_mk_not(ctx, nia);
-    Z3_inc_ref(ctx, neq);
-    Z3_solver_assert(ctx, solv, neq);
-    Z3_dec_ref(ctx, neq);
-    Z3_model_dec_ref(ctx, m_model);
-
-    Z3_lbool b2 = Z3_solver_check(ctx, solv);
-    if (b2 == Z3_L_UNDEF) ret = -1;
-    if (b2 == Z3_L_TRUE) ret = 2;
-End:
+faild: {
+    std::cout << exp << std::endl;
+    std::cout << solv.assertions() << std::endl;
     solv.pop();
-    return ret;
+    return -1;
+    };
 }
 
 
@@ -264,7 +255,7 @@ template <typename ADDR> State<ADDR>::State(vex_context<ADDR>& vctx, ADDR gse, B
     if (gse)
         guest_start_ep = gse;
     else {
-        guest_start_ep = regs.get<ADDR>(info().gRegsIpOffset());
+        guest_start_ep = regs.get<ADDR>(info().gRegsIpOffset()).tor();
     }
     guest_start = guest_start_ep;
 
@@ -408,8 +399,8 @@ UInt State<ADDR>::getStr(std::stringstream& st, ADDR addr)
         auto b = mem.load<Ity_I8>(addr++);
         if (b.real()) {
             p++;
-            st << (UChar)b;
-            if(!(UChar)b) return -1;
+            st << (UChar)b.tor();
+            if(!(UChar)b.tor()) return -1;
         }
         else {
             return p;
@@ -662,7 +653,7 @@ inline tval State<ADDR>::tIRExpr(IRExpr* e)
     case Iex_ITE: {
         auto cond = tIRExpr(e->Iex.ITE.cond).tobool();
         if (cond.real()) {
-            if (cond)
+            if (cond.tor())
                 return tIRExpr(e->Iex.ITE.iftrue);
             else
                 return tIRExpr(e->Iex.ITE.iffalse);
@@ -723,7 +714,9 @@ bool State<ADDR>::vex_start() {
     State<ADDR>* newBranch = nullptr;
     bool call_stack_is_empty = false;
 
-    if (m_vctx.get_hook(hs, guest_start)) { goto bkp_pass; }
+    if (m_vctx.get_hook(hs, guest_start)) { 
+        goto bkp_pass; 
+    }
 
     for (;;) {
     For_Begin:
@@ -808,12 +801,14 @@ bool State<ADDR>::vex_start() {
                     };
                 }
                 else {
-                    Int eval_size = eval_all_bool(solv, guard);
-                    if (eval_size <= 0) {  throw Expt::SolverNoSolution("eval_size <= 0", solv); }
-                    if (eval_size == 1) {
+                    int ebool = eval_all_bool(solv, guard.tos());
+                    if (ebool < 0) {
+                        throw Expt::SolverNoSolution("eval_size <= 0", solv);
+                    }
+                    if (ebool == 1) {
                         goto Exit_guard_true;
                     }
-                    if (eval_size == 2) {
+                    if (ebool == 2) {
                         if (s->Ist.Exit.jk != Ijk_Boring) {
                             solv.add_assert(!guard.tos());
                         }
@@ -887,7 +882,7 @@ bool State<ADDR>::vex_start() {
                 IRLoadG* lg = s->Ist.LoadG.details;
                 auto guard = tIRExpr(lg->guard).tobool();
                 if (guard.real()) {
-                    emu[lg->dst] = (((UChar)guard)) ? ILGop(lg) : tIRExpr(lg->alt);
+                    emu[lg->dst] = (guard.tor()) ? ILGop(lg) : tIRExpr(lg->alt);
                 }
                 else {
                     emu[lg->dst] = ite(guard.tos(), ILGop(lg), tIRExpr(lg->alt));
@@ -938,8 +933,8 @@ bool State<ADDR>::vex_start() {
         }
         case Ijk_Boring: break;
         case Ijk_Call: {
-            auto next = tIRExpr(irsb->next);
-            auto bp = regs.get<ADDR>(m_vctx.gRegsBpOffset());
+            auto next = tIRExpr(irsb->next).tor<false, wide>();
+            auto bp = regs.get<ADDR>(m_vctx.gRegsBpOffset()).tor();
             traceInvoke(next, bp);
             m_InvokStack.push(next, bp);
             break; 
@@ -968,12 +963,12 @@ bool State<ADDR>::vex_start() {
             State<ADDR>* prv = newBranch;
             const sbool& guard = prv->solv.get_asserts()[0];
             if (next.real()) {
-                newBranch = (State<ADDR>*)mkState((ADDR)next);
+                newBranch = (State<ADDR>*)mkState((ADDR)next.tor());
                 newBranch->solv.add_assert(!guard);
             }
             else {
                 std::deque<tval> result;
-                Int eval_size = eval_all(result, solv, next);
+                Int eval_size = eval_all(result, solv, next.tos());
                 if (eval_size <= 0) { throw Expt::SolverNoSolution("eval_size <= 0", solv); }
                 else if (eval_size == 1) { guest_start = result[0].tor<false, wide>(); }
                 else {
@@ -989,11 +984,11 @@ bool State<ADDR>::vex_start() {
         }
 
         if (next.real()) {
-            guest_start = next;
+            guest_start = next.tor();
         }
         else {
             std::deque<tval> result;
-            Int eval_size = eval_all(result, solv, next);
+            Int eval_size = eval_all(result, solv, next.tos());
             if (eval_size <= 0) { 
                 throw Expt::SolverNoSolution("eval_size <= 0", solv); 
             }

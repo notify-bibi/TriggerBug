@@ -363,9 +363,9 @@ State_Tag test_ir_dirty_hook(State<Addr32>& state) {
     PWOW64_CONTEXT ContextRecord = (PWOW64_CONTEXT)(esp - sizeof(WOW64_CONTEXT));
     PEXCEPTION_RECORD32 ExceptionRecord = (PEXCEPTION_RECORD32)(esp - sizeof(WOW64_CONTEXT) - sizeof(EXCEPTION_RECORD32));
     
-    if ((Addr32) state.vex_stack_get(1) != (Addr32)(ULong)ContextRecord) return Death;
-    if ((UInt)state.vex_stack_get(2) != EXCEPTION_BREAKPOINT) return Death;
-    if ((UInt)state.vex_stack_get(22 + offsetof(WOW64_CONTEXT, Esp) / 4) != 0x8000) return Death;
+    if ((Addr32) state.vex_stack_get(1).tor() != (Addr32)(ULong)ContextRecord) return Death;
+    if ((UInt)state.vex_stack_get(2).tor() != EXCEPTION_BREAKPOINT) return Death;
+    if ((UInt)state.vex_stack_get(22 + offsetof(WOW64_CONTEXT, Esp) / 4).tor() != 0x8000) return Death;
     return Exit;
 }
 
@@ -391,6 +391,9 @@ bool test_ir_dirty() {
 
     return state.status() == Exit;
 }
+
+
+
 
 bool creakme();
 bool asong();
@@ -480,7 +483,7 @@ int main() {
 
     //testz3();
     IR_TEST(test_ir_dirty);
-    IR_TEST(creakme);
+    //IR_TEST(creakme);
     IR_TEST(asong);
     IR_TEST(test_cmpress);
 

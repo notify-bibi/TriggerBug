@@ -6,36 +6,37 @@ void TR::win32::avoid_anti_debugging()
 {
     // kernelbase_IsDebuggerPresent
     auto peb = mem.load<Ity_I32>(TEB() + 0x30);
-    UChar v = mem.load<Ity_I8>(peb + 2);
-    if (v) {
-        std::cout << "hide kernelbase_IsDebuggerPresent" << std::endl;
-        mem.store(peb + 2, (UChar)0);
+    if (peb.real()) {
+        UChar v = mem.load<Ity_I8>(peb + 2).tor();
+        if (v) {
+            std::cout << "hide kernelbase_IsDebuggerPresent" << std::endl;
+            mem.store(peb + 2, (UChar)0);
+        }
+        //PEB.NtGlobalFlag
+        v = mem.load<Ity_I8>(peb + 0x68).tor();
+        if (v == 0x70) {
+            std::cout << "hide PEB.NtGlobalFlag" << std::endl;
+            mem.store(peb + 0x68, (UChar)0);
+        }
+        //patch PEB.ProcessHeap.Flags/ForceFlags
+        auto process_heap = mem.load<Ity_I32>(peb + 0x18);
+        v = mem.load<Ity_I8>(process_heap + 0xc).tor();
+        if (v != 2) {
+            std::cout << "hide PEB.ProcessHeap.Flags" << std::endl;
+            mem.store(process_heap + 0xc, 2);
+        }
+        v = mem.load<Ity_I8>(process_heap + 0x10).tor();
+        if (v != 0) {
+            std::cout << "hide PEB.ProcessHeap.ForceFlags" << std::endl;
+            mem.store(process_heap + 0x10, 0);
+        }
     }
-    //PEB.NtGlobalFlag
-    v = mem.load<Ity_I8>(peb + 0x68);
-    if (v == 0x70) {
-        std::cout << "hide PEB.NtGlobalFlag" << std::endl;
-        mem.store(peb + 0x68, (UChar)0);
-    }
-    //patch PEB.ProcessHeap.Flags/ForceFlags
-    auto process_heap = mem.load<Ity_I32>(peb + 0x18);
-    v = mem.load<Ity_I8>(process_heap + 0xc);
-    if (v != 2) {
-        std::cout << "hide PEB.ProcessHeap.Flags" << std::endl;
-        mem.store(process_heap + 0xc, 2);
-    }
-    v = mem.load<Ity_I8>(process_heap + 0x10);
-    if (v != 0) {
-        std::cout << "hide PEB.ProcessHeap.ForceFlags" << std::endl;
-        mem.store(process_heap + 0x10, 0);
-    }
-    
 }
 
 //https://docs.microsoft.com/en-us/windows/win32/devnotes/ntreadfile
 State_Tag TR::win32::Sys_syscall() 
 {
-    goto_ptr(vex_pop());
+    goto_ptr(vex_pop().tor());
     m_InvokStack.pop();
     auto eax = regs.get<Ity_I32>(X86_IR_OFFSET::EAX);
     auto arg0 = vex_stack_get(1);
@@ -48,7 +49,7 @@ State_Tag TR::win32::Sys_syscall()
 
 
     if (eax.real()) {//这就非常的烦
-        switch ((UInt)eax) {
+        switch ((UInt)eax.tor()) {
         case 0x0000018: {//ntdll_NtAllocateVirtualMemory
             /*
             HANDLE ProcessHandle,
@@ -59,19 +60,19 @@ State_Tag TR::win32::Sys_syscall()
             ULONG Protect
             */
 
-            UInt BaseAddress = mem.load<Ity_I32>(arg1);
-            UInt RegionSize = mem.load<Ity_I32>(arg3);;
+            UInt BaseAddress = mem.load<Ity_I32>(arg1).tor();
+            UInt RegionSize = mem.load<Ity_I32>(arg3).tor();
             mem.map(BaseAddress, RegionSize);
 
             regs.set(X86_IR_OFFSET::EAX, 0);
             return Running;
         }
         case 0x19: {//ntdll_NtQueryInformationProcess
-            _In_      HANDLE           ProcessHandle = (HANDLE)(DWORD)arg0;
-            _In_      PROCESSINFOCLASS ProcessInformationClass = (PROCESSINFOCLASS)(DWORD)arg1;
-            _Out_     PVOID            ProcessInformation = (PVOID)(DWORD)arg2;
-            _In_      DWORD            ProcessInformationLength = arg3;
-            _Out_opt_ DWORD            ReturnLength = arg4;
+            _In_      HANDLE           ProcessHandle = (HANDLE)(DWORD)arg0.tor();
+            _In_      PROCESSINFOCLASS ProcessInformationClass = (PROCESSINFOCLASS)(DWORD)arg1.tor();
+            _Out_     PVOID            ProcessInformation = (PVOID)(DWORD)arg2.tor();
+            _In_      DWORD            ProcessInformationLength = arg3.tor();
+            _Out_opt_ DWORD            ReturnLength = arg4.tor();
 
             if (ProcessInformationClass == ProcessDebugPort) {//kernelbase_CheckRemoteDebuggerPresent
                 mem.store((Addr32)(ULong)ProcessInformation, 0);
@@ -85,7 +86,7 @@ State_Tag TR::win32::Sys_syscall()
             return Running;
         }
         case 0x43: {
-            PWOW64_CONTEXT ctx = (PWOW64_CONTEXT)(DWORD)arg0;
+            PWOW64_CONTEXT ctx = (PWOW64_CONTEXT)(DWORD)arg0.tor();
             Addr32 next = dirty_call("getExecptionCtx32", Kc32::getExecptionCtx, { rsval<Addr64>(m_ctx, (size_t)ctx), rsval<Addr64>(m_ctx, getGSPTR()) }, Ity_I32);
             goto_ptr(next);
             m_InvokStack.clear();
@@ -155,10 +156,10 @@ State_Tag TR::win32::Ijk_call(IRJumpKind kd)
     }
     case Ijk_NoDecode: {
         //EA 09 60 47 77 33 00 00
-        if ((ULong)mem.load<Ity_I64>(get_cpu_ip()) == 0x3377476009ea) {
+        if ((ULong)mem.load<Ity_I64>(get_cpu_ip()).tor() == 0x3377476009ea) {
             return Sys_syscall();
         }
-        if ((UChar)mem.load<Ity_I8>(get_cpu_ip()) == 0xf2) {
+        if ((UChar)mem.load<Ity_I8>(get_cpu_ip()).tor() == 0xf2) {
             set_delta(1);
             return Running;
         }
@@ -187,7 +188,7 @@ void TR::win32::cpu_exception(Expt::ExceptionBase const& e)
     std::cerr << "Error message:" << std::endl;
     std::cerr << e << std::endl;
     UInt stack_size = sizeof(EXCEPTION_RECORD32) + sizeof(WOW64_CONTEXT);
-    UInt sp_tmp = regs.get<Ity_I32>(X86_IR_OFFSET::ESP);
+    UInt sp_tmp = regs.get<Ity_I32>(X86_IR_OFFSET::ESP).tor();
     UInt esp = sp_tmp - 532;
 
 
@@ -247,9 +248,9 @@ void TR::win32::cpu_exception(Expt::ExceptionBase const& e)
 
     std::cout << " SEH Exception ID:[" << std::hex << ExceptionCode << "] at:" << std::hex << get_cpu_ip() << std::endl;
 
-    //tval eflags = z3_x86g_calculate_eflags_all(regs.get<Ity_I32>(X86_IR_OFFSET::CC_OP), regs.get<Ity_I32>(X86_IR_OFFSET::CC_DEP1), regs.get<Ity_I32>(X86_IR_OFFSET::CC_DEP2), regs.get<Ity_I32>(X86_IR_OFFSET::CC_NDEP));
+    auto eflags = z3_x86g_calculate_eflags_all(regs.get<Ity_I32>(X86_IR_OFFSET::CC_OP), regs.get<Ity_I32>(X86_IR_OFFSET::CC_DEP1), regs.get<Ity_I32>(X86_IR_OFFSET::CC_DEP2), regs.get<Ity_I32>(X86_IR_OFFSET::CC_NDEP));
     
-    rcval<int> eflags(m_ctx, 0);
+
     dirty_call("putExecptionCtx32", Kc32::putExecptionCtx,
         {
             rcval<Addr32>(m_ctx, (size_t)ExceptionRecord), rcval<Addr32>(m_ctx, (size_t)ContextRecord),

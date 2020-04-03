@@ -98,7 +98,7 @@ namespace TR {
         static void init_vta_chunk(VexTranslateArgs& vta_chunk, VexGuestExtents& vge_chunk, VexArch guest, ULong traceflags);
         void init_vta_chunk(VexTranslateArgs& vta_chunk, VexGuestExtents& vge_chunk) { init_vta_chunk(vta_chunk, vge_chunk, m_guest, m_traceflags); }
 
-        inline void set_system(GuestSystem s) { m_guest_system = s; }    
+        inline void set_system(GuestSystem s) { m_guest_system = s; }
         IRConst const* softwareBptConst() const { return &m_bpt_code; };
 
         void softwareBptStore(UChar* dst) { memcpy(dst, &m_bpt_code.Ico.U8, IRConstTag2nb(m_bpt_code.tag)); };
@@ -141,7 +141,8 @@ namespace TR {
         ThreadPool m_pool;
         std::atomic_uint32_t m_user_counter = 1;
         UInt mk_user_id() { vassert(m_user_counter < -1u);  return m_user_counter++; }
-        vctx_base(VexArch guest, const char* filename):vex_info(guest, filename), m_pool(gmax_threads_num()){}
+        vctx_base(VexArch guest, const char* filename) :vex_info(guest, filename), m_pool(gmax_threads_num()) {}
+        vctx_base(VexArch guest, int max_threads, const char* filename) :vex_info(guest, filename), m_pool(max_threads) { m_maxThreadsNum = max_threads; }
         ThreadPool& pool() { return m_pool; }
 
         inline operator vex_context<Addr32>& () { return *this; };
@@ -180,6 +181,12 @@ namespace TR {
         void hook_add(State<ADDR>&state, ADDR addr, State_Tag(*_func)(State<ADDR>&), TRControlFlags cflag);
         bool get_hook(Hook_struct& hs, ADDR addr);
     public:
+
+        vex_context(VexArch guest, int max_threads, const char* filename) :vctx_base(guest, max_threads, filename), m_top_state(nullptr) {
+            hook_read(vex_read<ADDR>);
+            hook_write(vex_write<ADDR>);
+        };
+
         vex_context(VexArch guest, const char* filename) :vctx_base(guest, filename), m_top_state(nullptr) {
             hook_read(vex_read<ADDR>);
             hook_write(vex_write<ADDR>);

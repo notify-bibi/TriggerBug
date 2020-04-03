@@ -33,12 +33,12 @@ State_Tag success_ret3(State<Addr64>& s) {
 
 
 bool asong() {
-    vex_context<Addr64> v(VexArchAMD64, PROJECT_DIR"PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.dump");
-
+    vex_context<Addr64> v(VexArchAMD64, 1, PROJECT_DIR"PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.dump");
 
 
     SP::linux64 state(v, 0, True);
     //state.setFlag(CF_ppStmts);
+    state.setFlag(CF_traceJmp);
     std::cout << state << std::endl;
 
     Kernel& k = state;

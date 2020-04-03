@@ -1,7 +1,5 @@
 #include "engine/engine.h"
 #include "z3_target_call.h"
-#include "AMD64/amd64CCall.h"
-#include "X86/x86CCall.h"
 #include "z3_target_defs.h"
 #include "engine/variable.h"
 #define _SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS
@@ -10,39 +8,39 @@
 
 
 
-static const UChar s_parity_table[256] = {
-    AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0,
-    0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P,
-    0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P,
-    AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0,
-    0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P,
-    AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0,
-    AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0,
-    0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P,
-    0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P,
-    AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0,
-    AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0,
-    0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P,
-    AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0,
-    0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P,
-    0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P,
-    AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0,
-    0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P,
-    AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0,
-    AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0,
-    0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P,
-    AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0,
-    0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P,
-    0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P,
-    AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0,
-    AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0,
-    0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P,
-    0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P,
-    AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0,
-    0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P,
-    AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0,
-    AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0,
-    0, AMD64G_CC_MASK_P, AMD64G_CC_MASK_P, 0, AMD64G_CC_MASK_P, 0, 0, AMD64G_CC_MASK_P,
+static const bool s_parity_table[256] = {
+    true, 0, 0, true, 0, true, true, 0,
+    0, true, true, 0, true, 0, 0, true,
+    0, true, true, 0, true, 0, 0, true,
+    true, 0, 0, true, 0, true, true, 0,
+    0, true, true, 0, true, 0, 0, true,
+    true, 0, 0, true, 0, true, true, 0,
+    true, 0, 0, true, 0, true, true, 0,
+    0, true, true, 0, true, 0, 0, true,
+    0, true, true, 0, true, 0, 0, true,
+    true, 0, 0, true, 0, true, true, 0,
+    true, 0, 0, true, 0, true, true, 0,
+    0, true, true, 0, true, 0, 0, true,
+    true, 0, 0, true, 0, true, true, 0,
+    0, true, true, 0, true, 0, 0, true,
+    0, true, true, 0, true, 0, 0, true,
+    true, 0, 0, true, 0, true, true, 0,
+    0, true, true, 0, true, 0, 0, true,
+    true, 0, 0, true, 0, true, true, 0,
+    true, 0, 0, true, 0, true, true, 0,
+    0, true, true, 0, true, 0, 0, true,
+    true, 0, 0, true, 0, true, true, 0,
+    0, true, true, 0, true, 0, 0, true,
+    0, true, true, 0, true, 0, 0, true,
+    true, 0, 0, true, 0, true, true, 0,
+    true, 0, 0, true, 0, true, true, 0,
+    0, true, true, 0, true, 0, 0, true,
+    0, true, true, 0, true, 0, 0, true,
+    true, 0, 0, true, 0, true, true, 0,
+    0, true, true, 0, true, 0, 0, true,
+    true, 0, 0, true, 0, true, true, 0,
+    true, 0, 0, true, 0, true, true, 0,
+    0, true, true, 0, true, 0, 0, true,
 };
 
 rsbool parity_table(sv::rsval<true, 8, Z3_BV_SORT> const&d) {

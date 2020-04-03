@@ -188,7 +188,7 @@ namespace TR {
         if (m_callBackDict.find(addr) == m_callBackDict.end()) {
             auto o = state.mem.load<Ity_I64>(addr);
             vassert(o.real());
-            m_callBackDict[addr] = Hook_struct{ func , IRConstTag2nb(state.info().softwareBptConst()->tag) , o , cflag };
+            m_callBackDict[addr] = Hook_struct{ func , IRConstTag2nb(state.info().softwareBptConst()->tag) , o.tor() , cflag };
             state.mem.Ist_Store(addr, tval(state.m_ctx, state.info().softwareBptConst()));
         }
         else {

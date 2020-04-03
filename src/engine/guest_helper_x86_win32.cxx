@@ -1,4 +1,5 @@
 #include "engine/guest_helper_defs.h"
+#include "guest_x86_defs.h"
 #include <Windows.h>
 
 
@@ -123,7 +124,9 @@ namespace Kc32 {
         gst->guest_EIP = ContextRecord->Eip;
         gst->guest_CS = ContextRecord->SegCs;
                            
-        //eflags = ContextRecord->EFlags;
+        gst->guest_CC_OP = X86G_CC_OP_COPY;
+        gst->guest_CC_DEP1 = ContextRecord->EFlags;
+
         gst->guest_ESP = ContextRecord->Esp;
         gst->guest_SS = ContextRecord->SegSs;
 

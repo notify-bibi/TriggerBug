@@ -613,8 +613,8 @@ rsval<uint32_t> z3_x86g_calculate_condition(
     const rsval<uint32_t>& cc_dep2,
     const rsval<uint32_t>& cc_ndep)
 {
-    auto flag = _z3_x86g_calculate_condition(cond, cc_op, cc_dep1, cc_dep2, cc_ndep);
-    if (((UInt)cond & 1)) {
+    auto flag = _z3_x86g_calculate_condition(cond.tor(), cc_op.tor(), cc_dep1, cc_dep2, cc_ndep);
+    if (((int)cond.tor() & 1)) {
         flag = !flag;
     }
     return flag;
@@ -626,7 +626,7 @@ rsval<uint32_t> z3_x86g_calculate_eflags_c(
     const rsval<uint32_t>& cc_dep2,
     const rsval<uint32_t>& cc_ndep)
 {
-    return z3_x86g_calculate_eflags_cf(cc_op, cc_dep1, cc_dep2, cc_ndep);
+    return z3_x86g_calculate_eflags_cf(cc_op.tor(), cc_dep1, cc_dep2, cc_ndep);
 }
 
 rsval<uint32_t> z3_x86g_calculate_eflags_all(
@@ -636,12 +636,12 @@ rsval<uint32_t> z3_x86g_calculate_eflags_all(
     const rsval<uint32_t>& cc_ndep) 
 {
 
-    auto of = ite(z3_x86g_calculate_eflags_of(cc_op, cc_dep1, cc_dep2, cc_ndep), rsval<uint32_t>(cc_op, 0u), rsval<uint32_t>(cc_op, X86G_CC_MASK_O));
-    auto sf = ite(z3_x86g_calculate_eflags_sf(cc_op, cc_dep1, cc_dep2, cc_ndep), rsval<uint32_t>(cc_op, 0u), rsval<uint32_t>(cc_op, X86G_CC_MASK_S));
-    auto zf = ite(z3_x86g_calculate_eflags_zf(cc_op, cc_dep1, cc_dep2, cc_ndep), rsval<uint32_t>(cc_op, 0u), rsval<uint32_t>(cc_op, X86G_CC_MASK_Z));
-    auto af = ite(z3_x86g_calculate_eflags_af(cc_op, cc_dep1, cc_dep2, cc_ndep), rsval<uint32_t>(cc_op, 0u), rsval<uint32_t>(cc_op, X86G_CC_MASK_A));
-    auto cf = ite(z3_x86g_calculate_eflags_cf(cc_op, cc_dep1, cc_dep2, cc_ndep), rsval<uint32_t>(cc_op, 0u), rsval<uint32_t>(cc_op, X86G_CC_MASK_C));
-    auto pf = ite(z3_x86g_calculate_eflags_pf(cc_op, cc_dep1, cc_dep2, cc_ndep), rsval<uint32_t>(cc_op, 0u), rsval<uint32_t>(cc_op, X86G_CC_MASK_P));
+    auto of = ite(z3_x86g_calculate_eflags_of(cc_op.tor(), cc_dep1, cc_dep2, cc_ndep), rsval<uint32_t>(cc_op, X86G_CC_MASK_O), rsval<uint32_t>(cc_op, 0u));
+    auto sf = ite(z3_x86g_calculate_eflags_sf(cc_op.tor(), cc_dep1, cc_dep2, cc_ndep), rsval<uint32_t>(cc_op, X86G_CC_MASK_S), rsval<uint32_t>(cc_op, 0u));
+    auto zf = ite(z3_x86g_calculate_eflags_zf(cc_op.tor(), cc_dep1, cc_dep2, cc_ndep), rsval<uint32_t>(cc_op, X86G_CC_MASK_Z), rsval<uint32_t>(cc_op, 0u));
+    auto af = ite(z3_x86g_calculate_eflags_af(cc_op.tor(), cc_dep1, cc_dep2, cc_ndep), rsval<uint32_t>(cc_op, X86G_CC_MASK_A), rsval<uint32_t>(cc_op, 0u));
+    auto cf = ite(z3_x86g_calculate_eflags_cf(cc_op.tor(), cc_dep1, cc_dep2, cc_ndep), rsval<uint32_t>(cc_op, X86G_CC_MASK_C), rsval<uint32_t>(cc_op, 0u));
+    auto pf = ite(z3_x86g_calculate_eflags_pf(cc_op.tor(), cc_dep1, cc_dep2, cc_ndep), rsval<uint32_t>(cc_op, X86G_CC_MASK_P), rsval<uint32_t>(cc_op, 0u));
     return of | sf | zf | af | cf | pf;
 }
 

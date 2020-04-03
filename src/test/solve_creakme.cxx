@@ -12,7 +12,7 @@ State_Tag hoo(State<Addr32> &s) {
 
 State_Tag hook2(State<Addr32>& s) {
     SP::win32& sp = (SP::win32&)s;
-    sp.setFlag(CF_traceJmp);
+    //sp.setFlag(CF_traceJmp);
     return Running;
 }
 

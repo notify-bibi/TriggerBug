@@ -121,7 +121,7 @@ void cmpr::GPMana::operator=(const GPMana& gp)
 
 void cmpr::GPMana::add(sbool const& ass, PACK const& v)
 {
-    if (v.real()) add((Z3_ast)ass, (ULong)v); else  add((Z3_ast)ass, (Z3_ast)v);
+    if (v.real()) add((Z3_ast)ass, (ULong)v.tor()); else  add((Z3_ast)ass, (Z3_ast)v.tos());
 }
 
 void cmpr::GPMana::add(Z3_ast ass, Z3_ast v)

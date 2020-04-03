@@ -313,7 +313,7 @@ private:
                 Addr64 stack_ret = m_stack_addr + m_stack_reservve_size - 0x8ull * MAX_GUEST_DIRTY_CALL_PARARM_NUM;
                 auto rsp = regs.get<Ity_I64>(AMD64_IR_OFFSET::RSP);
                 if (rsp.real()) {
-                    vassert((ULong)rsp == stack_ret);
+                    vassert((ULong)rsp.tor() == stack_ret);
                     set_status(Dirty_ret);
                     break;
                 }
@@ -363,7 +363,7 @@ private:
                 case Ist_Exit: {
                     rsbool guard = tIRExpr(s->Ist.Exit.guard).tobool();
                     if (guard.real()) {
-                        if (guard) {
+                        if (guard.tor()) {
                         Exit_guard_true:
                             vassert(s->Ist.Exit.jk == Ijk_Boring);
                             m_host_addr = (UChar*)s->Ist.Exit.dst->Ico.U64;
@@ -371,13 +371,15 @@ private:
                         };
                     }
                     else {
-                        UInt eval_size = eval_all_bool(m_solv, guard);
-                        vassert(eval_size <= 2);
-                        if (eval_size == 0) { m_status = Death; goto EXIT; }
-                        if (eval_size == 1) {
+                        int ebool = eval_all_bool(m_solv, guard.tos());
+                        vassert(ebool <= 2);
+                        if (ebool < 0) {
+                            throw Expt::SolverNoSolution("eval_size <= 0", m_solv);
+                        }
+                        if (ebool == 1) {
                             goto Exit_guard_true;
                         }
-                        if (eval_size == 2) {
+                        if (ebool == 2) {
                             if (s->Ist.Exit.jk != Ijk_Boring) {
                                 m_solv.add_assert(!guard.tos());
                             }
@@ -410,7 +412,7 @@ private:
                     }
                     break;
                 };
-                case Ist_AbiHint: { m_InvokStack.push(tIRExpr(s->Ist.AbiHint.nia), regs.get<Ity_I64>(AMD64_IR_OFFSET::RBP)); break; }
+                case Ist_AbiHint: { m_InvokStack.push(tIRExpr(s->Ist.AbiHint.nia), regs.get<Ity_I64>(AMD64_IR_OFFSET::RBP).tor()); break; }
                 case Ist_PutI: {
                     auto ix = tIRExpr(s->Ist.PutI.details->ix);
                     vassert(ix.real());
@@ -427,7 +429,7 @@ private:
                     if (guard.symb()) {
                         VPANIC("auto guard = m_state.tIRExpr(dirty->guard); symbolic");
                     }
-                    if (((UChar)guard) & 1) {
+                    if ((UChar)guard.tor()) {
                         dirty_run(dirty);
                         if (dirty->tmp != IRTemp_INVALID) {
                             emu[dirty->tmp] = result(typeOfIRTemp(irsb->tyenv, dirty->tmp));
@@ -440,7 +442,7 @@ private:
                     IRLoadG* lg = s->Ist.LoadG.details;
                     rsbool guard = tIRExpr(lg->guard).tobool();
                     if (guard.real()) {
-                        emu[lg->dst] = (((UChar)guard & 1)) ? ILGop(lg) : tIRExpr(lg->alt);
+                        emu[lg->dst] = (guard.tor()) ? ILGop(lg) : tIRExpr(lg->alt);
                     }
                     else {
                         emu[lg->dst] = ite(guard.tos(), ILGop(lg), tIRExpr(lg->alt));
@@ -451,7 +453,7 @@ private:
                     IRStoreG* sg = s->Ist.StoreG.details;
                     rsbool guard = tIRExpr(sg->guard).tobool();
                     if (guard.real()) {
-                        if ((UChar)guard)
+                        if (guard.tor())
                             mem.Ist_Store(tIRExpr(sg->addr), tIRExpr(sg->data));
                     }
                     else {
@@ -483,7 +485,7 @@ private:
                 break;
             }
             case Ijk_Call:{
-                m_InvokStack.push(tIRExpr(irsb->next), regs.get<Ity_I64>(AMD64_IR_OFFSET::RBP));
+                m_InvokStack.push(tIRExpr(irsb->next), regs.get<Ity_I64>(AMD64_IR_OFFSET::RBP).tor());
                 break;
             }
             case Ijk_Ret: {
@@ -500,12 +502,12 @@ private:
                 DState* prv = newBranch;
                 sbool const& guard = prv->m_solv.get_asserts()[0];
                 if (next.real()) {
-                    newBranch = mkState(next);
+                    newBranch = mkState(next.tor());
                     newBranch->m_solv.add_assert(!guard);
                 }
                 else {
                     std::deque<tval> result;
-                    UInt eval_size = eval_all(result, m_solv, next);
+                    UInt eval_size = eval_all(result, m_solv, next.tos());
                     if (eval_size == 0) {
                         m_status = Death; 
                         goto EXIT; 
@@ -530,7 +532,7 @@ private:
             }
             else {
                 std::deque<tval> result;
-                UInt eval_size = eval_all(result, m_solv, next);
+                UInt eval_size = eval_all(result, m_solv, next.tor());
                 if (eval_size == 0) { m_status = Death; goto EXIT; }
                 else if (eval_size == 1) {
                     m_host_addr = (UChar*)(size_t)result[0].tor<false, 64>();
@@ -717,7 +719,7 @@ tval DState::tIRExpr(IRExpr* e)
     case Iex_ITE: {
         auto cond = tIRExpr(e->Iex.ITE.cond).tobool();
         if (cond.real()) {
-            if (cond)
+            if (cond.tor())
                 return tIRExpr(e->Iex.ITE.iftrue);
             else
                 return tIRExpr(e->Iex.ITE.iffalse);

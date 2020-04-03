@@ -21,7 +21,7 @@ using namespace TR;
 template<typename ADDR>
 rsval<ADDR> TR::vex_read(State<ADDR>& s, const rsval<ADDR>& addr, const rsval<ADDR>& len) {
     vassert(len.real());
-    UInt size = len;
+    UInt size = len.tor();
     std::string st;
     char buff[2];
     buff[1] = 0;
@@ -39,14 +39,14 @@ rsval<ADDR> TR::vex_read(State<ADDR>& s, const rsval<ADDR>& addr, const rsval<AD
 template<typename ADDR>
 void TR::vex_write(State<ADDR>& s, const rsval<ADDR>& addr, const rsval<ADDR>& len) {
     vassert(len.real());
-    UInt size = len;
+    UInt size = len.tor();
     std::string st;
     char buff[2];
     buff[1] = 0;
     for (UInt n = 0; n < size; n += 1) {
         auto chr = s.mem.load<Ity_I8>(addr + n);
         if (chr.real()) {
-            buff[0] = chr;
+            buff[0] = chr.tor();
             st.append(buff);
         }
         else {

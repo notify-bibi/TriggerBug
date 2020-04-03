@@ -41,7 +41,7 @@ namespace TR {
     template<typename ADDR>
     void EmuEnvironment<MAX_TMP>::set_guest_code_temp(MEM<ADDR>& mem_obj, Addr64 virtual_addr, Hook_struct const& hs)
     {
-        *(__m128i*)(m_pap.swap) = mem_obj.load<Ity_V256>(virtual_addr);
+        *(__m128i*)(m_pap.swap) = mem_obj.load<Ity_V256>(virtual_addr).tor();
         memcpy(m_pap.swap, &hs.original.m64_u8, hs.nbytes);
         m_pap.start_swap = 2;
         m_pap.guest_max_insns = 1;
