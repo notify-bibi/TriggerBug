@@ -166,10 +166,10 @@ namespace TR {
             z3::context& m_ctx;
             Z3_ast m_addr;
             Z3_ast last_avoid_addr;
+            Z3_lbool m_lbool;
             //std::vector<Z3_model> v_model;
         public:
-            Z3_lbool m_lbool;
-            inline Itaddress(z3::solver& s, Z3_ast addr) :m_ctx(m_solver.ctx()), m_solver(s), m_addr(addr) {
+            Itaddress(z3::solver& s, Z3_ast addr) :m_ctx(m_solver.ctx()), m_solver(s), m_addr(addr) {
                 m_addr = Z3_simplify(s.ctx(), m_addr);
                 Z3_inc_ref(m_ctx, m_addr);
                 m_solver.push();
@@ -182,6 +182,7 @@ namespace TR {
 
             inline bool check() {
                 m_lbool = Z3_solver_check(m_ctx, m_solver);
+                vassert(m_lbool != Z3_L_UNDEF);
                 return m_lbool == Z3_L_TRUE;
             }
 
@@ -232,7 +233,9 @@ namespace TR {
         virtual void unmap_interface(PAGE* pt[1]) override;
 
     private:
-        void CheckSelf(PAGE*& P, ADDR address);
+        bool check_page(PAGE*& P, PAGE** PT);
+        PAGE* get_write_page(ADDR addr);
+        tval _Iex_Load(PAGE* P, ADDR address, UShort size);
         void init_page(PAGE*& P, ADDR address);
         UInt write_bytes(ULong address, ULong length, UChar* data);
         MEM(TR::vctx_base & vctxb, z3::solver& s, z3::vcontext& ctx, PML4T** cr3, Int _user, Bool _need_record) :
@@ -278,22 +281,6 @@ namespace TR {
         }
         Itaddress addr_begin(z3::solver& s, Z3_ast addr) { return Itaddress(s, addr); }
 
-    private:
-       /* Vns _Iex_Load_a(PAGE* P, ADDR address, UShort size) {
-            PAGE* nP = get_mem_page(address + 0x1000);
-            MEM_ACCESS_ASSERT_R(nP, address + 0x1000);
-            UInt plength = 0x1000 - ((UShort)address & 0xfff);
-            return (*nP)->Iex_Get(0, size - plength).translate(m_ctx).Concat((*P)->Iex_Get(((UShort)address & 0xfff), plength));
-        }
-
-        Vns _Iex_Load_b(PAGE* P, ADDR address, UShort size) {
-            PAGE* nP = get_mem_page(address + 0x1000);
-            MEM_ACCESS_ASSERT_R(nP, address + 0x1000);
-            UInt plength = 0x1000 - ((UShort)address & 0xfff);
-            return (*nP)->Iex_Get(0, size - plength).translate(m_ctx).Concat((*P)->Iex_Get(((UShort)address & 0xfff), plength, m_ctx));
-        }*/
-
-
     public:
 
         //----------------------- real address -----------------------
@@ -308,11 +295,10 @@ namespace TR {
             };
 
             if ((address & 0xfff) >= (0x1001 - (nbits >> 3))) {
-                vassert(0);
-                //return _Iex_Load_a(P, address, 2);
+                return _Iex_Load(page, address, nbits >> 3).tors<sign, nbits, sk>();
             }
 
-            if (user == page->get_user()) {//WNC
+            if (user == page->get_user()) {
                 return (*page)->get<sign, nbits, sk>(address & 0xfff);
             }
             else {
@@ -339,20 +325,24 @@ namespace TR {
         sv::rsval<sign, nbits, sk> load_all(const sval<ADDR>& address) {
             sv::symbolic<sign, nbits, sk> ret(m_ctx);
             bool first = true;
-            Itaddress it = this->addr_begin(m_solver, address);
-            while (it.check()) {
-                rsval<ADDR> addr = *it;
-                sv::rsval<sign, nbits, sk>  data = load<sign, nbits, sk>((ADDR)addr.tor());
-                if (first) {
-                    first = false;
-                    ret = data.tos();
-                }
-                else {
-                    ret = ite(address == addr.tos(), data.tos(), ret);
-                }
-                it++;
+            {
+                Itaddress it = this->addr_begin(m_solver, address);
+                while (it.check()) {
+                    rsval<ADDR> addr = *it;
+                    sv::rsval<sign, nbits, sk>  data = load<sign, nbits, sk>((ADDR)addr.tor());
+                    if (first) {
+                        first = false;
+                        ret = data.tos();
+                    }
+                    else {
+                        ret = ite(address == addr.tos(), data.tos(), ret);
+                    }
+                    it++;
+                };
+            }
+            if (!(Z3_ast)ret) { 
+                throw Expt::SolverNoSolution("load error", m_solver);
             };
-            if (!(Z3_ast)ret) { throw Expt::SolverNoSolution("load error", m_solver); };
             return ret;
         }
 
@@ -495,17 +485,10 @@ namespace TR {
 
         template<typename DataTy, TASSERT(std::is_arithmetic<DataTy>::value)>
         void store(ADDR address, DataTy data) {
-            CODEBLOCKISWRITECHECK(address);
-            PAGE* page = get_mem_page(address);
-            MEM_ACCESS_ASSERT_W(page, address);
-            CheckSelf(page, address);
-            vassert(page->get_user() == user);
-            page->check_ref_cound();
+            PAGE* page = get_write_page(address);
             UShort offset = address & 0xfff;
             if (fastalignD1[sizeof(data) << 3] > 0xFFF - offset) {
-                PAGE* npage = get_mem_page(address + 0x1000);
-                MEM_ACCESS_ASSERT_W(npage, address + 0x1000);
-                CheckSelf(npage, address + 0x1000);
+                PAGE* npage = get_write_page(address + 0x1000);
                 UInt plength = (0x1000 - offset);
                 (*page)->Ist_Put(offset, (void*)&data, plength);
                 (*npage)->Ist_Put(0, ((UChar*)((void*)&data)) + plength, (sizeof(data) - plength));
@@ -520,17 +503,10 @@ namespace TR {
 
         template<typename DataTy, TASSERT(sv::is_sse<DataTy>::value)>
         void store(ADDR address, const DataTy& data) {
-            CODEBLOCKISWRITECHECK(address);
-            PAGE* page = get_mem_page(address);
-            MEM_ACCESS_ASSERT_W(page, address);
-            CheckSelf(page, address);
-            vassert(page->get_user() == user);
-            page->check_ref_cound();
+            PAGE* page = get_write_page(address);
             UShort offset = address & 0xfff;
             if (fastalignD1[sizeof(data) << 3] > 0xFFF - offset) {
-                PAGE* npage = get_mem_page(address + 0x1000);
-                MEM_ACCESS_ASSERT_W(npage, address + 0x1000);
-                CheckSelf(npage, address + 0x1000);
+                PAGE* npage = get_write_page(address + 0x1000);
                 UInt plength = (0x1000 - offset);
                 (*page)->Ist_Put(offset, (void*)&data, plength);
                 (*npage)->Ist_Put(0, ((UChar*)((void*)&data)) + plength, (sizeof(data) - plength));
@@ -546,23 +522,16 @@ namespace TR {
         template<int nbits>
         inline void store(ADDR address, Z3_ast data) {
             static_assert((nbits & 7) == 0, "err store");
-            CODEBLOCKISWRITECHECK(address);
-            PAGE* page = get_mem_page(address);
-            MEM_ACCESS_ASSERT_W(page, address);
-            CheckSelf(page, address);
-            vassert(page->get_user() == user);
-            page->check_ref_cound();
+            PAGE* page = get_write_page(address);
             UShort offset = address & 0xfff;
             if (fastalignD1[nbits] > 0xFFF - offset) {
-                PAGE* npage = get_mem_page(address + 0x1000);
-                MEM_ACCESS_ASSERT_W(npage, address + 0x1000);
-                CheckSelf(npage, address + 0x1000);
+                PAGE* npage = get_write_page(address + 0x1000);
                 UInt plength = (0x1000 - offset);
                 Z3_ast Low = Z3_mk_extract(m_ctx, (plength << 3) - 1, 0, data);
                 Z3_inc_ref(m_ctx, Low);
                 Z3_ast HI = Z3_mk_extract(m_ctx, nbits - 1, plength << 3, data);
                 Z3_inc_ref(m_ctx, HI);
-                (*npage)->Ist_Put(offset, Low, plength);
+                (*page)->Ist_Put(offset, Low, plength);
                 (*npage)->Ist_Put(0, HI, (nbits >> 3) - plength);
                 Z3_dec_ref(m_ctx, Low);
                 Z3_dec_ref(m_ctx, HI);

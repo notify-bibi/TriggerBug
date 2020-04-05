@@ -17,12 +17,19 @@
 #include "engine/trException.h"
 #ifdef _DEBUG
 #define TVAL_CHECK
+#define Z3CK check_error();
+#else
+#define Z3CK 
 #endif
 
 #define TASSERT(v) std::enable_if_t<(v)> * = nullptr
 #define fastMask(n) ((ULong)((((int)(n))<64)?((1ull << ((int)(n))) - 1):-1ll))
 #define fastMaskReverse(N) (~fastMask(N))
 #define ALIGN(Value,size) ((Value) & ~((size) - 1))
+
+
+
+bool z3_get_all_256(Z3_context ctx, Z3_ast rnum, int64_t* num);
 
 
 namespace sv {
@@ -287,10 +294,22 @@ namespace sv {
 
         inline symbol(){}
         explicit inline  symbol(Z3_context ctx) : m_ctx((_CTX_)ctx), m_ast((_AST_)0) { }
-        inline ~symbol() { if (m_ast) Z3_dec_ref((Z3_context)m_ctx, (Z3_ast)m_ast); }
+        inline ~symbol() {
+            if (m_ast) {
+                Z3_dec_ref((Z3_context)m_ctx, (Z3_ast)m_ast);
+                Z3CK
+            }
+        }
 
-        explicit inline symbol(Z3_context ctx, Z3_ast ast) : m_ctx((_CTX_)ctx), m_ast((_AST_)ast) { dassert(ast); Z3_inc_ref(ctx, ast); }
-        explicit inline symbol(Z3_context ctx, Z3_ast ast, no_inc) : m_ctx((_CTX_)ctx), m_ast((_AST_)ast) { dassert(ast); }
+        explicit inline symbol(Z3_context ctx, Z3_ast ast) : m_ctx((_CTX_)ctx), m_ast((_AST_)ast) { 
+            dassert(ast); 
+            Z3_inc_ref(ctx, ast);
+            Z3CK
+        }
+        explicit inline symbol(Z3_context ctx, Z3_ast ast, no_inc) : m_ctx((_CTX_)ctx), m_ast((_AST_)ast) {
+            dassert(ast);
+            Z3CK
+        }
 
         //numreal mk bv uint < 64 bits(zext)
         explicit symbol(Z3_context ctx, uint64_t v, unsigned nbits);
@@ -302,13 +321,16 @@ namespace sv {
         explicit symbol(Z3_context ctx, const void* v, unsigned nbit) : m_ctx((_CTX_)ctx) {
             m_ast = (_AST_)_mk_ast(ctx, (uint64_t*)v, nbit);
             _simpify();
+            Z3CK
         };
         //numreal mk fpa any size 
         explicit symbol(Z3_context ctx, const void *fpa_bytes, const sort& fpa_sort, unsigned nbits) : symbol(ctx, fpa_bytes, nbits){
             _to_fp(fpa_sort);
+            Z3CK
         }
     public:
         static Z3_ast _mk_ast(Z3_context ctx, const uint64_t* v, unsigned nbit);
+        Z3_error_code check_error() const;
     private:
 
         inline sort bool_sort() const { return sort((Z3_context)m_ctx, Z3_mk_bool_sort((Z3_context)m_ctx)); }
@@ -904,15 +926,15 @@ namespace sv {
         }
 
         template<int hi, int lo, z3sk _Tk0 = _Tk, TASSERT(_Tk0 == Z3_BV_SORT), TASSERT(hi <= 64 && lo <= 64)>
-        inline ctype_val<_Tsigned, hi + lo - 1, Z3_BV_SORT> extract() const {
+        inline ctype_val<_Tsigned, hi - lo + 1, Z3_BV_SORT> extract() const {
             static_assert(hi >= 0 && lo >= 0, "err");
             static_assert(hi >= lo, "err");
             static_assert(hi < _Tn, "err");
-            return ctype_val<_Tsigned, hi + lo - 1, Z3_BV_SORT>((Z3_context)m_ctx, mr.m_data[0] >> lo);
+            return ctype_val<_Tsigned, hi - lo + 1, Z3_BV_SORT>((Z3_context)m_ctx, mr.m_data[0] >> lo);
         }
 
         template<int hi, int lo, z3sk _Tk0 = _Tk, TASSERT(_Tk0 == Z3_BV_SORT), TASSERT(!(hi <= 64 && lo <= 64))>
-        inline ctype_val<_Tsigned, hi + lo - 1, Z3_BV_SORT> extract() const {
+        inline ctype_val<_Tsigned, hi - lo + 1, Z3_BV_SORT> extract() const {
             static_assert(false, "not support! u can u up");
         }
 
@@ -1174,6 +1196,11 @@ namespace sv{
             return sv::symbolic<_Tsigned, nbits, _Tk>((Z3_context)m_ctx, Z3_mk_extract((Z3_context)m_ctx, start + (nbits - 1), start, (Z3_ast)m_ast));
         }
 
+        template<z3sk __Tk = _Tk, bool __Ts = _Tsigned, TASSERT(__Ts), TASSERT(__Tk == Z3_BV_SORT)>
+        inline const symbolic<false, _Tn, _Tk>& to_ubv() const noexcept { return  *reinterpret_cast<const symbolic<false, _Tn, _Tk>*>(this); }
+
+        template<z3sk __Tk = _Tk, bool __Ts = _Tsigned, TASSERT(!__Ts), TASSERT(__Tk == Z3_BV_SORT)>
+        inline const symbolic<true, _Tn, _Tk>& to_sbv() const noexcept { return  *reinterpret_cast<const symbolic<true, _Tn, _Tk>*>(this); }
 
         //------------------------------  operators  ------------------------------
 
@@ -1573,12 +1600,12 @@ namespace sv{
             Z3_context ctx = simp;
             if (_Tn <= 64) {
                 uint64_t reval;
-                Z3_get_numeral_uint64(ctx, simp, &reval);
+                vassert(Z3_get_numeral_uint64(ctx, simp, &reval));
                 return rsval<_Tsigned, _Tn, _Tk>(ctx, reval);
             }
             else {
                 __m256i buff;
-                Z3_get_numeral_bytes(ctx, simp, (ULong*)&buff);
+                vassert(z3_get_all_256(ctx, simp, (int64_t*)&buff));
                 return rsval<_Tsigned, _Tn, _Tk>(ctx, (void*)&buff);
             }
         }
@@ -1696,17 +1723,9 @@ namespace sv {
         }
 
         template<typename _Tty, int tn = Tn, TASSERT(is_sse<_Tty>::value)>
-        inline rsval(Z3_context ctx, const _Tty& data) :ctype_val(ctx, data) { }
-
-
-        //inline rsval(const rclass& r) : ctype_val(r) {
-        //    m_data_inuse = true;
-        //}
-
-        //inline rsval(const sclass& s)  {
-        //    reinterpret_cast<sclass*>(this)->symbolic::symbolic(s);
-        //    m_data_inuse = false;
-        //}
+        inline rsval(Z3_context ctx, const _Tty& data) :ctype_val(ctx, data) {
+            m_data_inuse = true;
+        }
 
         inline sclass& tos() const {
             if (m_data_inuse) ((ctype_val*)this)->operator Z3_ast();
@@ -2085,9 +2104,6 @@ namespace sv{
 
         // translate
         explicit inline tval(Z3_context target_ctx, const tval& b) noexcept {
-#ifdef TVAL_CHECK
-            dassert(b.m_data_inuse == true);
-#endif
             static_assert(sizeof(symbol) == 16, "err size");
             static_assert(sizeof(tval) == 48, "err size");
             * (__m128i*)this = _mm_load_si128((__m128i*) & b);
@@ -2303,10 +2319,10 @@ namespace sv{
         std::string str() const;
 
 
-    private:
         Z3_ast mk_bv_ast() const;
         Z3_ast mk_bool_ast() const;
         Z3_ast mk_fpa_ast(unsigned ebits, unsigned sbits) const;
+    private:
         friend tval ite(const sbool& cond, const tval& iftrue, const tval& iffalse);
     };
 };

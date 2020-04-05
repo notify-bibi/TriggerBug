@@ -58,9 +58,9 @@ typedef unsigned int digit_t;
 
 #ifndef _MP_GMP
 class mpz_cell {
+public:
     unsigned  m_size;
     unsigned  m_capacity;
-public:
     digit_t   m_digits[0];
     friend class mpz_manager<true>;
     friend class mpz_manager<false>;

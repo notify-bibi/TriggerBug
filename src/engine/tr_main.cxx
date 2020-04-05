@@ -33,7 +33,7 @@ rsval<ADDR> TR::vex_read(State<ADDR>& s, const rsval<ADDR>& addr, const rsval<AD
         st.append(buff);
     }
     std::cout << "]" << std::endl;
-    return rsval<ADDR>(s.m_ctx, n);
+    return rsval<ADDR>(s.ctx(), n);
 }
 
 template<typename ADDR>
@@ -70,7 +70,7 @@ rsval<Addr32> TR::StateX86::TEB()
             regs.get<Ity_I32>(X86_IR_OFFSET::LDT),
             regs.get<Ity_I32>(X86_IR_OFFSET::GDT),
             regs.get<Ity_I16>(X86_IR_OFFSET::FS),
-            rcval<Addr32>(m_ctx, (ULong)0)
+            rcval<Addr32>(ctx(), (ULong)0)
         },
         Ity_I32).tors<false, 32>();
 }

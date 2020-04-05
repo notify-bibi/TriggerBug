@@ -562,6 +562,10 @@ private:
 
 public:
     void start() {
+        if (status() != NewState) {
+            std::cout << "war: this->m_status != NewState" << std::endl;
+            exit(0);
+        }
         try {
             exec();
             if (status() == Dirty_ret) {

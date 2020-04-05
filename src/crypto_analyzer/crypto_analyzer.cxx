@@ -46,9 +46,9 @@ public:
             std::list<finder>::iterator itor = fs.begin();
             for (; itor != fs.end(); itor++) {
                 finder f = *itor;
-                Vns value = mem.Iex_Load<Ity_I32>(m_base + (idx << 2));
-                if (value.symbolic()) return false;
-                ana_decl ad = f(idx, value);
+                auto value = mem.load<Ity_I32>(m_base + (idx << 2));
+                if (value.symb()) return false;
+                ana_decl ad = f(idx, value.tor());
                 if (!ad) {
                     itor = fs.erase(itor);
                     if (itor == fs.end()) break;

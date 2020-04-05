@@ -636,7 +636,7 @@ namespace TR {
                 symbolic = new Symbolic<maxlength>(m_ctx);
             clear(offset, nbytes);
             auto fastindex = m_fastindex + offset;
-            for (int i = 0; i < nbytes; i++) { SET1(fastindex + i, i + 1); };
+            for (unsigned i = 0; i < nbytes; i++) { fastindex[i] = i + 1; };
             m_ast[offset] = _ast;
             Z3_inc_ref(m_ctx, _ast);
             if (record) {
@@ -668,7 +668,7 @@ namespace TR {
             }
             return tval(m_ctx, GET32(m_bytes + offset), nbytes << 3);
         has_sym:
-            return tval(m_ctx, Reg2AstSSE(nbytes, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx), nbytes << 3, no_inc{});
+            return tval(m_ctx, Reg2AstSSE(nbytes, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx), Z3_BV_SORT, nbytes << 3, no_inc{});
         }
 
         //is slowly 变长取值
@@ -684,7 +684,7 @@ namespace TR {
             }
             return tval(ctx, GET32(m_bytes + offset), nbytes << 3);
         has_sym:
-            return tval(ctx, Reg2AstSSE(nbytes, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx, ctx), nbytes << 3, no_inc{});
+            return tval(ctx, Reg2AstSSE(nbytes, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx, ctx), Z3_BV_SORT, nbytes << 3, no_inc{});
         }
 
 

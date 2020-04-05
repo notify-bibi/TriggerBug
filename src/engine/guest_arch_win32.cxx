@@ -86,8 +86,8 @@ State_Tag TR::win32::Sys_syscall()
             return Running;
         }
         case 0x43: {
-            PWOW64_CONTEXT ctx = (PWOW64_CONTEXT)(DWORD)arg0.tor();
-            Addr32 next = dirty_call("getExecptionCtx32", Kc32::getExecptionCtx, { rsval<Addr64>(m_ctx, (size_t)ctx), rsval<Addr64>(m_ctx, getGSPTR()) }, Ity_I32);
+            PWOW64_CONTEXT wow64_ctx = (PWOW64_CONTEXT)(DWORD)arg0.tor();
+            Addr32 next = dirty_call("getExecptionCtx32", Kc32::getExecptionCtx, { rsval<Addr64>(ctx(), (size_t)wow64_ctx), rsval<Addr64>(ctx(), getGSPTR()) }, Ity_I32);
             goto_ptr(next);
             m_InvokStack.clear();
             regs.set(X86_IR_OFFSET::EAX, 0);
@@ -110,7 +110,7 @@ State_Tag TR::win32::Sys_syscall()
 
 
             rsval<Addr32> count = m_vctx.get_hook_read()(*this, arg5, arg6);
-            mem.store(arg4, count.concat(rsval<int>(m_ctx, 0)));
+            mem.store(arg4, count.concat(rsval<int>(ctx(), 0)));
             regs.set(X86_IR_OFFSET::EAX, 1);
             return Running;
         }
@@ -130,7 +130,7 @@ State_Tag TR::win32::Sys_syscall()
             */
 
             m_vctx.get_hook_write()(*this, arg5, arg6);
-            mem.store(arg4, arg6.concat(rsval<int>(m_ctx, 0)));
+            mem.store(arg4, arg6.concat(rsval<int>(ctx(), 0)));
             regs.set(X86_IR_OFFSET::EAX, 0);
             return Running;
         }
@@ -253,10 +253,10 @@ void TR::win32::cpu_exception(Expt::ExceptionBase const& e)
 
     dirty_call("putExecptionCtx32", Kc32::putExecptionCtx,
         {
-            rcval<Addr32>(m_ctx, (size_t)ExceptionRecord), rcval<Addr32>(m_ctx, (size_t)ContextRecord),
-            rcval<Addr64>(m_ctx, gst), eflags,
-            rcval<int>(m_ctx, ExceptionCode), rcval<Addr32>(m_ctx, ExceptionAddress), rcval<int>(m_ctx, ExceptionFlags),rcval<int>(m_ctx, NumberParameters), rcval<Addr32>(m_ctx, nextExceptionRecord),
-            rcval<Addr32>(m_ctx, info0), rcval<Addr32>(m_ctx, info1), rcval<Addr32>(m_ctx, info2)
+            rcval<Addr32>(ctx(), (size_t)ExceptionRecord), rcval<Addr32>(ctx(), (size_t)ContextRecord),
+            rcval<Addr64>(ctx(), gst), eflags,
+            rcval<int>(ctx(), ExceptionCode), rcval<Addr32>(ctx(), ExceptionAddress), rcval<int>(ctx(), ExceptionFlags),rcval<int>(ctx(), NumberParameters), rcval<Addr32>(ctx(), nextExceptionRecord),
+            rcval<Addr32>(ctx(), info0), rcval<Addr32>(ctx(), info1), rcval<Addr32>(ctx(), info2)
         },
         Ity_I32);
 

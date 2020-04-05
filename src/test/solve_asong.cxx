@@ -33,7 +33,7 @@ State_Tag success_ret3(State<Addr64>& s) {
 
 
 bool asong() {
-    vex_context<Addr64> v(VexArchAMD64, 1, PROJECT_DIR"PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.dump");
+    vex_context<Addr64> v(VexArchAMD64, 8, PROJECT_DIR"PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.dump");
 
 
     SP::linux64 state(v, 0, True);
@@ -53,6 +53,7 @@ bool asong() {
         state.mem.store(state.regs.get<Ity_I64>(AMD64_IR_OFFSET::RDI) + i, flag);
         state.solv.add_assert(ao3);
     }
+    
     state.hook_add(0x400CC0, success_ret3);
 
     test(state);

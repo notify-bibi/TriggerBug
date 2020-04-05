@@ -71,49 +71,22 @@ namespace TR {
         void push() { m_solver_snapshot = true; z3::solver::push(); }
         void pop() { z3::solver::pop(); m_solver_snapshot = false; }
         bool is_snapshot() { return m_solver_snapshot; }
+
         std::vector<sbool> const& get_asserts() const { return m_asserts; };
+
         //不会保存assert到solver,因为在push之前会进行push
         void add(sbool const& e);
+
         void add(rsbool const& e) { add(e.tos()); }
 
         void check_if_forget_pop();
+
         void add_assert(const sbool& assert);
+
         inline operator Z3_context() { return ctx(); }
-        static z3::solver mk_tactic_solver_default(z3::context& c) {
-            /*Legal parameters are :
-              ctrl_c(bool) (default: true)
-              dump_benchmarks(bool) (default: false)
-              dump_models(bool) (default: false)
-              elim_01(bool) (default: true)
-              enable_sat(bool) (default: true)
-              enable_sls(bool) (default: false)
-              maxlex.enable(bool) (default: true)
-              maxres.add_upper_bound_block(bool) (default: false)
-              maxres.hill_climb(bool) (default: true)
-              maxres.max_core_size(unsigned int) (default: 3)
-              maxres.max_correction_set_size(unsigned int) (default: 3)
-              maxres.max_num_cores(unsigned int) (default: 4294967295)
-              maxres.maximize_assignment(bool) (default: false)
-              maxres.pivot_on_correction_set(bool) (default: true)
-              maxres.wmax(bool) (default: false)
-              maxsat_engine(symbol) (default: maxres)
-              optsmt_engine(symbol) (default: basic)
-              pb.compile_equality(bool) (default: false)
-              pp.neat(bool) (default: true)
-              priority(symbol) (default: lex)
-              rlimit(unsigned int) (default: 0)
-              solution_prefix(symbol) (default:)
-              timeout(unsigned int) (default: 4294967295)
-            */
-            z3::params t_params(c);
-            z3::tactic t_tactic(z3::with(z3::tactic(c, "simplify"), t_params) &
-                z3::tactic(c, "sat") &
-                z3::tactic(c, "solve-eqs") &
-                z3::tactic(c, "bit-blast") &
-                z3::tactic(c, "smt")
-            );
-            return t_tactic.mk_solver();
-        }
+
+        static z3::solver mk_tactic_solver_default(z3::context& c);
+
         void use_tactic(z3::tactic& t) {
             *(z3::solver*)(this) = t.mk_solver();
         }

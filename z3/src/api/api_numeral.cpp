@@ -439,15 +439,16 @@ extern "C" {
         Z3_CATCH_RETURN(nullptr);
     }
 
-    bool Z3_API Z3_get_numeral_bytes(Z3_context c, Z3_ast a, unsigned long long* b) {
+    bool Z3_API Z3_get_numeral_bytes(Z3_context c, Z3_ast a, int64_t* b, int64_t* len) {
         Z3_TRY;
-        // This function invokes Z3_get_numeral_rational, but it is still ok to add LOG command here because it does not return a Z3 object.
+        // This function invokes Z3_get_numeral_rational, but it is still ok to add LO,G command here because it does not return a Z3 object.
         RESET_ERROR_CODE();
         rational r;
         bool ok = Z3_get_numeral_rational(c, a, r);
         if (ok) {
             const mpz& m = r.to_mpq().numerator();
             if (!m.m_ptr) return false;
+            len[0] = m.m_ptr->m_size;
             b[0] = ((unsigned long long*)m.m_ptr->m_digits)[0];
             b[1] = ((unsigned long long*)m.m_ptr->m_digits)[1];
             b[2] = ((unsigned long long*)m.m_ptr->m_digits)[2];

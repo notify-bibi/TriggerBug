@@ -61,6 +61,6 @@ namespace TR {
 };
 
 
-template TR::EmuEnvironment<800>;
-template void TR::EmuEnvironment<800>::set_guest_code_temp(TR::MEM<Addr32>& mem_obj, Addr64 virtual_addr, TR::Hook_struct const& hs);
-template void TR::EmuEnvironment<800>::set_guest_code_temp(TR::MEM<Addr64>& mem_obj, Addr64 virtual_addr, TR::Hook_struct const& hs);
+template TR::EmuEnvironment<MAX_IRTEMP>;
+template void TR::EmuEnvironment<MAX_IRTEMP>::set_guest_code_temp(TR::MEM<Addr32>& mem_obj, Addr64 virtual_addr, TR::Hook_struct const& hs);
+template void TR::EmuEnvironment<MAX_IRTEMP>::set_guest_code_temp(TR::MEM<Addr64>& mem_obj, Addr64 virtual_addr, TR::Hook_struct const& hs);

@@ -64,6 +64,14 @@ namespace sv {
         return r;
     }
 
+    Z3_error_code symbol::check_error() const
+    {
+        Z3_error_code e = Z3_get_error_code((Z3_context)m_ctx);
+        if (e != Z3_OK)
+            throw (z3::z3exception(Z3_get_error_msg((Z3_context)m_ctx, e)));
+        return e;
+    }
+
     void symbol::_simpify() const
     {
         Z3_ast simp = Z3_simplify((Z3_context)m_ctx, (Z3_ast)m_ast);
@@ -367,6 +375,25 @@ namespace sv {
 };
 
 
+
+bool z3_get_all_256(Z3_context ctx, Z3_ast rnum, int64_t* num)
+{
+    int64_t den;
+    if (Z3_get_numeral_rational_int64(ctx, rnum, num, &den)) {
+        if (den == 1) {
+            num[1] = 0;
+            _mm_store_si128((__m128i*) & num[2], _mm_setzero_si128());
+            return true;
+        }
+    }
+    if (Z3_get_numeral_bytes(ctx, rnum, (int64_t*)num, &den)) {
+        for (int i = den; i < 8; i++) {
+            ((int32_t*)num)[i] = 0;
+        }
+        return true;
+    }
+    return false;
+}
 
 void HexToStr(unsigned char* pbDest, unsigned char* pbSrc, int nLen)
 

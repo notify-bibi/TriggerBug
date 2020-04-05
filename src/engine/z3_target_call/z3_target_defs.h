@@ -1,5 +1,5 @@
 
-#define bit2ret(v, idx) (rsbool(((v) >> (idx))))
+#define bit2ret(v, idx) (rsbool(  (v).extract<(idx), (idx)>()  ))
 
 
 #define NOTEMACRO(...)  

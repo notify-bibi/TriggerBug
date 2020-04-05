@@ -3373,7 +3373,7 @@ extern "C" {
        def_API('Z3_mk_bv_numeral', AST, (_in(CONTEXT), _in(UINT), _in_array(1, BOOL)))
     */
     Z3_ast Z3_API Z3_mk_bv_numeral(Z3_context c, unsigned sz, bool const* bits);
-    bool Z3_API Z3_get_numeral_bytes(Z3_context c, Z3_ast a, unsigned long long* b);
+    bool Z3_API Z3_get_numeral_bytes(Z3_context c, Z3_ast a, int64_t* b, int64_t* len);
 
     /*@}*/
 

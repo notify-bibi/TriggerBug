@@ -408,8 +408,8 @@ bool test_cmpress() {
 
     for (int i = 0; i < 4; i++) {
         SP::linux64* s = (SP::linux64*)(state.ForkState(20));
-        z3::expr f1 = s->m_ctx.bv_const("a1", 8);
-        z3::expr f2 = s->m_ctx.bv_const("a2", 8);
+        z3::expr f1 = s->ctx().bv_const("a1", 8);
+        z3::expr f2 = s->ctx().bv_const("a2", 8);
         s->solv.add_assert(f1 > i);
         s->solv.add_assert(f2 < i);
         s->mem.store(0x602080, 1000 + i);
@@ -420,8 +420,8 @@ bool test_cmpress() {
     std::cout << state << std::endl;
     for (int i = 4; i < 5; i++) {
         SP::linux64* s = (SP::linux64*)(state.ForkState(32));
-        z3::expr f1 = s->m_ctx.bv_const("aj", 8);
-        z3::expr f2 = s->m_ctx.bv_const("ak", 8);
+        z3::expr f1 = s->ctx().bv_const("aj", 8);
+        z3::expr f2 = s->ctx().bv_const("ak", 8);
         s->solv.add_assert(f1 > i);
         s->solv.add_assert(f2 < i);
         s->set_status((State_Tag)88);
@@ -434,7 +434,7 @@ bool test_cmpress() {
         if (i <= 3) { continue; }
         SP::linux64* s2 = (SP::linux64*)(s->ForkState(20));
         s->set_status(Fork);
-        z3::expr f = s2->m_ctx.bv_const("b", 8);
+        z3::expr f = s2->ctx().bv_const("b", 8);
         s2->solv.add_assert(f > i);
         s2->mem.store(0x602080, 100 + i);
         s2->mem.store(0x602081, 100ull + i + (1ull << 63));
@@ -476,16 +476,141 @@ bool test_cmpress() {
 //}
 //
 
+bool check(TRsolver &solver, sbool &s) {
+    solver.add(s);
+    auto f = solver.check();
+    if (!(f == z3::unsat)) {
+        std::cout << solver.assertions() << std::endl;
+        std::cout << solver.get_model() << std::endl;
+        solver.pop();
+        return false;
+    }
+    solver.pop();
+    return true;
+}
+
+
+
+bool test_ir_dirty_rflags() {
+    z3::context c;
+    TRsolver solver(c);
+    {
+        ssbval<64> dep1(c.bv_const("dep1", 64));
+        ssbval<64> dep2(c, c.bv_const("dep2", 64));
+        ssbval<64> ndep(c, c.bv_const("ndep", 64));
+
+
+        solver.add((z3_amd64g_calculate_condition(rsval<uint64_t>(c, AMD64CondLE), rsval<uint64_t>(c, AMD64G_CC_OP_SUBB), dep1, dep2, ndep).tos().extract<0, 0>() == 1) != dep1.extract<7,0>() <= dep2.extract<7, 0>());
+        if (!solver.check() == z3::unsat) return false;
+        solver.pop();
+
+
+        solver.add((z3_amd64g_calculate_condition(rsval<uint64_t>(c, AMD64CondLE), rsval<uint64_t>(c, AMD64G_CC_OP_SUBQ), dep1, dep2, ndep).tos().extract<0, 0>() == 1) != dep1 <= dep2);
+        if (!solver.check() == z3::unsat) return false;
+        solver.pop();
+
+    };
+    {
+        subval<64> dep1(c.bv_const("dep1", 64));
+        subval<64> dep2(c, c.bv_const("dep2", 64));
+        subval<64> ndep(c, c.bv_const("ndep", 64));
+
+        solver.add((z3_amd64g_calculate_condition(rsval<uint64_t>(c, AMD64CondBE), rsval<uint64_t>(c, AMD64G_CC_OP_SUBB), dep1, dep2, ndep).tos().extract<0, 0>() == 1) != dep1.extract<7, 0>() <= dep2.extract<7, 0>());
+        if (!solver.check() == z3::unsat) return false;
+        solver.pop();
+
+
+        solver.add((z3_amd64g_calculate_condition(rsval<uint64_t>(c, AMD64CondB), rsval<uint64_t>(c, AMD64G_CC_OP_SUBQ), dep1, dep2, ndep).tos().extract<0, 0>() == 1) != dep1 < dep2);
+        if (!solver.check() == z3::unsat) return false;
+        solver.pop();
+
+    };
+
+
+    {
+
+        ssbval<8> dep1(c.bv_const("dep1", 8));
+        ssbval<8> dep2(c, c.bv_const("dep2", 8));
+        subval<64> ndep(c, c.bv_const("ndep", 64));
+
+        
+
+        sbool s0 = z3_amd64g_calculate_condition(rsval<uint64_t>(c, AMD64CondLE), rsval<uint64_t>(c, AMD64G_CC_OP_SUBL), dep1.ext<true, 24>() - 0xa, ssbval<64>(c, 0x55), ndep).tos().extract<0, 0>() == 1;
+        sbool s1 = z3_amd64g_calculate_condition(rsval<uint64_t>(c, AMD64CondLE), rsval<uint64_t>(c, AMD64G_CC_OP_SUBB), dep1.to_ubv(), ssbval<64>(c, 0x2f), ndep).tos().extract<0, 0>() == 1;
+        sbool s2 = z3_amd64g_calculate_condition(rsval<uint64_t>(c, AMD64CondLE), rsval<uint64_t>(c, AMD64G_CC_OP_SUBB), dep1.to_ubv(), ssbval<64>(c, 0x39), ndep).tos().extract<0, 0>() == 1;
+            
+
+        check(solver, !s0 != (dep1.ext<true, 24>() - 0xa) > ssbval<32>(c, 0x55));
+
+
+        check(solver, !s1 != dep1 > ssbval<8>(c, 0x2f));
+
+
+        check(solver, s2 != dep1 <= ssbval<8>(c, 0x39));
+        
+    }
+
+
+    std::cout << std::endl;
+    return true;
+}
+
+
+bool test_mem() {
+    ctx32 v(VexArchX86, "");
+    SP::win32 state(v, 0, True);
+    state.mem.map(0x1000, 0x3000);
+
+
+    subval<64> v64 = state.ctx().bv_const("v64", 64);
+    ssbval<32> v32 = state.ctx().bv_const("v32", 32);
+
+    state.mem.store(0x2000 - 2, v64);
+    auto c = (state.mem.load<Ity_I64>(0x2000 - 2).tos() == v64).simplify();
+    
+    if (!c.real()) { 
+        std::cout << c << std::endl;
+        return false; 
+    }
+    if (!c.tor()) {
+        std::cout << c << std::endl;
+        return false;
+    }
+
+    SP::win32 fork(&state, 0x1000);
+    auto tv64 = v64.translate(fork.ctx());
+    auto tv32 = v32.translate(fork.ctx());
+
+    c = (fork.mem.load<Ity_I64>(0x2000 - 2).tos() == tv64).simplify();
+    if (!c.real())
+        return false;
+    if (!c.tor())
+        return false;
+
+    fork.mem.store(0x2000 - 2, tv32);
+
+    c = (fork.mem.load<Ity_I64>(0x2000 - 2).tos() == tv64.extract<63, 32>().concat(tv32)).simplify();
+    if (!c.real())
+        return false;
+    if (!c.tor())
+        return false;
+
+
+    return true;
+}
+
 
 int main() {
     test1();
     test2();
 
     //testz3();
+    IR_TEST(test_mem);
+    IR_TEST(test_ir_dirty_rflags);
     IR_TEST(test_ir_dirty);
-    //IR_TEST(creakme);
     IR_TEST(asong);
     IR_TEST(test_cmpress);
+    IR_TEST(creakme);
 
 }
 

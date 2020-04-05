@@ -146,6 +146,28 @@ ULong MEM<ADDR>::find_block_reverse(ULong start, ADDR size)
     }
     return start += 0x1000;
 }
+template<typename ADDR>
+tval TR::MEM<ADDR>::_Iex_Load(PAGE* P, ADDR address, UShort size)
+{
+    PAGE* nP = get_mem_page(address + 0x1000);
+    MEM_ACCESS_ASSERT_R(nP, address + 0x1000);
+    UInt plength = 0x1000 - ((UShort)address & 0xfff);
+    tval L, R;
+    if (user == nP->get_user()) {
+        L = (*nP)->Iex_Get(0, size - plength);
+    }
+    else {
+        L = (*nP)->Iex_Get(0, size - plength, m_ctx);
+    }
+
+    if (user == P->get_user()) {
+        R = (*P)->Iex_Get(((UShort)address & 0xfff), plength);
+    }
+    else {
+        R = (*P)->Iex_Get(((UShort)address & 0xfff), plength, m_ctx);
+    }
+    return L.concat(R);
+}
 ;
 
 template<typename ADDR>
@@ -288,7 +310,7 @@ void TR::MEM<ADDR>::Ist_Store(Z3_ast address, tval const& data)
 
 
 template<typename ADDR>
-void MEM<ADDR>::CheckSelf(PAGE*& P, ADDR address)
+bool MEM<ADDR>::check_page(PAGE*& P, PAGE** PT)
 {
 #ifndef CLOSECNW
     Int xchg_user = 0;
@@ -299,23 +321,35 @@ void MEM<ADDR>::CheckSelf(PAGE*& P, ADDR address)
         mem_change_map[ALIGN(address, 0x1000)] = (*P);
 #endif
         P->disable_pad(m_ctx, need_record);
-        return;
+        return false;
     }
-    //--P->used_point;
-    //P->check_ref_cound();
     P->dec_used_ref();
-    PAGE** page = get_pointer_of_mem_page(address);
-    vassert(user != (*page)->get_user());
+    vassert(user != PT[0]->get_user());
     PAGE* np = new PAGE(user);
     np->copy(P, m_ctx, need_record);
-    *page = np;
+    PT[0] = np;
     P->unlock(xchg_user);
     P = np;
-    mem_change_map[ALIGN(address, 0x1000)] = (*np);
 #else
     vassert(user == P->user);
     mem_change_map[ALIGN(address, 0x1000)] = (*P);
 #endif
+    return true;
+}
+
+template<typename ADDR>
+PAGE* TR::MEM<ADDR>::get_write_page(ADDR address)
+{
+    CODEBLOCKISWRITECHECK(address);
+    PAGE** pt = get_pointer_of_mem_page(address);
+    PAGE* page = (pt) ? pt[0] : nullptr;
+    MEM_ACCESS_ASSERT_W(page, address);
+    if (check_page(page, pt)) {
+        mem_change_map[ALIGN(address, 0x1000)] = (*page);
+    }
+    vassert(page->get_user() == user);
+    page->check_ref_cound();
+    return page;
 }
 
 template<typename ADDR>

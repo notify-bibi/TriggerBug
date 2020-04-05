@@ -116,20 +116,22 @@ int eval_all(std::deque<tval>& result, z3::solver& solv, Z3_ast _exp) {
     auto sk = exp.get_sort().sort_kind();
     vassert(sk == Z3_BV_SORT);
     int nbits = exp.get_sort().bv_size();
-
+    vassert(nbits <= 64);
+    uint64_t realu64;
     for (int nway = 0; ; nway++) {
         auto ck = solv.check();
         if (ck == z3::unknown) return -1;
         if (ck == z3::sat) {
             z3::model m = solv.get_model();
+            Z3_model_inc_ref(ctx, m);
             z3::expr re = m.eval(exp);
-            uint64_t u64 = 0;
-            if (re.is_numeral_u64(u64)) {
-                result.emplace_back(tval(ctx, u64, nbits));
-                solv.add(exp != ctx.bv_val(u64, nbits));
+            std::cout << re << std::endl;
+            if (re.is_numeral_u64(realu64)){
+                result.emplace_back(tval(ctx, realu64, nbits));
+                solv.add(exp != re);
             }
             else {
-                std::cout << exp << std::endl;
+                std::cout << re << std::endl;
                 std::cout << solv.assertions() << std::endl;
                 solv.pop();
                 return -1;
@@ -149,41 +151,46 @@ int eval_all(std::deque<tval>& result, z3::solver& solv, Z3_ast _exp) {
 //-1 err. 0 false. 1 true. 2 false || true.
 int eval_all_bool(z3::solver& solv, Z3_ast _exp) {
     int ret = -1; 
+    Z3_decl_kind bool_L, bool_R;
     z3::context& ctx = solv.ctx();
     z3::expr exp(ctx, _exp);
+
+    //std::cout << exp << std::endl;
+    //std::cout << solv.assertions() << std::endl;
+
     solv.push();
     {
         auto sk = exp.get_sort().sort_kind();
         vassert(sk == Z3_BOOL_SORT);
 
         auto b1 = solv.check();
-        if (b1 == z3::unknown) {
+        if (b1 != z3::sat) {
             goto faild;
         }
-        if (b1 == z3::unsat) {
-            solv.pop();
-            return 0;
-        };
         z3::model m1 = solv.get_model();
         z3::expr e1 = m1.eval(exp);
-        auto dk = e1.decl().decl_kind();
-        if (!(dk == Z3_OP_TRUE || dk == Z3_OP_FALSE))
+        bool_L = e1.decl().decl_kind();
+        if (!(bool_L == Z3_OP_TRUE || bool_L == Z3_OP_FALSE))
             goto faild;
 
-        ret = dk == Z3_OP_TRUE;
 
         //----------not-----------
-        solv.add(!exp);
+
+        solv.add(exp != e1);
         auto b2 = solv.check();
+        if (b2 == z3::unknown) {
+            goto faild;
+        }
         if (b2 == z3::unsat) {
             solv.pop();
-            return ret;
+            return bool_L == Z3_OP_TRUE;
         }
-        else {
-            solv.pop();
-            return 2;
-        }
+
+        solv.pop();
+        return 2;
     }
+
+
 faild: {
     std::cout << exp << std::endl;
     std::cout << solv.assertions() << std::endl;
@@ -211,22 +218,6 @@ z3::expr StateMEM<ADDR>::idx2Value(Addr64 base, Z3_ast idx)
     return result;
 }
 
-//DES等加密算法需要配置tactic策略才能求解出答案。
-//z3::params m_params(m_ctx);
-//z3::tactic m_tactic(with(tactic(m_ctx, "simplify"), m_params) &
-//    tactic(m_ctx, "sat") &
-//    tactic(m_ctx, "solve-eqs") &
-//    tactic(m_ctx, "bit-blast") &
-//    tactic(m_ctx, "smt")
-//    &
-//    tactic(m_ctx, "factor") &
-//    tactic(m_ctx, "bv1-blast") &
-//    tactic(m_ctx, "qe-sat") &
-//    tactic(m_ctx, "ctx-solver-simplify") &
-//    tactic(m_ctx, "nla2bv") &
-//    tactic(m_ctx, "symmetry-reduce")/**/
-//);
-//state.setSolver(m_tactic);
 template <typename ADDR> State<ADDR>::State(vex_context<ADDR>& vctx, ADDR gse, Bool _need_record) :
     Kernel(vctx),
     m_vctx(vctx),
@@ -464,6 +455,66 @@ void TRsolver::add_assert(const sbool& t_assert)
     if (!is_snapshot()) {
         m_asserts.push_back(t_assert);
     }
+}
+
+//DES等加密算法需要配置tactic策略才能求解出答案。
+//z3::params m_params(m_ctx);
+//z3::tactic m_tactic(with(tactic(m_ctx, "simplify"), m_params) &
+//    tactic(m_ctx, "sat") &
+//    tactic(m_ctx, "solve-eqs") &
+//    tactic(m_ctx, "bit-blast") &
+//    tactic(m_ctx, "smt")
+//    &
+//    tactic(m_ctx, "factor") &
+//    tactic(m_ctx, "bv1-blast") &
+//    tactic(m_ctx, "qe-sat") &
+//    tactic(m_ctx, "ctx-solver-simplify") &
+//    tactic(m_ctx, "nla2bv") &
+//    tactic(m_ctx, "symmetry-reduce")/**/
+//);
+//state.setSolver(m_tactic);
+z3::solver TR::TRsolver::mk_tactic_solver_default(z3::context& c)
+{
+    /*Legal parameters are :
+      ctrl_c(bool) (default: true)
+      dump_benchmarks(bool) (default: false)
+      dump_models(bool) (default: false)
+      elim_01(bool) (default: true)
+      enable_sat(bool) (default: true)
+      enable_sls(bool) (default: false)
+      maxlex.enable(bool) (default: true)
+      maxres.add_upper_bound_block(bool) (default: false)
+      maxres.hill_climb(bool) (default: true)
+      maxres.max_core_size(unsigned int) (default: 3)
+      maxres.max_correction_set_size(unsigned int) (default: 3)
+      maxres.max_num_cores(unsigned int) (default: 4294967295)
+      maxres.maximize_assignment(bool) (default: false)
+      maxres.pivot_on_correction_set(bool) (default: true)
+      maxres.wmax(bool) (default: false)
+      maxsat_engine(symbol) (default: maxres)
+      optsmt_engine(symbol) (default: basic)
+      pb.compile_equality(bool) (default: false)
+      pp.neat(bool) (default: true)
+      priority(symbol) (default: lex)
+      rlimit(unsigned int) (default: 0)
+      solution_prefix(symbol) (default:)
+      timeout(unsigned int) (default: 4294967295)
+    */
+    z3::params t_params(c);
+    z3::tactic t_tactic(z3::with(z3::tactic(c, "simplify"), t_params) &
+        z3::tactic(c, "sat") &
+        z3::tactic(c, "solve-eqs") &
+        z3::tactic(c, "bit-blast") &
+        z3::tactic(c, "smt")
+        &
+        z3::tactic(c, "factor") &
+        z3::tactic(c, "bv1-blast") &
+        z3::tactic(c, "qe-sat") &
+        z3::tactic(c, "ctx-solver-simplify") &
+        z3::tactic(c, "nla2bv") &
+        z3::tactic(c, "symmetry-reduce")
+    );
+    return t_tactic.mk_solver();
 }
 
 
@@ -1014,8 +1065,9 @@ EXIT:
 
 template <typename ADDR>
 void State<ADDR>::start() {
-    if (this->m_status != NewState) {
+    if (status() != NewState) {
         std::cout <<"war: this->m_status != NewState"<< std::endl;
+        exit(0);
     }
     m_status = Running;
     traceStart();
