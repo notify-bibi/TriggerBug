@@ -30,7 +30,7 @@ namespace TR {
         Exit,
         NoDecode,
         Exception,
-        Dirty_ret
+        DirtyRet
     }State_Tag;
 
     typedef enum :UChar {

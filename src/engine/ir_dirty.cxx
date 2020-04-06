@@ -17,6 +17,8 @@ extern IRSB* LibVEX_FrontEnd_coexistence( /*MOD*/ VexTranslateArgs* vta,
 
 extern "C" void vexSetAllocModeTEMP_and_save_curr(void);
 
+void tAMD64REGS(int offset, int length);
+
 class DMEM : public MEM<Addr64> {
     bool m_front;
     Addr64 m_stack_reservve_size;
@@ -75,11 +77,12 @@ class DStateCmprsInterface;
 DState* mk_DStateIRDirty(DState* s);
 
 
-
 class DState {
     template <typename xx> friend class VexIRDirty;
     friend class DStateIRDirty;
     friend class DStateCmprsInterface;
+    using BTS = TR::BTS<DState>;
+
     bool m_front;
     DState* m_base;
     vex_info& m_vex_info;
@@ -98,6 +101,7 @@ class DState {
 
     Addr64 vex_ret_addr = 0x1ull;// Dont patch it
     BranchManager<DState> branch;
+    std::deque<BTS> m_tmp_branch;
     State_Tag   m_status;
     InvocationStack<Addr64>   m_InvokStack;
     UChar* m_host_addr;
@@ -168,6 +172,8 @@ public:
     inline const vex_info& info() const { return m_vex_info; }
     inline State_Tag    status() { return m_status; }
     inline void         set_status(State_Tag t) { m_status = t; };
+    inline IRJumpKind   jump_kd() const { ; }
+    inline void         set_jump_kd(IRJumpKind kd) { ; }
     tval                CCall(IRCallee* cee, IRExpr** exp_args, IRType ty);
     tval                tIRExpr(IRExpr* e);
     IRSB*               translate(UChar* Host_code);
@@ -182,6 +188,7 @@ public:
     inline operator z3::context& () { return m_ctx; }
     inline operator z3::vcontext& () { return m_ctx; }
     inline operator Z3_context() const { return m_ctx; }
+    inline TRsolver& solver() { return m_solv; }
 
     virtual tval      base_tIRExpr(IRExpr* e) { return m_base->tIRExpr(e).translate(m_ctx); }
     virtual IRSB*    translate(
@@ -300,13 +307,14 @@ public:
         }
     }
 
+
 private:
         
     void exec() {
         EmuEnvironment<MAX_IRTEMP> emu(info(), m_ctx, VexArchAMD64);
         m_irtemp = emu;
-        DState* newBranch = nullptr;
         set_status(Running);
+        rsbool fork_guard(m_ctx, false);
 
         while (true) {
             if (reinterpret_cast<Addr64>(m_host_addr) == vex_ret_addr) {
@@ -314,7 +322,7 @@ private:
                 auto rsp = regs.get<Ity_I64>(AMD64_IR_OFFSET::RSP);
                 if (rsp.real()) {
                     vassert((ULong)rsp.tor() == stack_ret);
-                    set_status(Dirty_ret);
+                    set_status(DirtyRet);
                     break;
                 }
                 VPANIC("????");
@@ -385,8 +393,8 @@ private:
                             }
                             else {
                                 vassert(s->Ist.Exit.jk == Ijk_Boring);
-                                newBranch = mkState(s->Ist.Exit.dst->Ico.U64);
-                                newBranch->m_solv.add_assert(guard.tos());
+                                fork_guard = guard;
+                                m_tmp_branch.push_back(BTS(*this, s->Ist.Exit.dst->Ico.U64, fork_guard));
                                 m_status = Fork;
                             }
                         }
@@ -396,9 +404,7 @@ private:
                 case Ist_NoOp: break;
                 case Ist_IMark: {
                     if (m_status == Fork) {
-                        DState* prv = newBranch;
-                        newBranch = mkState(s->Ist.IMark.addr);
-                        newBranch->m_solv.add_assert(!prv->m_solv.get_asserts()[0]);
+                        m_tmp_branch.push_back(BTS(*this, s->Ist.IMark.addr, !fork_guard));
                         goto EXIT;
                     };
                     m_host_addr = (UChar*)s->Ist.IMark.addr;
@@ -499,11 +505,8 @@ private:
         Isb_next:
             auto next = tIRExpr(irsb->next).tors<false, 64>();
             if (m_status == Fork) {
-                DState* prv = newBranch;
-                sbool const& guard = prv->m_solv.get_asserts()[0];
                 if (next.real()) {
-                    newBranch = mkState(next.tor());
-                    newBranch->m_solv.add_assert(!guard);
+                    m_tmp_branch.push_back(BTS(*this, next.tor(), !fork_guard));
                 }
                 else {
                     std::deque<tval> result;
@@ -518,9 +521,7 @@ private:
                     else {
                         for (auto re : result) {
                             auto GN = re.tor<false, 64>();//guest next ip
-                            newBranch = mkState(GN);
-                            newBranch->m_solv.add_assert(!guard);
-                            newBranch->m_solv.add_assert(next.tos() == (size_t)GN);
+                            m_tmp_branch.push_back(BTS(*this, GN, !fork_guard, next == (Addr64)GN));
                         }
                     }
                 }
@@ -540,8 +541,7 @@ private:
                 else {
                     for (auto re : result) {
                         auto GN = re.tor<false, 64>();//guest next ip
-                        newBranch = mkState(GN);
-                        newBranch->m_solv.add_assert(next.tos() == (size_t)GN);
+                        m_tmp_branch.push_back(BTS(*this, GN, next == (Addr64)GN));
                     }
                     m_status = Fork;
                     goto EXIT;
@@ -563,18 +563,14 @@ private:
 public:
     void start() {
         if (status() != NewState) {
-            std::cout << "war: this->m_status != NewState" << std::endl;
-            exit(0);
+            VPANIC("war: this->m_status != NewState");
         }
         try {
             exec();
-            if (status() == Dirty_ret) {
+            if (status() == DirtyRet) 
                 return;
-            }
-            else {
-                VPANIC("FGH");
-            }
 
+            VPANIC("dirty fork(cmpr::compress not support)");
         }
         catch (Expt::ExceptionBase & error) {
             std::cout << "dirty err :: " << std::endl;
@@ -969,6 +965,7 @@ void dirty_ccall(DirtyCtx dctx, IRCallee* cee, IRExpr** args) {
     Int regparms = cee->regparms;
     UInt mcx_mask = cee->mcx_mask;
     vexSetAllocModeTEMP_and_save_curr();
+    d->set_status(NewState);
     d->init_param(cee, args);
     d->start();
 }
@@ -978,6 +975,7 @@ void dirty_call_np(DirtyCtx dctx, const HChar* name, void* func, const std::init
     VexIRDirty<ADDR>* d = (VexIRDirty<ADDR>*)dctx;
     IRCallee cee = { (Int)parms.size() , name, func, 0xffffffff };
     vexSetAllocModeTEMP_and_save_curr();
+    d->set_status(NewState);
     d->init_param(&cee, parms);
     d->start();
 }
@@ -1010,4 +1008,242 @@ template tval dirty_result<Addr32>(DirtyCtx dctx, IRType rty);
 template tval dirty_result<Addr64>(DirtyCtx dctx, IRType rty);
 
 
+
+
+#define CODEDEF1(name)					 \
+switch (length) {						 \
+case 8:vex_printf((name)); break;		 \
+default:goto none;						 \
+}break;								     \
+
+
+#define CODEDEF2(length,name)			\
+switch ((length)) {						\
+case 1:vex_printf((name)); break;		\
+default:goto none;						\
+}break;									
+
+
+void tAMD64REGS(int offset, int length) {
+    vex_printf("\t\t");
+    switch (offset) {
+    case 16:
+        switch (length) {
+        case 8:vex_printf("rax"); break;
+        case 4:vex_printf("eax"); break;
+        case 2:vex_printf(" ax"); break;
+        case 1:vex_printf(" al"); break;
+        default:goto none;
+        }break;
+        CODEDEF2(17, "ah");
+    case 24:
+        switch (length) {
+        case 8:vex_printf("rcx"); break;
+        case 4:vex_printf("ecx"); break;
+        case 2:vex_printf(" cx"); break;
+        case 1:vex_printf(" cl"); break;
+        default:goto none;
+        }break;
+        CODEDEF2(25, "ch");
+    case 32: vex_printf("rdx"); break;
+        switch (length) {
+        case 8:vex_printf("rdx"); break;
+        case 4:vex_printf("edx"); break;
+        case 2:vex_printf(" dx"); break;
+        case 1:vex_printf(" dl"); break;
+        default:goto none;
+        }break;
+        CODEDEF2(33, "dh");
+    case 40: vex_printf("rbx"); break;
+        switch (length) {
+        case 8:vex_printf("rbx"); break;
+        case 4:vex_printf("ebx"); break;
+        case 2:vex_printf(" bx"); break;
+        case 1:vex_printf(" bl"); break;
+        default:goto none;
+        }break;
+    case 48: vex_printf("rsp"); break;
+        switch (length) {
+        case 8:vex_printf("rsp"); break;
+        case 4:vex_printf("esp"); break;
+        default:goto none;
+        }break;
+    case 56: vex_printf("rbp"); break;
+        switch (length) {
+        case 8:vex_printf("rbp"); break;
+        case 4:vex_printf("ebp"); break;
+        default:goto none;
+        }break;
+    case 64: vex_printf("rsi"); break;
+        switch (length) {
+        case 8:vex_printf("rsi"); break;
+        case 4:vex_printf("esi"); break;
+        case 2:vex_printf(" si"); break;
+        case 1:vex_printf("sil"); break;
+        default:goto none;
+        }break;
+        CODEDEF2(65, "sih");
+    case 72: vex_printf("rdi"); break;
+        switch (length) {
+        case 8:vex_printf("rdi"); break;
+        case 4:vex_printf("edi"); break;
+        case 2:vex_printf(" di"); break;
+        case 1:vex_printf(" dil"); break;
+        default:goto none;
+        }break;
+        CODEDEF2(73, "dih");
+    case 80: vex_printf("r8"); break;
+    case 88: vex_printf("r9"); break;
+    case 96: vex_printf("r10"); break;
+    case 104: vex_printf("r11"); break;
+    case 112: vex_printf("r12"); break;
+    case 120: vex_printf("r13"); break;
+    case 128: vex_printf("r14"); break;
+    case 136: vex_printf("r15"); break;
+    case 144: vex_printf("cc_op"); break;
+    case 152: vex_printf("cc_dep1"); break;
+    case 160: vex_printf("cc_dep2"); break;
+    case 168: vex_printf("cc_ndep"); break;
+    case 176: vex_printf("d"); break;
+    case 184: vex_printf("rip"); break;
+    case 192: vex_printf("ac"); break;
+    case 200: vex_printf("id"); break;
+    case 208: vex_printf("fs"); break;
+    case 216: vex_printf("sseround"); break;
+    case 224:
+        switch (length) {
+        case 32:vex_printf("ymm0"); break;
+        case 16:vex_printf("xmm0"); break;
+        default:vex_printf("ymm0"); break;
+        }break;
+    case 256:
+        switch (length) {
+        case 32:vex_printf("ymm1"); break;
+        case 16:vex_printf("xmm1"); break;
+        default:vex_printf("ymm1"); break;
+        }break;
+    case 288:
+        switch (length) {
+        case 32:vex_printf("ymm2"); break;
+        case 16:vex_printf("xmm2"); break;
+        default:vex_printf("ymm2"); break;
+        }break;
+    case 320:
+        switch (length) {
+        case 32:vex_printf("ymm3"); break;
+        case 16:vex_printf("xmm3"); break;
+        default:vex_printf("ymm3"); break;
+        }break;
+    case 352:
+        switch (length) {
+        case 32:vex_printf("ymm4"); break;
+        case 16:vex_printf("xmm4"); break;
+        default:vex_printf("ymm4"); break;
+        }break;
+    case 384:
+        switch (length) {
+        case 32:vex_printf("ymm5"); break;
+        case 16:vex_printf("xmm5"); break;
+        default:vex_printf("ymm5"); break;
+        }break;
+    case 416:
+        switch (length) {
+        case 32:vex_printf("ymm6"); break;
+        case 16:vex_printf("xmm6"); break;
+        default:vex_printf("ymm6"); break;
+        }break;
+    case 448:
+        switch (length) {
+        case 32:vex_printf("ymm7"); break;
+        case 16:vex_printf("xmm7"); break;
+        default:vex_printf("ymm7"); break;
+        }break;
+    case 480:
+        switch (length) {
+        case 32:vex_printf("ymm8"); break;
+        case 16:vex_printf("xmm8"); break;
+        default:vex_printf("ymm8"); break;
+        }break;
+    case 512:
+        switch (length) {
+        case 32:vex_printf("ymm9"); break;
+        case 16:vex_printf("xmm9"); break;
+        default:vex_printf("ymm9"); break;
+        }break;
+    case 544:
+        switch (length) {
+        case 32:vex_printf("ymm10"); break;
+        case 16:vex_printf("xmm10"); break;
+        default:vex_printf("ymm10"); break;
+        }break;
+    case 576:
+        switch (length) {
+        case 32:vex_printf("ymm11"); break;
+        case 16:vex_printf("xmm11"); break;
+        default:vex_printf("ymm11"); break;
+        }break;
+    case 608:
+        switch (length) {
+        case 32:vex_printf("ymm12"); break;
+        case 16:vex_printf("xmm12"); break;
+        default:vex_printf("ymm12"); break;
+        }break;
+    case 640:
+        switch (length) {
+        case 32:vex_printf("ymm13"); break;
+        case 16:vex_printf("xmm13"); break;
+        default:vex_printf("ymm13"); break;
+        }break;
+    case 672:
+        switch (length) {
+        case 32:vex_printf("ymm14"); break;
+        case 16:vex_printf("xmm14"); break;
+        default:vex_printf("ymm14"); break;
+        }break;
+    case 704:
+        switch (length) {
+        case 32:vex_printf("ymm15"); break;
+        case 16:vex_printf("xmm15"); break;
+        default:vex_printf("ymm15"); break;
+        }break;
+    case 736:
+        switch (length) {
+        case 32:vex_printf("ymm16"); break;
+        case 16:vex_printf("xmm16"); break;
+        default:vex_printf("ymm16"); break;
+        }break;
+    case 768: vex_printf("ftop"); break;
+    case 776:
+        switch (length) {
+        case 64:vex_printf("fpreg"); break;
+        case 8:vex_printf("mm0"); break;
+        default:vex_printf("fpreg"); break;
+        }break;
+    case 784: CODEDEF1("mm1")
+    case 792: CODEDEF1("mm2")
+    case 800: CODEDEF1("mm3")
+    case 808: CODEDEF1("mm4")
+    case 816: CODEDEF1("mm5")
+    case 824: CODEDEF1("mm6")
+    case 832: CODEDEF1("mm7")
+    case 840: CODEDEF1("fptag")
+    case 848: CODEDEF1("fpround")
+    case 856: CODEDEF1("fc3210")
+    case 864: {
+        switch (length) {
+        case 4:vex_printf("emnote"); break;
+        default:goto none;
+        }break;
+    }
+    case 872: CODEDEF1("cmstart")
+    case 880: CODEDEF1("cmlen")
+    case 888: CODEDEF1("nraddr")
+    case 904: CODEDEF1("gs")
+    case 912: CODEDEF1("ip_at_syscall")
+    default:goto none;
+    }
+    return;
+none:
+    vex_printf(" what regoffset = %d ", offset);
+}
 

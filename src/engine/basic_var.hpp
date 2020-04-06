@@ -293,7 +293,9 @@ namespace sv {
         friend class tval;
 
         inline symbol(){}
-        explicit inline  symbol(Z3_context ctx) : m_ctx((_CTX_)ctx), m_ast((_AST_)0) { }
+
+        explicit inline symbol(Z3_context ctx) : m_ctx((_CTX_)ctx), m_ast((_AST_)0) { }
+
         inline ~symbol() {
             if (m_ast) {
                 Z3_dec_ref((Z3_context)m_ctx, (Z3_ast)m_ast);
@@ -660,6 +662,8 @@ namespace sv {
             }
             return (Z3_ast)m_ast;
         }
+
+        inline Z3_context ctx() const { return (Z3_context)m_ctx; }
 
         //only support iee754 , u can use mk_fpa_ast<ebits, sbits>
         template<z3sk k = _Tk, int __Tn = _Tn, TASSERT(k == Z3_FLOATING_POINT_SORT)>
@@ -1048,7 +1052,7 @@ namespace sv{
 
         //bv(sse)
         template<typename _Ty, z3sk __Tk = _Tk, TASSERT((sizeof(_Ty) > 8)), TASSERT((sizeof(_Ty) << 3) == _Tn), TASSERT(__Tk == Z3_BV_SORT)>
-                inline symbolic(Z3_context ctx, const _Ty& v) : symbol(ctx, (const void*)&v, _Tn) { };
+        inline symbolic(Z3_context ctx, const _Ty& v) : symbol(ctx, (const void*)&v, _Tn) { };
 
 
         //---------------------- symbolic <- symbolic --------------------------
@@ -1560,7 +1564,7 @@ namespace sv{
     public:
         inline sort get_sort() const { return sort((Z3_context)m_ctx, Z3_get_sort((Z3_context)m_ctx, (Z3_ast)m_ast)); }
         inline Z3_sort_kind sort_kind() const { return get_sort().sort_kind(); }
-
+        inline Z3_context ctx() const { return (Z3_context)m_ctx; }
 
 
         template<z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BV_SORT)>
@@ -2005,6 +2009,7 @@ namespace sv {
 
         inline bool symb() const { return !m_data_inuse; }
         inline bool real() const { return m_data_inuse; }
+        inline Z3_context ctx() const { return (Z3_context)m_ctx; }
         inline operator Z3_context() const { return this->ctype_val::operator Z3_context(); }
 
 

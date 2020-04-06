@@ -324,11 +324,16 @@ bool MEM<ADDR>::check_page(PAGE*& P, PAGE** PT)
         return false;
     }
     P->dec_used_ref();
-    vassert(user != PT[0]->get_user());
+    if (user == PT[0]->get_user()) {
+        VPANIC("ERROR");
+    }
+
+    P->unlock(xchg_user);
+
     PAGE* np = new PAGE(user);
     np->copy(P, m_ctx, need_record);
     PT[0] = np;
-    P->unlock(xchg_user);
+
     P = np;
 #else
     vassert(user == P->user);

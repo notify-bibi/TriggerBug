@@ -599,18 +599,42 @@ bool test_mem() {
     return true;
 }
 
+bool test_mem_GPMana() {
+    z3::context ctx;
+    cmpr::GPMana v1(ctx, 18);
+    subval<64> v64 = ctx.bv_const("v64", 64);
+    ssbval<32> v32 = ctx.bv_const("v32", 32);
+    for (int i = 0; i < 5; i++) {
+        v1.add(v32 > i, v64 + i);
+        v1.debug_display();
+    }
+    for (int i = 5; i < 10; i++) {
+        v1.add(v32 < i, v64 + (i - 5));
+        v1.debug_display();
+    }
+
+    v1.add(v32 < 9, v64 + 3);
+    v1.add(v32 < 9, v64 + 9);
+    v1.debug_display();
+
+    std::cout << v1.get() << std::endl;
+    return true;
+}
+
 
 int main() {
     test1();
     test2();
 
+
     //testz3();
+    IR_TEST(test_mem_GPMana);
     IR_TEST(test_mem);
     IR_TEST(test_ir_dirty_rflags);
     IR_TEST(test_ir_dirty);
+    IR_TEST(creakme);
     IR_TEST(asong);
     IR_TEST(test_cmpress);
-    IR_TEST(creakme);
 
 }
 

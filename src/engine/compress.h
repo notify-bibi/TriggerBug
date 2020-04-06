@@ -49,6 +49,7 @@ namespace cmpr {
 
         void operator=(const GPMana& gp);
 
+        void debug_display();
 
         void add(sbool const& ass, PACK const& v);
 

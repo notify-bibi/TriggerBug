@@ -34,27 +34,18 @@ State_Tag success_ret3(State<Addr64>& s) {
 
 bool asong() {
     vex_context<Addr64> v(VexArchAMD64, 8, PROJECT_DIR"PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.dump");
-
-
     SP::linux64 state(v, 0, True);
-    //state.setFlag(CF_ppStmts);
+    state.setFlag(CF_ppStmts);
     state.setFlag(CF_traceJmp);
     std::cout << state << std::endl;
-
-    Kernel& k = state;
-
-    State<Addr64>* pp = k;
-
-
-
     for (int i = 0; i < 38; i++) {
         auto flag = state.mk_int_const(8).tos<false, 8>();
-        auto ao3 = flag >= 1u && flag <= 128u;
+        auto g = flag >= 1u && flag <= 128u;
         state.mem.store(state.regs.get<Ity_I64>(AMD64_IR_OFFSET::RDI) + i, flag);
-        state.solv.add_assert(ao3);
+        state.solv.add_assert(g);
     }
-    
     state.hook_add(0x400CC0, success_ret3);
+
 
     test(state);
    // state.start();

@@ -45,7 +45,6 @@ unsigned int IRConstTag2nb(IRConstTag t);
 unsigned int ty2length(IRType ty);
 unsigned int ty2bit(IRType ty);
 IRType       length2ty(UShort bit);
-void         tAMD64REGS(int offset, int length);
 
 #define __i386__
 #define TESTCODE(code)                                                                                                  \

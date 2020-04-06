@@ -126,10 +126,54 @@ namespace TR {
         operator std::string() const;
     };
 
+
     template<typename ADDR>
     inline bool operator==(InvocationStack<ADDR> const& a, InvocationStack<ADDR> const& b) {
         return (a.guest_call_stack == b.guest_call_stack) && (a.guest_stack == b.guest_stack);
     }
+
+    //branch_temp_state
+    template<class STATE>
+    class BTS {
+        STATE& m_state;
+        Addr64 m_oep;
+        rsbool m_guard;
+        rsbool m_addr_eq;
+        STATE* m_child_state = nullptr;
+        IRJumpKind m_jump_kd = Ijk_Boring;
+    public:
+        inline BTS(STATE& s, Addr64 start, rsbool& guard) :
+            m_state(s), m_oep(start), m_guard(guard), m_addr_eq(guard.ctx(), false)
+        { };
+
+        inline BTS(STATE& s, Addr64 start, rsbool& guard, rsbool&& addr_eq) :
+            m_state(s), m_oep(start), m_guard(guard), m_addr_eq(addr_eq) 
+        { };
+
+        inline IRJumpKind jump_kd() const { return m_jump_kd; }
+        inline void set_jump_kd(IRJumpKind kd) { m_jump_kd = kd; }
+
+        virtual STATE* child() {
+            if (m_child_state)
+                return m_child_state;
+
+            m_child_state = (STATE*)m_state.mkState(m_oep);
+            m_child_state->set_jump_kd(m_jump_kd);
+            m_child_state->solver().add_assert(m_guard.tos());
+            if (m_addr_eq.symb()) {
+                m_child_state->solver().add_assert(m_addr_eq.tos());
+            }
+            return m_child_state;
+        }
+
+        Addr64 get_oep() { return m_oep; }
+        const sbool& get_guard() const { return m_guard; }
+        ~BTS(){}
+
+        BTS(const BTS& a) : m_state(a.m_state), m_oep(a.m_oep), m_guard(a.m_guard), m_addr_eq(a.m_addr_eq), m_child_state(a.m_child_state) {};
+        
+        void operator = (const BTS& a) { this->BTS::~BTS(); this->BTS::BTS(a); }
+    };
 
 
     template<class BState>
@@ -245,6 +289,7 @@ namespace TR {
         friend class StateAnalyzer<ADDR>;
         friend class StateCmprsInterface<ADDR>;
         using vsize_t = rsval<ADDR>;
+        using BTS = BTS<State<ADDR>>;
         static constexpr int wide = sizeof(ADDR) << 3;
 
     public:
@@ -264,6 +309,7 @@ namespace TR {
         std::mutex  m_state_lock;
         ADDR        m_delta;
         State_Tag   m_status;
+        IRJumpKind  m_jump_kd;
     public:
         tval* m_ir_temp = nullptr;
         InvocationStack<ADDR>   m_InvokStack;
@@ -273,6 +319,7 @@ namespace TR {
         //客户机内存 （多线程设置相同user，不同state设置不同user）
         StateMEM<ADDR>          mem;
         BranchManager<State<ADDR>> branch;
+        std::deque<BTS> m_tmp_branch;
 
         State(TR::vex_context<ADDR>& vex_info, ADDR gse, Bool _need_record);
         State(State* father_state, ADDR gse);
@@ -299,6 +346,7 @@ namespace TR {
         tval mk_int_const(UShort nbit);
         tval mk_int_const(UShort n, UShort nbit);
         UInt getStr(std::stringstream& st, ADDR addr);
+        inline TRsolver& solver() { return solv; }
         inline operator MEM<ADDR>& () { return mem; }
         inline operator Register<REGISTER_LEN>& () { return regs; }
         inline operator z3::context& () const { return const_cast<State<ADDR>*>(this)->m_ctx; }
@@ -307,6 +355,8 @@ namespace TR {
         inline ADDR get_state_ep() { return guest_start_ep; }
         inline State_Tag status() { return m_status; }
         inline void set_status(State_Tag t) { m_status = t; };
+        inline IRJumpKind jump_kd() const { return m_jump_kd; }
+        inline void set_jump_kd(IRJumpKind kd) { m_jump_kd = kd; }
         operator std::string() const;
 
         DirtyCtx getDirtyVexCtx();

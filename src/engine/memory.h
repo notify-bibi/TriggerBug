@@ -108,7 +108,13 @@ public:
     }
     inline void lock(Int& xchg_user) {
         xchg_user = 0;
-        while (!xchg_user) { __asm__ __volatile("xchgb %b0,%1":"=r"(xchg_user) : "m"(m_user), "0"(xchg_user) : "memory"); }
+        while (!xchg_user) {
+            __asm__ __volatile(
+                "xchgl %0,%1"
+                : "=r"(xchg_user) 
+                : "m"(m_user), "0"(xchg_user) 
+                : "memory");
+        }
     }
     inline void unlock(Int xchg_user) {
         vassert(xchg_user == _m_user_);

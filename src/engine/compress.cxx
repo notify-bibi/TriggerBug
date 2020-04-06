@@ -124,6 +124,16 @@ void cmpr::GPMana::add(sbool const& ass, PACK const& v)
     if (v.real()) add((Z3_ast)ass, (ULong)v.tor()); else  add((Z3_ast)ass, (Z3_ast)v.tos());
 }
 
+void cmpr::GPMana::debug_display() {
+    struct _m_vec_* vec = m_sort;
+    struct _m_vec_* prv = nullptr;
+    for (; vec; prv = vec, vec = vec->sort) {
+        std::cout << std::hex << vec->value.ast << "<" << vec->m_maps_ass_idx << ">, ";
+    }
+    std::cout << std::endl;
+}
+
+
 void cmpr::GPMana::add(Z3_ast ass, Z3_ast v)
 {
     check();
@@ -199,11 +209,13 @@ void cmpr::GPMana::mk_sort(_m_vec_* prv, _m_vec_* new_vec)
     }
     //into
     struct _m_vec_* vec = prv ? prv->sort : m_sort;
-    for (; vec; prv = vec, vec = vec->sort) {
-        if (new_vec->m_maps_ass_idx <= vec->m_maps_ass_idx) {
-            prv->sort = new_vec;
-            new_vec->sort = vec;
-            return;
+    if (vec != new_vec) {
+        for (; vec; prv = vec, vec = vec->sort) {
+            if (new_vec->m_maps_ass_idx <= vec->m_maps_ass_idx) {
+                prv->sort = new_vec;
+                new_vec->sort = vec;
+                return;
+            }
         }
     }
     prv->sort = new_vec;

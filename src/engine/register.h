@@ -126,38 +126,8 @@ namespace TR {
             m_ast = new Z3_ast[maxlength];
 #endif
         }
-        inline Symbolic(z3::vcontext& ctx, Symbolic<maxlength>* father) : m_ctx(ctx) {
-            memcpy(m_fastindex, father->m_fastindex, maxlength);
-            memset(m_fastindex + maxlength, 0, 32);
-#ifndef USE_HASH_AST_MANAGER
-            Int _pcur = maxlength - 1;
-            DWORD N;
-            for (; _pcur > 0; ) {
-                if (_BitScanReverse64(&N, ((DWORD64*)(m_fastindex))[_pcur >> 3] & fastMaskBI1[_pcur % 8])) {
-                    _pcur = ALIGN(_pcur, 8) + (N >> 3);
-                    _pcur = _pcur - m_fastindex[_pcur] + 1;
-                    m_ast[_pcur] = Z3_translate(father->m_ctx, father->m_ast[_pcur], m_ctx);
-                    vassert(m_ast[_pcur] != NULL);
-                    Z3_inc_ref(m_ctx, m_ast[_pcur]);
-                    _pcur--;
-                }
-                else {
-                    _pcur = ALIGN(_pcur - 8, 8) + 7;
-                }
-            };
-#else
-            std::hash_map<Int, Z3_ast>& fast = father->m_ast.m_mem;
-            auto it_end = fast.end();
-            for (auto it = fast.begin(); it != it_end; it++) {
-                if (m_fastindex[it->first] == 1) {
-                    Z3_ast translate_ast = Z3_translate(father->m_ctx, it->second, m_ctx);
-                    m_ast[it->first] = translate_ast;
-                    vassert(translate_ast != NULL);
-                    Z3_inc_ref(m_ctx, translate_ast);
-                }
-            }
-#endif
-        }
+        Symbolic(z3::vcontext& ctx, Symbolic<maxlength>* father);
+
         inline ~Symbolic<maxlength>() {
             int _pcur = maxlength - 1;
             DWORD N;
@@ -782,6 +752,7 @@ namespace TR {
         Register(const Register<maxlength>& father_regs) = delete;
         void operator = (Register<maxlength>& a) = delete;
     };
+
 
 };
 
