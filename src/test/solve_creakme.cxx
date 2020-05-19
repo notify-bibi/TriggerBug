@@ -23,17 +23,17 @@ State_Tag hook2(State<Addr32>& s) {
 //    for (int n = 0; n < 27; n++) {
 //        tval FLAG = s.mk_int_const(8);
 //        s.mem.Ist_Store(addr + n, FLAG);
-//        auto ao1 = FLAG >= 'A' && FLAG <= 'Z';
-//        auto ao2 = FLAG >= 'a' && FLAG <= 'z';
-//        auto ao3 = FLAG >= '0' && FLAG <= '9';
-//        s.solv.add_assert(ao1 || ao2 || ao3 || FLAG == '_' || FLAG == '{' || FLAG == '}', True);
+//        auto ao1 = FLAG >= "A" && FLAG <= "Z";
+//        auto ao2 = FLAG >= "a" && FLAG <= "z";
+//        auto ao3 = FLAG >= "0" && FLAG <= "9";
+//        s.solv.add_assert(ao1 || ao2 || ao3 || FLAG == "_" || FLAG == "{" || FLAG == "}", True);
 //    }
-//    s.mem.Ist_Store(addr + 27, '\n');
+//    s.mem.Ist_Store(addr + 27, "\n");
 //    return Vns(ctx, 28);
 //}
 
-
 bool creakme() {
+
     ctx32 v(VexArchX86, PROJECT_DIR"PythonFrontEnd\\examples\\SCTF-creakMe\\creakme.exe.dump");
     v.set_system(windows);
     //v.setFlag(CF_traceJmp);

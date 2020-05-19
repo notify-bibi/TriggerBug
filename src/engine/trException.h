@@ -8,7 +8,7 @@ const char* constStrIRJumpKind(IRJumpKind kind);
 namespace Expt {
     class GuestMemReadErr;
     class GuestMemWriteErr;
-
+    class SolverNoSolution;
     typedef enum {
         //Ä£ÄâÈí¼ş´íÎó
         GuestMem_read_err,
@@ -62,7 +62,7 @@ namespace Expt {
         Addr64 m_gaddr;
         std::string m_msg;
         GuestMem(char const* msg, Addr64 gaddr, ExceptionTag err) :ExceptionBase(err),
-            m_msg(msg), m_gaddr(gaddr) {
+            m_gaddr(gaddr), m_msg(msg){
         }
         virtual Addr64 addr() const override { return m_gaddr; }
     };

@@ -1609,6 +1609,7 @@ namespace sv{
             }
             else {
                 __m256i buff;
+                // not safe
                 vassert(z3_get_all_256(ctx, simp, (int64_t*)&buff));
                 return rsval<_Tsigned, _Tn, _Tk>(ctx, (void*)&buff);
             }

@@ -2,6 +2,8 @@
 from __future__ import print_function
 import idaapi
 import idc
+from idautils import cpu
+import ida_loader
 import idautils
 import sys
 import struct
@@ -11,6 +13,7 @@ import archinfo  # 没有pyvex则archinfo无法工作
 import ctypes
 import re
 import base64
+import keystone
 
 arch = None
 mode = None
@@ -275,35 +278,35 @@ def get_hardware_mode():
     if cpuname == "metapc":
         if info.is_64bit():
             arch = archinfo.ArchAMD64()
-            mode = KS_MODE_64
+            mode = keystone.KS_MODE_64
         elif info.is_32bit():
             arch = archinfo.ArchX86()
-            mode = KS_MODE_32
+            mode = keystone.KS_MODE_32
         else:
             arch = archinfo.ArchNotFound()
-            mode = KS_MODE_16
+            mode = keystone.KS_MODE_16
 
     elif cpuname.startswith("ppc"):
         if info.is_64bit():
             arch = archinfo.ArchPPC64()
-            mode = KS_MODE_PPC64
+            mode = keystone.KS_MODE_PPC64
         else:
             arch = archinfo.ArchPPC32()
-            mode = KS_MODE_PPC32
+            mode = keystone.KS_MODE_PPC32
         if cpuname == "ppc":
             # do not support Little Endian mode for PPC
-            mode += KS_MODE_BIG_ENDIAN
+            mode += keystone.KS_MODE_BIG_ENDIAN
 
     elif cpuname.startswith("mips"):
         if info.is_64bit():
             arch = archinfo.ArchMIPS64()
-            mode = KS_MODE_MIPS64
+            mode = keystone.KS_MODE_MIPS64
         else:
             arch = archinfo.ArchMIPS32()
-            mode = KS_MODE_MIPS32
+            mode = keystone.KS_MODE_MIPS32
     elif cpuname.startswith("systemz") or cpuname.startswith("s390x"):
         arch = archinfo.ArchS390X()
-        mode = KS_MODE_BIG_ENDIAN
+        mode = keystone.KS_MODE_BIG_ENDIAN
 
     return (arch, mode)
 
