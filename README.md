@@ -23,9 +23,11 @@ The engine was developed to solve some of Angr's more intractable problems.
 
 - [x] 
 
-- [x] 代码重构，计划将代码部署在linux、darwin、windows(clang)
+- [x] 移植，计划将代码部署在linux、darwin、windows(clang)
 
 - [x] 反反调试功能（vmp检测通过）
+
+- [x] 代码重构，所有基础符号变量全部使用basic_var.hpp中的sv::模版类，涵盖所有操作，编译时期确定并计算参数（提速），编译时检查所有AST误操作等问题。
 
 - [x] windows 异常支持（Eha/ EHsc）
 
@@ -256,4 +258,4 @@ Warmly welcome to join us in the development. Study together.
 
 
 
-另外值得高兴的是，windows终于支持clang了，早点放弃自家编译器该多好啊，有些时候还是不要那么执着的好（黑，逃
+另外值得高兴的是，windows终于支持clang了，早点放弃自家编译器该多好啊，有些时候还是不要那么执着的好
