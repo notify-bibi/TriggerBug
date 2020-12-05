@@ -1,3 +1,18 @@
+
+/* ---------------------------------------------------------------------------------------
+ *      Notify-bibi Symbolic-Emulation-Engine project
+ *      Copyright (c) 2019 Microsoft Corporation by notify-bibi@github, 2496424084@qq.com
+ *      ALL RIGHTS RESERVED.
+ *
+ *      采用模拟执行 为宿主机提供的c代码 来操作客户机的内存和寄存器（宿主机和主机内存共享，
+ *      通过执行该c代码来访问 如VexGuestX86State参数来修改宿主机寄存器，将宿主机寄存器页
+ *      挂载到irdirty环境）
+ *      解决ir_dirty的函数不支持符号执行问题，解决大量适配问题
+ * ---------------------------------------------------------------------------------------
+ */
+
+
+
 #include "engine/ir_dirty.h"
 #include "engine/state_class.h"
 #include "engine/z3_target_call/z3_target_call.h"
@@ -7,7 +22,7 @@
 #endif
 
 using namespace TR;
-//ע���ַλ��
+//注意地址位宽
 
 
 extern IRSB* LibVEX_FrontEnd_coexistence( /*MOD*/ VexTranslateArgs* vta,
@@ -349,7 +364,7 @@ private:
                     std::cout << emu[s->Ist.WrTmp.tmp];
 #endif
                     break; };
-                case Ist_CAS /*�ȽϺͽ���*/: {//xchg    rax, [r10]
+                case Ist_CAS /*比较和交换*/: {//xchg    rax, [r10]
                     IRCAS cas = *(s->Ist.CAS.details);
                     tval addr = tIRExpr(cas.addr);//r10.value
                     tval expdLo = tIRExpr(cas.expdLo);
@@ -469,7 +484,7 @@ private:
                     }
                     break;
                 }
-                case Ist_MBE:  /*�ڴ������¼���fence/����/�ͷ�������*/ {
+                case Ist_MBE:  /*内存总线事件，fence/请求/释放总线锁*/ {
                     vex_printf("IR-");
                     ppIRMBusEvent(s->Ist.MBE.event);
                     break;
@@ -754,13 +769,13 @@ class DStateCmprsInterface {
     cmpr::StateType m_type;
     sbool m_condition;
     static bool StateCompression(DState& a, DState const& next) {
-        bool ret = a.m_InvokStack == next.m_InvokStack;// ѹ������
-        return ret && a.StateCompression(next);//֧����չ����
+        bool ret = a.m_InvokStack == next.m_InvokStack;// 压缩条件
+        return ret && a.StateCompression(next);//支持扩展条件
     }
 
     static void StateCompressMkSymbol(DState& a, DState const& newState) {
-        a.m_InvokStack = newState.m_InvokStack;// ʹ������ѹ������
-        a.StateCompressMkSymbol(newState);//֧��
+        a.m_InvokStack = newState.m_InvokStack;// 使其满足压缩条件
+        a.StateCompressMkSymbol(newState);//支持
     }
 
     std::vector<sbool> const& get_asserts() const { return m_state.m_solv.get_asserts(); };
@@ -784,7 +799,7 @@ public:
         return m_condition;
     }
 
-    void get_write_map(std::hash_map<Addr64, bool>& record) {
+    void get_write_map(HASH_MAP<Addr64, bool>& record) {
         if (m_state.regs.getRecord()) {
             for (auto offset : *m_state.regs.getRecord()) {
                 record[offset];
@@ -852,7 +867,7 @@ public:
     }
 
     DStateCmprsInterface* mk(DState* son, cmpr::StateType tag) {
-        //ʵ��������4��case intel��������תΪif
+        //实际上少于4个case intel编译器会转为if
         switch (tag) {
         case cmpr::Fork_Node:return new cmpr::CmprsFork<DStateCmprsInterface>(m_ctx, *son);
         case cmpr::Avoid_Node:return new cmpr::CmprsAvoid<DStateCmprsInterface>(m_ctx, *son);
@@ -884,9 +899,9 @@ void DState::compress(cmpr::CmprsContext<DState, State_Tag>& ctx)
             printf("%s\n", Z3_ast_to_string(condition, condition));
 #endif //  _DEBUG
             nbranch->m_solv.add_assert(condition);
-            std::hash_map<Addr64, cmpr::GPMana> const& cm = state.changes();
-            std::hash_map<Addr64, cmpr::GPMana>::const_iterator itor = cm.begin();
-            std::hash_map<Addr64, cmpr::GPMana>::const_iterator end = cm.end();
+            HASH_MAP<Addr64, cmpr::GPMana> const& cm = state.changes();
+            HASH_MAP<Addr64, cmpr::GPMana>::const_iterator itor = cm.begin();
+            HASH_MAP<Addr64, cmpr::GPMana>::const_iterator end = cm.end();
 
             for (; itor != end; itor++) {
                 Addr64 addr = itor->first;
@@ -916,9 +931,9 @@ void DState::compress(cmpr::CmprsContext<DState, State_Tag>& ctx)
             printf("%s\n", Z3_ast_to_string(condition, condition));
 #endif //  _DEBUG
             m_solv.add_assert(condition);
-            std::hash_map<Addr64, cmpr::GPMana> const& cm = state.changes();
-            std::hash_map<Addr64, cmpr::GPMana>::const_iterator itor = cm.begin();
-            std::hash_map<Addr64, cmpr::GPMana>::const_iterator end = cm.end();
+            HASH_MAP<Addr64, cmpr::GPMana> const& cm = state.changes();
+            HASH_MAP<Addr64, cmpr::GPMana>::const_iterator itor = cm.begin();
+            HASH_MAP<Addr64, cmpr::GPMana>::const_iterator end = cm.end();
             cmp.clear_nodes();
             for (; itor != end; itor++) {
                 Addr64 addr = itor->first;

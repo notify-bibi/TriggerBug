@@ -1,14 +1,16 @@
 #pragma once
-/*++
-Copyright (c) 2019 Microsoft Corporation
-Module Name:
-    Reister.class: 
-Abstract:
-    API list;
-Author:
-    WXC 2019-05-31.
-Revision History:
---*/
+
+/* ---------------------------------------------------------------------------------------
+ *      Notify-bibi Symbolic-Emulation-Engine project
+ *      Copyright (c) 2019 Microsoft Corporation by notify-bibi@github, 2496424084@qq.com
+ *      ALL RIGHTS RESERVED.
+ *
+ *      快速的（采用高速的扩展指令）将page中的符号(ast)和真值(numreal)进行合并返回和拆分存入。
+        核心代码，对效率十分重要。cp必究
+ *
+ * ---------------------------------------------------------------------------------------
+ */
+
 #define UNDEFREG
 #include "register.h"
 
@@ -24,10 +26,10 @@ RegisterStatic::RegisterStatic(){
     for (int i = 0; i <= 32; i++) {
         m32_fast[i] = m32;
         for (int j = i; j <= 32; j++) {
-            m32_fast[i].m256i_i8[j] = 0;
+            M256i(m32_fast[i]).m256i_i8[j] = 0;
         }
         m32_mask_reverse[i] = _mm256_setzero_si256();
-        memset(&m32_mask_reverse[i].m256i_i8[i], -1ul, 32 - i);
+        memset(&M256i(m32_mask_reverse[i]).m256i_i8[i], -1ul, 32 - i);
     }
 }
 
@@ -85,7 +87,7 @@ void RegisterStatic::setfast(void* fast_ptr, UInt __nbytes) {
 
 
 
-//ȡֵ�����������ast����ֵ���Ϊһ��ast
+//取值函数。将多个ast和真值组合为一个ast
 #ifdef USE_HASH_AST_MANAGER
 Z3_ast TR::Reg2Ast(int nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX &m_ast, z3::vcontext& ctx) {
 #else
@@ -94,9 +96,11 @@ Z3_ast TR::Reg2Ast(int nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast
     vassert(nbytes <= 8);
     ULong scan = GET8(m_fastindex);
     Z3_ast result;
-    DWORD index;
+    UInt index;
     Z3_ast reast;
-    if (_BitScanReverse64(&index, scan & fastMask(nbytes << 3))) {
+	Uint index = __builtin_clzll(scan & fastMask(nbytes << 3));
+    if (index != 64) {
+		index = 63 - index;
         auto offset = (index >> 3);
         Char relen = nbytes - offset - 1;
         auto fast = m_fastindex[offset];
@@ -154,7 +158,9 @@ Z3_ast TR::Reg2Ast(int nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast
         return reast;
     }
     while (nbytes > 0) {
-        if (_BitScanReverse64(&index, scan & fastMask(nbytes << 3))) {
+		index = __builtin_clzll(scan & fastMask(nbytes << 3));
+        if (index!=64) {
+			index = 63 - index;
             auto offset = index >> 3;
             Char relen = nbytes - offset - 1;
             auto fast = m_fastindex[offset];
@@ -254,9 +260,11 @@ TR::Symbolic<maxlength>::Symbolic(z3::vcontext& ctx, TR::Symbolic<maxlength>* fa
     memset(m_fastindex + maxlength, 0, 32);
 #ifndef USE_HASH_AST_MANAGER
     Int _pcur = maxlength - 1;
-    DWORD N;
+    UInt N;
     for (; _pcur > 0; ) {
-        if (_BitScanReverse64(&N, ((DWORD64*)(m_fastindex))[_pcur >> 3] & fastMaskBI1[_pcur % 8])) {
+		N = __builtin_clzll(((ULong*)(m_fastindex))[_pcur >> 3] & fastMaskBI1[_pcur % 8]);
+        if (N!=64) {
+			N = 63 - N;
             _pcur = ALIGN(_pcur, 8) + (N >> 3);
             _pcur = _pcur - m_fastindex[_pcur] + 1;
             m_ast[_pcur] = Translate(father->m_ctx, m_ctx, father->m_ast[_pcur]);
@@ -269,7 +277,7 @@ TR::Symbolic<maxlength>::Symbolic(z3::vcontext& ctx, TR::Symbolic<maxlength>* fa
         }
 };
 #else
-    std::hash_map<Int, Z3_ast>& fast = father->m_ast.m_mem;
+    HASH_MAP<Int, Z3_ast>& fast = father->m_ast.m_mem;
     auto it_end = fast.end();
     for (auto it = fast.begin(); it != it_end; it++) {
         if (m_fastindex[it->first] == 1) {
@@ -290,9 +298,11 @@ Z3_ast TR::Reg2Ast(int nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_
     vassert(nbytes <= 8);
     ULong scan = GET8(m_fastindex);
     Z3_ast result;
-    DWORD index;
+    UInt index;
     Z3_ast reast;
-    if (_BitScanReverse64(&index, scan & fastMask(nbytes << 3))) {
+	index = __builtin_clzll(scan & fastMask(nbytes << 3));
+    if (index != 64) {
+		index = 63 - index;
         auto offset = (index >> 3);
         Char relen = nbytes - offset - 1;
         auto fast = m_fastindex[offset];
@@ -354,7 +364,9 @@ Z3_ast TR::Reg2Ast(int nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_
         return reast;
     }
     while (nbytes > 0) {
-        if (_BitScanReverse64(&index, scan & fastMask(nbytes << 3))) {
+		index = __builtin_clzll(scan & fastMask(nbytes << 3));
+        if (index != 64) {
+			index = 63 - index;
             auto offset = index >> 3;
             Char relen = nbytes - offset - 1;
             auto fast = m_fastindex[offset];
@@ -426,7 +438,7 @@ static inline Z3_ast mk_large_int(Z3_context ctx, void* data, UInt nbit) {
     return sv::symbol::_mk_ast(ctx, (uint64_t*)data, nbit);
 }
 
-//ȡֵ�����������ast����ֵ���Ϊһ��ast
+//取值函数。将多个ast和真值组合为一个ast
 #ifdef USE_HASH_AST_MANAGER
 Z3_ast TR::Reg2AstSSE(int nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX& m_ast, z3::vcontext& ctx) {
 #else
@@ -435,9 +447,11 @@ Z3_ast TR::Reg2AstSSE(int nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast *
     vassert(nbytes <= 32);
     UInt scan = ~_mm256_movemask_epi8(_mm256_cmpeq_epi8(_mm256_setzero_si256(), _mm256_loadu_si256((__m256i*)m_fastindex)));
     Z3_ast result;
-    DWORD index;
+    UInt index;
     Z3_ast reast;
-    if (_BitScanReverse64(&index, scan & fastMask(nbytes))) {
+	index = __builtin_clzll(scan & fastMask(nbytes));
+    if (index!=64) {
+		index = 63 - index;
         Char relen = nbytes - index - 1;
         auto fast = m_fastindex[index];
         if (relen) {
@@ -485,7 +499,9 @@ Z3_ast TR::Reg2AstSSE(int nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast *
         return mk_large_int(ctx, m_bytes, nbytes << 3);
     }
     while (nbytes > 0) {
-        if (_BitScanReverse64(&index, scan & fastMask(nbytes))) {
+		index = __builtin_clzll(scan & fastMask(nbytes));
+        if (index != 64) {
+			index = 63 - index;
             Char relen = nbytes - index - 1;
             auto fast = m_fastindex[index];
             if (relen) {
@@ -551,9 +567,11 @@ Z3_ast TR::Reg2AstSSE(int nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast *
     vassert(nbytes <= 32);
     UInt scan = ~_mm256_movemask_epi8(_mm256_cmpeq_epi8(_mm256_setzero_si256(), _mm256_loadu_si256((__m256i*)m_fastindex)));
     Z3_ast result;
-    DWORD index;
+    UInt index;
     Z3_ast reast;
-    if (_BitScanReverse64(&index, scan & fastMask(nbytes))) {
+	index = __builtin_clzll(scan & fastMask(nbytes));
+    if (index != 64) {
+		index = 63 - index;
         Char relen = nbytes - index - 1;
         auto fast = m_fastindex[index];
         if (relen) {
@@ -605,7 +623,9 @@ Z3_ast TR::Reg2AstSSE(int nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast *
         return mk_large_int(toctx, m_bytes, nbytes << 3);
     }
     while (nbytes > 0) {
-        if (_BitScanReverse64(&index, scan & fastMask(nbytes))) {
+		index = __builtin_clzll(scan & fastMask(nbytes));
+        if (index != 64) {
+			index = 63 - index;
             Char relen = nbytes - index - 1;
             auto fast = m_fastindex[index];
             if (relen) {

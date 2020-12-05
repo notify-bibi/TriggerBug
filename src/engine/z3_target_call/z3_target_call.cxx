@@ -2,8 +2,7 @@
 #include "z3_target_call.h"
 #include "z3_target_defs.h"
 #include "engine/variable.h"
-#define _SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS
-#include <hash_map>
+
 
 
 
@@ -69,7 +68,7 @@ UChar* extern_dealy_call(UChar* fuc) {
     }
 #else
     //plt
-#error "???? arch "
+#warning "----------- ???? host OS ------------"
 #endif
     vex_printf("func(%p) not found real func", fuc);
     VPANIC("gg");
@@ -81,7 +80,7 @@ UChar* extern_dealy_call(UChar* fuc) {
 
 thread_local static UChar* old_fuc = NULL;
 thread_local static UChar* old_z3_fuc = NULL;
-std::hash_map<UChar*, UChar*> fuc_2_Z3_Func_Map;
+HASH_MAP<UChar*, UChar*> fuc_2_Z3_Func_Map;
 
 
 static void Func_Map_Add(UChar* ir_fuc, UChar* z3_fuc) {

@@ -37,7 +37,7 @@ public:
     inline operator TR::State<Addr64>& () { return *this; };
     inline operator TR::State<Addr32>* () { return reinterpret_cast <TR::State<Addr32>*>(this); };
     inline operator TR::State<Addr64>* () { return reinterpret_cast <TR::State<Addr64>*>(this); };
-    //±ØĞë´æÔÚÖÁÉÙÒ»¸övirtualà¸£¬²»È»ÉÏÃæ4¾ä×ª»»¾Í»á²úÉú´íÎ»
+    //å¿…é¡»å­˜åœ¨è‡³å°‘ä¸€ä¸ªvirtualå–”ï¼Œä¸ç„¶ä¸Šé¢4å¥è½¬æ¢å°±ä¼šäº§ç”Ÿé”™ä½
     virtual Addr64 get_cpu_ip() { return 0; };
 private:
 

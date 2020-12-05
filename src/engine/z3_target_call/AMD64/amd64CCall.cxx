@@ -516,10 +516,10 @@
 
 #define z3_amd64g_calculate_rflags_(FLAG)                                                \
 rsbool z3_amd64g_calculate_rflags_##FLAG(                                                \
-    int cc_op,                                                                         \
-    const rsval<uint64_t> &cc_dep1_formal,                                                 \
-    const rsval<uint64_t> &cc_dep2_formal,                                                 \
-    const rsval<uint64_t> &cc_ndep_formal)                                                 \
+    int cc_op,                                                                           \
+    const rsval<uint64_t> &cc_dep1_formal,                                               \
+    const rsval<uint64_t> &cc_dep2_formal,                                               \
+    const rsval<uint64_t> &cc_ndep_formal)                                               \
 {                                                                                        \
     switch (cc_op) {                                                                     \
     case AMD64G_CC_OP_COPY:   ACTIONS_COPY_##FLAG()                                      \
@@ -619,9 +619,8 @@ rsbool z3_amd64g_calculate_rflags_##FLAG(                                       
                                                                                          \
     default:                                                                             \
         /* shouldn't really make these calls from generated code */                      \
-        vex_printf("amd64g_calculate_rflags_all_WRK(AMD64)"                              \
-            "( %llu, 0x%llx, 0x%llx, 0x%llx )\n",                                        \
-            cc_op, cc_dep1_formal, cc_dep2_formal, cc_ndep_formal);                      \
+        vex_printf("amd64g_calculate_rflags_all_WRK(AMD64)");                            \
+        std::cout << std::hex<< cc_op << ", " << cc_dep1_formal << ", " << cc_dep2_formal << ", " << cc_ndep_formal << std::endl; \
         vpanic("amd64g_calculate_rflags_all_WRK(AMD64)");                                \
     }                                                                                    \
 }
@@ -687,9 +686,8 @@ static inline rsbool _z3_amd64g_calculate_condition(AMD64Condcode/*AMD64Condcode
     }
     default:
         /* shouldn't really make these calls from generated code */
-        vex_printf("amd64g_calculate_condition"
-            "( %llu, %llu, 0x%llx, 0x%llx, 0x%llx )\n",
-            cond, cc_op, cc_dep1, cc_dep2, cc_ndep);
+        vex_printf("amd64g_calculate_condition");
+        std::cout << cond << ", " << cc_op << ", " << cc_dep1 << ", " << cc_dep2 << ", " << cc_ndep << std::endl;
         vpanic("amd64g_calculate_condition");
     }
 }

@@ -18,32 +18,32 @@ namespace Kc32 {
 
     /*
     The first element of the array contains a read-write flag that indicates the type of operation that caused the access violation.
-    Êı×éµÄµÚÒ»¸öÔªËØ°üº¬ÁËÒ»¸ö¶ÁĞ´±êÖ¾£¬±íÊ¾ÒıÆğ·ÃÎÊÎ¥¹æµÄ²Ù×÷ÀàĞÍ¡£
+    æ•°ç»„çš„ç¬¬ä¸€ä¸ªå…ƒç´ åŒ…å«äº†ä¸€ä¸ªè¯»å†™æ ‡å¿—ï¼Œè¡¨ç¤ºå¼•èµ·è®¿é—®è¿è§„çš„æ“ä½œç±»å‹ã€‚
     If this value is zero, the thread attempted to read the inaccessible data.
-    Èç¹ûÕâ¸öÖµÎª0£¬±íÊ¾Ïß³ÌÊÔÍ¼¶ÁÈ¡²»¿É·ÃÎÊµÄÊı¾İ¡£
+    å¦‚æœè¿™ä¸ªå€¼ä¸º0ï¼Œè¡¨ç¤ºçº¿ç¨‹è¯•å›¾è¯»å–ä¸å¯è®¿é—®çš„æ•°æ®ã€‚
     If this value is 1, the thread attempted to write to an inaccessible address.
-    Èç¹ûÕâ¸öÖµÎª1£¬±íÊ¾Ïß³ÌÊÔÍ¼Ğ´Èë²»¿É·ÃÎÊµÄµØÖ·¡£
+    å¦‚æœè¿™ä¸ªå€¼ä¸º1ï¼Œè¡¨ç¤ºçº¿ç¨‹è¯•å›¾å†™å…¥ä¸å¯è®¿é—®çš„åœ°å€ã€‚
     If this value is 8, the thread causes a user-mode data execution prevention (DEP) violation.
-    Èç¹ûÕâ¸öÖµÊÇ8£¬±íÊ¾Ïß³ÌÏß³ÌÒı·¢ÁËÒ»¸öÓÃ»§Ä£Ê½µÄDEPÎ¥¹æ¡£
+    å¦‚æœè¿™ä¸ªå€¼æ˜¯8ï¼Œè¡¨ç¤ºçº¿ç¨‹çº¿ç¨‹å¼•å‘äº†ä¸€ä¸ªç”¨æˆ·æ¨¡å¼çš„DEPè¿è§„ã€‚
 
     The second array element specifies the virtual address of the inaccessible data.
-    Êı×éµÄµÚ¶ş¸öÔªËØÖ¸¶¨ÁË²»¿É·ÃÎÊÊı¾İµÄĞéÄâµØÖ·¡£
+    æ•°ç»„çš„ç¬¬äºŒä¸ªå…ƒç´ æŒ‡å®šäº†ä¸å¯è®¿é—®æ•°æ®çš„è™šæ‹Ÿåœ°å€ã€‚
 
 
 
     The first element of the array contains a read-write flag that indicates the type of operation that caused the access violation.
-    Êı×éµÄµÚÒ»¸öÔªËØ°üº¬ÁËÒ»¸ö¶ÁĞ´±êÖ¾£¬ÓÃÓÚ±íÊ¾ÒıÆğ·ÃÎÊÎ¥¹æµÄ²Ù×÷ÀàĞÍ¡£
+    æ•°ç»„çš„ç¬¬ä¸€ä¸ªå…ƒç´ åŒ…å«äº†ä¸€ä¸ªè¯»å†™æ ‡å¿—ï¼Œç”¨äºè¡¨ç¤ºå¼•èµ·è®¿é—®è¿è§„çš„æ“ä½œç±»å‹ã€‚
     If this value is zero, the thread attempted to read the inaccessible data.
-    Èç¹ûÖµÎª0£¬±íÊ¾Ïß³ÌÊÔÍ¼¶ÁÈ¡²»¿É·ÃÎÊµÄÊı¾İ¡£
+    å¦‚æœå€¼ä¸º0ï¼Œè¡¨ç¤ºçº¿ç¨‹è¯•å›¾è¯»å–ä¸å¯è®¿é—®çš„æ•°æ®ã€‚
     If this value is 1, the thread attempted to write to an inaccessible address.
-    Èç¹ûÖµÎª1£¬±íÊ¾Ïß³ÌÊÔÍ¼Ğ´Èë²»¿É·ÃÎÊµÄµØÖ·¡£
+    å¦‚æœå€¼ä¸º1ï¼Œè¡¨ç¤ºçº¿ç¨‹è¯•å›¾å†™å…¥ä¸å¯è®¿é—®çš„åœ°å€ã€‚
     If this value is 8, the thread causes a user-mode data execution prevention (DEP) violation.
-    Èç¹ûÖµÎª8£¬±íÊ¾Ïß³ÌÒıÆğÁËÒ»¸öÓÃ»§Ä£Ê½µÄDEPÎ¥¹æ¡£
+    å¦‚æœå€¼ä¸º8ï¼Œè¡¨ç¤ºçº¿ç¨‹å¼•èµ·äº†ä¸€ä¸ªç”¨æˆ·æ¨¡å¼çš„DEPè¿è§„ã€‚
 
     The second array element specifies the virtual address of the inaccessible data.
-    Êı×éµÄµÚ¶ş¸öÔªËØÖ¸¶¨ÁË²»¿É·ÃÎÊÊı¾İµÄĞéÄâµØÖ·¡£
+    æ•°ç»„çš„ç¬¬äºŒä¸ªå…ƒç´ æŒ‡å®šäº†ä¸å¯è®¿é—®æ•°æ®çš„è™šæ‹Ÿåœ°å€ã€‚
     The third array element specifies the underlying NTSTATUS code that resulted in the exception.
-    Êı×éµÄµÚÈı¸öÔªËØ±íÊ¾µ×²ãµÄNTSTATUSÂëÒıÆğµÄ±¾´ÎÒì³£¡£
+    æ•°ç»„çš„ç¬¬ä¸‰ä¸ªå…ƒç´ è¡¨ç¤ºåº•å±‚çš„NTSTATUSç å¼•èµ·çš„æœ¬æ¬¡å¼‚å¸¸ã€‚
 
     ntdll::KiUserExceptionDispatcher*/
     VOID putExecptionCtx(

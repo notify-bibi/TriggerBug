@@ -12,7 +12,9 @@ using namespace TR;
 
 void test1() {
     z3::context c;
-
+    
+    const int dfd = _LIBCPP_STD_VER;
+    
     cbool bo1(c, false);
     cbool bo2(c, true);
 
@@ -148,6 +150,7 @@ void test2() {
 
     sv::sort rm = sv::fpRM(c, Irrm_NegINF);
     auto f1 = f10_62.fpa2fpa<5, 6>(rm);
+    auto _f1 = f10_62.fpa2fpa<5, 6>(Irrm_NegINF);
 
     auto x1 = d2 + 8;
     auto x2 = d3 + 8;
@@ -191,10 +194,10 @@ void test2() {
 
 
 
-    bool cmp64 = UI64 < I64;//true : 取决于 UI64
+    bool cmp64 = UI64 < I64;//true : 取锟斤拷锟斤拷 UI64
     cmp64 = I32 > UI32;
 
-    cmp64 = UI64 < I32;//true : 取决于 UI64
+    cmp64 = UI64 < I32;//true : 取锟斤拷锟斤拷 UI64
     cmp64 = I32 > UI64;
 
     cmp64 = I64 > UI64;//true
@@ -203,8 +206,8 @@ void test2() {
 
 
 
-    cmp64 = UI32 < I64;//false : 取决于 I64
-    cmp64 = UI32 < I32;//true : 取决于 UI32
+    cmp64 = UI32 < I64;//false : 取锟斤拷锟斤拷 I64
+    cmp64 = UI32 < I32;//true : 取锟斤拷锟斤拷 UI32
 
 
 
@@ -243,7 +246,7 @@ void test2() {
     std::cout << Kernel::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 1)) << std::endl;
     std::cout << Kernel::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 1).tos()).tos<true, 64, Z3_BV_SORT>().simplify() << std::endl;
 
-
+    
     //Z3_inc_ref(sg240, sg240);
 }
 
@@ -531,7 +534,7 @@ bool test_ir_dirty_rflags() {
 
         ssbval<8> dep1(c.bv_const("dep1", 8));
         ssbval<8> dep2(c, c.bv_const("dep2", 8));
-        subval<64> ndep(c, c.bv_const("ndep", 64));
+        subval<64> ndep(c, c.bv_const("ndep", 64));;
 
         
 

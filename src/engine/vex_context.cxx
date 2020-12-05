@@ -1,5 +1,4 @@
 #include "engine/vex_context.h"
-#include "engine/variable.h"
 #include "engine/memory.h"
 #include "engine/state_class.h"
 
@@ -217,7 +216,7 @@ namespace TR {
     {
         if (m_callBackDict.find(addr) != m_callBackDict.end()) {
             //pool->wait();
-            std::hash_map<Addr64, Hook_struct>::iterator h = m_callBackDict.find(addr);
+            HASH_MAP<Addr64, Hook_struct>::iterator h = m_callBackDict.find(addr);
             m_top_state->mem.Ist_Store(addr, tval(m_top_state->ctx(), h->second.original, h->second.nbytes));
             m_callBackDict.erase(h);
         }
@@ -226,7 +225,7 @@ namespace TR {
     template<typename ADDR>
     z3::expr vex_context<ADDR>::idx2value(const TR::State<ADDR>& state, ADDR base, Z3_ast index)
     {
-        std::hash_map<Addr64, Hook_idx2Value>::iterator _where = m_tableIdxDict.find(base);
+        HASH_MAP<Addr64, Hook_idx2Value>::iterator _where = m_tableIdxDict.find(base);
         return (_where != m_tableIdxDict.end()) ? _where->second(state, base, index) : z3::expr(state);
     }
 

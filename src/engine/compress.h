@@ -1,5 +1,5 @@
 
-//  ·ÖÖ§ºÏ²¢µÄÑ¹ËõËã·¨ 
+//  åˆ†æ”¯åˆå¹¶çš„å‹ç¼©ç®—æ³• 
 
 
 #ifndef _STATE_COMPRESS_
@@ -65,9 +65,9 @@ namespace cmpr {
     };
 
     typedef enum :Int {
-        //×Ó½Úµã
+        //å­èŠ‚ç‚¹
         Fork_Node = -3,
-        //Ò¶×Ó½Úµã
+        //å¶å­èŠ‚ç‚¹
         Avoid_Node,
         Survive_Node,
         //target node: 0-n
@@ -83,8 +83,8 @@ namespace cmpr {
         z3::vcontext& m_z3_target_ctx;
 
     public:
-        CmprsContext(const CmprsContext& ass) { static_assert(false, "not support"); };
-        void operator =(const CmprsContext& ass) { static_assert(false, "not support"); };
+        CmprsContext(const CmprsContext& ass) { FAILD_ASSERT(CompressClass, "not support"); };
+        void operator =(const CmprsContext& ass) { FAILD_ASSERT(CompressClass, "not support"); };
 
         CmprsContext(z3::vcontext& target_ctx, Addr64 target_addr, StateStatus ttag)
             :m_target_addr(target_addr), m_target_tag(ttag), m_z3_target_ctx(target_ctx)
@@ -115,7 +115,7 @@ namespace cmpr {
     public:
         template<class _CTX, class _S>
         CmprsAvoid(_CTX& ctx, _S& s) :STATEinterface(ctx, s, Avoid_Node) { }
-        ~CmprsAvoid() override { del_obj(); }
+        ~CmprsAvoid() override { this->del_obj(); }
     };
 
 
@@ -141,7 +141,7 @@ namespace cmpr {
             vassert(ty >= 0);
         };
         CmprsTarget<STATEinterface>& get_target_node() override { return *this; }
-        ~CmprsTarget() override { del_obj(); }
+        ~CmprsTarget() override { this->del_obj(); }
     };
 
 
@@ -159,9 +159,9 @@ namespace cmpr {
         CmprsFork(_CTX& ctx, _S& s, bool) :CmprsFork(ctx, s) { m_has_survive = true; }
         template<class _CTX, class _S>
         CmprsFork(_CTX& ctx, _S& s) : STATEinterface(ctx, s, Fork_Node) {
-            vassert(!branch().empty());
-            m_child_nodes.reserve(branch().size());
-            for (auto bstate : branch()) {
+            vassert(!this->branch().empty());
+            m_child_nodes.reserve(this->branch().size());
+            for (auto bstate : this->branch()) {
                 STATEinterface* ns = mk(bstate, tag(bstate));
                 m_child_nodes.emplace_back(ns);
                 if (ns->type() == Survive_Node) {
@@ -207,7 +207,7 @@ namespace cmpr {
 
         inline std::vector<STATEinterface*>& child_nodes() { return m_child_nodes; }
 
-        inline STATEinterface& operator[](Int idx) { return child_nodes[idx]; }
+        inline STATEinterface& operator[](Int idx) { return m_child_nodes[idx]; }
 
         CmprsFork<STATEinterface>& get_fork_node() override { return *this; }
 
@@ -215,7 +215,7 @@ namespace cmpr {
             for (auto s : m_child_nodes) {
                 delete s;
             };
-            if (!has_survive()) del_obj();
+            if (!has_survive()) this->del_obj();
         }
     };
 
@@ -239,7 +239,7 @@ namespace cmpr {
                 Compress& m_c;
                 UInt m_group;
                 sbool m_assert;
-                std::hash_map<Addr64, GPMana> m_changes;
+                HASH_MAP<Addr64, GPMana> m_changes;
 
                 StateRes(Compress const& c, UInt group) :m_c(const_cast<Compress&>(c)), m_group(group),
                     m_assert(m_c.avoid_asserts(m_c.m_node, m_group).tos())
@@ -247,9 +247,9 @@ namespace cmpr {
                     m_c.treeCompress(m_changes, m_c.m_node, m_group);
                 }
             public:
-                StateRes(const StateRes& ass) { static_assert(false, "not support"); };
-                void operator =(const StateRes& ass) { static_assert(false, "not support"); };
-                inline std::hash_map<Addr64, GPMana> const& changes() { return m_changes; }
+                StateRes(const StateRes& ass) { FAILD_ASSERT(STATEinterface, "not support"); };
+                void operator =(const StateRes& ass) { FAILD_ASSERT(STATEinterface, "not support"); };
+                inline HASH_MAP<Addr64, GPMana> const& changes() { return m_changes; }
                 inline sbool conditions() const { return m_assert; }
             };
         public:
@@ -257,16 +257,16 @@ namespace cmpr {
             Iterator(Compress const& c) :m_c(const_cast<Compress&>(c)), m_it_group(0) {
                 m_group_max = m_c.m_ctx.group().size();
             }
-            Iterator(const Iterator& ass) { static_assert(false, "not support"); };
-            void operator =(const Iterator& ass) { static_assert(false, "not support"); };
+            Iterator(const Iterator& ass) { FAILD_ASSERT(STATEinterface, "not support"); };
+            void operator =(const Iterator& ass) { FAILD_ASSERT(STATEinterface, "not support"); };
             inline bool operator!=(const Iterator& src) { return m_it_group != src.m_group_max; }
             inline void operator++() { m_it_group++; }
             inline StateRes operator*() { return StateRes(m_c, m_it_group); }
             inline UInt group_max() { return m_group_max; }
         };
     private:
-        Compress(const Compress& ass) { static_assert(false, "not support"); };
-        void operator =(const Compress& ass) { static_assert(false, "not support"); };
+        Compress(const Compress& ass) { FAILD_ASSERT(STATEinterface, "not support"); };
+        void operator =(const Compress& ass) { FAILD_ASSERT(STATEinterface, "not support"); };
     public:
 
         Compress(
@@ -278,7 +278,7 @@ namespace cmpr {
 
         }
         inline bool has_survive() { return m_node.has_survive(ignore{}); }
-        inline operator z3::vcontext& () { return m_z3_target_ctx; }
+        inline operator z3::vcontext& () { return this->m_z3_target_ctx; }
         Iterator begin() const { return Iterator(*this); }
         Iterator end() const { return Iterator(*this); }
         void clear_nodes() {
@@ -288,12 +288,12 @@ namespace cmpr {
             m_node.m_child_nodes.clear();
         }
         /*
-        ©´(P¡ÄQ)<=> ©´P¡Å©´Q
-        ©´(P¡ÅQ)<=> ©´P¡Ä©´Q
-        P¡Å(Q¡ÄR)<=>(P¡ÅQ)¡Ä(P¡ÅR)
-        P¡Ä(Q¡ÅR)<=>(P¡ÄQ)¡Å(P¡ÄR)
-        ©´(P¡úQ)<=> P¡Ä©´Q
-        P¡úQ<=>©´P¡ÅQ
+        â”(Pâˆ§Q)<=> â”Pâˆ¨â”Q
+        â”(Pâˆ¨Q)<=> â”Pâˆ§â”Q
+        Pâˆ¨(Qâˆ§R)<=>(Pâˆ¨Q)âˆ§(Pâˆ¨R)
+        Pâˆ§(Qâˆ¨R)<=>(Pâˆ§Q)âˆ¨(Pâˆ§R)
+        â”(Pâ†’Q)<=> Pâˆ§â”Q
+        Pâ†’Q<=>â”Pâˆ¨Q
                                top
                                P1
 
@@ -303,14 +303,14 @@ namespace cmpr {
             a1  a2  -a1 -a2              b-1  b0   b1
             Q1  Q2   q1  q2
 
-        yes  P2 ¡ú (Q1 ¡Å Q2) <=> ©´P2 ¡Å (Q1 ¡Å Q2) <=> ©´P2 ¡Å Q1 ¡Å Q2
+        yes  P2 â†’ (Q1 âˆ¨ Q2) <=> â”P2 âˆ¨ (Q1 âˆ¨ Q2) <=> â”P2 âˆ¨ Q1 âˆ¨ Q2
         sat:  P2 Q1 Q2
               1  1  1
               1  0  1
               1  1  0
               0  x  x
 
-        yes  P2 ¡ú (©´q1 ¡Ä ©´q2) <=> P2 ¡ú ©´(q1 ¡Å q2) <=> ©´P2 ¡Å (©´q1 ¡Ä ©´q2) <=> ©´P2 ¡Å (©´q1 ¡Ä ©´q2)
+        yes  P2 â†’ (â”q1 âˆ§ â”q2) <=> P2 â†’ â”(q1 âˆ¨ q2) <=> â”P2 âˆ¨ (â”q1 âˆ§ â”q2) <=> â”P2 âˆ¨ (â”q1 âˆ§ â”q2)
         sat:  P2 q1 q2
               1  0  0
               0  x  x
@@ -337,7 +337,7 @@ namespace cmpr {
                 };
             }
             if (target_num <= avoid_num) {
-                // P2 ¡ú (Q1 ¡Å Q2)
+                // P2 â†’ (Q1 âˆ¨ Q2)
                 if (!target_num) {
                     return rsbool(m_ctx.ctx(), false);
                 }
@@ -368,7 +368,7 @@ namespace cmpr {
                 return logic_or(aasv);
             }
             else {
-                // P2 ¡ú ©´(q1 ¡Å q2)
+                // P2 â†’ â”(q1 âˆ¨ q2)
                 if (!avoid_num) {
                     return rsbool(m_ctx.ctx(), false);
                 }
@@ -412,7 +412,7 @@ namespace cmpr {
 
         class __struct_cmaps__ {
             STATEinterface* m_node;
-            std::hash_map<Addr64, PACK> m_cm;
+            HASH_MAP<Addr64, PACK> m_cm;
             UInt m_size;
         public:
             __struct_cmaps__(STATEinterface* node, UInt size) :m_node(node), m_size(size) {
@@ -423,7 +423,7 @@ namespace cmpr {
                 m_cm[addr] = m;
             }
 
-            operator std::hash_map<Addr64, PACK>& () {
+            operator HASH_MAP<Addr64, PACK>& () {
                 return m_cm;
             }
 
@@ -435,7 +435,7 @@ namespace cmpr {
                 return m_cm.find(a) != m_cm.end();
             }
 
-            void load(std::hash_map<Addr64, GPMana>& cm_ret, std::hash_map<Addr64, bool>& maps) {
+            void load(HASH_MAP<Addr64, GPMana>& cm_ret, HASH_MAP<Addr64, bool>& maps) {
                 auto it_end = maps.end();
                 auto it_start = maps.begin();
                 sbool ass = m_node->get_assert();
@@ -461,7 +461,7 @@ namespace cmpr {
 
 
         void treeCompress(
-            std::hash_map<Addr64, GPMana>& cm_ret,/*OUT*/
+            HASH_MAP<Addr64, GPMana>& cm_ret,/*OUT*/
             CmprsFork<STATEinterface>& node, Int group/*IN*/
         ) {
             std::vector<__struct_cmaps__> changes;
@@ -474,17 +474,17 @@ namespace cmpr {
             }
             changes.reserve(max);
 
-            std::hash_map<Addr64, bool> record;
+            HASH_MAP<Addr64, bool> record;
             for (__struct_cmaps__& changes_node : changes) {
                 STATEinterface* sNode = changes_node;
                 ///sbool top = sNode->get_assert();
                 if (Fork_Node == sNode->type() && sNode->get_fork_node().target_counts(group)) {
                     sNode->get_write_map(record);
-                    std::hash_map<Addr64, GPMana> cm_ret_tmp;
+                    HASH_MAP<Addr64, GPMana> cm_ret_tmp;
                     treeCompress(cm_ret_tmp, sNode->get_fork_node(), group);
                     auto it_end = cm_ret_tmp.end();
                     auto it_start = cm_ret_tmp.begin();
-                    std::hash_map<Addr64, PACK>& fork_cm = changes_node;
+                    HASH_MAP<Addr64, PACK>& fork_cm = changes_node;
                     for (; it_start != it_end; it_start++) {
                         changes_node.add(it_start->first, it_start->second.get());
                         record[it_start->first];

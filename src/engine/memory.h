@@ -1,4 +1,4 @@
-﻿/*++
+/*++
 Copyright (c) 2019 Microsoft Corporation
 Module Name:
     Memory.class:
@@ -16,7 +16,7 @@ Revision History:
 #ifndef MEMORY_DEFS_H
 #define MEMORY_DEFS_H
 
-#include <Windows.h>
+//#include <Windows.h>
 #include "engine/engine.h"
 #include "engine/basic_var.hpp"
 #include "engine/register.h"
@@ -143,10 +143,10 @@ public:
     template<bool sign, int nbits, sv::z3sk sk>
     inline sv::rsval<sign, nbits, sk> value(Z3_context ctx) {
         __m256i pad = _mm256_set1_epi8(m_pad);
-        return sv::rsval<sign, nbits, sk>(ctx, pad.m256i_i8);
+        return sv::rsval<sign, nbits, sk>(ctx, M256i(pad).m256i_i8);
     };
 
-    ~PAGE() {
+    ~PAGE() noexcept(false) {
         vassert(m_ref_cound == 0); 
         if (m_unit) {
             delete m_unit;
@@ -226,7 +226,7 @@ namespace TR {
             }
         };
     private:
-        std::hash_map<ADDR, TR::Register<0x1000>*> mem_change_map;
+        HASH_MAP<ADDR, TR::Register<0x1000>*> mem_change_map;
         TR::vctx_base&  m_vctx;
         Bool            need_record;
         Int             user;
@@ -264,7 +264,7 @@ namespace TR {
         void clearRecord();
         ULong find_block_forward(ULong start, ADDR size);
         ULong find_block_reverse(ULong start, ADDR size);
-        inline std::hash_map<ADDR, TR::Register<0x1000>*> change_map() { return mem_change_map; }
+        inline HASH_MAP<ADDR, TR::Register<0x1000>*> change_map() { return mem_change_map; }
         inline Int get_user() { return user; }
         //把两个不连续的页放到Pap里，以支持valgrind的跨页翻译
         inline void set_double_page(ADDR address, Pap& addrlst) {

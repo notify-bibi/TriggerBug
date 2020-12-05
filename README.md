@@ -1,30 +1,49 @@
-## TriggerBug
+<center> TriggerBug</center>
 
 ------
 
-本项目编写一年有余，目的就是解决现代符号执行的各种困难（路径爆炸，符号地址读写，求解费时，客户机适配工作量大），本项目力求写好约束就可快速得到flag
+**tips:**  
 
-<center> 目前还未将其向各大平台推广（改动大，python前端同步困难），计划最迟到今年年底再推送。</center>
-
-tips:  You can save time. It is not recommended that you understand the tool at present, the front end is not updated. But you can experiment with the c++ back end as a developer. Under construction.....
+You can save time. It is not recommended that you understand the tool at present, the front end is not updated. But you can experiment with the c++ back end as a developer. Under construction.....
 
 The C++ Dynamic symbolic executor like Angr.
 The engine was developed to solve some of Angr's more intractable problems.
 
-	进展：
-	1. python前端准备重写，结构太复杂。
-	2. 解决了并提供求解AES等一些列现代加密算法的方案。（原理层方案，非自己实现Aes decrypto。demo example有实例）。某些隐式加密在原理上是解不开的，只能爆破，故准备写一个常见现代加密算法的crypto ANAlyzer, 方便构建exp，不需要hook table_base进行显式转换。
-	3. 符号地址读写策略变更，之前是求解子集再读写，速度极慢，现在实现了超集求解算法，快速极快。再根据求得的超集读写。
-	4. 自动合并路径的算法已经构造完毕.
-	5. 代码控制流块探索算法完成，计划写主动式路径合并分析器，正在完善。。。。。。 (目前只有被动式的可以自动合并分支，某些子状态回收不是很好)
-	6. 计划写反ollvm控制流平坦化的算法。
-	7. crypto_finder算法完成，现代加密算法的隐式关系表还太少
-	8. 采用模拟host code实现guest code的方法去支持所有ir dirty code（guest code 的微操作）和ir dirty call, 但switch结构微操作尚未支持（使用if结构替换可解决【效率低】，或者直接实现微操作到z3_target_call项目代码中替换dirty call【效率高】）。[原因：本方法是将客户机寄存器和内存映射到模拟宿主机，客户机模拟微指令只可以使用宿主机的栈，switch结构的静态表不属于模拟栈。
+进展：
 
+- [x] 解决了并提供求解AES等一些列现代加密算法的方案。（原理层方案，非实现Aes decrypto。demo example有实例）。某些隐式加密在原理上是解不开的，只能爆破，故准备写一个常见现代加密算法的crypto ANAlyzer, 方便构建exp，不需要hook table_base进行显式转换。crypto_finder
 
-​	ing.....
+- [x] 采用模拟host code实现guest code的方法去支持所有ir dirty code（guest code 的微操作）和ir dirty call, 但switch结构微操作尚未支持（使用if结构替换可解决【效率低】，或者直接实现微操作到z3_target_call项目代码中替换dirty call【效率高】）。[原因：本方法是将客户机寄存器和内存映射到模拟宿主机，客户机模拟微指令只可以使用宿主机的栈，switch结构的静态表不属于模拟栈。  
 
-### Advantages：The present does not represent the future
+- [x] 符号地址读写策略变更，之前是求解子集再读写，速度极慢，现在实现了超集求解算法，快速极快。再根据求得的超集读写。
+
+- [x] 自动合并路径的算法已经构造完毕.
+
+- [x] 缓解路径爆炸状态合并模块 cmpr::Compress<target_state, ...>
+
+- [x] 
+
+- [x] 代码重构，计划将代码部署在linux、darwin、windows(clang)
+
+- [x] 反反调试功能（vmp检测通过）
+
+- [x] windows 异常支持（Eha/ EHsc）
+
+- [x] 
+
+- [ ] Python前端重写（结构太复杂、项目重构不易同步）推迟。
+
+- [x] 代码控制流目标路径探索算法完成，计划写主动式路径合并分析器，正在完善。。。。。。 (目前只有被动式的可以自动合并分支，某些子状态回收不是很好) 
+
+  
+
+- [ ] 设计分析器，使用valgrind优化block，日志型模拟基本块，记录执行指令分析，分析循环条件等手段来解决问题。在原理上，对于很多大型程序，符号执行并不能构建出程序的所有的执行状态，时间复杂度O(k^n)，加入各种预测约束、快速解析符号地址遍历读写技术、状态合并技术、Cr3用户页复制等也仅仅是一种缓解手段，但不是说没有用，其在无环路分支上表现非常好。挖坑 ...
+
+- [ ] VMP等强壳的随机地址解密释放代码再执行会干扰分析器，地址不再具有意义，irsb和hash进行绑定，有待解决
+
+坚持✊
+
+## advantage
 
 |         |  Angr  | TriggerBug |
 | :---------:  | ------ | ------ |
@@ -38,21 +57,44 @@ The engine was developed to solve some of Angr's more intractable problems.
 |binary load|[py module:cle(Incomplete loading)<br />Parsing is not complete<br />slowly][CLE]|[py dump mem from  IDA <br/>1:1 Fully symbolic loading<br/>200MB/1s][MDB]|
 |speed| ... |like qemu|
 
+
+
 ## shortcomings：
 
 |  all Arch  | X86,AMD64,ARM,ARM64,PPC32,PPC64,S390X,MIPS32,MIPS64 |
 | :--: | ---- |
 | MEM dump support | X86,AMD64（Under construction..） [CLE][CLE] can give you more supports |
 
-It is possible that I have misunderstood angr, so I apologize again
+``It is possible that I have misunderstood angr, so I apologize ``
 
 ## Make
-------
 
-​        Now only support win64 host machine. Use camke and Visual Studio 2019 with Intel compiler.
+**darwin**、**linux**
+
+```bash
+$ mkdir build && cmake .. && make
+```
+
+**-G Xcode** with Xcode
+
+In  **windows**
+
+```bash
+cmake -G "Visual Studio 16 2019" -T ClangCL X:\TriggerBug
+pls use ms build IDE
+```
+
+**dev option**
+
+`-DDEBUG_GABLE=ON`
+`-DZ3_BUILD_LIBZ3_SHARED=ON `
+`-DZ3_USE_LIB_GMP=OFF `
+`-DZ3_SINGLE_THREADED=OFF `
+
 
 
 ## Release
+
 ------
 
 ​        [Dlls & python module][Plre]
@@ -60,6 +102,8 @@ It is possible that I have misunderstood angr, so I apologize again
 ## Install 
 
 ------
+前端暂不可用
+
 ```cmd
 cd ./TriggerBug/PythonFrontEnd
 python setup.py install
@@ -70,18 +114,17 @@ python setup.py install
 ## Usage
 ------
 
-open ida, make a backpoint(bpt). When you get to the bpt, you need to delete the bpt and ```(Shift-2)``` to dump binary.
+open ida, make a backpoint(bpt). When you get to the bpt. Just **(Shift-2)** to dump binary.
 
-```
-介绍下c++写代码使用引擎技巧（需要构建）
-python前端用不了，敬请期待
+介绍下c++写代码使用引擎技巧
 例如 examples 的ctf题目 xctf-asong
-建议先试着您的使用ctf技巧逆向该题目，再看下面的代码。
 此题使用angr必定路径爆炸，某些模拟执行的地址访问可能是符号地址访问，angr可能会直接将该state添加到Death的state管理器
+库函数底层调用系统调用可能才会失败，比如malloc、printf、微软闭源库函数等均无问题（sys_brk、nt_proc_information、非标准IO等系统调用已经实现）
 
 下面使用本引擎
 速度很快的，主要是z3太耗时，如果没有大量处理符号，仿真速度基本不用担心
 
+```
 
 [shift-2] dump it
 +-------------------+----------------------+--------------------+----------+--------+
@@ -146,7 +189,7 @@ int main() {
     gv.Run();
 }
 
-不到30s解出
+不到20s解出, angr用时4分钟
 
 PS: TriggerBug\PythonFrontEnd\examples> python .\str2flag.py "sat(define-fun p_20 () (_ BitVec 8)
 >>   #x66)
@@ -176,12 +219,12 @@ namespace: <p_>       len: 38{
     
 本引擎提供基本的反反调试功能、支持windows异常、支持解AES(隐式关系)
 也可以看看creakme一题，一个aes的题目，上面的特性全部能够展露
-还有个vmp题目，可以借助本工具看到它的实际加密逻辑（污点追踪）
 ```
 
-###     [examples][Pltest] 
+goto   [examples][Pltest]  ;
 
 ## Salute to you
+
 ------
 Thanks to the developers of the  [Z3][Plz3] ,[Valgrind][Plvgrd] and [Angr][Plangr] projects.
 
@@ -210,3 +253,7 @@ Warmly welcome to join us in the development. Study together.
 
 [MDB]: <https://github.com/notify-bibi/TriggerBug/blob/master/PythonFrontEnd/ida-plugins/memory_dump_BIN.py>
 [CLE]: <https://github.com/angr/cle>
+
+
+
+另外值得高兴的是，windows终于支持clang了，早点放弃自家编译器该多好啊，有些时候还是不要那么执着的好（黑，逃

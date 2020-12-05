@@ -48,7 +48,7 @@ State_Tag TR::win32::Sys_syscall()
     auto arg6 = vex_stack_get(7);
 
 
-    if (eax.real()) {//这就非常的烦
+    if (eax.real()) {//杩欏氨闈炲父鐨勭儲
         switch ((UInt)eax.tor()) {
         case 0x0000018: {//ntdll_NtAllocateVirtualMemory
             /*

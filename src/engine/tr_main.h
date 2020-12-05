@@ -1,3 +1,15 @@
+
+/* ---------------------------------------------------------------------------------------
+ *      Hex-Rays Decompiler project
+ *      Copyright (c) 2019 Microsoft Corporation by notify-bibi@github, 2496424084@qq.com
+ *      ALL RIGHTS RESERVED.
+ *
+ *      这是 TR::State<BitWide> 的派生类定义地，只允许 32 or 64 
+ *
+ * ---------------------------------------------------------------------------------------
+ */
+
+
 #ifndef _TRIGGERBUG_
 #define _TRIGGERBUG_
 

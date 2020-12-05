@@ -1,4 +1,13 @@
 #include "engine/op_header.h"
+/* ---------------------------------------------------------------------------------------
+ *      Notify-bibi Symbolic-Emulation-Engine project
+ *      Copyright (c) 2019 Microsoft Corporation by notify-bibi@github, 2496424084@qq.com
+ *      ALL RIGHTS RESERVED.
+ *
+ *      快速地执行 IR operator 并返回
+ *      如果是你需要的op code，请帮我完善还未能实现的 IR op
+ * ---------------------------------------------------------------------------------------
+ */
 
 
 template<unsigned nb>
@@ -17,36 +26,6 @@ static subval<nb> ctz(const subval<nb>& s) {
     for (int i = nb - 1; i != -1; i--)
         r = ite(s.extract<1>(i) == b1, subval<nb>(s, i), r);
     return r;
-}
-
-static inline int CountLeadingZeros32(uint32_t n) {
-#if defined(_MSC_VER)
-    unsigned long result = 0;
-    if (_BitScanReverse(&result, n)) {
-        return 31 - result;
-    }
-    return 32;
-#elif defined(__GNUC__)
-    if (n == 0) {
-        return 32;
-    }
-    return __builtin_clz(n);
-#endif
-}
-
-static inline int CountLeadingZeros64(uint64_t n) {
-#if defined(_MSC_VER)
-    unsigned long result = 0; 
-    if (_BitScanReverse64(&result, n)) {
-        return 63 - result;
-    }
-    return 64;
-#elif defined(__GNUC__)
-    if (n == 0) {
-        return 64;
-    }
-    return __builtin_clzll(n);
-#endif
 }
 
 
@@ -180,18 +159,10 @@ tval Kernel::tUnop(IROp op, tval const& a) {
         case Iop_32UtoV128: { return tval(a, _mm_set_epi32(0, 0, 0, ato(int32_t))); }
         case Iop_64UtoV128: { return tval(a, _mm_set_epi64x(0, ato(int64_t))); }
 
-        case Iop_Clz32: { return tval(a, (uint32_t)CountLeadingZeros32(ato(uint32_t))); }
-        case Iop_Clz64: { return tval(a, (uint64_t)CountLeadingZeros64(ato(uint64_t)));}
-        case Iop_Ctz32: {
-            unsigned long result = 0;
-            if (!_BitScanForward(&result, (uint32_t)ato(uint32_t)))  result = 32;
-            return tval(a, (uint32_t)result);
-        };//ok
-        case Iop_Ctz64: {
-            unsigned long result = 0;
-            if (!_BitScanForward64(&result, ato(uint64_t)))  result = 64;
-            return tval(a, (uint64_t)result);
-        };//ok bsf
+        case Iop_Clz32: { return tval(a, (uint32_t)__builtin_clz(ato(uint32_t))); }
+        case Iop_Clz64: { return tval(a, (uint64_t)__builtin_clzll(ato(uint64_t)));}
+        case Iop_Ctz32: { return tval(a, (uint32_t)__builtin_ctz((uint32_t)ato(uint32_t))); };//ok
+        case Iop_Ctz64: { return tval(a, (uint64_t)__builtin_ctzll(ato(uint64_t))); };//ok bsf
         case Iop_GetMSBs8x16: { return tval(a, (UShort)_mm_movemask_epi8(ato(__m128i))); }//OK pmovmskb
 
         case Iop_Abs64Fx2:

@@ -1,4 +1,4 @@
-﻿
+
 /*++
 Copyright (c) 2019 Microsoft Corporation
 Module Name:
@@ -1173,7 +1173,7 @@ public:
         return m_condition;
     }
 
-    void get_write_map(std::hash_map<Addr64, bool>& record) {
+    void get_write_map(HASH_MAP<Addr64, bool>& record) {
         if (m_state.regs.getRecord()) {
             for (auto offset : *m_state.regs.getRecord()) {
                 record[offset];
@@ -1275,9 +1275,9 @@ void State<ADDR>::compress(cmpr::CmprsContext<State<ADDR>, State_Tag>& ctx)
             printf("%s\n", Z3_ast_to_string(condition, condition));
 #endif //  _DEBUG
             nbranch->solv.add_assert(condition);
-            std::hash_map<Addr64, cmpr::GPMana> const& cm = state.changes();
-            std::hash_map<Addr64, cmpr::GPMana>::const_iterator itor = cm.begin();
-            std::hash_map<Addr64, cmpr::GPMana>::const_iterator end = cm.end();
+            HASH_MAP<Addr64, cmpr::GPMana> const& cm = state.changes();
+            HASH_MAP<Addr64, cmpr::GPMana>::const_iterator itor = cm.begin();
+            HASH_MAP<Addr64, cmpr::GPMana>::const_iterator end = cm.end();
 
             for (; itor != end; itor++) {
                 Addr64 addr = itor->first;
@@ -1307,9 +1307,9 @@ void State<ADDR>::compress(cmpr::CmprsContext<State<ADDR>, State_Tag>& ctx)
             printf("%s\n", Z3_ast_to_string(condition, condition));
 #endif //  _DEBUG
             solv.add_assert(condition);
-            std::hash_map<Addr64, cmpr::GPMana> const& cm = state.changes();
-            std::hash_map<Addr64, cmpr::GPMana>::const_iterator itor = cm.begin();
-            std::hash_map<Addr64, cmpr::GPMana>::const_iterator end = cm.end();
+            HASH_MAP<Addr64, cmpr::GPMana> const& cm = state.changes();
+            HASH_MAP<Addr64, cmpr::GPMana>::const_iterator itor = cm.begin();
+            HASH_MAP<Addr64, cmpr::GPMana>::const_iterator end = cm.end();
             cmp.clear_nodes();
             for (; itor != end; itor++) {
                 Addr64 addr = itor->first;

@@ -47,7 +47,7 @@ bool check_has_loop(State<ADDR>*s, ADDR oep) {
 }
 
 template<typename ADDR>
-void find_explore_state(State<ADDR> &state, std::vector<State<ADDR>*>& explore, std::hash_map<ADDR, UInt> &Fork_addr) {
+void find_explore_state(State<ADDR> &state, std::vector<State<ADDR>*>& explore, HASH_MAP<ADDR, UInt> &Fork_addr) {
    if (state.branch.empty()) {
         if (state.status() == Fork) {
             auto _where = Fork_addr.find(state.get_cpu_ip());
@@ -73,7 +73,7 @@ void find_explore_state(State<ADDR> &state, std::vector<State<ADDR>*>& explore, 
 
 
 template<typename ADDR>
-void find_fork_state(State<ADDR>& state, std::hash_map<ADDR, UInt>& Fork_addr) {
+void find_fork_state(State<ADDR>& state, HASH_MAP<ADDR, UInt>& Fork_addr) {
     if (!state.branch.empty()) {
         Fork_addr[state.get_cpu_ip()] = 0;
         for (State<ADDR>* cs : state.branch) {
@@ -86,7 +86,7 @@ template<typename ADDR>
 bool task_explorer(State<ADDR>* top) {
     vex_context<ADDR>& vctx = top->vctx();
     while (true) {
-        std::hash_map<ADDR, UInt> Fork_addr;
+        HASH_MAP<ADDR, UInt> Fork_addr;
         std::vector<State<ADDR>*> explore;
         find_fork_state(*top, Fork_addr);
         find_explore_state(*top, explore, Fork_addr);
@@ -121,8 +121,8 @@ bool task_explorer(State<ADDR>* top) {
 
     //std::vector<State<ADDR>*> ForkTree;
     //ForkTree.emplace_back(top);
-    //std::hash_map<ADDR, UInt> Fork_addr;
-    //std::hash_map<ADDR, UInt> CompStates;
+    //HASH_MAP<ADDR, UInt> Fork_addr;
+    //HASH_MAP<ADDR, UInt> CompStates;
     //while (true)
     //{
     //    printf("++++2++++ {\n");
@@ -523,7 +523,7 @@ class PathExplorer : public GraphView<ADDR> {
         typedef typename _Container::iterator iterator;
         using jmps = _jmps;
     private:
-        std::hash_map<_Ty, _jmps> m_stack_map;
+        HASH_MAP<_Ty, _jmps> m_stack_map;
     public:
         void pop() {
             _Container::reference v = _Container::back();
@@ -572,7 +572,7 @@ public:
         
     }
 
-    void set_visited(Int _itor, Stack<ADDR>& stack, std::hash_map<ADDR, bool>& target) {
+    void set_visited(Int _itor, Stack<ADDR>& stack, HASH_MAP<ADDR, bool>& target) {
         Stack<ADDR>::iterator itor = stack.begin() + _itor;
 #ifdef OUTPUT_PATH
         std::cout << *itor << " -> ";
@@ -609,7 +609,7 @@ public:
 #endif
     }
 
-    ADDR getUnvisitedVertex(Stack<ADDR>& stack, ADDR vertex, std::hash_map<ADDR, bool>& avoid) {
+    ADDR getUnvisitedVertex(Stack<ADDR>& stack, ADDR vertex, HASH_MAP<ADDR, bool>& avoid) {
         ADDR block_end = begin2End(vertex);
         std::map<ADDR, GraphView<ADDR>::jmp_kind>::iterator to = m_jmp.find(block_end);
         if (to == m_jmp.end()) {
@@ -642,8 +642,8 @@ public:
 
     void get_path(ADDR start, ADDR end = 0) {
         Stack<ADDR> stack;
-        std::hash_map<ADDR, bool> block_target;
-        std::hash_map<ADDR, bool> avoid;
+        HASH_MAP<ADDR, bool> block_target;
+        HASH_MAP<ADDR, bool> avoid;
         stack.push(start);
         UInt prev_itor = 0;
         while (!stack.empty()) {

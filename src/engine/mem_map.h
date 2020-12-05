@@ -67,20 +67,20 @@ namespace TR {
             memset(&_CR3_, 0, sizeof(PML4T));
         }
 
-        //¿Í»§»úµÄ·ÖÅä¿Õ¼äËã·¨ ÀàËÆcpuµÄÓ²¼þÐéÄâÓ³Éä¼¼Êõ¡£ÕâÀïÎÒÃÇÊ¹ÓÃÈí¼þÐéÄâÓ³Éä
+        //å®¢æˆ·æœºçš„åˆ†é…ç©ºé—´ç®—æ³• ç±»ä¼¼cpuçš„ç¡¬ä»¶è™šæ‹Ÿæ˜ å°„æŠ€æœ¯ã€‚è¿™é‡Œæˆ‘ä»¬ä½¿ç”¨è½¯ä»¶è™šæ‹Ÿæ˜ å°„
         ULong map(ULong address, ULong length);
 
-        //ÀàËÆÓÚlinuxµÄsys_fork.Ð´Ê±¸´ÖÆ.ËÙ¶È¿ì
+        //ç±»ä¼¼äºŽlinuxçš„sys_fork.å†™æ—¶å¤åˆ¶.é€Ÿåº¦å¿«
         void copy(PML4T* cr3);
 
-        //ÊÍ·ÅÎïÀíÒ³
+        //é‡Šæ”¾ç‰©ç†é¡µ
         ULong unmap(ULong address, ULong length);
         
         void recycle();
 
         ~mapping() { vassert(!CR3[0]); }
 
-        //ÐéÄâÓ³ÉäÒ»¸öÐéÄâµØÖ·
+        //è™šæ‹Ÿæ˜ å°„ä¸€ä¸ªè™šæ‹Ÿåœ°å€
         inline ST** get_pointer_of_mem_page(Addr64 address) {
             UShort PML4T_ind = (address >> 39 & 0x1ff);
             UShort PDPT_ind = (address >> 30 & 0x1ff);

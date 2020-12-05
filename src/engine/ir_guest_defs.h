@@ -14,7 +14,7 @@ Revision History:
 
 extern "C"
 {
-#include "libvex.h";
+#include "libvex.h"
 #include "libvex_guest_x86.h"
 #include "libvex_guest_amd64.h"
 #include "libvex_guest_arm.h"

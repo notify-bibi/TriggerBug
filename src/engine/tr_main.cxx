@@ -1,17 +1,5 @@
-﻿/*++
-Copyright (c) 2019 Microsoft Corporation
-Module Name:
-    TriggerBug.cpp: 
-Abstract:
-    API list;
-Author:
-    WXC 2019-05-31.
-Revision History:
---*/
-
 
 //#undef _DEBUG
-
 
 #include "engine/tr_main.h"
 

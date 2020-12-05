@@ -1,3 +1,13 @@
+
+/* ---------------------------------------------------------------------------------------
+ *      Notify-bibi Symbolic-Emulation-Engine project
+ *      Copyright (c) 2019 Microsoft Corporation by notify-bibi@github, 2496424084@qq.com
+ *      ALL RIGHTS RESERVED.
+ *
+ *      模拟计算机的mmu单元，即虚拟映射。支持写时复制，支持fork
+ * ---------------------------------------------------------------------------------------
+ */
+
 #include "engine/mem_map.h"
 #include "engine/memory.h"
 using namespace TR;
@@ -322,7 +332,7 @@ void TR::mapping<ST>::recycle()
  {
     if (!CR3[0]) return;
     PML4T* CR3_point = CR3[0];
-    //  ����˫������
+    //  遍历双向链表
     LCODEDEF5(LSTRUCT2, pdpt_point, free_pdpt_point, CR3_point, i1,
         LCODEDEF5(LSTRUCT3, pdt_point, free_pdt_point, pdpt_point, i2,
             LCODEDEF5(LSTRUCT4, pt_point, free_pt_point, pdt_point, i3,

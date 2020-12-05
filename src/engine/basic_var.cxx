@@ -68,7 +68,7 @@ namespace sv {
     {
         Z3_error_code e = Z3_get_error_code((Z3_context)m_ctx);
         if (e != Z3_OK)
-            throw (z3::z3exception(Z3_get_error_msg((Z3_context)m_ctx, e)));
+            throw (z3::exception(Z3_get_error_msg((Z3_context)m_ctx, e)));
         return e;
     }
 
@@ -97,7 +97,7 @@ namespace sv {
         case Irrm_ZERO: { return sort(ctx, Z3_mk_fpa_rtz(ctx)); }
         case Irrm_NEAREST_TIE_AWAY_0: { return sort(ctx, Z3_mk_fpa_rna(ctx)); }
         case Irrm_NegINF: { return sort(ctx, Z3_mk_fpa_rtn(ctx)); }
-        default: VPANIC("NOT SUPPPORT"); return *(sort*)(nullptr);
+        default: VPANIC("NOT SUPPPORT"); return sort(ctx, (Z3_ast)nullptr);
         }
     }
     std::string tval::str() const
@@ -134,7 +134,7 @@ namespace sv {
             str.append(strContent);
             return str;
 #else
-            snprintf(buff, sizeof(buff), " BVS %d < \\%p/ >  ", m_bits, m_ast);
+            snprintf(buff, sizeof(buff), " BVS %d < \\%zx/ >  ", m_bits, m_ast);
             str.assign(buff);
             return str;
 #endif
@@ -175,7 +175,7 @@ namespace sv {
             UChar _n = size >> 6;
             UChar _s = (64 - (lo & 7));
             for (int i = 0; i <= _n; i++) {
-                m32.m256i_u64[i] = (m32.m256i_u64[i] >> (lo & 7)) | (m32.m256i_u64[i + 1] << _s);
+                M256i(m32).m256i_u64[i] = (M256i(m32).m256i_u64[i] >> (lo & 7)) | (M256i(m32).m256i_u64[i + 1] << _s);
             }
         }
         return tval((Z3_context)m_ctx, m32, size);
@@ -190,18 +190,18 @@ namespace sv {
             if (low.m_bits & 7) {
                 __m256i m32 = *(__m256i*)low.m_data;
                 auto base = ((low.m_bits - 1) >> 6);
-                m32.m256i_u64[base] &= fastMask(low.m_bits & 63);
+                M256i(m32).m256i_u64[base] &= fastMask(low.m_bits & 63);
                 auto shln = low.m_bits & 63;
                 auto shrn = (64 - shln);
-                m32.m256i_u64[base] |= m_data[0] << shln;
-                for (int i = 1; i <= ((m_bits - 1) >> 6); i++) {
-                    m32.m256i_u64[base + i] = (m_data[i] << shln) | (m_data[i - 1] >> shrn);
+                M256i(m32).m256i_u64[base] |= m_data[0] << shln;
+                for (unsigned int i = 1; i <= ((m_bits - 1) >> 6); i++) {
+                    M256i(m32).m256i_u64[base + i] = (m_data[i] << shln) | (m_data[i - 1] >> shrn);
                 }
                 return tval((Z3_context)m_ctx, m32, low.m_bits + m_bits);
             }
             else {
                 __m256i re = *(__m256i*)low.m_data;
-                memcpy(&re.m256i_u8[(low.m_bits >> 3)], m_data, (this->m_bits) >> 3);
+                memcpy(&M256i(re).m256i_u8[(low.m_bits >> 3)], m_data, (this->m_bits) >> 3);
                 return tval((Z3_context)m_ctx, re, low.m_bits + m_bits);
             }
         }
@@ -217,18 +217,18 @@ namespace sv {
                 if (shn & 7) {
                     __m256i m32 = _mm256_set1_epi64x(0ull);
                     auto base = (((UInt)shn - 1) >> 6);
-                    m32.m256i_u64[base] &= fastMask((UInt)shn & 63);
+                    M256i(m32).m256i_u64[base] &= fastMask((UInt)shn & 63);
                     auto shln = (UInt)shn & 63;
                     auto shrn = (64 - shln);
-                    m32.m256i_u64[base] |= m_data[0] << shln;
-                    for (int i = 1; i <= ((m_bits - 1) >> 6); i++) {
-                        m32.m256i_u64[base + i] = (m_data[i] << shln) | (m_data[i - 1] >> shrn);
+                    M256i(m32).m256i_u64[base] |= m_data[0] << shln;
+                    for (unsigned int i = 1; i <= ((m_bits - 1) >> 6); i++) {
+                        M256i(m32).m256i_u64[base + i] = (m_data[i] << shln) | (m_data[i - 1] >> shrn);
                     }
                     return tval((Z3_context)m_ctx, m32, m_bits);
                 }
                 else {
                     __m256i re = _mm256_set1_epi64x(0ull);;
-                    memcpy(&re.m256i_u8[((UInt)shn >> 3)], &this->m_data, (this->m_bits) >> 3);
+                    memcpy(&M256i(re).m256i_u8[((UInt)shn >> 3)], &this->m_data, (this->m_bits) >> 3);
                     return tval((Z3_context)m_ctx, re, m_bits);
                 }
             }
@@ -276,9 +276,9 @@ namespace sv {
         }
         auto m32 = *(__m256i*)(m_data);
         if (m_bits & 7) {
-            m32.m256i_i8[(m_bits - 1) >> 3] &= fastMask(m_bits & 7);
+            M256i(m32).m256i_i8[(m_bits - 1) >> 3] &= fastMask(m_bits & 7);
         }
-        memset(&m32.m256i_i8[((m_bits - 1) >> 3) + 1], 0ul, i >> 3);
+        memset(&M256i(m32).m256i_i8[((m_bits - 1) >> 3) + 1], 0ul, i >> 3);
         return tval((Z3_context)m_ctx, m32, m_bits + i);
     }
     tval tval::sext(int i) const
@@ -291,15 +291,15 @@ namespace sv {
         auto m32 = *(__m256i*)(&this->m_data);
         if ((((uint8_t*)m_data)[(m_bits - 1) >> 3] >> ((m_bits - 1) & 7)) & 1) {
             if (m_bits & 7) {
-                m32.m256i_i8[(m_bits - 1) >> 3] |= fastMaskReverse((m_bits & 7));
+                M256i(m32).m256i_i8[(m_bits - 1) >> 3] |= fastMaskReverse((m_bits & 7));
             }
-            memset(&m32.m256i_i8[((m_bits - 1) >> 3) + 1], -1ul, i >> 3);
+            memset(&M256i(m32).m256i_i8[((m_bits - 1) >> 3) + 1], ULONG_MAX, i >> 3);
         }
         else {
             if (m_bits & 7) {
-                m32.m256i_i8[(m_bits - 1) >> 3] &= fastMask(8 - (m_bits & 7));
+                M256i(m32).m256i_i8[(m_bits - 1) >> 3] &= fastMask(8 - (m_bits & 7));
             }
-            memset(&m32.m256i_i8[((m_bits - 1) >> 3) + 1], 0ul, i >> 3);
+            memset(&M256i(m32).m256i_i8[((m_bits - 1) >> 3) + 1], 0ul, i >> 3);
         }
         return tval((Z3_context)m_ctx, m32, m_bits + i);
     }
@@ -375,6 +375,9 @@ namespace sv {
 };
 
 
+bool Z3_API Z3_get_numeral_bytes(Z3_context c, Z3_ast a, int64_t* num, int64_t* den) {
+#warning "!!!!!!!!!!!!!!!!!!!!"
+}
 
 bool z3_get_all_256(Z3_context ctx, Z3_ast rnum, int64_t* num)
 {

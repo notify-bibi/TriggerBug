@@ -68,7 +68,7 @@ namespace TR {
 
 
     class sys_params {
-        std::hash_map<std::string, ULong> m_symbols;
+        HASH_MAP<std::string, ULong> m_symbols;
     public:
         void set(const char*key, ULong value) {
             m_symbols[key] = value;
@@ -102,7 +102,7 @@ namespace TR {
         IRConst const* softwareBptConst() const { return &m_bpt_code; };
 
         void softwareBptStore(UChar* dst) { memcpy(dst, &m_bpt_code.Ico.U8, IRConstTag2nb(m_bpt_code.tag)); };
-        //±ØĞë±£ÁôÒ»¸övirtual
+        //å¿…é¡»ä¿ç•™ä¸€ä¸ªvirtual
         virtual UInt bit_wide() { VPANIC("??"); }
         static UInt gMaxThreadsNum();
         static IRConst gsoftwareBpt(VexArch guest);
@@ -157,9 +157,9 @@ namespace TR {
     class vex_context :public vctx_base
     {
     public:
-        //¶Á
+        //è¯»
         using Hook_Read = rsval<ADDR> (*)(State<ADDR> & , const rsval<ADDR>&, const rsval<ADDR>&);
-        //Ğ´
+        //å†™
         using Hook_Write = void(*)(State<ADDR> & , const rsval<ADDR>&, const rsval<ADDR>&);
         //idx2v
         using Hook_idx2Value = z3::expr(*) (State<ADDR>&, ADDR /*base*/, Z3_ast /*idx*/);
@@ -168,9 +168,9 @@ namespace TR {
         friend class vex_info;
         friend class State<ADDR>;
         State<ADDR>*    m_top_state;
-        //Ä£ÄâÈí¼ş¶Ïµã software backpoint callback
-        std::hash_map<Addr64, Hook_struct> m_callBackDict;
-        std::hash_map<Addr64/*static table base*/, Hook_idx2Value> m_tableIdxDict;
+        //æ¨¡æ‹Ÿè½¯ä»¶æ–­ç‚¹ software backpoint callback
+        HASH_MAP<Addr64, Hook_struct> m_callBackDict;
+        HASH_MAP<Addr64/*static table base*/, Hook_idx2Value> m_tableIdxDict;
         Hook_Read m_hook_read;
         Hook_Write m_hook_write;
 
@@ -201,17 +201,17 @@ namespace TR {
         inline ThreadPool& pool() { return m_pool; };
 
 
-        /*read static_table from symbolic address  ¶¨Òå index ºÍ ¸Ã³£Á¿Êı×é Ö®¼äµÄ¹ØÏµ ²»È»Ö»ÄÜÖğÒ»±¬ÆÆ ÈçDESµÄ4¸ö¾²Ì¬±í
-        ±íÓ³Éä callback
+        /*read static_table from symbolic address  å®šä¹‰ index å’Œ è¯¥å¸¸é‡æ•°ç»„ ä¹‹é—´çš„å…³ç³» ä¸ç„¶åªèƒ½é€ä¸€çˆ†ç ´ å¦‚DESçš„4ä¸ªé™æ€è¡¨
+        è¡¨æ˜ å°„ callback
 
-            Ä£Äâ³ÌĞòÓĞ¾²Ì¬µÄÊı×é
-                UInt staticMagic[256]£¨bss£©;
+            æ¨¡æ‹Ÿç¨‹åºæœ‰é™æ€çš„æ•°ç»„
+                UInt staticMagic[256]ï¼ˆbssï¼‰;
 
-            Òşº¬¹ØÏµÎª£º
+            éšå«å…³ç³»ä¸ºï¼š
                 For i in 0-255
                     staticMagic[i] = unknownFx()
 
-            ¼ÙÈçÓĞÈçÏÂ¼ÓÃÜ·½Ê½£º
+            å‡å¦‚æœ‰å¦‚ä¸‹åŠ å¯†æ–¹å¼ï¼š
                 const UInt staticMagic[256]={xx,xx,xx,...,xx};
 
                 UChar passwd[4] = input(4);
@@ -220,8 +220,8 @@ namespace TR {
                     print("ok")
                 ELSE:
                     print("faild")
-            µ±Çó½âÕâÖÖ±í´ïÊ½Ê±ÔÚÔ­ÀíÉÏÊÇ½â²»¿ªµÄ£¬ĞèÒªÄúÏÔÊ½½øĞĞ¶¨ÒåstaticMagicµÄindexÓëstaticMagic[index]µÄ×ª»»¹ØÏµ£¨·ñÔòĞèÒª±¬ÆÆ255^4£©
-            ËùÒÔÇëÊ¹ÓÃidx2Value_Decl_addÌí¼Ó»Øµ÷º¯Êı£¬µ±Ä£ÄâÖ´ĞĞÊ±·ÃÎÊstaticMagic£¬»Øµ÷º¯Êı±»µ÷ÓÃ
+            å½“æ±‚è§£è¿™ç§è¡¨è¾¾å¼æ—¶åœ¨åŸç†ä¸Šæ˜¯è§£ä¸å¼€çš„ï¼Œéœ€è¦æ‚¨æ˜¾å¼è¿›è¡Œå®šä¹‰staticMagicçš„indexä¸staticMagic[index]çš„è½¬æ¢å…³ç³»ï¼ˆå¦åˆ™éœ€è¦çˆ†ç ´255^4ï¼‰
+            æ‰€ä»¥è¯·ä½¿ç”¨idx2Value_Decl_addæ·»åŠ å›è°ƒå‡½æ•°ï¼Œå½“æ¨¡æ‹Ÿæ‰§è¡Œæ—¶è®¿é—®staticMagicï¼Œå›è°ƒå‡½æ•°è¢«è°ƒç”¨
         */
         void idx2Value_Decl_add(ADDR addr, Hook_idx2Value _func) { m_tableIdxDict[addr] = _func; };
         void idx2Value_Decl_del(ADDR addr) { m_tableIdxDict.erase(m_tableIdxDict.find(addr)); };

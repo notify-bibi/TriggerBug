@@ -4,9 +4,9 @@
 
 #include <deque>
 #include "api/c++/z3++.h"
-#include "engine/variable.h"
-#include "libvex_basictypes.h";
-
+extern "C"{
+#include "libvex_basictypes.h"
+}
 #define BIT_BLAST_MAX_BIT 14
 
 namespace TR {

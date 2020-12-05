@@ -1,4 +1,4 @@
-﻿/*++
+/*++
 Copyright (c) 2019 Microsoft Corporation
 Module Name:
     Memory.class:
@@ -465,7 +465,7 @@ UInt MEM<ADDR>::write_bytes(ULong address, ULong length, UChar* data) {
                     p_page->malloc_unit(m_ctx, need_record);
                 }
                 else {
-                    p_page->set_pad(pad.m256i_u8[0]);
+                    p_page->set_pad(M256i(pad).m256i_u8[0]);
                     count = ALIGN(address + count + 0x1000, 0x1000) - address;
                     continue;
                 }
@@ -488,7 +488,7 @@ UInt MEM<ADDR>::write_bytes(ULong address, ULong length, UChar* data) {
             write_count += align_r;
         }
         else {
-            p_page->set_pad(pad.m256i_u8[0]);
+            p_page->set_pad(M256i(pad).m256i_u8[0]);
         }
     }
 

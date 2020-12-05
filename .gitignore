@@ -1,6 +1,8 @@
-build
-bin/Debug
-bin/Release
+/bin
+/*clang*
+/*build*
+/*xcode*
+/lib
 *.dir
 *.zip
 *.bz2
@@ -10,6 +12,11 @@ bin/Release
 *.nam
 *.til
 *.dump
+.*/
+*.py[cod]
+.DS_Store
+valgrind-*tar*
+code_convert/original
 TriggerBug.7z
 PythonFrontEnd/.idea
 PythonFrontEnd/dist

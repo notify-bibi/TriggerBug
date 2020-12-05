@@ -1,18 +1,30 @@
+
+/* ---------------------------------------------------------------------------------------
+ *      Notify-bibi Symbolic-Emulation-Engine project
+ *      Copyright (c) 2019 Microsoft Corporation by notify-bibi@github, 2496424084@qq.com
+ *      ALL RIGHTS RESERVED.
+ *
+ *      本代码是将符号变量的各种operator完全仿真c代码的语句, 方便扩展编写各种符号表达式的产
+ *      生和尽量在编译期确定操作，大大提高速度。你可以将一个表达之转为符号表达式，只需要改变
+ *      其中的符号类型如 int 为 rcval<int> 就完事了
+        当然不止 rcval 符号类，还有rsval, tval, sval.
+ *      
+ *      本代码亦是本项目核心的一部分，经过一个月的严格验证和理论设计，因为z3的引用计数器，
+ *      引用计数错误并不会导致z3及时停止，只会在你很高兴的时候（开始求解了）出现crash!， 特别是
+ *      逻辑上的漏洞十分难以定位，好在经过长时间的大力调试下，本项目不会产生任何的ast leak。
+ *      所以 cp必究
+ *
+ * ---------------------------------------------------------------------------------------
+ */
+
+
 #ifndef _BASIC_VAR_HEAD_
 #define _BASIC_VAR_HEAD_
 
 #include <z3++.h>
-#include <mmintrin.h>  //SSE(include mmintrin.h)
-#include <xmmintrin.h> //SSE2(include xmmintrin.h)
-#include <emmintrin.h> //SSE3(include emmintrin.h)
-#include <pmmintrin.h> //SSSE3(include pmmintrin.h)
-#include <tmmintrin.h> //SSE4.1(include tmmintrin.h)
-#include <smmintrin.h> //SSE4.2(include smmintrin.h)
-#include <nmmintrin.h> //AES(include nmmintrin.h)
-#include <wmmintrin.h> //AVX(include wmmintrin.h)
-#include <immintrin.h> //(include immintrin.h)
-#include <intrin.h>    
+#include "engine/engine.h"
 #include <stdint.h>   
+#include <type_traits>
 
 #include "engine/trException.h"
 #ifdef _DEBUG
@@ -22,7 +34,7 @@
 #define Z3CK 
 #endif
 
-#define TASSERT(v) std::enable_if_t<(v)> * = nullptr
+#define TASSERT(v) typename std::enable_if_t<(v)> * = nullptr
 #define fastMask(n) ((ULong)((((int)(n))<64)?((1ull << ((int)(n))) - 1):-1ll))
 #define fastMaskReverse(N) (~fastMask(N))
 #define ALIGN(Value,size) ((Value) & ~((size) - 1))
@@ -37,7 +49,7 @@ namespace sv {
 
     template <class _Ty>
     struct type_constant {
-        using value_type = std::remove_const<_Ty>::type;
+        using value_type = typename std::remove_const<_Ty>::type;
     };
 
     template <IRType _Ty, bool _is_signed, int _nbits, int _nbytes, z3sk _sort_kind>
@@ -86,18 +98,18 @@ namespace sv {
     template<bool tsigned, int nbits, typename ty = void>
     struct _integral_type { using v = void; };
 
-    template<int nbits> struct _integral_type<true, nbits, std::enable_if<nbits <= 8>::type> { using value_type = int8_t; };
-    template<int nbits> struct _integral_type<true, nbits, std::enable_if<(nbits > 8  && nbits <= 16)>::type >{ using value_type = int16_t; };
-    template<int nbits> struct _integral_type<true, nbits, std::enable_if<(nbits > 16 && nbits <= 32)>::type >{ using value_type = int32_t; };
-    template<int nbits> struct _integral_type<true, nbits, std::enable_if<(nbits > 32 && nbits <= 64)>::type >{ using value_type = int64_t; };
-    template<int nbits> struct _integral_type<true, nbits, std::enable_if<(nbits > 64)>::type >{ using value_type = int64_t; };
+    template<int nbits> struct _integral_type<true, nbits, typename std::enable_if<nbits <= 8>::type> { using value_type = int8_t; };
+    template<int nbits> struct _integral_type<true, nbits, typename std::enable_if<(nbits > 8  && nbits <= 16)>::type >{ using value_type = int16_t; };
+    template<int nbits> struct _integral_type<true, nbits, typename std::enable_if<(nbits > 16 && nbits <= 32)>::type >{ using value_type = int32_t; };
+    template<int nbits> struct _integral_type<true, nbits, typename std::enable_if<(nbits > 32 && nbits <= 64)>::type >{ using value_type = int64_t; };
+    template<int nbits> struct _integral_type<true, nbits, typename std::enable_if<(nbits > 64)>::type >{ using value_type = int64_t; };
 
 
-    template<int nbits> struct _integral_type<false, nbits, std::enable_if<nbits <= 8>::type> { using value_type = uint8_t; };
-    template<int nbits> struct _integral_type<false, nbits, std::enable_if<(nbits > 8 && nbits <= 16)>::type >{ using value_type = uint16_t; };
-    template<int nbits> struct _integral_type<false, nbits, std::enable_if<(nbits > 16 && nbits <= 32)>::type >{ using value_type = uint32_t; };
-    template<int nbits> struct _integral_type<false, nbits, std::enable_if<(nbits > 32 && nbits <= 64)>::type >{ using value_type = uint64_t; };
-    template<int nbits> struct _integral_type<false, nbits, std::enable_if<(nbits > 64)>::type >{ using value_type = uint64_t; };
+    template<int nbits> struct _integral_type<false, nbits, typename std::enable_if<nbits <= 8>::type> { using value_type = uint8_t; };
+    template<int nbits> struct _integral_type<false, nbits, typename std::enable_if<(nbits > 8 && nbits <= 16)>::type >{ using value_type = uint16_t; };
+    template<int nbits> struct _integral_type<false, nbits, typename std::enable_if<(nbits > 16 && nbits <= 32)>::type >{ using value_type = uint32_t; };
+    template<int nbits> struct _integral_type<false, nbits, typename std::enable_if<(nbits > 32 && nbits <= 64)>::type >{ using value_type = uint64_t; };
+    template<int nbits> struct _integral_type<false, nbits, typename std::enable_if<(nbits > 64)>::type >{ using value_type = uint64_t; };
 
 
     template <bool tsigned, int nbits>
@@ -123,18 +135,58 @@ namespace sv {
     struct ite_val : value_constant<_Rty, _ite_val<_Rty, _Tbool, _Ty1, _Ty2>::val > {};
 
 
-    template <class, class>
-    constexpr auto _convert_type = false;
+     //template <class, class>
+     //constexpr auto _convert_type = false;
 
-    template <class _Ty1, class _Ty2>
-    constexpr auto _convert_type<_Ty1, _Ty2> = (_Ty1*)0 + (_Ty1)0;
+     //template <class _Ty1, class _Ty2>
+     //constexpr auto _convert_type<_Ty1, _Ty2> = (_Ty1*)0 + (_Ty1)0;
 
-    template <class _Ty1, class _Ty2>
-    struct convert : type_constant<decltype(_convert_type<_Ty1, _Ty2>)> {};
+     //template <class _Ty1, class _Ty2>
+     //struct convert : type_constant<decltype(_convert_type<_Ty1, _Ty2>)> {};
+
+
+
+#if defined(_MSC_VER)
+#define IS_ANY_OF_V std::_Is_any_of_v
+#else
+#define _INLINE_VAR inline
+
+// STRUCT TEMPLATE disjunction
+    template <bool _First_value, class _First, class... _Rest>
+    struct _Disjunction { // handle true trait or last trait
+        using type = _First;
+    };
+
+    template <class _False, class _Next, class... _Rest>
+    struct _Disjunction<false, _False, _Next, _Rest...> { // first trait is false, try the next trait
+        using type = typename _Disjunction<_Next::value, _Next, _Rest...>::type;
+    };
+
+    template <class... _Traits>
+    struct disjunction : std::false_type {}; // If _Traits is empty, false_type
+
+    template <class _First, class... _Rest>
+    struct disjunction<_First, _Rest...> : _Disjunction<_First::value, _First, _Rest...>::type {
+        // the first true trait in _Traits, or the last trait if none are true
+    };
+
+    template <class... _Traits>
+    _INLINE_VAR constexpr bool disjunction_v = disjunction<_Traits...>::value;
+
+    // VARIABLE TEMPLATE _Is_any_of_v
+    template <class _Ty, class... _Types>
+    _INLINE_VAR constexpr bool _Is_any_of_v = // true if and only if _Ty is in _Types
+        disjunction_v<std::is_same<_Ty, _Types>...>;
+
+
+
+#define IS_ANY_OF_V _Is_any_of_v
+#endif 
+
 
 
     template <class _Ty>
-    constexpr bool is_sse_v = std::_Is_any_of_v < std::remove_cv_t<_Ty>, __m128d, __m128i, __m128, __m256d, __m256, __m256i, __m64>;
+    constexpr bool is_sse_v = IS_ANY_OF_V < std::remove_cv_t<std::remove_reference_t<_Ty>>, __m128d, __m128i, __m128, __m256d, __m256, __m256i, __m64>;
 
     template <class _Ty>
     struct is_sse : std::bool_constant<is_sse_v<_Ty>> {};
@@ -196,7 +248,7 @@ namespace sv {
 
     // 自定义你的有符号无符号类型
     template <class _Ty>
-    struct is_my_signed : std::bool_constant <std::is_signed<_Ty>::value || std::_Is_any_of_v < std::remove_cv_t<_Ty>, 
+    struct is_my_signed : std::bool_constant <std::is_signed<_Ty>::value || IS_ANY_OF_V < std::remove_cv_t<std::remove_reference_t<_Ty>>,
         Signed128  /*,other type*/
     >>{};
 
@@ -359,7 +411,7 @@ namespace sv {
     template<class Ctype, int nbits, int nct, bool is_fp, bool bitspace, typename ty = void> struct d_ctype_val {};
 
     template<class Ctype, int nbits, int nct>
-    struct d_ctype_val<Ctype, nbits, nct, false, false, std::enable_if<(nct > 1)>::type> {
+    struct d_ctype_val<Ctype, nbits, nct, false, false, typename std::enable_if<(nct > 1)>::type> {
         union {
             Ctype m_data[nct];
             struct {
@@ -370,7 +422,7 @@ namespace sv {
     };
 
     template<class Ctype, int nbits, int nct>
-    struct d_ctype_val<Ctype, nbits, nct, false, false, std::enable_if<(nct == 1)>::type> {
+    struct d_ctype_val<Ctype, nbits, nct, false, false, typename std::enable_if<(nct == 1)>::type> {
         union {
             Ctype m_data[nct];
             Ctype m_value : nbits;
@@ -404,10 +456,10 @@ namespace sv {
 
         
     public:
-        using c_type = ite_type<_Tk == Z3_BOOL_SORT, bool,
-            ite_type<(_Tk == Z3_FLOATING_POINT_SORT && _Tn == 32), float,
-            ite_type<(_Tk == Z3_FLOATING_POINT_SORT && _Tn == 64), double,
-            integral_type<_Tsigned, _Tn>::value_type
+        using c_type = typename ite_type<_Tk == Z3_BOOL_SORT, bool,
+            typename ite_type<(_Tk == Z3_FLOATING_POINT_SORT && _Tn == 32), float,
+            typename ite_type<(_Tk == Z3_FLOATING_POINT_SORT && _Tn == 64), double,
+            typename integral_type<_Tsigned, _Tn>::value_type
             >::value_type
             >::value_type
         >::value_type;
@@ -417,10 +469,10 @@ namespace sv {
         static constexpr const int n_c_type = 1 + (((_Tn - 1) >> 3) / sizeof(c_type));
         using ctype_val_struct = d_ctype_val<c_type, (_Tn & 0x3f) ? (_Tn & 0x3f) : 0x40, n_c_type, _Tk == Z3_FLOATING_POINT_SORT, is_avoid_fp>;
     private:
-#pragma pack(push, 1)
+//#pragma pack(push, 1)
         __declspec(align(8))
         ctype_val_struct mr;
-#pragma pack(pop)
+//#pragma pack(pop)
 
         template<bool _ts, int _tn, z3sk _tk> friend class ctype_val;
         template<bool _ts, int _tn, z3sk _tk> friend class symbolic;
@@ -620,24 +672,24 @@ namespace sv {
         template<bool ts, int tn, z3sk tk>
         inline void operator=(const ctype_val<ts, tn, tk>& b) {
             ctype_val::~ctype_val();
-            ctype_val::ctype_val(b);
+            this->ctype_val::ctype_val(b);
         }
         inline void operator=(const ctype_val& b) {
             ctype_val::~ctype_val();
-            ctype_val::ctype_val(b);
+            this->ctype_val::ctype_val(b);
         }
 
         template<typename _Tty, int _tn = _Tn, TASSERT(_tn <= 64)>
         inline void operator=(_Tty b) {
             ctype_val::~ctype_val();
-            ctype_val::ctype_val((Z3_context)m_ctx, b);
+            this->ctype_val::ctype_val((Z3_context)m_ctx, b);
         }
 
         // sse
         template<typename _Tty, int _tn = _Tn, TASSERT(_tn > 64)>
         inline void operator=(const _Tty& b) {
             ctype_val::~ctype_val();
-            ctype_val::ctype_val((Z3_context)m_ctx, b);
+            this->ctype_val::ctype_val((Z3_context)m_ctx, b);
         }
 
 
@@ -762,7 +814,7 @@ namespace sv {
         template< z3sk _Tk0 = _Tk, TASSERT(_Tk0 == Z3_BOOL_SORT)> \
         inline auto operator op(bool b) const noexcept { return cbool((Z3_context)m_ctx, mr.m_value op b); }\
         template<typename _Ty1, z3sk _Tk0 = _Tk, TASSERT(_Tk0 == Z3_BOOL_SORT)> \
-        inline int operator op(_Ty1 b) const noexcept { static_assert(false, "ctype_val(bool) "#op" num ?"); }
+        inline int operator op(_Ty1 b) const noexcept { FAILD_ASSERT(_Ty1, "ctype_val(bool) "#op" num ?"); }
 
         OPERATOR_DEFS_BOOL_OP(&&);
         OPERATOR_DEFS_BOOL_OP(||);
@@ -926,7 +978,7 @@ namespace sv {
 
         template<bool ts, int tn, z3sk _Tk0 = _Tk, TASSERT(_Tk0 == Z3_BV_SORT), TASSERT(_Tn + tn > 64)>
         inline ctype_val<_Tsigned, _Tn + tn, Z3_BV_SORT> concat(ctype_val<ts, tn>& lo) const {
-            static_assert(false, "not support! u can u up");
+            FAILD_ASSERT(_Tsigned, "not support! u can u up");
         }
 
         template<int hi, int lo, z3sk _Tk0 = _Tk, TASSERT(_Tk0 == Z3_BV_SORT), TASSERT(hi <= 64 && lo <= 64)>
@@ -939,7 +991,7 @@ namespace sv {
 
         template<int hi, int lo, z3sk _Tk0 = _Tk, TASSERT(_Tk0 == Z3_BV_SORT), TASSERT(!(hi <= 64 && lo <= 64))>
         inline ctype_val<_Tsigned, hi - lo + 1, Z3_BV_SORT> extract() const {
-            static_assert(false, "not support! u can u up");
+            FAILD_ASSERT(_Tsigned, "not support! u can u up");
         }
 
 
@@ -959,7 +1011,7 @@ namespace sv {
         }\
         template<typename _Ty0, bool _Ts, int _Tn, z3sk _Tk0, TASSERT(std::is_arithmetic<_Ty0>::value), TASSERT(_Tk0 == Z3_BOOL_SORT)>\
         static int operator op(_Ty0 a, const ctype_val<_Ts, _Tn, _Tk0>&b) {\
-            static_assert(false, "num "#op" ctype_val<bool>?");\
+            FAILD_ASSERT(_Ty0, "num "#op" ctype_val<bool>?");\
         }
 
 #if 1
@@ -969,7 +1021,7 @@ namespace sv {
         }\
         template<typename _Ty0, bool _Ts, int _Tn, z3sk _Tk0, TASSERT(std::is_arithmetic<_Ty0>::value), TASSERT(_Tk0 == Z3_BOOL_SORT)>\
         static int operator +(_Ty0 a, const ctype_val<_Ts, _Tn, _Tk0>&b) {\
-            static_assert(false, "num + ctype_val<bool>?");\
+            FAILD_ASSERT(_Ty0, "num + ctype_val<bool>?");\
         }
 #else
         OPERATOR_DEFS(+);
@@ -991,7 +1043,7 @@ namespace sv {
 template<typename _Ty1, bool _Tty, int _Tn, z3sk _Tk0, TASSERT(std::is_arithmetic<_Ty1>::value), TASSERT(_Tk0 != Z3_BOOL_SORT)> \
 static inline auto operator op(_Ty1 a, const ctype_val<_Tty, _Tn, _Tk0>&b) noexcept { return cbool((Z3_context)b, a op b.value()); }\
 template<typename _Ty1, bool _Tty, int _Tn, z3sk _Tk0, TASSERT(std::is_arithmetic<_Ty1>::value), TASSERT(_Tk0 == Z3_BOOL_SORT)> \
-static inline int operator op(_Ty1 a, const ctype_val<_Tty, _Tn, _Tk0>&b) noexcept { static_assert(false, "num "#op" ctype_val(bool) ?"); }
+static inline int operator op(_Ty1 a, const ctype_val<_Tty, _Tn, _Tk0>&b) noexcept { FAILD_ASSERT(_Ty1, "num "#op" ctype_val(bool) ?"); }
 
 
         OPERATOR_DEFS_BOOL(> );
@@ -1048,7 +1100,7 @@ namespace sv{
         //------------------------------numreal-----------------------------------
         //bv(integral)
         template<typename _Ty, z3sk __Tk = _Tk, TASSERT(sizeof(_Ty) <= 8), TASSERT(std::is_integral<_Ty>::value), TASSERT(__Tk == Z3_BV_SORT) >
-        inline symbolic(Z3_context ctx, _Ty v) : symbol(ctx, (ite_type<is_my_signed<_Ty>::value, int64_t, uint64_t>::value_type) v, _Tn) { };
+        inline symbolic(Z3_context ctx, _Ty v) : symbol(ctx, (typename ite_type<is_my_signed<_Ty>::value, int64_t, uint64_t>::value_type) (v), _Tn) { };
 
         //bv(sse)
         template<typename _Ty, z3sk __Tk = _Tk, TASSERT((sizeof(_Ty) > 8)), TASSERT((sizeof(_Ty) << 3) == _Tn), TASSERT(__Tk == Z3_BV_SORT)>
@@ -1064,7 +1116,7 @@ namespace sv{
 
         //bool(nbv)
         template<bool _ts, int _tn, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BOOL_SORT)>
-        inline symbolic(const symbolic<_ts, _tn, Z3_BV_SORT>& b) : symbol((Z3_context)b.m_ctx, b.extract<0, 0>() == symbolic<false, 1, Z3_BV_SORT>((Z3_context)b.m_ctx, 1)) { };
+        inline symbolic(const symbolic<_ts, _tn, Z3_BV_SORT>& b) : symbol((Z3_context)b.m_ctx, b.template extract<0, 0>() == symbolic<false, 1, Z3_BV_SORT>((Z3_context)b.m_ctx, 1)) { };
 
         //nbv(bool)
         template<z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BV_SORT)>
@@ -1158,13 +1210,13 @@ namespace sv{
 
 
         template<bool _Resig, int _extn, z3sk __Tk = _Tk, bool _Ts = _Tsigned, TASSERT(!_Ts), TASSERT(__Tk == Z3_BV_SORT)>
-        inline symbolic<_Resig, _Tn + _extn, _Tk> ext() const noexcept {
+        inline symbolic<_Resig, _Tn + _extn, _Tk>  ext() const noexcept {
             static_assert(_extn > 0, "err size");
             return symbolic<_Resig, _Tn + _extn, Z3_BV_SORT>((Z3_context)m_ctx, Z3_mk_zero_ext((Z3_context)m_ctx, _extn, (Z3_ast)m_ast));
         }
 
         template<bool _Resig, int _extn, z3sk __Tk = _Tk, bool _Ts = _Tsigned, TASSERT(_Ts), TASSERT(__Tk == Z3_BV_SORT)>
-        inline symbolic<_Resig, _Tn + _extn, _Tk> ext() const noexcept {
+        inline symbolic<_Resig, _Tn + _extn, _Tk>  ext() const noexcept {
             static_assert(_extn > 0, "err size");
             return symbolic<_Resig, _Tn + _extn, Z3_BV_SORT>((Z3_context)m_ctx, Z3_mk_sign_ext((Z3_context)m_ctx, _extn, (Z3_ast)m_ast));
         }
@@ -1213,7 +1265,7 @@ namespace sv{
 #define TEMP_OPERATOR_BITWISHE_NO_ALIGN(op)\
         template<bool _ts, int _tn, TASSERT(_tn < _Tn), z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BV_SORT)>                                      \
         inline auto operator op(const symbolic<_ts, _tn, Z3_BV_SORT>& b) const noexcept {                                                  \
-            return *this op b.ext<_Tsigned, _Tn - _tn>();                                                                                       \
+            return *this op b.template ext<_Tsigned, _Tn - _tn>();                                                                                       \
         }                                                                                                                                  \
         template<bool _ts, int _tn, TASSERT(_tn > _Tn), z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BV_SORT)>                                      \
         inline auto operator op(const symbolic<_ts, _tn, Z3_BV_SORT>& b) const noexcept {                                                  \
@@ -1295,7 +1347,7 @@ namespace sv{
         }
         template<int _tn, TASSERT(_tn < _Tn)>
         inline auto operator <<(const symbolic<false, _tn, Z3_BV_SORT>& b) const noexcept {
-            return *this << b.ext<false, _Tn - _tn>();
+            return *this << b.template ext<false, _Tn - _tn>();
         }
         template<int _tn, TASSERT(_tn > _Tn)>
         inline auto operator <<(const symbolic<false, _tn, Z3_BV_SORT>& b) const noexcept {
@@ -1321,7 +1373,7 @@ namespace sv{
 
         template<int _tn, TASSERT(_tn < _Tn)>
         inline auto operator >>(const symbolic<false, _tn, Z3_BV_SORT>& b) const noexcept {
-            return *this >> b.ext<false, _Tn - _tn>();
+            return *this >> b.template ext<false, _Tn - _tn>();
         }
         template<int _tn, TASSERT(_tn > _Tn)>
         inline auto operator >>(const symbolic<false, _tn, Z3_BV_SORT>& b) const noexcept {
@@ -1491,36 +1543,65 @@ namespace sv{
         inline symbolic<false, _Tn, Z3_BV_SORT> tobv() const {
             return symbolic<false, _Tn, Z3_BV_SORT>((Z3_context)m_ctx, Z3_mk_fpa_to_ieee_bv((Z3_context)m_ctx, (Z3_ast)m_ast));
         };
-        //  signed int bv -> fp
+
+        //  signed int bv -> fp with rm sort
         template<unsigned ebits, unsigned sbits, bool _ts = _Tsigned, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BV_SORT), TASSERT(_ts)>
         inline symbolic<true, ebits + sbits, Z3_FLOATING_POINT_SORT> Integer2fpa(const sort& rm) const {
             return symbolic<true, ebits + sbits, Z3_FLOATING_POINT_SORT>((Z3_context)m_ctx, Z3_mk_fpa_to_fp_signed((Z3_context)m_ctx, rm, (Z3_ast)m_ast, fpa_sort(ebits, sbits)));
         };
-        //unsigned int bv -> fp
+        //  signed int bv -> fp with IRRoundingMode
+        template<unsigned ebits, unsigned sbits, bool _ts = _Tsigned, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BV_SORT), TASSERT(_ts)>
+        inline symbolic<true, ebits + sbits, Z3_FLOATING_POINT_SORT> Integer2fpa(IRRoundingMode rrm) const {
+            return Integer2fpa<ebits, sbits>(fpRM((Z3_context)m_ctx, rrm));
+        };
+
+        //unsigned int bv -> fp with rm sort
         template<unsigned ebits, unsigned sbits, bool _ts = _Tsigned, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BV_SORT), TASSERT(!_ts)>
         inline symbolic<true, ebits + sbits, Z3_FLOATING_POINT_SORT> Integer2fpa(const sort& rm) const {
             return symbolic<true, ebits + sbits, Z3_FLOATING_POINT_SORT>((Z3_context)m_ctx, Z3_mk_fpa_to_fp_unsigned((Z3_context)m_ctx, rm, (Z3_ast)m_ast, fpa_sort(ebits, sbits)));
         };
-        //fp ->   signed int(bv)
+        //unsigned int bv -> fp with IRRoundingMode
+        template<unsigned ebits, unsigned sbits, bool _ts = _Tsigned, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BV_SORT), TASSERT(!_ts)>
+        inline symbolic<true, ebits + sbits, Z3_FLOATING_POINT_SORT> Integer2fpa(IRRoundingMode rrm) const {
+            return Integer2fpa<ebits, sbits>(fpRM((Z3_context)m_ctx, rrm));
+        };
+
+        //fp ->   signed int(bv) with rm sort
         template<unsigned int bvsz, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_FLOATING_POINT_SORT)>
         inline symbolic<true , bvsz, Z3_BV_SORT> toInteger_sbv(const sort& rm) const {
             return symbolic<true, bvsz, Z3_BV_SORT>((Z3_context)m_ctx, Z3_mk_fpa_to_sbv((Z3_context)m_ctx, rm, (Z3_ast)m_ast, bvsz));
         };
-        //fp -> unsigned int (bv)
+        //fp ->   signed int(bv) with IRRoundingMode
+        template<unsigned int bvsz, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_FLOATING_POINT_SORT)>
+        inline symbolic<true, bvsz, Z3_BV_SORT> toInteger_sbv(IRRoundingMode rrm) const {
+            return toInteger_sbv<bvsz>(fpRM((Z3_context)m_ctx, rrm));
+        };
+
+        //fp -> unsigned int (bv) with rm sort
         template<unsigned int bvsz, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_FLOATING_POINT_SORT)>
         inline symbolic<false, bvsz, Z3_BV_SORT> toInteger_ubv(const sort& rm) const {
             return symbolic<false, bvsz, Z3_BV_SORT>((Z3_context)m_ctx, Z3_mk_fpa_to_ubv((Z3_context)m_ctx, rm, (Z3_ast)m_ast, bvsz));
         };
-        //fp -> fp
+        //fp -> unsigned int (bv) with IRRoundingMode
+        template<unsigned int bvsz, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_FLOATING_POINT_SORT)>
+        inline symbolic<false, bvsz, Z3_BV_SORT> toInteger_ubv(IRRoundingMode rrm) const {
+            return toInteger_ubv<bvsz>(fpRM((Z3_context)m_ctx, rrm));
+        };
+
+        //fp -> fp with rm sort
         template<unsigned ebits, unsigned sbits, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_FLOATING_POINT_SORT)>
         inline symbolic<true, ebits + sbits, Z3_FLOATING_POINT_SORT> fpa2fpa(const sort& rm) const {
             return symbolic<true, ebits + sbits, Z3_FLOATING_POINT_SORT>((Z3_context)m_ctx, Z3_mk_fpa_to_fp_float((Z3_context)m_ctx, rm, (Z3_ast)m_ast, fpa_sort(ebits, sbits)));
         };
+        //fp -> fp with IRRoundingMode
+        template<unsigned ebits, unsigned sbits, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_FLOATING_POINT_SORT)>
+        inline symbolic<true, ebits + sbits, Z3_FLOATING_POINT_SORT> fpa2fpa(IRRoundingMode rrm) const {
+            return fpa2fpa<ebits, sbits>(fpRM((Z3_context)m_ctx, rrm));
+        };
 
 
 
-
-        ~symbolic() {}
+        inline ~symbolic() {}
 
 
 
@@ -1629,7 +1710,7 @@ static auto operator op(_Ty0 a, const symbolic<_Ts, _Tn, _Tk0>&b) {\
 }\
 template<typename _Ty0, bool _Ts, int _Tn, z3sk _Tk0, TASSERT(std::is_arithmetic<_Ty0>::value), TASSERT(_Tk0 != Z3_BV_SORT)>\
 static int operator op(_Ty0 a, const symbolic<_Ts, _Tn, _Tk0>&b) {\
-    static_assert(false, "num "#op" symbolic<bool>?");\
+    FAILD_ASSERT(_Ty0, "num "#op" symbolic<bool>?");\
 }
 
         template<typename _Ty0, bool _Ts, int _Tn, z3sk _Tk0, TASSERT(std::is_arithmetic<_Ty0>::value), TASSERT(_Tk0 == Z3_BV_SORT), TASSERT(_Tn < (sizeof(_Ty0)<<3))>\
@@ -1642,7 +1723,7 @@ static int operator op(_Ty0 a, const symbolic<_Ts, _Tn, _Tk0>&b) {\
         }\
         template<typename _Ty0, bool _Ts, int _Tn, z3sk _Tk0, TASSERT(std::is_arithmetic<_Ty0>::value), TASSERT(_Tk0 != Z3_BV_SORT)>\
         static int operator +(_Ty0 a, const symbolic<_Ts, _Tn, _Tk0>&b) {\
-            static_assert(false, "num + symbolic<NOT A Z3_BV_SORT>?");\
+            FAILD_ASSERT(_Ty0, "num + symbolic<NOT A Z3_BV_SORT>?");\
         }
 
         SYM_OPERATOR_DEFS(-);
@@ -1657,10 +1738,10 @@ static int operator op(_Ty0 a, const symbolic<_Ts, _Tn, _Tk0>&b) {\
 
 
 #define SYM_OPERATOR_DEFS_BOOL(op) \
-template<typename _Ty1, bool _Ts, int _Tn, z3sk _Tk0, TASSERT(std::is_arithmetic<_Ty1>::value), TASSERT(_Tk0 == Z3_BV_SORT)> \
-static inline auto operator op(_Ty1 a, const symbolic<_Ts, _Tn, _Tk0>&b) noexcept { return symbolic<is_my_signed<_Ty1>, sizeof(_Ty0)<<3, Z3_BV_SORT>((Z3_context)b.m_ctx, a) op b; }\
-template<typename _Ty1, bool _Ts, int _Tn, z3sk _Tk0, TASSERT(std::is_arithmetic<_Ty1>::value), TASSERT(_Tk0 != Z3_BOOL_SORT)> \
-static inline int operator op(_Ty1 a, const symbolic<_Ts, _Tn, _Tk0>&b) noexcept { static_assert(false, "num "#op" symbolic<NOT A Z3_BV_SORT> ?"); }
+template<typename _Ty0, bool _Ts, int _Tn, z3sk _Tk0, TASSERT(std::is_arithmetic<_Ty0>::value), TASSERT(_Tk0 == Z3_BV_SORT)> \
+static inline auto operator op(_Ty0 a, const symbolic<_Ts, _Tn, _Tk0>&b) noexcept { return symbolic<is_my_signed<_Ty0>::value, sizeof(_Ty0)<<3, Z3_BV_SORT>((Z3_context)b.m_ctx, a) op b; }\
+template<typename _Ty0, bool _Ts, int _Tn, z3sk _Tk0, TASSERT(std::is_arithmetic<_Ty0>::value), TASSERT(_Tk0 != Z3_BOOL_SORT)> \
+static inline int operator op(_Ty0 a, const symbolic<_Ts, _Tn, _Tk0>&b) noexcept { FAILD_ASSERT(_Ty0, "num "#op" symbolic<NOT A Z3_BV_SORT> ?"); }
 
 
         SYM_OPERATOR_DEFS_BOOL(> );
@@ -1678,7 +1759,12 @@ static inline int operator op(_Ty1 a, const symbolic<_Ts, _Tn, _Tk0>&b) noexcept
 };
     
 
-
+static inline auto operator!(const sbool& b) {
+    return sv::symbolic<false, 1, Z3_BOOL_SORT>((Z3_context)b, Z3_mk_not((Z3_context)b, (Z3_ast)b));
+}
+static inline auto operator!(const cbool& b) {
+    return cbool((Z3_context)b, !(bool)b);
+}
 
 
 
@@ -1699,93 +1785,103 @@ namespace sv {
     public:
         inline rsval() :rsval((Z3_context)-1, -1) { }
 
-        inline rsval(Z3_context ctx, rclass::c_type value, Z3_ast ast) : rsval(ctx, value) {
-            reinterpret_cast<sclass*>(this)->symbolic::symbolic(ctx, ast);
+        inline rsval(Z3_context ctx, typename rclass::c_type value, Z3_ast ast) : rsval(ctx, value) {
+            //reinterpret_cast<sclass*>(this)->symbolic::symbolic(ctx, ast);
+            new(this) sclass(ctx, ast);
         }
 
         template<class pointer, TASSERT(std::is_pointer<pointer>::value)>
         inline rsval(Z3_context ctx, const pointer value, Z3_ast ast) : rsval(ctx, value) {
-            reinterpret_cast<sclass*>(this)->symbolic::symbolic(ctx, ast);
+            //reinterpret_cast<sclass*>(this)->symbolic::symbolic(ctx, ast);
+            new(this) sclass(ctx, ast);
         }
 
-        inline rsval(Z3_context ctx, rclass::c_type value) : ctype_val(ctx, value) {
-            m_data_inuse = true;
+        inline rsval(Z3_context ctx, typename rclass::c_type value) : rsval::ctype_val(ctx, value) {
+            rsval::m_data_inuse = true;
         }
 
         template<class pointer, TASSERT(std::is_pointer<pointer>::value)>
-        inline rsval(Z3_context ctx, const pointer value) : ctype_val(ctx, value) {
-            m_data_inuse = true;
+        inline rsval(Z3_context ctx, const pointer value) : rsval::ctype_val(ctx, value) {
+            rsval::m_data_inuse = true;
         }
 
         inline rsval(Z3_context ctx, Z3_ast value) {
-            reinterpret_cast<sclass*>(this)->symbolic::symbolic(ctx, value);
-            m_data_inuse = false;
+            new(this) sclass(ctx, value);
+            //reinterpret_cast<sclass*>(this)->symbolic::symbolic(ctx, value);
+            rsval::m_data_inuse = false;
         }
 
         inline rsval(Z3_context ctx, Z3_ast value, no_inc) {
-            reinterpret_cast<sclass*>(this)->symbolic::symbolic(ctx, value, no_inc{});
-            m_data_inuse = false;
+            new(this) sclass(ctx, value, no_inc{});
+            //reinterpret_cast<sclass*>(this)->symbolic::symbolic(ctx, value, no_inc{});
+            rsval::m_data_inuse = false;
         }
 
         template<typename _Tty, int tn = Tn, TASSERT(is_sse<_Tty>::value)>
-        inline rsval(Z3_context ctx, const _Tty& data) :ctype_val(ctx, data) {
-            m_data_inuse = true;
+        inline rsval(Z3_context ctx, const _Tty& data) : rsval::ctype_val(ctx, data) {
+            rsval::m_data_inuse = true;
         }
 
         inline sclass& tos() const {
-            if (m_data_inuse) ((ctype_val*)this)->operator Z3_ast();
+            if (rsval::m_data_inuse) 
+                ((rclass*)this)->operator Z3_ast();
             return *reinterpret_cast<sclass*>(const_cast<rsval*>(this));
         }
 
         inline rclass& tor() const {
-            vassert(m_data_inuse);
+            vassert(rsval::m_data_inuse);
             return *(const_cast<rsval*>(this));
         }
 
         template<bool ts, int tn, z3sk tk>
-        inline rsval(const ctype_val<ts, tn, tk>& r) : ctype_val(r) {
-            m_data_inuse = true;
+        inline rsval(const ctype_val<ts, tn, tk>& r) : rsval::ctype_val(r) {
+            rsval::m_data_inuse = true;
         }
 
         template<bool ts, int tn, z3sk tk>
         inline rsval(const symbolic<ts, tn, tk>& s) {
-            reinterpret_cast<sclass*>(this)->symbolic::symbolic(s);
-            m_data_inuse = false;
+            new (this) sclass(s);
+            rsval::m_data_inuse = false;
         }
 
 
         template<bool ts, int tn, z3sk tk>
         inline rsval(const rsval<ts, tn, tk>& s) {
             if (s.m_data_inuse) {
-                ((ctype_val*)this)->ctype_val::ctype_val(s.tor());
-                m_data_inuse = true;
+                new(this) ctype_val(s.tor());
+                //this->rsval::ctype_val::ctype_val(s.tor());
+                rsval::m_data_inuse = true;
             }
             else {
-                reinterpret_cast<sclass*>(this)->symbolic::symbolic(s.tos());
-                m_data_inuse = false;
+                //reinterpret_cast<sclass*>(this)->symbolic::symbolic(s.tos());
+                new(this) sclass(s.tos());
+                rsval::m_data_inuse = false;
             }
         }
 
         inline rsval(const rsval& s) {
             if (s.m_data_inuse) {
-                ((ctype_val*)this)->ctype_val::ctype_val(s.tor());
-                m_data_inuse = true;
+                //this->rsval::ctype_val::ctype_val(s.tor());
+                new(this) ctype_val(s.tor());
+                rsval::m_data_inuse = true;
             }
             else {
-                reinterpret_cast<sclass*>(this)->symbolic::symbolic(s.tos());
-                m_data_inuse = false;
+                //reinterpret_cast<sclass*>(this)->symbolic::symbolic(s.tos());
+                new(this) sclass(s.tos());
+                rsval::m_data_inuse = false;
             }
         }
 
         inline void operator=(const rsval& s) {
-            this->ctype_val::~ctype_val();
-            this->rsval::rsval( s  );
+            ((rclass*)this)->rclass::~ctype_val();
+            //this->rsval::rsval( s  );
+            new(this) rsval(s);
         }
 
 #define RSVAL_OPERATOR(op)\
         template<bool _ts, int _tn, z3sk _tk>\
         rsval<calc_signed(Tsigned, Tn, _ts, _tn), ite_val<int, (bool)(Tn > _tn), Tn, _tn>::value, _Tk> operator op(const rsval<_ts, _tn, _tk>& b) const {\
-            if (m_data_inuse && b.m_data_inuse) {\
+            if (rsval::m_data_inuse && b.m_data_inuse) {\
                 return tor() op b.tor();\
             }\
             else {\
@@ -1794,7 +1890,7 @@ namespace sv {
         }\
         template<typename _Ty0, TASSERT(std::is_arithmetic<_Ty0>::value)>\
         rsval<calc_signed(Tsigned, Tn, std::is_signed<_Ty0>::value, sizeof(_Ty0) << 3), ite_val<int, ((sizeof(_Ty0) << 3) > Tn), (sizeof(_Ty0) << 3), Tn>::value, _Tk> operator op(_Ty0 b) const {\
-            if (m_data_inuse) {\
+            if (rsval::m_data_inuse) {\
                 return tor() op b;\
             }\
             else {\
@@ -1805,7 +1901,7 @@ namespace sv {
 #if 1
         template<bool _ts, int _tn, z3sk _tk>
         rsval<calc_signed(Tsigned, Tn, _ts, _tn), ite_val<int, (bool)(Tn > _tn), Tn, _tn>::value, _Tk> operator +(const rsval<_ts, _tn, _tk>& b) const {
-            if (m_data_inuse && b.m_data_inuse) {
+            if (rsval::m_data_inuse && b.m_data_inuse) {
                 return this->tor() + b.tor();
             }
             else {
@@ -1815,7 +1911,7 @@ namespace sv {
 
         template<typename _Ty0, TASSERT(std::is_arithmetic<_Ty0>::value)>\
         rsval<calc_signed(Tsigned, Tn, std::is_signed<_Ty0>::value, sizeof(_Ty0) << 3), ite_val<int, ((sizeof(_Ty0) << 3) > Tn), (sizeof(_Ty0) << 3), Tn>::value, _Tk> operator +(_Ty0 b) const {\
-            if (m_data_inuse) {\
+            if (rsval::m_data_inuse) {\
                 return this->tor() + b;\
             }\
             else {\
@@ -1841,7 +1937,7 @@ namespace sv {
 #define RSVAL_OPERATOR_BOOL(op)\
         template<bool _ts, int _tn, z3sk _tk>\
         rsval<false, 1, Z3_BOOL_SORT> operator op(const rsval<_ts, _tn, _tk>& b) const {\
-            if (m_data_inuse && b.m_data_inuse) {\
+            if (rsval::m_data_inuse && b.m_data_inuse) {\
                 return this->tor() op b.tor();\
             }\
             else {\
@@ -1850,7 +1946,7 @@ namespace sv {
         }\
         template<typename ty, TASSERT(std::is_arithmetic<ty>::value)>\
         rsval<false, 1, Z3_BOOL_SORT> operator op(ty b) const {\
-            if (m_data_inuse) {\
+            if (rsval::m_data_inuse) {\
                 return this->tor() op b;\
             }\
             else {\
@@ -1871,7 +1967,7 @@ namespace sv {
 #define TEMP_OPERATOR_BOOL_OP(op)\
         template<z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BOOL_SORT)>\
         inline rsval operator op(const rsval<false, 1, Z3_BOOL_SORT>& b) const noexcept {\
-            if (m_data_inuse && b.m_data_inuse) {\
+            if (rsval::m_data_inuse && b.m_data_inuse) {\
                 return tor() op b.tor();\
             }else{\
                 return tos() op b.tos();\
@@ -1883,12 +1979,12 @@ namespace sv {
         TEMP_OPERATOR_BOOL_OP(&& );
         TEMP_OPERATOR_BOOL_OP(^);
 
-#undef TEMP_OPERATOR_BOOL_OP;
+#undef TEMP_OPERATOR_BOOL_OP
 
 
         template<bool _Ts, int tn, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BV_SORT)>
         inline rsval operator >>(const rsval<_Ts, tn, Z3_BV_SORT>& b) const noexcept {
-            if (m_data_inuse && b.m_data_inuse) {
+            if (rsval::m_data_inuse && b.m_data_inuse) {
                 return tor() >> b.tor();
             }else{
                 return tos() >> b.tos();
@@ -1897,7 +1993,7 @@ namespace sv {
 
         template<typename ty, TASSERT(std::is_arithmetic<ty>::value)>
         inline rsval operator >>(ty b) const noexcept {
-            if (m_data_inuse) {
+            if (rsval::m_data_inuse) {
                 return tor() >> b;
             }
             else {
@@ -1907,7 +2003,7 @@ namespace sv {
 
         template<bool _Ts, int tn, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BV_SORT)>
         inline rsval operator <<(const rsval<_Ts, tn, Z3_BV_SORT>& b) const noexcept {
-            if (m_data_inuse && b.m_data_inuse) {
+            if (rsval::m_data_inuse && b.m_data_inuse) {
                 return tor() << b.tor();
             }
             else {
@@ -1917,7 +2013,7 @@ namespace sv {
 
         template<typename ty, TASSERT(std::is_arithmetic<ty>::value)>\
             inline rsval operator <<(ty b) const noexcept {
-            if (m_data_inuse) {
+            if (rsval::m_data_inuse) {
                 return tor() << b;
             }
             else {
@@ -1927,17 +2023,17 @@ namespace sv {
 
         template<z3sk __Tk = _Tk, TASSERT(__Tk != Z3_BOOL_SORT)>
         rsval operator -() {
-            return m_data_inuse ? -tor() : -tos();
+            return rsval::m_data_inuse ? -tor() : -tos();
         }
 
         template<z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BV_SORT)>
         rsval operator ~() {
-            return m_data_inuse ? ~tor() : ~tos();
+            return rsval::m_data_inuse ? ~tor() : ~tos();
         }
 
 
         rsval implies(const rsval& b) {
-            if (m_data_inuse && b.m_data_inuse) {
+            if (rsval::m_data_inuse && b.m_data_inuse) {
                 return tor().implies(b.tor());
             }
             else {
@@ -1948,43 +2044,48 @@ namespace sv {
 
         template<z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BOOL_SORT)>
         rsval bool_not() const {
-            if (m_data_inuse) return !tor(); else return !tos();
+            if (rsval::m_data_inuse) { 
+                return ! tor(); 
+            }
+            else {
+                return ! tos(); 
+            };
         }
 
 
         template<bool ts, int tn, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BV_SORT)>
         rsval<Tsigned, Tn + tn, Z3_BV_SORT> concat(const rsval<ts, tn, Z3_BV_SORT>& lo) const {
-            if (m_data_inuse && lo.m_data_inuse) return tor().concat(lo.tor()); else  return tos().concat(lo.tos());
+            if (rsval::m_data_inuse && lo.m_data_inuse) return tor().concat(lo.tor()); else  return tos().concat(lo.tos());
         }
 
 
         template<int hi, int lo, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BV_SORT)>
         rsval<Tsigned, hi - lo + 1, Z3_BV_SORT> extract() const {
-            if (m_data_inuse) return tor().extract<hi, lo>(); else  return tos().extract<hi, lo>();
+            if (rsval::m_data_inuse) return tor().template extract<hi, lo>(); else  return tos().template extract<hi, lo>();
         }
 
 
 
         template<bool Resig, int extn, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BV_SORT)>
         inline rsval<Resig, Tn + extn, _Tk> ext() const noexcept {
-            if (m_data_inuse) return tor().ext<Resig, extn>(); else  return tos().ext<Resig, extn>();
+            if (rsval::m_data_inuse) return tor().template ext<Resig, extn>(); else  return tos().template ext<Resig, extn>();
         }
 
 
         template<bool Resig, int extn, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BV_SORT)>
         inline rsval<Resig, Tn + extn, _Tk> zext() const noexcept {
-            return reinterpret_cast<const rsval<false, Tn, _Tk>*>(this)->ext<Resig, extn, _Tk>();
+            return reinterpret_cast<const rsval<false, Tn, _Tk>*>(this)->template ext<Resig, extn, _Tk>();
         }
 
         template<bool Resig, int extn, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BV_SORT)>
         inline rsval<Resig, Tn + extn, _Tk> sext() const noexcept {
-            return reinterpret_cast<const rsval<true, Tn, _Tk>*>(this)->ext<Resig, extn, _Tk>();
+            return reinterpret_cast<const rsval<true, Tn, _Tk>*>(this)->template ext<Resig, extn, _Tk>();
         }
 
         template<bool _ts, int _tn, z3sk _tk, z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BOOL_SORT)>
         inline sv::rsval<_ts, _tn, _tk> ite(const sv::rsval<_ts, _tn, _tk>& a, const sv::rsval<_ts, _tn, _tk>& b) const {
             if (real()) {
-                return mr.m_value ? a : b;
+                return rsval::mr.m_value ? a : b;
             }
             else {
                 return tos().ite(a.tos(), b.tos());
@@ -2004,14 +2105,14 @@ namespace sv {
         }
 
         inline std::string str() const{
-            return m_data_inuse ? reinterpret_cast<rclass*>(const_cast<rsval*>(this))->str() : tos().str();
+            return rsval::m_data_inuse ? reinterpret_cast<rclass*>(const_cast<rsval*>(this))->str() : tos().str();
         }
 
 
-        inline bool symb() const { return !m_data_inuse; }
-        inline bool real() const { return m_data_inuse; }
-        inline Z3_context ctx() const { return (Z3_context)m_ctx; }
-        inline operator Z3_context() const { return this->ctype_val::operator Z3_context(); }
+        inline bool symb() const { return !rsval::m_data_inuse; }
+        inline bool real() const { return rsval::m_data_inuse; }
+        inline Z3_context ctx() const { return (Z3_context)rsval::m_ctx; }
+        inline operator Z3_context() const { return this->rsval::ctype_val::operator Z3_context(); }
 
 
     private:
@@ -2040,7 +2141,7 @@ namespace sv {
 namespace sv {
     template <class ctype_name>
     struct sv_cty {
-        using ty = std::decay<ctype_name>::type;
+        using ty = typename std::decay<ctype_name>::type;
         static constexpr bool is_signed = is_my_signed<ty>::value;
         static constexpr int  nbits = ite_val<int, std::is_same<ty, bool>::value, 1, (sizeof(ty) << 3)>::value;
         static constexpr z3sk sk = ite_val<z3sk, std::is_same<ty, bool>::value, Z3_BOOL_SORT,/**/ ite_val<z3sk, std::is_floating_point<ty>::value, Z3_FLOATING_POINT_SORT, Z3_BV_SORT>::value /**/>::value;
@@ -2126,7 +2227,7 @@ namespace sv{
         }
 
         //real data
-        template<typename _Ty, std::enable_if_t<std::is_arithmetic<_Ty>::value> * = nullptr>
+        template<typename _Ty, typename std::enable_if_t<std::is_arithmetic<_Ty>::value> * = nullptr>
         inline tval(Z3_context ctx, _Ty data) :symbol(ctx) {
             static_assert(offsetof(tval, m_data) == 0x10, "error");
             m_bits = sizeof(_Ty) << 3;
@@ -2140,7 +2241,7 @@ namespace sv{
 
 
         //real && symbolic
-        template<typename _Ty, std::enable_if_t<std::is_arithmetic<_Ty>::value> * = nullptr>
+        template<typename _Ty, typename std::enable_if_t<std::is_arithmetic<_Ty>::value> * = nullptr>
         inline tval(Z3_context ctx, _Ty data, Z3_ast ast, z3sk sk, int bits) :symbol(ctx, ast) {
             static_assert(offsetof(tval, m_data) == 0x10, "error");
             m_bits = bits;
@@ -2150,7 +2251,7 @@ namespace sv{
         }
 
         //real with nbits
-        template<typename _Ty, std::enable_if_t<std::is_arithmetic<_Ty>::value>* = nullptr>
+        template<typename _Ty, typename std::enable_if_t<std::is_arithmetic<_Ty>::value>* = nullptr>
         inline tval(Z3_context ctx, _Ty data, int bits) :symbol(ctx) {
             static_assert(offsetof(tval, m_data) == 0x10, "error");
             m_bits = bits;
@@ -2303,7 +2404,7 @@ namespace sv{
         template<unsigned ebits, unsigned sbits>
         symbolic<true, ebits + sbits, Z3_FLOATING_POINT_SORT>& tosFpa() const {
             vassert(ebits + sbits == m_bits);
-            if (m_data_inuse) reinterpret_cast<ctype_val<true, ebits + sbits, Z3_FLOATING_POINT_SORT>*>(const_cast<tval*>(this))->mk_fpa_ast<ebits, sbits>();
+            if (m_data_inuse) reinterpret_cast<ctype_val<true, ebits + sbits, Z3_FLOATING_POINT_SORT>*>(const_cast<tval*>(this))->template mk_fpa_ast<ebits, sbits>();
             return *reinterpret_cast<symbolic<true, ebits + sbits, Z3_FLOATING_POINT_SORT>*>(const_cast<tval*>(this));
         }
 
@@ -2349,19 +2450,14 @@ static inline sbool implies(sbool const& a, sbool const& b) { return a.implies(b
 template<bool _ts, int _tn1, int _tn2, sv::z3sk _tk, TASSERT(_tk == Z3_BV_SORT)>
 static inline sv::symbolic<_ts, _tn1 + _tn2, _tk> concat(const sv::symbolic<_ts, _tn1, _tk>& a, const sv::symbolic<_ts, _tn2, _tk>& b) { return a.concat(b); }
 template<int hi, int lo, bool _ts, int _tn, sv::z3sk _tk, TASSERT(_tk == Z3_BV_SORT)>
-inline auto extract(const sv::symbolic<_ts, _tn, _tk>& a) { return a.extract<hi, lo>(); }
+inline auto extract(const sv::symbolic<_ts, _tn, _tk>& a) { return a.template extract<hi, lo>(); }
 
 template<bool _ts, int _tn, sv::z3sk _tk> 
 static inline std::ostream& operator<<(std::ostream& out, sv::symbolic<_ts, _tn, _tk> const& n) { return out << n.str(); }
 template<bool _ts, int _tn, sv::z3sk _tk>
 static inline std::ostream& operator<<(std::ostream& out, const sv::ctype_val<_ts, _tn, _tk>& n) { return out << n.str(); }
 static inline std::ostream& operator<<(std::ostream& out, sv::tval const& n) { return out << n.str(); }
-static inline auto operator!(const sbool& b) {
-    return sv::symbolic<false, 1, Z3_BOOL_SORT>((Z3_context)b, Z3_mk_not((Z3_context)b, (Z3_ast)b));
-}
-static inline auto operator!(const cbool& b) {
-    return cbool((Z3_context)b, !(bool)b);
-}
+
 
 static inline tval concat(const tval& a, const tval& b) { return a.concat(b); }
 

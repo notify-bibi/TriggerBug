@@ -1,5 +1,13 @@
 #include "engine/op_header.h"
-
+ /* ---------------------------------------------------------------------------------------
+  *      Notify-bibi Symbolic-Emulation-Engine project
+  *      Copyright (c) 2019 Microsoft Corporation by notify-bibi@github, 2496424084@qq.com
+  *      ALL RIGHTS RESERVED.
+  *
+  *      快速地执行 IR operator 并返回
+  *      如果是你需要的op code，请帮我完善还未能实现的 IR op
+  * ---------------------------------------------------------------------------------------
+  */
 
 
 #define Z3caseIop(IROPNAME, issigned, nb, OP)\

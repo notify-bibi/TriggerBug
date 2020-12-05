@@ -13,9 +13,8 @@ Revision History:
 #define REGISTER_HL_CD
 
 #include "engine/engine.h"
-#include "engine/variable.h"
 #include "engine/basic_var.hpp"
-#include <Windows.h>
+
 
 
 #define fastMaskB(n) fastMask(((n)<<3))
@@ -29,14 +28,14 @@ namespace TR {
         template <int maxlength>
         friend class Register;
     public:
-        std::hash_map<Int, Z3_ast> m_mem;
+        HASH_MAP<Int, Z3_ast> m_mem;
         class AstManagerX {
-            std::hash_map<Int, Z3_ast>& m_mem;
+            HASH_MAP<Int, Z3_ast>& m_mem;
             Int m_offset;
         public:
             inline AstManagerX(AstManager& am) :m_mem(am.m_mem), m_offset(0) {}
             inline AstManagerX(AstManager& am, Int offset) : m_mem(am.m_mem), m_offset(offset) {}
-            inline AstManagerX(std::hash_map<Int, Z3_ast>& mem, Int offset) : m_mem(mem), m_offset(offset) {}
+            inline AstManagerX(HASH_MAP<Int, Z3_ast>& mem, Int offset) : m_mem(mem), m_offset(offset) {}
             inline Z3_ast& operator[](Int idx) { return m_mem[m_offset + idx]; }
             AstManagerX operator+(Int offset) { return AstManagerX(m_mem, m_offset + offset); }
             AstManagerX operator-(Int offset) { return AstManagerX(m_mem, m_offset - offset); }
@@ -130,9 +129,11 @@ namespace TR {
 
         inline ~Symbolic<maxlength>() {
             int _pcur = maxlength - 1;
-            DWORD N;
+            unsigned int N;
             for (; _pcur > 0; ) {
-                if (_BitScanReverse64(&N, ((DWORD64*)(m_fastindex))[_pcur >> 3] & fastMaskBI1(_pcur % 8))) {
+				N = __builtin_clzll(((ULong*)(m_fastindex))[_pcur >> 3] & fastMaskBI1(_pcur % 8));
+                if ( N!=64 ) {
+					N = 63 - N;
                     _pcur = ALIGN(_pcur, 8) + (N >> 3);
                     _pcur = _pcur - m_fastindex[_pcur] + 1;
                     Z3_dec_ref(m_ctx, m_ast[_pcur]);
@@ -150,7 +151,7 @@ namespace TR {
 
 
     //Record
-    //Ğ´Èë¼ÇÂ¼Æ÷£¬8×Ö½Ú¼ÇÂ¼Îªm_flagµÄÒ»¸öbit
+    //å†™å…¥è®°å½•å™¨ï¼Œ8å­—èŠ‚è®°å½•ä¸ºm_flagçš„ä¸€ä¸ªbit
     template<int maxlength>
     class Record {
     public:
@@ -197,7 +198,7 @@ namespace TR {
             return write_count;
         }
 
-        //Ğ´Èë±éÀúÆ÷
+        //å†™å…¥éå†å™¨
         class iterator
         {
         private:
@@ -206,9 +207,10 @@ namespace TR {
             ULong* m_flag;
         public:
             inline iterator(UChar* flag) :_pcur(0), m_flag((ULong*)flag), m_len(0) {
-                DWORD N;
+                UInt N;
                 for (; ; _pcur += 64) {
-                    if (_BitScanForward64(&N, m_flag[_pcur >> 6])) {
+					N = __builtin_ctzll(m_flag[_pcur >> 6]);
+                    if (N != 64) {
                         _pcur += N;
                         return;
                     }
@@ -226,9 +228,10 @@ namespace TR {
 
             inline void operator++()
             {
-                unsigned long N;
+                unsigned int N;
                 for (;;) {
-                    if (_BitScanForward64(&N, m_flag[_pcur >> 6] & fastMaskReverse(_pcur % 64))) {
+					N = __builtin_ctzll(m_flag[_pcur >> 6] & fastMaskReverse(_pcur % 64));
+                    if (N != 64) {
                         _pcur = ALIGN(_pcur, 64) + N;
                         return;
                     }
@@ -294,7 +297,7 @@ namespace TR {
             symbolic(NULL),
             record(_need_record ? new Record<maxlength>() : NULL)
         { }
-        //·­Òë×ª»»¸¸register
+        //ç¿»è¯‘è½¬æ¢çˆ¶register
         inline Register(Register<maxlength>& father_regs, z3::vcontext& ctx, Bool _need_record) :
             m_ctx(ctx),
             symbolic(father_regs.symbolic ? new Symbolic<maxlength>(m_ctx, father_regs.symbolic) : NULL),
@@ -545,7 +548,6 @@ namespace TR {
 #undef lazydef
             default: vex_printf("ty = 0x%x\n", (UInt)ty); vpanic("tIRType");
             }
-            return Vns();
         }
 
 
@@ -641,7 +643,7 @@ namespace TR {
             return tval(m_ctx, Reg2AstSSE(nbytes, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx), Z3_BV_SORT, nbytes << 3, no_inc{});
         }
 
-        //is slowly ±ä³¤È¡Öµ
+        //is slowly å˜é•¿å–å€¼
         tval Iex_Get(UInt offset, UInt nbytes, z3::vcontext& ctx) {
             vassert(nbytes <= 32);
             auto fastindex = m_fastindex + offset;
@@ -658,7 +660,7 @@ namespace TR {
         }
 
 
-        //½«fastindex offsetÎ»ÖÃµÄastÇå¿Õ£¨¼ôÇĞ&ÊÍ·Å£©
+        //å°†fastindex offsetä½ç½®çš„astæ¸…ç©ºï¼ˆå‰ªåˆ‡&é‡Šæ”¾ï¼‰
         void clear(UInt org_offset, Int LEN)
         {
             Char length = LEN;
@@ -696,11 +698,13 @@ namespace TR {
                 org_offset += (sort_size - fastL);
                 length -= (sort_size - fastL);
             }
-            DWORD index;
+            UInt index;
             if (LEN <= 8) {
                 ULong fast_index = GET8(m_fastindex + org_offset);
                 while (length > 0) {
-                    if (_BitScanReverse64(&index, fast_index & fastMaskB(length))) {
+					index = __builtin_clzll(fast_index & fastMaskB(length));
+                    if (index != 64) {
+						index = 63 - index;
                         index >>= 3;
                         auto fast = m_fastindex[org_offset + index] - 1;
                         length = index - fast;
@@ -717,7 +721,9 @@ namespace TR {
                 if (_pcur < org_offset)
                     return;
                 for (; ; ) {
-                    if (_BitScanReverse64(&index, ((DWORD64*)(m_fastindex))[_pcur >> 3] & fastMaskBI1(_pcur % 8))) {
+					index = __builtin_clzll(((ULong*)(m_fastindex))[_pcur >> 3] & fastMaskBI1(_pcur % 8));
+                    if (index != 64) {
+						index = 63 - index;
                         _pcur = ALIGN(_pcur, 8) + (index >> 3);
                         _pcur = _pcur - m_fastindex[_pcur] + 1;
                         if (_pcur >= org_offset)

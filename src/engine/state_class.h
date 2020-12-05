@@ -3,7 +3,7 @@ Copyright (c) 2019 Microsoft Corporation
 Module Name:
     State_class.hpp:
 Abstract:
-    ·ûºÅ±äÁ¿
+    ç¬¦å·å˜é‡
 Author:
     WXC 2019-05-31.
 Revision History:
@@ -74,7 +74,7 @@ namespace TR {
 
         std::vector<sbool> const& get_asserts() const { return m_asserts; };
 
-        //²»»á±£´æassertµ½solver,ÒòÎªÔÚpushÖ®Ç°»á½øĞĞpush
+        //ä¸ä¼šä¿å­˜assertåˆ°solver,å› ä¸ºåœ¨pushä¹‹å‰ä¼šè¿›è¡Œpush
         void add(sbool const& e);
 
         void add(rsbool const& e) { add(e.tos()); }
@@ -104,7 +104,7 @@ namespace TR {
             guest_call_stack = fsk.guest_call_stack;
             guest_stack = fsk.guest_stack;
         }
-        inline void push(ADDR call_ptr, ADDR bp/*Õ»µ×*/) {
+        inline void push(ADDR call_ptr, ADDR bp/*æ ˆåº•*/) {
             guest_call_stack.push_back(call_ptr);
             guest_stack.push_back(bp);
         }
@@ -295,9 +295,9 @@ namespace TR {
     public:
         vex_context<ADDR>& m_vctx;
     private:
-        //µ±Ç°stateµÄÈë¿Úµã
+        //å½“å‰stateçš„å…¥å£ç‚¹
         ADDR        guest_start_ep;
-        //¿Í»§»ústateµÄeip£¨¼ÆÊıÆ÷eip£©
+        //å®¢æˆ·æœºstateçš„eipï¼ˆè®¡æ•°å™¨eipï¼‰
         ADDR        guest_start;
     private:
         bool        m_dirty_vex_mode = false;
@@ -314,9 +314,9 @@ namespace TR {
         tval* m_ir_temp = nullptr;
         InvocationStack<ADDR>   m_InvokStack;
         TRsolver                solv;
-        //¿Í»§»ú¼Ä´æÆ÷
+        //å®¢æˆ·æœºå¯„å­˜å™¨
         Register<REGISTER_LEN>  regs;
-        //¿Í»§»úÄÚ´æ £¨¶àÏß³ÌÉèÖÃÏàÍ¬user£¬²»Í¬stateÉèÖÃ²»Í¬user£©
+        //å®¢æˆ·æœºå†…å­˜ ï¼ˆå¤šçº¿ç¨‹è®¾ç½®ç›¸åŒuserï¼Œä¸åŒstateè®¾ç½®ä¸åŒuserï¼‰
         StateMEM<ADDR>          mem;
         BranchManager<State<ADDR>> branch;
         std::deque<BTS> m_tmp_branch;
@@ -338,7 +338,7 @@ namespace TR {
         vex_context<ADDR>& vctx() { return m_vctx; }
 
         cmpr::CmprsContext<State<ADDR>, State_Tag> cmprContext(ADDR target_addr, State_Tag tag) { return cmpr::CmprsContext<State<ADDR>, State_Tag>(m_ctx, target_addr, tag); }
-        void compress(cmpr::CmprsContext<State<ADDR>, State_Tag>& ctx);//×î´ó»¯ËõºÏ×´Ì¬ 
+        void compress(cmpr::CmprsContext<State<ADDR>, State_Tag>& ctx);//æœ€å¤§åŒ–ç¼©åˆçŠ¶æ€ 
         inline tval tIRExpr(IRExpr*);
         tval CCall(IRCallee* cee, IRExpr** exp_args, IRType ty);
         inline tval ILGop(IRLoadG* lg);

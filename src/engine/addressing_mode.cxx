@@ -1,5 +1,5 @@
 #include "engine/addressing_mode.h"
-#include <intrin.h>    //(include immintrin.h)
+
 
 #define fastMask(n) ((ULong)((((int)(n))<64)?((1ull << ((int)(n))) - 1):-1ll))
 #define fastMaskI1(n) fastMask(((n)+1))
@@ -45,8 +45,8 @@ TR::addressingMode<ADDR>::iterator::iterator(TR::addressingMode<ADDR>& am) :
     unsigned long N;
     UInt _pcur;
     UInt nb = 0;
-
-    if (_BitScanForward64(&N, m_sym_mask)) {
+	N = __builtin_ctzll(m_sym_mask);
+    if ( N != 64 ) {
         m_sym_ml[0] = shift_mask{ (UChar)N,((ADDR)1) << N };
         m_sym_ml_n = 1;
         _pcur = N;
@@ -54,8 +54,9 @@ TR::addressingMode<ADDR>::iterator::iterator(TR::addressingMode<ADDR>& am) :
         nb = 1;
 
         for (; ; ) {
-            if (_BitScanForward64(&N, m_sym_mask & fastMaskReverseI1(_pcur))) {
-                if (N = _pcur + 1) {
+			N = __builtin_ctzll(m_sym_mask & fastMaskReverseI1(_pcur));
+            if (N != 64) {
+                if (N == _pcur + 1) {
                     m_sym_ml[m_sym_ml_n - 1].mask |= ((ADDR)1) << N;
                 }
                 else {
@@ -218,7 +219,7 @@ bool TR::addressingMode<ADDR>::offset_bit_blast()
     std::deque<sbit_struct_r> vec;
     for (UInt idx = 0; idx < size; idx++) {
         sbit_struct s = _check_is_extract(m_offset, idx);
-        //°Ñast·Ö½âÎª Ò»¸öÒ»¸öbit¶ÀÁ¢µ¥Ôª
+        //æŠŠaståˆ†è§£ä¸º ä¸€ä¸ªä¸€ä¸ªbitç‹¬ç«‹å•å…ƒ
         if (s.sym_ast) {
             auto end = vec.end();
             auto m = vec.begin();
@@ -493,7 +494,7 @@ goFaild:
 
 
 template<typename ADDR>
-TR::addressingMode<ADDR>::sbit_struct TR::addressingMode<ADDR>::_check_is_extract(expr const& _e, UInt _idx) {
+typename TR::addressingMode<ADDR>::sbit_struct TR::addressingMode<ADDR>::_check_is_extract(expr const& _e, UInt _idx) {
     context& c = _e.ctx();
     UInt idx = _idx;
     expr e = _e;

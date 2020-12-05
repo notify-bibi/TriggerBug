@@ -4,7 +4,7 @@ Copyright (c) 2019 Microsoft Corporation
 Module Name:
     Variable.hpp:
 Abstract:
-    ·ûºÅ±äÁ¿
+    ç¬¦å·å˜é‡
 Author:
     WXC 2019-05-31.
 Revision History:
@@ -370,7 +370,7 @@ public:
                     r_ast = concat_ast;
                 }
             }
-            //ÈÆ¹ıconst
+            //ç»•è¿‡const
             const_cast<Vns*>(this)->m_ast = r_ast;
             const_cast<Vns*>(this)->m_kind = REAL_BCKAST;
         };

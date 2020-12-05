@@ -1,8 +1,118 @@
 #ifndef _TR_head
 #define _TR_head
 #define _SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS
+
+
+#include <mmintrin.h>  //SSE(include mmintrin.h)
+#include <xmmintrin.h> //SSE2(include xmmintrin.h)
+#include <emmintrin.h> //SSE3(include emmintrin.h)
+#include <pmmintrin.h> //SSSE3(include pmmintrin.h)
+#include <tmmintrin.h> //SSE4.1(include tmmintrin.h)
+#include <smmintrin.h> //SSE4.2(include smmintrin.h)
+#include <nmmintrin.h> //AES(include nmmintrin.h)
+#include <wmmintrin.h> //AVX(include wmmintrin.h)
+#include <immintrin.h> //(include immintrin.h)
+/*
+ * Intel(R) AVX compiler intrinsic functions.
+ */
+typedef union __declspec(align(32)) _m256 {
+    float m256_f32[8];
+} _m256;
+
+typedef struct __declspec(align(32)) _m256d {
+    double m256d_f64[4];
+} _m256d;
+
+typedef union  __declspec(align(32)) _m256i {
+    __int8              m256i_i8[32];
+    __int16             m256i_i16[16];
+    __int32             m256i_i32[8];
+    __int64             m256i_i64[4];
+    unsigned __int8     m256i_u8[32];
+    unsigned __int16    m256i_u16[16];
+    unsigned __int32    m256i_u32[8];
+    unsigned __int64    m256i_u64[4];
+} _m256i;
+
+typedef union __declspec(align(16)) _m128i {
+    __int8              m128i_i8[16];
+    __int16             m128i_i16[8];
+    __int32             m128i_i32[4];
+    __int64             m128i_i64[2];
+    unsigned __int8     m128i_u8[16];
+    unsigned __int16    m128i_u16[8];
+    unsigned __int32    m128i_u32[4];
+    unsigned __int64    m128i_u64[2];
+} _m128i;
+
+typedef struct __declspec(align(16)) _m128d {
+    double              m128d_f64[2];
+} _m128d;
+
+
+typedef union __declspec(align(16)) _m128 {
+    float               m128_f32[4];
+    unsigned __int64    m128_u64[2];
+    __int8              m128_i8[16];
+    __int16             m128_i16[8];
+    __int32             m128_i32[4];
+    __int64             m128_i64[2];
+    unsigned __int8     m128_u8[16];
+    unsigned __int16    m128_u16[8];
+    unsigned __int32    m128_u32[4];
+} _m128;
+
+
+
+#define M256i(v) (*(_m256i*)(&v))
+#define M256d(v) (*(_m256d*)(&v))
+#define M256(v) (*(_m256*)(&v))
+
+#define M128i(v) (*(_m128i*)(&v))
+#define M128d(v) (*(_m128d*)(&v))
+#define M128(v) (*(_m128*)(&v))
+
+
+
+#if defined(_MSC_VER)
+ /* Microsoft C/C++-compatible compiler */
+#elif defined(__GNUC__) && !defined(__llvm__) && (!defined(__INTEL_COMPILER)) && (defined(__x86_64__))
+ /* GCC-compatible compiler, targeting x86/x86-64 */
+#define REAL_GCC   __GNUC__ // probably
+#elif defined(__GNUC__) && !defined(__llvm__) && (defined(__INTEL_COMPILER)) && (defined(__x86_64__))
+/* INTEL COMPILER */
+#elif defined(__llvm__) && (defined(__x86_64__))
+/* clang */
+#else
+#error "???"
+#endif
+
+
+#ifdef _MSC_VER
+#define NORETURN __declspec(noreturn)
+#else
+#define NORETURN __attribute__ ((noreturn))
+#endif
+
+
+#if defined(_MSC_VER)
+#include <intrin.h>
 #include <hash_map>
-#include <intrin.h>    //(include immintrin.h)
+#define HASH_MAP std::hash_map
+#define FAILD_ASSERT(any_cond, msg) static_assert(any_cond, msg);
+#else
+#include <x86intrin.h>
+#include <unordered_map>
+#define HASH_MAP std::unordered_map
+template <class...> constexpr std::false_type always_false{};
+//#define FAILD_ASSERT(any_cond, msg) static_assert(always_false<any_cond>, msg);
+#define FAILD_ASSERT(any_cond, msg) static_assert(false, msg); // if dont support please use -fdelayed-template-parsing
+#endif
+
+
+
+
+
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -11,36 +121,36 @@
 #include <future>
 #include <functional>
 #include <iomanip>
-
+#include <climits>
 #include "z3++.h"
 #include "engine/ir_guest_defs.h"
 #include "thread_pool/thread_pool.h"
 #include "engine/trException.h"
 
-//¾õµÃÒıÇæÃ»bugÁË¾ÍÈ¡Ïû×¢ÊÍ£¬¼Ó¿ìËÙ¶È
+//è§‰å¾—å¼•æ“æ²¡bugäº†å°±å–æ¶ˆæ³¨é‡Šï¼ŒåŠ å¿«é€Ÿåº¦
 //#define RELEASE_OFFICIALLY
 
-//ËùÓĞ¿Í»§»ú¼Ä´æÆ÷µÄir²ãµÄ×î´ó³¤¶È¡£½¨Òé>=100
+//æ‰€æœ‰å®¢æˆ·æœºå¯„å­˜å™¨çš„irå±‚çš„æœ€å¤§é•¿åº¦ã€‚å»ºè®®>=100
 #define REGISTER_LEN 0x800
 
-//100ÌõÈÎÒâ¿Í»§»úÖ¸ÁîËùĞèÒªµÄ×î´ó IR temp index¡£½¨Òé>=400
+//100æ¡ä»»æ„å®¢æˆ·æœºæŒ‡ä»¤æ‰€éœ€è¦çš„æœ€å¤§ IR temp indexã€‚å»ºè®®>=400
 #define MAX_IRTEMP 800
 
-//Ã¿¸öĞéÄâÎïÀíÒ³´æÔÚastÊ±£¬Ê¹ÓÃhash±£´æÃ¿Ò»¸öast;·ñÔòÊ¹ÓÃZ3_ast[0x1000];Ç°ÕßºÄ·ÑĞ¡£¬ËÙ¶ÈÉÔÎ¢Âı£¬ºóÕß·´Ö®
+//æ¯ä¸ªè™šæ‹Ÿç‰©ç†é¡µå­˜åœ¨astæ—¶ï¼Œä½¿ç”¨hashä¿å­˜æ¯ä¸€ä¸ªast;å¦åˆ™ä½¿ç”¨Z3_ast[0x1000];å‰è€…è€—è´¹å°ï¼Œé€Ÿåº¦ç¨å¾®æ…¢ï¼Œåè€…åä¹‹
 #define USE_HASH_AST_MANAGER
 
-//copy one write Ğ´Ê±¸´ÖÆ£¬ËÙ¶È¿ì£¬Ä¬ÈÏ²»¹Ø±Õ
+//copy one write å†™æ—¶å¤åˆ¶ï¼Œé€Ÿåº¦å¿«ï¼Œé»˜è®¤ä¸å…³é—­
 //#define CLOSECNW
 
-//¸¸Ò³´æÔÚast¾Í¿½±´Ò»Ò³£»·ñÔò¾ÍÊ¹ÓÃ¸¸Ò³£¬Ğ´Ê±ÔÙ¸´ÖÆ(ºóÕßËÙ¶È¿ì)
+//çˆ¶é¡µå­˜åœ¨astå°±æ‹·è´ä¸€é¡µï¼›å¦åˆ™å°±ä½¿ç”¨çˆ¶é¡µï¼Œå†™æ—¶å†å¤åˆ¶(åè€…é€Ÿåº¦å¿«)
 //#define USECNWNOAST
 
-//ËŞÖ÷»úµÄÆ½Ì¨¼Ü¹¹
+//å®¿ä¸»æœºçš„å¹³å°æ¶æ„
 #define HOSTARCH VexArchAMD64
 
-extern "C" void vex_assert_fail(const HChar * expr, const HChar * file, Int line, const HChar * fn);
+extern "C" NORETURN void vex_assert_fail(const HChar * expr, const HChar * file, Int line, const HChar * fn);
 extern "C" unsigned int vex_printf(const HChar * format, ...);
-extern "C" void vpanic(const HChar * str);
+extern "C" NORETURN void vpanic(const HChar * str);
 unsigned int IRConstTag2nb(IRConstTag t);
 unsigned int ty2length(IRType ty);
 unsigned int ty2bit(IRType ty);
@@ -63,14 +173,8 @@ IRType       length2ty(UShort bit);
 
 #define ALIGN(Value,size) ((Value) & ~((size) - 1))
 #define Z3_Get_Ref(exp) (((int*)((Z3_ast)((exp))))[2])
-#define MMEMPTY _mm_empty() //x87¸¡µã
+#define MMEMPTY _mm_empty() //x87æµ®ç‚¹
 
-
-#ifdef _MSC_VER
-#define NORETURN __declspec(noreturn)
-#else
-#define NORETURN __attribute__ ((noreturn))
-#endif
 
 
 /* vex_traceflags values */
@@ -156,7 +260,7 @@ public:
 
 namespace z3 {
     class vcontext :public context {
-        //z3_translate²¢²»ÊÇÏß³Ì°²È«µÄ£¬target_ctx²»Í¬£¬ctxÏàÍ¬½øĞĞ¶àÏß³Ì²¢·¢Ò²»ábug¡£ÎªÁËĞ´Ê±¸´ÖÆÌí¼ÓÒ»¸öËø
+        //z3_translateå¹¶ä¸æ˜¯çº¿ç¨‹å®‰å…¨çš„ï¼Œtarget_ctxä¸åŒï¼Œctxç›¸åŒè¿›è¡Œå¤šçº¿ç¨‹å¹¶å‘ä¹Ÿä¼šbugã€‚ä¸ºäº†å†™æ—¶å¤åˆ¶æ·»åŠ ä¸€ä¸ªé”
         spin_mutex translate_mutex;
     public:
 
@@ -173,7 +277,7 @@ namespace z3 {
 struct no_inc {};
 
 
-//×¢£ºintel±àÒëÆ÷¶ÔËÄ¸ö¼°ËÄ¸öÒ»ÏÂµÄswitch case»á×Ô¶¯Ê¹ÓÃif else½á¹¹¡£ÎğÅçÓÃswitchĞ§ÂÊµÍÏÂ
+//æ³¨ï¼šintelç¼–è¯‘å™¨å¯¹å››ä¸ªåŠå››ä¸ªä¸€ä¸‹çš„switch caseä¼šè‡ªåŠ¨ä½¿ç”¨if elseç»“æ„ã€‚å‹¿å–·ç”¨switchæ•ˆç‡ä½ä¸‹
 
 
 
@@ -192,4 +296,4 @@ struct no_inc {};
 //}
 
 
-#endif _TR_head
+#endif // _TR_head

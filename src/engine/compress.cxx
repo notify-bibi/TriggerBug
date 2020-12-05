@@ -74,7 +74,7 @@ void cmpr::GPMana::check()
 }
 
 cmpr::GPMana::GPMana(Z3_context ctx, UInt size)
-    :m_size(size), m_ctx(ctx), m_sort(nullptr) {
+    :m_ctx(ctx), m_sort(nullptr), m_size(size) {
     m_vec = (_m_vec_*)malloc(sizeof(_m_vec_) * size);
     memset(m_vec, 0, sizeof(_m_vec_) * m_size);
 }

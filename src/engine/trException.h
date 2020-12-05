@@ -10,18 +10,18 @@ namespace Expt {
     class GuestMemWriteErr;
     class SolverNoSolution;
     typedef enum {
-        //Ä£ÄâÈí¼ş´íÎó
+        //æ¨¡æ‹Ÿè½¯ä»¶é”™è¯¯
         GuestMem_read_err,
         GuestMem_write_err,
         GuestRuntime_exception,
-        //Éè¼Æbug
+        //è®¾è®¡bug
         /*
         Engine_memory_leak,
         Engine_memory_unmap_has_ref,
         Engine_memory_access_has_ref,
         */
         IR_failure_exit,
-        //z3 solver ÎŞ½â
+        //z3 solver æ— è§£
         Solver_no_solution
         //
     }ExceptionTag;
@@ -36,10 +36,10 @@ namespace Expt {
         friend class RuntimeIrSig;
 
         ExceptionTag m_errorId;
-        /*£¡£¡£¡£¡ÔÚÕâÀïÏÂ¸ö¶Ï£¡£¡£¡£¡*/
-        /*£¡£¡£¡£¡add a backpoint here£¡£¡£¡£¡*/
+        /*ï¼ï¼ï¼ï¼åœ¨è¿™é‡Œä¸‹ä¸ªæ–­ï¼ï¼ï¼ï¼*/
+        /*ï¼ï¼ï¼ï¼add a backpoint hereï¼ï¼ï¼ï¼*/
         ExceptionBase(ExceptionTag t) :m_errorId(t) {
-            //´íÎó¹ıÂËÆ÷ error filter
+            //é”™è¯¯è¿‡æ»¤å™¨ error filter
             ExceptionTag dbg;
             switch (t) {
             case GuestMem_read_err:dbg = t; break;
@@ -73,7 +73,7 @@ namespace Expt {
         std::string msg() const override {
             assert(m_errorId == GuestMem_read_err);
             char buffer[50];
-            snprintf(buffer, 50, "Gest : mem read addr(%p) :::  ", m_gaddr);
+            snprintf(buffer, 50, "Gest : mem read addr(%llu) :::  ", m_gaddr);
             std::string ret;
             return ret.assign(buffer) + m_msg;
         }
@@ -85,7 +85,7 @@ namespace Expt {
         std::string msg() const override {
             assert(m_errorId == GuestMem_write_err);
             char buffer[50];
-            snprintf(buffer, 50, "Gest : mem write addr(%p) :::  ", m_gaddr);
+            snprintf(buffer, 50, "Gest : mem write addr(%llu) :::  ", m_gaddr);
             std::string ret;
             return ret.assign(buffer) + m_msg;
         }
@@ -95,7 +95,7 @@ namespace Expt {
         z3::solver& m_solver;
         const char* m_msg;
     public:
-        SolverNoSolution(char const* msg, z3::solver& solver) :ExceptionBase(Solver_no_solution), m_msg(msg), m_solver(solver) {}
+        SolverNoSolution(char const* msg, z3::solver& solver) :ExceptionBase(Solver_no_solution), m_solver(solver), m_msg(msg) {}
         std::string msg() const override {
             assert(m_errorId == Solver_no_solution);
             return std::string("Solver no solution ::: ") + m_msg + "\nsolver's assertions:\n" +
@@ -168,7 +168,7 @@ namespace Expt {
         std::string msg() const override {
             assert(m_errorId == GuestRuntime_exception);
             char buffer[50];
-            snprintf(buffer, 50, "Guest : Sig(%s) at (%p) :::  ", constStrIRJumpKind(m_jk), m_sig_addr);
+            snprintf(buffer, 50, "Guest : Sig(%s) at (%llu) :::  ", constStrIRJumpKind(m_jk), m_sig_addr);
             std::string ret;
             return ret.assign(buffer);
         }
@@ -189,7 +189,7 @@ inline std::ostream& operator << (std::ostream& out, const Expt::ExceptionBase& 
   ((void) ((xexpr) ? 0 :                                        \
            (throw Expt::IRfailureExit (#xexpr,                            \
                              __FILE__, __LINE__,                \
-                             __FUNCSIG__), 0)))
+                             __PRETTY_FUNCTION__), 0)))
 #else
 #define dassert(...) 
 #endif // _DEBUG
@@ -199,7 +199,7 @@ inline std::ostream& operator << (std::ostream& out, const Expt::ExceptionBase& 
   ((void) ((xexpr) ? 0 :                                         \
            (throw Expt::IRfailureExit (#xexpr,                             \
                              __FILE__, __LINE__,                 \
-                             __FUNCSIG__), 0)))
+                             __PRETTY_FUNCTION__), 0)))
 #else
 #define vassert(...) 
 #endif
