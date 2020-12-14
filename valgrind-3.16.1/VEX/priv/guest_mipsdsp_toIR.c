@@ -8,6 +8,10 @@
 #include "main_globals.h"
 #include "guest_generic_bb_to_IR.h"
 #include "guest_mips_defs.h"
+MKG_VAR_CALL(mips, IRSB*, irsb)
+MKG_VAR_CALL(mips, Bool, mode64)
+#define  mode64 (*mips_mode64_var_call())
+#define  irsb (*mips_irsb_var_call())
 #include "mips_defs.h"
 
 

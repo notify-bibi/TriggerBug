@@ -24,25 +24,33 @@
 using namespace TR;
 //注意地址位宽
 
+#if 0
 
-extern IRSB* LibVEX_FrontEnd_coexistence( /*MOD*/ VexTranslateArgs* vta,
+
+extern IRSB* LibVEX_FrontEnd(
+    /*MOD*/ VexTranslateArgs* vta,
     /*OUT*/ VexTranslateResult* res,
-    /*OUT*/ VexRegisterUpdates* pxControl,
-    Pap* pap);
+    /*OUT*/ VexRegisterUpdates* pxControl
+);
 
 extern "C" void vexSetAllocModeTEMP_and_save_curr(void);
 
+extern "C" {
+    void vexSetAllocModeTEMP_and_save_curr(void) {
+#warning "need code"
+    }
+}
 void tAMD64REGS(int offset, int length);
 
-class DMEM : public MEM<Addr64> {
+class DMem : public MEM<Addr64> {
     bool m_front;
     Addr64 m_stack_reservve_size;
     Addr64 m_stack_addr;
     Addr64 m_guest_regs_map_addr;
 
 public:
-    template<typename ADDR>
-    DMEM(vctx_base & vctxb, TRsolver& s, z3::vcontext& ctx, MEM<ADDR>& mem, bool front, Bool _need_record) : MEM(vctxb, s, ctx, mem.CR3, mem.user, _need_record),
+    template<typename THword>
+    DMem(vctx_base & vctxb, TRsolver& s, z3::vcontext& ctx, MEM<THword>& mem, bool front, Bool _need_record) : MEM(vctxb, s, ctx, mem.CR3, mem.get_user(), _need_record),
         m_front(front),
         m_stack_reservve_size(0),
         m_stack_addr(0),
@@ -52,7 +60,7 @@ public:
     };
 
     //FORK
-    DMEM(z3::solver& so, z3::vcontext& ctx, DMEM& father_mem, Bool _need_record): MEM(so, ctx, father_mem, _need_record),
+    DMem(z3::solver& so, z3::vcontext& ctx, DMem& father_mem, Bool _need_record): MEM(so, ctx, father_mem, _need_record),
         m_stack_reservve_size(0),
         m_stack_addr(0),
         m_guest_regs_map_addr(0)
@@ -72,7 +80,7 @@ public:
         p[0]->mount_regs(s);
     }
 
-   ~DMEM()
+   ~DMem()
     {
        PAGE** p = get_pointer_of_mem_page(m_guest_regs_map_addr);
        p[0]->mount_regs((TR::Register<2333>*)nullptr);
@@ -106,7 +114,8 @@ class DState {
     z3::vcontext& m_ctx;
     TRsolver& m_solv;
     Register<REGISTER_LEN>  regs;
-    DMEM                    mem;
+    DMem mem;
+    EmuEnvironment<MAX_IRTEMP> ir_temp;
 
     bool    m_dirty_vex_mode = false;
     DState* m_dctx = nullptr;
@@ -121,25 +130,25 @@ class DState {
     InvocationStack<Addr64>   m_InvokStack;
     UChar* m_host_addr;
     UChar* m_host_ep;
-    tval* m_irtemp = nullptr;
     //fork
     DState(DState& fork) :
         m_front(false),
         m_base(&fork),
+        m_vex_info(fork.m_vex_info),
         _m_z3_ctx(),
         _m_z3_solv(_m_z3_ctx, fork.m_solv, z3::solver::translate{}),
         m_ctx(_m_z3_ctx),
         m_solv(_m_z3_solv),
         regs(_m_z3_ctx, true),
         mem(_m_z3_solv, _m_z3_ctx, fork.mem, true),
+        ir_temp(m_vex_info, mem, VexArchAMD64),
         m_stack_addr(mem.find_block_reverse(fork.m_stack_addr - 0x1000, m_stack_reservve_size)),
         m_guest_regs_map_addr(mem.find_block_forward(fork.m_guest_regs_map_addr + 0x1000, REGISTER_LEN)),
         vex_ret_addr(fork.vex_ret_addr + 1),
         branch(*this, fork.branch),
         m_status(NewState),
         m_host_addr(nullptr),
-        m_host_ep(nullptr),
-        m_vex_info(fork.m_vex_info)
+        m_host_ep(nullptr)
     {
         mem.map(m_stack_addr, m_stack_reservve_size);
         mem.map(m_guest_regs_map_addr, 0x1000);
@@ -153,24 +162,25 @@ class DState {
     }
 public:
     //dirty call
-    template<typename ADDR>
-    DState(vex_info const& info, z3::vcontext& ctx, TRsolver&solver, MEM<ADDR>& memory) :
+    template<typename THword>
+    DState(vex_info const& info, z3::vcontext& ctx, TRsolver&solver, MEM<THword>& memory) :
         m_front(true),
         m_base(nullptr),
+        m_vex_info(const_cast<vex_info&>(info)),
         _m_z3_ctx(),
         _m_z3_solv(ctx),
         m_ctx(ctx),
         m_solv(solver),
         regs(ctx, true),
         mem(info, solver, ctx, memory, true, true),
-        m_stack_addr(memory.find_block_reverse((ADDR)0 - 0x10000, m_stack_reservve_size)),
+        ir_temp(m_vex_info, mem, VexArchAMD64),
+        m_stack_addr(memory.find_block_reverse((THword)0 - 0x10000, m_stack_reservve_size)),
         m_guest_regs_map_addr(memory.find_block_forward(0x1000, REGISTER_LEN)),
         vex_ret_addr(1),
         branch(*this),
         m_status(NewState),
         m_host_addr(nullptr),
-        m_host_ep(nullptr),
-        m_vex_info(info)
+        m_host_ep(nullptr)
     {
         mem.map(m_stack_addr, m_stack_reservve_size);
         mem.map(m_guest_regs_map_addr, 0x1000);
@@ -209,10 +219,9 @@ public:
     virtual IRSB*    translate(
         /*MOD*/ VexTranslateArgs* vta,
         /*OUT*/ VexTranslateResult* res,
-        /*OUT*/ VexRegisterUpdates* pxControl,
-        Pap* pap
+        /*OUT*/ VexRegisterUpdates* pxControl
     ) {
-        return LibVEX_FrontEnd_coexistence(vta, res, pxControl, pap);
+        return LibVEX_FrontEnd(vta, res, pxControl);
     }
     void             init_param(IRCallee* cee, IRExpr** exp_args) {
         set_ip((UChar*)cee->addr);
@@ -326,8 +335,7 @@ public:
 private:
         
     void exec() {
-        EmuEnvironment<MAX_IRTEMP> emu(info(), m_ctx, VexArchAMD64);
-        m_irtemp = emu;
+        
         set_status(Running);
         rsbool fork_guard(m_ctx, false);
 
@@ -343,10 +351,10 @@ private:
                 VPANIC("????");
             }
         For_Begin:
-            emu.set_host_addr((Addr64)m_host_addr);
+            ir_temp.set_host_addr((Addr64)m_host_addr);
             VexRegisterUpdates pxControl;
             VexTranslateResult res;
-            IRSB* irsb = translate(emu, &res, &pxControl, emu);
+            IRSB* irsb = translate(ir_temp.get_ir_vex_translate_args(), &res, &pxControl);
             IRStmt* s = irsb->stmts[0];
             for (Int stmtn = 0; stmtn < irsb->stmts_used;
                 s = irsb->stmts[++stmtn])
@@ -359,9 +367,9 @@ private:
                 case Ist_Put: { regs.Ist_Put(s->Ist.Put.offset, tIRExpr(s->Ist.Put.data)); break; }
                 case Ist_Store: { mem.Ist_Store(tIRExpr(s->Ist.Store.addr), tIRExpr(s->Ist.Store.data)); break; };
                 case Ist_WrTmp: {
-                    emu[s->Ist.WrTmp.tmp] = tIRExpr(s->Ist.WrTmp.data);
+                    ir_temp[s->Ist.WrTmp.tmp] = tIRExpr(s->Ist.WrTmp.data);
 #ifdef OUTPUT_STMTS
-                    std::cout << emu[s->Ist.WrTmp.tmp];
+                    std::cout << ir_temp[s->Ist.WrTmp.tmp];
 #endif
                     break; };
                 case Ist_CAS /*比较和交换*/: {//xchg    rax, [r10]
@@ -372,13 +380,13 @@ private:
                     if ((cas.oldHi != IRTemp_INVALID) && (cas.expdHi)) {//double
                         tval expdHi = tIRExpr(cas.expdHi);
                         tval dataHi = tIRExpr(cas.dataHi);
-                        emu[cas.oldHi] = mem.Iex_Load(addr, expdLo.nbits());
-                        emu[cas.oldLo] = mem.Iex_Load(addr, expdLo.nbits());
+                        ir_temp[cas.oldHi] = mem.Iex_Load(addr, expdLo.nbits());
+                        ir_temp[cas.oldLo] = mem.Iex_Load(addr, expdLo.nbits());
                         mem.Ist_Store(addr, dataLo);
-                        mem.Ist_Store(addr + (dataLo.nbits() >> 3), dataHi);
+                        mem.Ist_Store(tval(addr.tors<false, 64>() + (dataLo.nbits() >> 3)), dataHi);
                     }
                     else {//single
-                        emu[cas.oldLo] = mem.Iex_Load(addr, expdLo.nbits());
+                        ir_temp[cas.oldLo] = mem.Iex_Load(addr, expdLo.nbits());
                         mem.Ist_Store(addr, dataLo);
                     }
                     break;
@@ -453,7 +461,7 @@ private:
                     if ((UChar)guard.tor()) {
                         dirty_run(dirty);
                         if (dirty->tmp != IRTemp_INVALID) {
-                            emu[dirty->tmp] = result(typeOfIRTemp(irsb->tyenv, dirty->tmp));
+                            ir_temp[dirty->tmp] = result(typeOfIRTemp(irsb->tyenv, dirty->tmp));
                         }
                     }
 
@@ -463,10 +471,10 @@ private:
                     IRLoadG* lg = s->Ist.LoadG.details;
                     rsbool guard = tIRExpr(lg->guard).tobool();
                     if (guard.real()) {
-                        emu[lg->dst] = (guard.tor()) ? ILGop(lg) : tIRExpr(lg->alt);
+                        ir_temp[lg->dst] = (guard.tor()) ? ILGop(lg) : tIRExpr(lg->alt);
                     }
                     else {
-                        emu[lg->dst] = ite(guard.tos(), ILGop(lg), tIRExpr(lg->alt));
+                        ir_temp[lg->dst] = ite(guard.tos(), ILGop(lg), tIRExpr(lg->alt));
                     }
                     break;
                 }
@@ -568,10 +576,8 @@ private:
         vex_printf("\n\n\n");
 #endif
     EXIT:
-        m_irtemp = nullptr;
         return;
     Faild_EXIT:
-        m_irtemp = nullptr;
         set_status(Death);
     }
 
@@ -581,13 +587,16 @@ public:
             VPANIC("war: this->m_status != NewState");
         }
         try {
+            ir_temp.malloc_ir_buff(m_ctx);
             exec();
+            ir_temp.free_ir_buff();
             if (status() == DirtyRet) 
                 return;
 
             VPANIC("dirty fork(cmpr::compress not support)");
         }
         catch (Expt::ExceptionBase & error) {
+            ir_temp.free_ir_buff();
             std::cout << "dirty err :: " << std::endl;
             switch (error.errTag()) {
             case Expt::GuestMem_read_err:
@@ -618,12 +627,12 @@ public:
 
 
 
-template<typename ADDR>
+template<typename THword>
 class VexIRDirty :public DState {
-    State<ADDR>& m_state;
+    State<THword>& m_state;
 
 public:
-    VexIRDirty(State<ADDR>& state) :DState(state.info(), state.m_ctx, state.solv, state.mem), m_state(state) { 
+    VexIRDirty(State<THword>& state) : DState(state.info(), state.m_ctx, state.solv, state.mem), m_state(state) { 
        mem.mount_regs(&m_state.regs, m_guest_regs_map_addr);
     }
     ~VexIRDirty(){  }
@@ -642,10 +651,9 @@ class DStateIRDirty :public DState {
     virtual IRSB*    translate(
         /*MOD*/ VexTranslateArgs* vta,
         /*OUT*/ VexTranslateResult* res,
-        /*OUT*/ VexRegisterUpdates* pxControl,
-        Pap* pap
+        /*OUT*/ VexRegisterUpdates* pxControl
     ) override {
-        return LibVEX_FrontEnd(vta, res, pxControl, pap);
+        return LibVEX_FrontEnd(vta, res, pxControl);
     }
 public:
     DStateIRDirty(DState& state) :DState(state.m_vex_info, state.m_ctx, state.m_solv, state.mem), m_state(state) { 
@@ -722,7 +730,7 @@ tval DState::tIRExpr(IRExpr* e)
 {
     switch (e->tag) {
     case Iex_Get: { return regs.Iex_Get(e->Iex.Get.offset, e->Iex.Get.ty); }
-    case Iex_RdTmp: { return m_irtemp[e->Iex.RdTmp.tmp]; }
+    case Iex_RdTmp: { return ir_temp[e->Iex.RdTmp.tmp]; }
 
     case Iex_Unop: { return Kernel::tUnop(e->Iex.Unop.op, tIRExpr(e->Iex.Unop.arg)); }
     case Iex_Binop: { return  Kernel::tBinop(e->Iex.Binop.op, tIRExpr(e->Iex.Binop.arg1), tIRExpr(e->Iex.Binop.arg2)); }
@@ -961,33 +969,33 @@ void DState::compress(cmpr::CmprsContext<DState, State_Tag>& ctx)
 }
 
 
-template<typename ADDR>
-DirtyCtx dirty_context(State<ADDR>* s) {
-    return (DirtyCtx)new VexIRDirty<ADDR>(*s);
+template<typename THword>
+DirtyCtx dirty_context(State<THword>* s) {
+    return (DirtyCtx)new VexIRDirty<THword>(*s);
 }
-template<typename ADDR>
+template<typename THword>
 Addr64 dirty_get_gsptr(DirtyCtx dctx) {
-    return ((VexIRDirty<ADDR>*)dctx)->getGSPTR();
+    return ((VexIRDirty<THword>*)dctx)->getGSPTR();
 }
-template<typename ADDR>
+template<typename THword>
 void dirty_context_del(DirtyCtx dctx) {
-    delete ((VexIRDirty<ADDR>*)dctx);
+    delete ((VexIRDirty<THword>*)dctx);
 }
 
-template<typename ADDR>
+template<typename THword>
 void dirty_ccall(DirtyCtx dctx, IRCallee* cee, IRExpr** args) {
-    VexIRDirty<ADDR>* d = (VexIRDirty<ADDR>*)dctx;
-    Int regparms = cee->regparms;
-    UInt mcx_mask = cee->mcx_mask;
+    VexIRDirty<THword>* d = (VexIRDirty<THword>*)dctx;
+    //Int regparms = cee->regparms;
+    //UInt mcx_mask = cee->mcx_mask;
     vexSetAllocModeTEMP_and_save_curr();
     d->set_status(NewState);
     d->init_param(cee, args);
     d->start();
 }
 
-template<typename ADDR>
+template<typename THword>
 void dirty_call_np(DirtyCtx dctx, const HChar* name, void* func, const std::initializer_list<rsval<Addr64>>& parms) {
-    VexIRDirty<ADDR>* d = (VexIRDirty<ADDR>*)dctx;
+    VexIRDirty<THword>* d = (VexIRDirty<THword>*)dctx;
     IRCallee cee = { (Int)parms.size() , name, func, 0xffffffff };
     vexSetAllocModeTEMP_and_save_curr();
     d->set_status(NewState);
@@ -995,15 +1003,15 @@ void dirty_call_np(DirtyCtx dctx, const HChar* name, void* func, const std::init
     d->start();
 }
 
-template<typename ADDR>
+template<typename THword>
 void dirty_run(DirtyCtx dctx, IRDirty* dirty) {
-    VexIRDirty<ADDR>* d = (VexIRDirty<ADDR>*)dctx;
-    dirty_ccall<ADDR>(dctx, dirty->cee, dirty->args);
+    //VexIRDirty<THword>* d = (VexIRDirty<THword>*)dctx;
+    dirty_ccall<THword>(dctx, dirty->cee, dirty->args);
 }
 
-template<typename ADDR>
+template<typename THword>
 tval dirty_result(DirtyCtx dctx, IRType rty) {
-    VexIRDirty<ADDR>* d = (VexIRDirty<ADDR>*)dctx;
+    VexIRDirty<THword>* d = (VexIRDirty<THword>*)dctx;
     return d->result(rty);
 }
 
@@ -1262,3 +1270,4 @@ none:
     vex_printf(" what regoffset = %d ", offset);
 }
 
+#endif

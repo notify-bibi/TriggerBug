@@ -33,8 +33,8 @@ public:
             fs[n] = ana[n];
         }*/
 
-        static std::hash_map<ADDR, ana_decl> m_ana_decl_all;
-        std::hash_map<ADDR, ana_decl>::iterator fa = m_ana_decl_all.find(m_base);
+        static HASH_MAP<ADDR, ana_decl> m_ana_decl_all;
+        HASH_MAP<ADDR, ana_decl>::iterator fa = m_ana_decl_all.find(m_base);
         if (fa != m_ana_decl_all.end()) {
             m_ana_decl = fa->second;
             return true;
@@ -46,7 +46,7 @@ public:
             std::list<finder>::iterator itor = fs.begin();
             for (; itor != fs.end(); itor++) {
                 finder f = *itor;
-                auto value = mem.load<Ity_I32>(m_base + (idx << 2));
+                auto value = mem.template load<Ity_I32>(m_base + (idx << 2));
                 if (value.symb()) return false;
                 ana_decl ad = f(idx, value.tor());
                 if (!ad) {

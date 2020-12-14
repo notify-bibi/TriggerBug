@@ -1,0 +1,301 @@
+# 1 "MKG.c"
+# 1 "<built-in>" 1
+# 1 "<built-in>" 3
+# 325 "<built-in>" 3
+# 1 "<command line>" 1
+# 1 "<built-in>" 2
+# 1 "MKG.c" 2
+# 19 "MKG.c"
+# 1 "./config.h" 1
+# 16 "./config.h"
+VexEndness* amd64_host_endness_var_call();
+const UChar** amd64_guest_code_var_call();
+Addr64* amd64_guest_RIP_bbstart_var_call();
+Addr64* amd64_guest_RIP_curr_instr_var_call();
+IRSB** amd64_irsb_var_call();
+Addr64* amd64_guest_RIP_next_assumed_var_call();
+Bool* amd64_guest_RIP_next_mustcheck_var_call();
+
+
+
+
+
+VexEndness* x86_host_endness_var_call();
+const UChar** x86_guest_code_var_call();
+Addr64* x86_guest_RIP_bbstart_var_call();
+Addr64* x86_guest_RIP_curr_instr_var_call();
+IRSB** x86_irsb_var_call();
+
+
+
+
+VexEndness* arm_host_endness_var_call();
+Addr32* arm_guest_R15_curr_instr_notENC_var_call();
+Bool* arm___curr_is_Thumb_var_call();
+IRSB** arm_irsb_var_call();
+Bool* arm_r15written_var_call();
+IRTemp* arm_r15guard_var_call();
+IRTemp* arm_r15kind_var_call();
+
+
+
+
+VexEndness* arm64_host_endness_var_call();
+Addr64* arm64_guest_PC_curr_instr_var_call();
+IRSB** arm64_irsb_var_call();
+
+
+
+
+VexEndness* mips_host_endness_var_call();
+const UChar** mips_guest_code_var_call();
+Addr64* mips_guest_PC_curr_instr_var_call();
+IRSB** mips_irsb_var_call();
+Bool* mips_mode64_var_call();
+Bool* mips_fp_mode64_var_call();
+Bool* mips_fp_mode64_fre_var_call();
+Bool* mips_has_msa_var_call();
+
+
+
+
+IRSB** nanomips_irsb_var_call();
+Addr32* nanomips_guest_PC_curr_instr_var_call();
+
+
+
+
+VexEndness* ppc_host_endness_var_call();
+const UChar** ppc_guest_code_var_call();
+Addr64* ppc_guest_CIA_bbstart_var_call();
+Addr64* ppc_guest_CIA_curr_instr_var_call();
+IRSB** ppc_irsb_var_call();
+Bool* ppc_mode64_var_call();
+Bool* ppc_OV32_CA32_supported_var_call();
+# 20 "MKG.c" 2
+
+
+
+
+
+
+
+# 1 "./config.h" 1
+# 16 "./config.h"
+define host_endness (*amd64_host_endness_var_call())
+define guest_code (*amd64_guest_code_var_call())
+define guest_RIP_bbstart (*amd64_guest_RIP_bbstart_var_call())
+define guest_RIP_curr_instr (*amd64_guest_RIP_curr_instr_var_call())
+define irsb (*amd64_irsb_var_call())
+define guest_RIP_next_assumed (*amd64_guest_RIP_next_assumed_var_call())
+define guest_RIP_next_mustcheck (*amd64_guest_RIP_next_mustcheck_var_call())
+
+
+
+
+
+define host_endness (*x86_host_endness_var_call())
+define guest_code (*x86_guest_code_var_call())
+define guest_RIP_bbstart (*x86_guest_RIP_bbstart_var_call())
+define guest_RIP_curr_instr (*x86_guest_RIP_curr_instr_var_call())
+define irsb (*x86_irsb_var_call())
+
+
+
+
+define host_endness (*arm_host_endness_var_call())
+define guest_R15_curr_instr_notENC (*arm_guest_R15_curr_instr_notENC_var_call())
+define __curr_is_Thumb (*arm___curr_is_Thumb_var_call())
+define irsb (*arm_irsb_var_call())
+define r15written (*arm_r15written_var_call())
+define r15guard (*arm_r15guard_var_call())
+define r15kind (*arm_r15kind_var_call())
+
+
+
+
+define host_endness (*arm64_host_endness_var_call())
+define guest_PC_curr_instr (*arm64_guest_PC_curr_instr_var_call())
+define irsb (*arm64_irsb_var_call())
+
+
+
+
+define host_endness (*mips_host_endness_var_call())
+define guest_code (*mips_guest_code_var_call())
+define guest_PC_curr_instr (*mips_guest_PC_curr_instr_var_call())
+define irsb (*mips_irsb_var_call())
+define mode64 (*mips_mode64_var_call())
+define fp_mode64 (*mips_fp_mode64_var_call())
+define fp_mode64_fre (*mips_fp_mode64_fre_var_call())
+define has_msa (*mips_has_msa_var_call())
+
+
+
+
+define irsb (*nanomips_irsb_var_call())
+define guest_PC_curr_instr (*nanomips_guest_PC_curr_instr_var_call())
+
+
+
+
+define host_endness (*ppc_host_endness_var_call())
+define guest_code (*ppc_guest_code_var_call())
+define guest_CIA_bbstart (*ppc_guest_CIA_bbstart_var_call())
+define guest_CIA_curr_instr (*ppc_guest_CIA_curr_instr_var_call())
+define irsb (*ppc_irsb_var_call())
+define mode64 (*ppc_mode64_var_call())
+define OV32_CA32_supported (*ppc_OV32_CA32_supported_var_call())
+# 27 "MKG.c" 2
+
+# 1 "MKG.c"
+# 1 "<built-in>" 1
+# 1 "<built-in>" 3
+# 325 "<built-in>" 3
+# 1 "<command line>" 1
+# 1 "<built-in>" 2
+# 1 "MKG.c" 2
+# 18 "MKG.c"
+# 1 "./config.h" 1
+# 16 "./config.h"
+define host_endness (*amd64_host_endness_var_call())
+define guest_code (*amd64_guest_code_var_call())
+define guest_RIP_bbstart (*amd64_guest_RIP_bbstart_var_call())
+define guest_RIP_curr_instr (*amd64_guest_RIP_curr_instr_var_call())
+define irsb (*amd64_irsb_var_call())
+define guest_RIP_next_assumed (*amd64_guest_RIP_next_assumed_var_call())
+define guest_RIP_next_mustcheck (*amd64_guest_RIP_next_mustcheck_var_call())
+
+
+
+
+
+define host_endness (*x86_host_endness_var_call())
+define guest_code (*x86_guest_code_var_call())
+define guest_EIP_bbstart (*x86_guest_EIP_bbstart_var_call())
+define guest_EIP_curr_instr (*x86_guest_EIP_curr_instr_var_call())
+define irsb (*x86_irsb_var_call())
+
+
+
+
+define host_endness (*arm_host_endness_var_call())
+define guest_R15_curr_instr_notENC (*arm_guest_R15_curr_instr_notENC_var_call())
+define __curr_is_Thumb (*arm___curr_is_Thumb_var_call())
+define irsb (*arm_irsb_var_call())
+define r15written (*arm_r15written_var_call())
+define r15guard (*arm_r15guard_var_call())
+define r15kind (*arm_r15kind_var_call())
+
+
+
+
+define host_endness (*arm64_host_endness_var_call())
+define guest_PC_curr_instr (*arm64_guest_PC_curr_instr_var_call())
+define irsb (*arm64_irsb_var_call())
+
+
+
+
+define host_endness (*mips_host_endness_var_call())
+define guest_code (*mips_guest_code_var_call())
+define guest_PC_curr_instr (*mips_guest_PC_curr_instr_var_call())
+define irsb (*mips_irsb_var_call())
+define mode64 (*mips_mode64_var_call())
+define fp_mode64 (*mips_fp_mode64_var_call())
+define fp_mode64_fre (*mips_fp_mode64_fre_var_call())
+define has_msa (*mips_has_msa_var_call())
+
+
+
+
+define irsb (*nanomips_irsb_var_call())
+define guest_PC_curr_instr (*nanomips_guest_PC_curr_instr_var_call())
+
+
+
+
+define host_endness (*ppc_host_endness_var_call())
+define guest_code (*ppc_guest_code_var_call())
+define guest_CIA_bbstart (*ppc_guest_CIA_bbstart_var_call())
+define guest_CIA_curr_instr (*ppc_guest_CIA_curr_instr_var_call())
+define irsb (*ppc_irsb_var_call())
+define mode64 (*ppc_mode64_var_call())
+define OV32_CA32_supported (*ppc_OV32_CA32_supported_var_call())
+# 19 "MKG.c" 2
+
+
+
+
+
+
+
+
+# 1 "./config.h" 1
+# 16 "./config.h"
+VexEndness* amd64_host_endness_var_call(){ static local_thread VexEndness host_endness; return &host_endness; }
+const UChar** amd64_guest_code_var_call(){ static local_thread const UChar* guest_code; return &guest_code; }
+Addr64* amd64_guest_RIP_bbstart_var_call(){ static local_thread Addr64 guest_RIP_bbstart; return &guest_RIP_bbstart; }
+Addr64* amd64_guest_RIP_curr_instr_var_call(){ static local_thread Addr64 guest_RIP_curr_instr; return &guest_RIP_curr_instr; }
+IRSB** amd64_irsb_var_call(){ static local_thread IRSB* irsb; return &irsb; }
+Addr64* amd64_guest_RIP_next_assumed_var_call(){ static local_thread Addr64 guest_RIP_next_assumed; return &guest_RIP_next_assumed; }
+Bool* amd64_guest_RIP_next_mustcheck_var_call(){ static local_thread Bool guest_RIP_next_mustcheck; return &guest_RIP_next_mustcheck; }
+
+
+
+
+
+VexEndness* x86_host_endness_var_call(){ static local_thread VexEndness host_endness; return &host_endness; }
+const UChar** x86_guest_code_var_call(){ static local_thread const UChar* guest_code; return &guest_code; }
+Addr64* x86_guest_EIP_bbstart_var_call(){ static local_thread Addr64 guest_EIP_bbstart; return &guest_EIP_bbstart; }
+Addr64* x86_guest_EIP_curr_instr_var_call(){ static local_thread Addr64 guest_EIP_curr_instr; return &guest_EIP_curr_instr; }
+IRSB** x86_irsb_var_call(){ static local_thread IRSB* irsb; return &irsb; }
+
+
+
+
+VexEndness* arm_host_endness_var_call(){ static local_thread VexEndness host_endness; return &host_endness; }
+Addr32* arm_guest_R15_curr_instr_notENC_var_call(){ static local_thread Addr32 guest_R15_curr_instr_notENC; return &guest_R15_curr_instr_notENC; }
+Bool* arm___curr_is_Thumb_var_call(){ static local_thread Bool __curr_is_Thumb; return &__curr_is_Thumb; }
+IRSB** arm_irsb_var_call(){ static local_thread IRSB* irsb; return &irsb; }
+Bool* arm_r15written_var_call(){ static local_thread Bool r15written; return &r15written; }
+IRTemp* arm_r15guard_var_call(){ static local_thread IRTemp r15guard; return &r15guard; }
+IRTemp* arm_r15kind_var_call(){ static local_thread IRTemp r15kind; return &r15kind; }
+
+
+
+
+VexEndness* arm64_host_endness_var_call(){ static local_thread VexEndness host_endness; return &host_endness; }
+Addr64* arm64_guest_PC_curr_instr_var_call(){ static local_thread Addr64 guest_PC_curr_instr; return &guest_PC_curr_instr; }
+IRSB** arm64_irsb_var_call(){ static local_thread IRSB* irsb; return &irsb; }
+
+
+
+
+VexEndness* mips_host_endness_var_call(){ static local_thread VexEndness host_endness; return &host_endness; }
+const UChar** mips_guest_code_var_call(){ static local_thread const UChar* guest_code; return &guest_code; }
+Addr64* mips_guest_PC_curr_instr_var_call(){ static local_thread Addr64 guest_PC_curr_instr; return &guest_PC_curr_instr; }
+IRSB** mips_irsb_var_call(){ static local_thread IRSB* irsb; return &irsb; }
+Bool* mips_mode64_var_call(){ static local_thread Bool mode64; return &mode64; }
+Bool* mips_fp_mode64_var_call(){ static local_thread Bool fp_mode64; return &fp_mode64; }
+Bool* mips_fp_mode64_fre_var_call(){ static local_thread Bool fp_mode64_fre; return &fp_mode64_fre; }
+Bool* mips_has_msa_var_call(){ static local_thread Bool has_msa; return &has_msa; }
+
+
+
+
+IRSB** nanomips_irsb_var_call(){ static local_thread IRSB* irsb; return &irsb; }
+Addr32* nanomips_guest_PC_curr_instr_var_call(){ static local_thread Addr32 guest_PC_curr_instr; return &guest_PC_curr_instr; }
+
+
+
+
+VexEndness* ppc_host_endness_var_call(){ static local_thread VexEndness host_endness; return &host_endness; }
+const UChar** ppc_guest_code_var_call(){ static local_thread const UChar* guest_code; return &guest_code; }
+Addr64* ppc_guest_CIA_bbstart_var_call(){ static local_thread Addr64 guest_CIA_bbstart; return &guest_CIA_bbstart; }
+Addr64* ppc_guest_CIA_curr_instr_var_call(){ static local_thread Addr64 guest_CIA_curr_instr; return &guest_CIA_curr_instr; }
+IRSB** ppc_irsb_var_call(){ static local_thread IRSB* irsb; return &irsb; }
+Bool* ppc_mode64_var_call(){ static local_thread Bool mode64; return &mode64; }
+Bool* ppc_OV32_CA32_supported_var_call(){ static local_thread Bool OV32_CA32_supported; return &OV32_CA32_supported; }
+# 27 "MKG.c" 2
+

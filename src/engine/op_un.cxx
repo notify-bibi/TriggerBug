@@ -10,21 +10,21 @@
  */
 
 
-template<unsigned nb>
+template<int nb>
 static subval<nb> clz(const subval<nb>& s) {
     subval<nb> r = subval<nb>(s, nb);
     subval<1> b1(s, 1);
     for (int i = 0; i < nb; i++) 
-        r = ite(s.extract<1>(i) == b1, subval<nb>(s, nb - i - 1), r);
+        r = ite(s.template extract<1>(i) == b1, subval<nb>(s, nb - i - 1), r);
     return r;
 }
 
-template<unsigned nb>
+template<int nb>
 static subval<nb> ctz(const subval<nb>& s) {
     subval<nb> r = subval<nb>(s, nb);
     subval<1> b1(s, 1);
     for (int i = nb - 1; i != -1; i--)
-        r = ite(s.extract<1>(i) == b1, subval<nb>(s, i), r);
+        r = ite(s.template extract<1>(i) == b1, subval<nb>(s, i), r);
     return r;
 }
 

@@ -37,7 +37,7 @@
 /*---------------------------------------------------------------*/
 
 typedef
-   struct {
+   struct __attribute__((__aligned__(LibVEX_GUEST_STATE_ALIGN))) {
       /*    0 */ UInt host_EvC_FAILADDR;
       /*    4 */ UInt host_EvC_COUNTER;
 

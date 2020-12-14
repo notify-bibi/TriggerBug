@@ -1,3 +1,3 @@
-﻿TR_add_library( TARGET thread_pool 
+﻿TR_add_library( TARGET threadPool 
                 CONFIGURE_TYPE STATIC 
               )

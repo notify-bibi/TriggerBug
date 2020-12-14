@@ -82,7 +82,7 @@ vrsave    Non-volatile 32-bit register
 #define VEX_GUEST_PPC64_REDIR_STACK_SIZE (16/*entries*/ * 2/*words per entry*/)
 
 typedef
-   struct {
+   struct __attribute__((__aligned__(LibVEX_GUEST_STATE_ALIGN))) {
      /* Event check fail addr, counter, and padding to make GPR0 16
         aligned. */
       /*   0 */ ULong  host_EvC_FAILADDR;

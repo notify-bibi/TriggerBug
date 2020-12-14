@@ -44,7 +44,7 @@
 #define VEX_GUEST_PPC32_REDIR_STACK_SIZE (16/*entries*/ * 2/*words per entry*/)
 
 typedef
-   struct {
+   struct __attribute__((__aligned__(LibVEX_GUEST_STATE_ALIGN))) {
       /* Event check fail addr and counter. */
       /*   0 */ UInt host_EvC_FAILADDR;
       /*   4 */ UInt host_EvC_COUNTER;

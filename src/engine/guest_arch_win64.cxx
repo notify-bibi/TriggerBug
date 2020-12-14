@@ -1,5 +1,7 @@
+#ifdef _MSC_VER
 #include "guest_arch_win64.h"
 #include <winternl.h>
+
 using namespace TR;
 
 void TR::win64::avoid_anti_debugging()
@@ -40,3 +42,6 @@ State_Tag TR::win64::Ijk_call(IRJumpKind kd)
 void TR::win64::cpu_exception(Expt::ExceptionBase const& e)
 {
 }
+
+
+#endif

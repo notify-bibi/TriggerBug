@@ -1,4 +1,5 @@
 
+#define MKG_ARM
 /*--------------------------------------------------------------------*/
 /*--- begin                                       guest_arm_toIR.c ---*/
 /*--------------------------------------------------------------------*/
@@ -101,7 +102,6 @@
 
 /* Translates ARM(v5) code to IR. */
 
-extern "C" {
 #include "libvex_basictypes.h"
 #include "libvex_ir.h"
 #include "libvex.h"
@@ -111,7 +111,6 @@ extern "C" {
 #include "main_globals.h"
 #include "guest_generic_bb_to_IR.h"
 #include "guest_arm_defs.h"
-}
 
 
 /*------------------------------------------------------------*/
@@ -126,19 +125,19 @@ extern "C" {
 /* CONST: what is the host's endianness?  This has to do with float vs
    double register accesses on VFP, but it's complex and not properly
    thought out. */
-thread_local static VexEndness host_endness;
+//static VexEndness host_endness;
 
 /* CONST: The guest address for the instruction currently being
    translated.  This is the real, "decoded" address (not subject
    to the CPSR.T kludge). */
-thread_local static Addr32 guest_R15_curr_instr_notENC;
+//static Addr32 guest_R15_curr_instr_notENC;
 
 /* CONST, FOR ASSERTIONS ONLY.  Indicates whether currently processed
    insn is Thumb (True) or ARM (False). */
-thread_local static Bool __curr_is_Thumb;
+//static Bool __curr_is_Thumb;
 
 /* MOD: The IRSB* into which we're generating code. */
-thread_local static IRSB* irsb;
+//static IRSB* irsb;
 
 /* These are to do with handling writes to r15.  They are initially
    set at the start of disInstr_ARM_WRK to indicate no update,
@@ -151,17 +150,26 @@ thread_local static IRSB* irsb;
 
 /* MOD.  Initially False; set to True iff abovementioned handling is
    required. */
-thread_local static Bool r15written;
+//static Bool r15written;
 
 /* MOD.  Initially IRTemp_INVALID.  If the r15 branch to be generated
    is conditional, this holds the gating IRTemp :: Ity_I32.  If the
    branch to be generated is unconditional, this remains
    IRTemp_INVALID. */
-thread_local static IRTemp r15guard; /* :: Ity_I32, 0 or 1 */
+//static IRTemp r15guard; /* :: Ity_I32, 0 or 1 */
 
 /* MOD.  Initially Ijk_Boring.  If an r15 branch is to be generated,
    this holds the jump kind. */
-thread_local static IRTemp r15kind;
+//static IRTemp r15kind;
+
+
+#define  host_endness (*arm_host_endness_var_call())
+#define  guest_R15_curr_instr_notENC (*arm_guest_R15_curr_instr_notENC_var_call())
+#define  __curr_is_Thumb (*arm___curr_is_Thumb_var_call())
+#define  irsb (*arm_irsb_var_call())
+#define  r15written (*arm_r15written_var_call())
+#define  r15guard (*arm_r15guard_var_call())
+#define  r15kind (*arm_r15kind_var_call())
 
 
 /*------------------------------------------------------------*/

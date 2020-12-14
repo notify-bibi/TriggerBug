@@ -34,3 +34,12 @@ C:\Users\bibi\Desktop\TriggerBug\src\z3\src\api\api_numeral.cpp
         Z3_CATCH_RETURN(false);
     }
     
+	
+
+libvex_basictypes.h:
+
+ typedef unsigned long SizeT;
+ 
+ typedef size_t Addr;
+ 
+ typedef size_t HWord;

@@ -1,4 +1,4 @@
-
+#define MKG_AMD64
 /*--------------------------------------------------------------------*/
 /*--- begin                                     guest_amd64_toIR.c ---*/
 /*--------------------------------------------------------------------*/
@@ -157,7 +157,7 @@
       dis_xadd_G_E     (xadd)
 */
 
-extern "C" {
+
 #include "libvex_basictypes.h"
 #include "libvex_ir.h"
 #include "libvex.h"
@@ -168,7 +168,7 @@ extern "C" {
 #include "guest_generic_bb_to_IR.h"
 #include "guest_generic_x87.h"
 #include "guest_amd64_defs.h"
-}
+
 
 /*------------------------------------------------------------*/
 /*--- Globals                                              ---*/
@@ -183,21 +183,21 @@ extern "C" {
    that we don't have to pass them around endlessly. */
 
 /* We need to know this to do sub-register accesses correctly. */
-thread_local static VexEndness host_endness;
+//static VexEndness host_endness;
 
 /* Pointer to the guest code area (points to start of BB, not to the
    insn being processed). */
-thread_local static const UChar* guest_code;
+//static const UChar* guest_code;
 
 /* The guest address corresponding to guest_code[0]. */
-thread_local static Addr64 guest_RIP_bbstart;
+//static Addr64 guest_RIP_bbstart;
 
 /* The guest address for the instruction currently being
    translated. */
-thread_local static Addr64 guest_RIP_curr_instr;
+//static Addr64 guest_RIP_curr_instr;
 
 /* The IRSB* into which we're generating code. */
-thread_local static IRSB* irsb;
+//static IRSB* irsb;
 
 /* For ensuring that %rip-relative addressing is done right.  A read
    of %rip generates the address of the next instruction.  It may be
@@ -211,8 +211,15 @@ thread_local static IRSB* irsb;
    After the decode, if _mustcheck is now True, _assumed is
    checked. */
 
-thread_local static Addr64 guest_RIP_next_assumed;
-thread_local static Bool   guest_RIP_next_mustcheck;
+//static Addr64 guest_RIP_next_assumed;
+//static Bool   guest_RIP_next_mustcheck;
+#define host_endness (*amd64_host_endness_var_call())
+#define guest_code (*amd64_guest_code_var_call())
+#define guest_RIP_bbstart (*amd64_guest_RIP_bbstart_var_call())
+#define guest_RIP_curr_instr (*amd64_guest_RIP_curr_instr_var_call())
+#define irsb (*amd64_irsb_var_call())
+#define guest_RIP_next_assumed (*amd64_guest_RIP_next_assumed_var_call())
+#define guest_RIP_next_mustcheck (*amd64_guest_RIP_next_mustcheck_var_call())
 
 
 /*------------------------------------------------------------*/
@@ -2388,11 +2395,11 @@ const HChar* segRegTxt ( Prefix pfx )
    present. */
 static
 IRExpr* handleAddrOverrides ( const VexAbiInfo* vbi, 
-                              Prefix pfx, IRExpr* _virtual )
+                              Prefix pfx, IRExpr* virtual )
 {
    /* --- address size override --- */
    if (haveASO(pfx))
-      _virtual = unop(Iop_32Uto64, unop(Iop_64to32, _virtual));
+      virtual = unop(Iop_32Uto64, unop(Iop_64to32, virtual));
 
    /* Note that the below are hacks that relies on the assumption
       that %fs or %gs are constant.
@@ -2402,7 +2409,7 @@ IRExpr* handleAddrOverrides ( const VexAbiInfo* vbi,
    if (pfx & PFX_FS) {
       if (vbi->guest_amd64_assume_fs_is_const) {
          /* return virtual + guest_FS_CONST. */
-         _virtual = binop(Iop_Add64, _virtual,
+         virtual = binop(Iop_Add64, virtual,
                                     IRExpr_Get(OFFB_FS_CONST, Ity_I64));
       } else {
          unimplemented("amd64 %fs segment override");
@@ -2412,7 +2419,7 @@ IRExpr* handleAddrOverrides ( const VexAbiInfo* vbi,
    if (pfx & PFX_GS) {
       if (vbi->guest_amd64_assume_gs_is_const) {
          /* return virtual + guest_GS_CONST. */
-         _virtual = binop(Iop_Add64, _virtual,
+         virtual = binop(Iop_Add64, virtual,
                                     IRExpr_Get(OFFB_GS_CONST, Ity_I64));
       } else {
          unimplemented("amd64 %gs segment override");
@@ -2421,7 +2428,7 @@ IRExpr* handleAddrOverrides ( const VexAbiInfo* vbi,
 
    /* cs, ds, es and ss are simply ignored in 64-bit mode. */
 
-   return _virtual;
+   return virtual;
 }
 
 //.. {
@@ -11865,233 +11872,6 @@ static Long dis_XSAVE ( const VexAbiInfo* vbi,
    return delta;
 }
 
-static void gen_XSAVEC_SEQUENCE(IRTemp addr, IRTemp rfbm)
-{
-    /* ------ rfbm[0] gates the x87 state ------ */
-
-    /* Uses dirty helper:
-          void amd64g_do_XSAVE_COMPONENT_0 ( VexGuestAMD64State*, ULong )
-    */
-
-    ULong XINUSE = 0b11;
-    IRTemp _TO_BE_SAVED = newTemp(Ity_I64);
-    assign(_TO_BE_SAVED, binop(Iop_And64, mkexpr(rfbm), mkU64(XINUSE)));
-    
-    IRTemp MXCSR = newTemp(Ity_I64);
-    assign(MXCSR,
-        binop(Iop_Or64,
-            binop(Iop_Shl64,
-                binop(Iop_And64, IRExpr_Get(216, Ity_I64), mkU64(0x3)), mkU8(13)
-            ),
-            mkU64(0x1F80))
-    );
-    
-
-    IRTemp TO_BE_SAVED = newTemp(Ity_I64);
-    assign(TO_BE_SAVED,
-        binop(Iop_Or64, mkexpr(_TO_BE_SAVED),
-            binop(Iop_Shl64,
-                unop(Iop_8Uto64,
-                    binop(Iop_And8,
-                        unop(Iop_1Uto8, binop(Iop_CmpNE64, mkexpr(MXCSR), mkU64(0x1F80))),
-                        unop(Iop_1Uto8, binop(Iop_CmpNE64, binop(Iop_And64, mkexpr(rfbm), mkU64(0x2)), mkU64(0x0)))
-                    )),
-                mkU8(1)
-            )
-        )
-    );
-
-    IRTemp do_x87 = newTemp(Ity_I1);
-    assign(do_x87, binop(Iop_CmpNE64,
-        binop(Iop_And64, mkexpr(TO_BE_SAVED), mkU64(0x1)),
-        mkU64(0)
-    ));
-
-    IRTemp do_sse1 = newTemp(Ity_I1);
-    assign(do_sse1 , binop(Iop_CmpNE64,
-        binop(Iop_And64, mkexpr(TO_BE_SAVED), mkU64(0x2)),
-        mkU64(0)
-    ));
-
-    IRTemp do_sse2 = newTemp(Ity_I1);
-    assign(do_sse2 , binop(Iop_CmpNE64,
-        binop(Iop_And64, mkexpr(TO_BE_SAVED), mkU64(0x4)),
-        mkU64(0)
-    ));
-
-    IRTemp do_1or2 = newTemp(Ity_I1);
-    assign(do_1or2, binop(Iop_CmpNE64,
-        binop(Iop_And64,
-            binop(Iop_And64, 
-                mkexpr(rfbm),
-                mkexpr(TO_BE_SAVED)
-            ),
-            mkU64(0x6)
-        ),
-        mkU64(0)
-    ));
-        
-    IRDirty* d0 = unsafeIRDirty_0_N(
-        0/*regparms*/,
-        "amd64g_dirtyhelper_XSAVE_COMPONENT_0",
-        &amd64g_dirtyhelper_XSAVE_COMPONENT_0,
-        mkIRExprVec_2(IRExpr_GSPTR(), mkexpr(addr))
-    );
-    d0->guard = mkexpr(do_x87);
-
-    /* Declare we're writing memory.  Really, bytes 24 through 31
-       (MXCSR and MXCSR_MASK) aren't written, but we can't express more
-       than 1 memory area here, so just mark the whole thing as
-       written. */
-    d0->mFx = Ifx_Write;
-    d0->mAddr = mkexpr(addr);
-    d0->mSize = 160;
-
-    /* declare we're reading guest state */
-    d0->nFxState = 5;
-    vex_bzero(&d0->fxState, sizeof(d0->fxState));
-
-    d0->fxState[0].fx = Ifx_Read;
-    d0->fxState[0].offset = OFFB_FTOP;
-    d0->fxState[0].size = sizeof(UInt);
-
-    d0->fxState[1].fx = Ifx_Read;
-    d0->fxState[1].offset = OFFB_FPREGS;
-    d0->fxState[1].size = 8 * sizeof(ULong);
-
-    d0->fxState[2].fx = Ifx_Read;
-    d0->fxState[2].offset = OFFB_FPTAGS;
-    d0->fxState[2].size = 8 * sizeof(UChar);
-
-    d0->fxState[3].fx = Ifx_Read;
-    d0->fxState[3].offset = OFFB_FPROUND;
-    d0->fxState[3].size = sizeof(ULong);
-
-    d0->fxState[4].fx = Ifx_Read;
-    d0->fxState[4].offset = OFFB_FC3210;
-    d0->fxState[4].size = sizeof(ULong);
-
-    stmt(IRStmt_Dirty(d0));
-
-    /* ------ rfbm[1] gates the SSE state ------ */
-
-    /*IRTemp rfbm_1 = newTemp(Ity_I64);
-    IRTemp rfbm_1or2 = newTemp(Ity_I64);
-    assign(rfbm_1, binop(Iop_And64, mkexpr(rfbm), mkU64(2)));
-    assign(rfbm_1or2, binop(Iop_And64, mkexpr(rfbm), mkU64(6)));
-
-    IRExpr* guard_1 = binop(Iop_CmpEQ64, mkexpr(rfbm_1), mkU64(2));
-    IRExpr* guard_1or2 = binop(Iop_CmpNE64, mkexpr(rfbm_1or2), mkU64(0));*/
-
-    /* Uses dirty helper:
-          void amd64g_do_XSAVE_COMPONENT_1_EXCLUDING_XMMREGS
-                  ( VexGuestAMD64State*, ULong )
-       This creates only MXCSR and MXCSR_MASK.  We need to do this if
-       either components 1 (SSE) or 2 (AVX) are requested.  Hence the
-       guard condition is a bit more complex.
-    */
-    IRDirty* d1 = unsafeIRDirty_0_N(
-        0/*regparms*/,
-        "amd64g_dirtyhelper_XSAVE_COMPONENT_1_EXCLUDING_XMMREGS",
-        &amd64g_dirtyhelper_XSAVE_COMPONENT_1_EXCLUDING_XMMREGS,
-        mkIRExprVec_2(IRExpr_GSPTR(), mkexpr(addr))
-    );
-    d1->guard = mkexpr(do_1or2);;
-
-    /* Declare we're writing memory: MXCSR and MXCSR_MASK.  Note that
-       the code for rbfm[0] just above claims a write of 0 .. 159, so
-       this duplicates it.  But at least correctly connects 24 .. 31 to
-       the MXCSR guest state representation (SSEROUND field). */
-    d1->mFx = Ifx_Write;
-    d1->mAddr = binop(Iop_Add64, mkexpr(addr), mkU64(24));
-    d1->mSize = 8;
-
-    /* declare we're reading guest state */
-    d1->nFxState = 1;
-    vex_bzero(&d1->fxState, sizeof(d1->fxState));
-
-    d1->fxState[0].fx = Ifx_Read;
-    d1->fxState[0].offset = OFFB_SSEROUND;
-    d1->fxState[0].size = sizeof(ULong);
-
-    /* Call the helper.  This creates MXCSR and MXCSR_MASK but nothing
-       else.  We do the actual register array, XMM[0..15], separately,
-       in order that any undefinedness in the XMM registers is tracked
-       separately by Memcheck and does not "infect" the in-memory
-       shadow for the other parts of the image. */
-    stmt(IRStmt_Dirty(d1));
-
-    /* And now the XMMs themselves. */
-    UInt reg;
-    for (reg = 0; reg < 16; reg++) {
-        stmt(IRStmt_StoreG(
-            Iend_LE,
-            binop(Iop_Add64, mkexpr(addr), mkU64(160 + reg * 16)),
-            getXMMReg(reg),
-            mkexpr(do_sse1)
-        ));
-    }
-
-    /* ------ rfbm[2] gates the AVX state ------ */
-    /* Component 2 is just a bunch of register saves, so we'll do it
-       inline, just to be simple and to be Memcheck friendly. */
-
-
-    for (reg = 0; reg < 16; reg++) {
-        stmt(IRStmt_StoreG(
-            Iend_LE,
-            binop(Iop_Add64, mkexpr(addr), mkU64(576 + reg * 16)),
-            getYMMRegLane128(reg, 1),
-            mkexpr(do_sse2)
-        ));
-    }
-    storeLE(binop(Iop_Add64, mkexpr(addr), mkU64(512)), mkexpr(TO_BE_SAVED));
-    storeLE(binop(Iop_Add64, mkexpr(addr), mkU64(512 + 8)), binop(Iop_Or64, mkexpr(rfbm), mkU64(0x8000000000000000)));
-    storeLE(binop(Iop_Add64, mkexpr(addr), mkU64(512 + 16)), mkU64(0x0));
-
-}
-
-static Long dis_XSAVEC(const VexAbiInfo* vbi,
-    Prefix pfx, Long delta, Int sz)
-{
-    /* Note that the presence or absence of REX.W (indicated here by
-       |sz|) slightly affects the written format: whether the saved FPU
-       IP and DP pointers are 64 or 32 bits.  But the helper function
-       we call simply writes zero bits in the relevant fields, which
-       are 64 bits regardless of what REX.W is, and so it's good enough
-       (iow, equally broken) in both cases. */
-    IRTemp addr = IRTemp_INVALID;
-    Int    alen = 0;
-    HChar  dis_buf[50];
-    UChar  modrm = getUChar(delta);
-    vassert(!epartIsReg(modrm)); /* ensured by caller */
-    vassert(sz == 4 || sz == 8); /* ditto */
-
-    addr = disAMode(&alen, vbi, pfx, delta, dis_buf, 0);
-    delta += alen;
-    gen_SEGV_if_not_64_aligned(addr);
-
-    DIP("%sxsave %s\n", sz == 8 ? "rex64/" : "", dis_buf);
-
-    /* VEX's caller is assumed to have checked this. */
-    const ULong aSSUMED_XCR0_VALUE = 0x1F;
-
-    IRTemp rfbm = newTemp(Ity_I64);
-    assign(rfbm,
-        binop(Iop_And64,
-            binop(Iop_Or64,
-                binop(Iop_Shl64,
-                    unop(Iop_32Uto64, getIRegRDX(4)), mkU8(32)),
-                unop(Iop_32Uto64, getIRegRAX(4))),
-            mkU64(aSSUMED_XCR0_VALUE)));
-
-    gen_XSAVEC_SEQUENCE(addr, rfbm);
-
-    /* Finally, we need to update XSTATE_BV in the XSAVE header area, by
-       OR-ing the RFBM value into it. */
-
-    return delta;
-}
 
 static Long dis_FXSAVE ( const VexAbiInfo* vbi,
                          Prefix pfx, Long delta, Int sz )
@@ -12354,7 +12134,7 @@ static Long dis_XRSTOR ( const VexAbiInfo* vbi,
         imply that xcomp_bv must be zero.
       xcomp_bv is header bytes 15 .. 8 and xstate_bv is header bytes 7 .. 0
    */
-  /* IRTemp fault_if_nonzero = newTemp(Ity_I64);
+   IRTemp fault_if_nonzero = newTemp(Ity_I64);
    assign(fault_if_nonzero,
           binop(Iop_Or64,
                 binop(Iop_And64, mkexpr(xstate_bv), mkU64(~aSSUMED_XCR0_VALUE)),
@@ -12363,7 +12143,7 @@ static Long dis_XRSTOR ( const VexAbiInfo* vbi,
                      Ijk_SigSEGV,
                      IRConst_U64(guest_RIP_curr_instr),
                      OFFB_RIP
-   ));*/
+   ));
 
    /* We are guaranteed now that both xstate_bv and rfbm are in the
       range 0 .. 7.  Generate the restore sequence proper. */
@@ -22652,14 +22432,6 @@ Long dis_ESC_0F (
          return delta;
       }
 
-	  /* 0F C7 /4 = XSAVE mem -- write x87, SSE, AVX state to memory */
-      if (haveNo66noF2noF3(pfx) && (sz == 4 || sz == 8)
-          && !epartIsReg(getUChar(delta))
-          && gregOfRexRM(pfx, getUChar(delta)) == 4
-          && (archinfo->hwcaps & VEX_HWCAPS_AMD64_AVX)) {
-          delta = dis_XSAVEC(vbi, pfx, delta, sz);
-          return delta;
-      }
       goto decode_failure;
    }
 

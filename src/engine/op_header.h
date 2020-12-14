@@ -13,8 +13,14 @@
 #include <nmmintrin.h> //SSE4.2(include smmintrin.h)
 #include <wmmintrin.h> //AES(include nmmintrin.h)
 #include <immintrin.h> //AVX(include wmmintrin.h)
-#include <intrin.h>    //(include immintrin.h)
+//(include immintrin.h)
+
+#if defined(_MSC_VER)
+#include <intrin.h>
 #include <dvec.h>
+#else
+#include <x86intrin.h>
+#endif
 
 
 #define atos(n) ((ssbval<n>&)a)

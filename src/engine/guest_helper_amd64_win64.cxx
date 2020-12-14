@@ -1,5 +1,16 @@
+#ifdef _MSC_VER
 #include "engine/guest_helper_defs.h"
+#include <Windows.h>
 
+
+namespace Kc64 {
+
+    VOID putExecptionCtx(
+        PEXCEPTION_RECORD64 ExceptionRecord, PCONTEXT ContextRecord,
+        VexGuestAMD64State* gst, DWORD64 rflags,
+        DWORD ExceptionCode, DWORD64 ExceptionAddress, DWORD ExceptionFlags, DWORD NumberParameters, DWORD64  nextExceptionRecord,
+        DWORD64 info0, DWORD64 info1, DWORD64 info2);
+};
 
 
 static UInt x86g_create_mxcsr(UInt sseround)
@@ -77,3 +88,5 @@ namespace Kc64 {
 
 
 }
+
+#endif

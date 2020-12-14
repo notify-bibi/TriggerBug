@@ -139,14 +139,14 @@ namespace TR {
         template<typename _> friend class MEM;
         template<typename _> friend class vex_context;
         ThreadPool m_pool;
-        std::atomic_uint32_t m_user_counter = 1;
+        std::atomic_uint32_t m_user_counter;
         UInt mk_user_id() { vassert(m_user_counter < -1u);  return m_user_counter++; }
-        vctx_base(VexArch guest, const char* filename) :vex_info(guest, filename), m_pool(gmax_threads_num()) {}
-        vctx_base(VexArch guest, int max_threads, const char* filename) :vex_info(guest, filename), m_pool(max_threads) { m_maxThreadsNum = max_threads; }
+        vctx_base(VexArch guest, const char* filename) :vex_info(guest, filename), m_pool(gmax_threads_num()), m_user_counter(1){}
+        vctx_base(VexArch guest, int max_threads, const char* filename) :vex_info(guest, filename), m_pool(max_threads), m_user_counter(1){ m_maxThreadsNum = max_threads; }
         ThreadPool& pool() { return m_pool; }
 
-        inline operator vex_context<Addr32>& () { return *this; };
-        inline operator vex_context<Addr64>& () { return *this; };
+        inline operator vex_context<Addr32>& () { return *reinterpret_cast <vex_context<Addr32>*>(this); };
+        inline operator vex_context<Addr64>& () { return *reinterpret_cast <vex_context<Addr64>*>(this); };
         inline operator vex_context<Addr32>* () { return reinterpret_cast <vex_context<Addr32>*>(this); };
         inline operator vex_context<Addr64>* () { return reinterpret_cast <vex_context<Addr64>*>(this); };
     private:
@@ -226,7 +226,7 @@ namespace TR {
         void idx2Value_Decl_add(ADDR addr, Hook_idx2Value _func) { m_tableIdxDict[addr] = _func; };
         void idx2Value_Decl_del(ADDR addr) { m_tableIdxDict.erase(m_tableIdxDict.find(addr)); };
         bool idx2Value_base_exist(ADDR base) { return m_tableIdxDict.find(base) != m_tableIdxDict.end(); }
-        z3::expr idx2value(const TR::State<ADDR>& state, ADDR base, Z3_ast index);
+        z3::expr idx2value(TR::State<ADDR>& state, ADDR base, Z3_ast index);
 
         UInt bit_wide() override { return (UInt)((sizeof(ADDR))<<3); }
     };

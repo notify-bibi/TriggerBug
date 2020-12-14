@@ -49,7 +49,7 @@
 
 
 typedef
-   struct {
+   struct __attribute__((__aligned__(LibVEX_GUEST_STATE_ALIGN))) {
       /* Event check fail addr, counter, and padding to make RAX 16
          aligned. */
       /*   0 */ ULong  host_EvC_FAILADDR;

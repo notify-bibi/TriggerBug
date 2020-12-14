@@ -17,16 +17,21 @@ Revision History:
 using namespace TR;
 
 
+template <typename THword>
+static const UChar* guest_insn_control_method_imp(void* instance, Addr guest_IP_sbstart, Long delta, const UChar* /*in guest_code*/ guest_code) {
+    MEM<THword>* mem = (MEM<THword>*)instance;
+    return mem->guest_insn_control(guest_IP_sbstart, delta, guest_code);
+}
 
 
 
-template<typename ADDR>
-PAGE* MEM<ADDR>::map_interface(ULong address) {
+template<typename THword>
+PAGE* MEM<THword>::map_interface(ULong address) {
     return new PAGE(user);;
 }
 
-template<typename ADDR>
-void MEM<ADDR>::copy_interface(PAGE* pt_dst[1], PAGE* pt_src[1]) {
+template<typename THword>
+void MEM<THword>::copy_interface(PAGE* pt_dst[1], PAGE* pt_src[1]) {
 #ifndef CLOSECNW
 #ifdef USECNWNOAST
     PAGE* fpage = pt_src[0];
@@ -69,8 +74,8 @@ dont_use_father_page:
 
 }
 
-template<typename ADDR>
-void MEM<ADDR>::unmap_interface(PAGE* pt[1]) {
+template<typename THword>
+void MEM<THword>::unmap_interface(PAGE* pt[1]) {
     PAGE* page = pt[0];
     page->dec_used_ref();
     if (page->get_user() == user) {
@@ -80,8 +85,8 @@ void MEM<ADDR>::unmap_interface(PAGE* pt[1]) {
 }
 
 
-template<typename ADDR>
-MEM<ADDR>::MEM(vctx_base& vctx, z3::solver& so, z3::vcontext& ctx, Bool _need_record) :
+template<typename THword>
+MEM<THword>::MEM(vctx_base& vctx, z3::solver& so, z3::vcontext& ctx, Bool _need_record) :
     m_vctx(vctx),
     m_solver(so),
     m_ctx(ctx),
@@ -90,8 +95,8 @@ MEM<ADDR>::MEM(vctx_base& vctx, z3::solver& so, z3::vcontext& ctx, Bool _need_re
 {
 }
 
-template<typename ADDR>
-MEM<ADDR>::MEM(z3::solver& so, z3::vcontext& ctx, MEM& father_mem, Bool _need_record) :
+template<typename THword>
+MEM<THword>::MEM(z3::solver& so, z3::vcontext& ctx, MEM& father_mem, Bool _need_record) :
     m_vctx(father_mem.m_vctx),
     m_solver(so),
     m_ctx(ctx),
@@ -103,8 +108,8 @@ MEM<ADDR>::MEM(z3::solver& so, z3::vcontext& ctx, MEM& father_mem, Bool _need_re
 }
 
 
-template<typename ADDR>
-void MEM<ADDR>::clearRecord()
+template<typename THword>
+void MEM<THword>::clearRecord()
 {
     for (auto p : mem_change_map) {
         p.second->clearRecord();
@@ -112,10 +117,10 @@ void MEM<ADDR>::clearRecord()
     mem_change_map.clear();
 }
 
-template<typename ADDR>
-ULong MEM<ADDR>::find_block_forward(ULong start, ADDR size) {
+template<typename THword>
+ULong MEM<THword>::find_block_forward(ULong start, THword size) {
     start &= ~0xfffull;
-    ADDR get_mem = 0;
+    THword get_mem = 0;
     for (; get_mem < size; start += 0x1000) {
         PAGE* p = get_mem_page(start);
         if (p) {
@@ -130,11 +135,11 @@ ULong MEM<ADDR>::find_block_forward(ULong start, ADDR size) {
 
 }
 
-template<typename ADDR>
-ULong MEM<ADDR>::find_block_reverse(ULong start, ADDR size)
+template<typename THword>
+ULong MEM<THword>::find_block_reverse(ULong start, THword size)
 {
     start &= ~0xfffull;
-    ADDR get_mem = 0;
+    THword get_mem = 0;
     for (; get_mem < size; start -= 0x1000) {
         PAGE* p = get_mem_page(start);
         if (p) {
@@ -146,8 +151,65 @@ ULong MEM<ADDR>::find_block_reverse(ULong start, ADDR size)
     }
     return start += 0x1000;
 }
-template<typename ADDR>
-tval TR::MEM<ADDR>::_Iex_Load(PAGE* P, ADDR address, UShort size)
+
+template<typename THword>
+const UChar* TR::MEM<THword>::get_vex_insn_linear(Addr guest_IP_sbstart)
+{
+    PAGE* p = get_mem_page(guest_IP_sbstart);
+    MEM_ACCESS_ASSERT_R(p, guest_IP_sbstart);
+    const UChar* guest_addr_in_page = (const UChar*)(*p)->m_bytes + (guest_IP_sbstart & 0xfff);
+    this->m_insn_linear = Insn_linear{
+        .flag = enough,
+        .the_rest_n = 0x1000 - (UInt)(guest_IP_sbstart & 0xfff),
+        .guest_addr_in_page = guest_addr_in_page,
+        .guest_block_start = guest_IP_sbstart,
+        .insn_block_delta = -1
+
+    };
+    const UChar* res = this->libvex_guest_insn_control(guest_IP_sbstart, 0, guest_addr_in_page);
+    return res;
+}
+
+template<typename THword>
+const UChar* TR::MEM<THword>::libvex_guest_insn_control(Addr guest_IP_sbstart, Long delta, const UChar* guest_code)
+{
+
+    Addr the_rest_n = 0x1000 - (guest_IP_sbstart & 0xfff);
+    Insn_linear& insn_linear = this->m_insn_linear;
+    vassert(insn_linear.insn_block_delta <= delta);
+    insn_linear.insn_block_delta = delta;
+    
+    if (insn_linear.flag == enough) {
+        if (the_rest_n - delta <= 16) {
+            insn_linear.flag = swap_state;
+            const UChar* align_address = insn_linear.guest_addr_in_page + the_rest_n - 0x10;
+            const UChar* now_address = insn_linear.guest_addr_in_page + delta;
+            *(__m128i*)(insn_linear.swap) = *(__m128i*)(align_address);
+            *(__m128i*)(insn_linear.swap + 16) = *(__m128i*)(this->get_next_page(guest_IP_sbstart));
+            //delta = (insn_linear.swap + (now_address - align_address)) - guest_code;
+            const UChar* ret_guest_code = (unsigned char*)(insn_linear.swap + (now_address - align_address)) - delta;
+            return ret_guest_code;
+        }
+    }
+    else if (insn_linear.flag == swap_state) {
+        ULong offset = ((delta + guest_code) - insn_linear.swap);
+        if (offset >= 16) {
+            insn_linear.flag = next_page;
+            vassert((offset <= 32));
+            //delta = insn_linear.n_page_mem(insn_linear) + (offset - 16) - guest_code;
+            const UChar* ret_guest_code = this->get_next_page(guest_IP_sbstart) + (offset - 16) - delta;
+            return ret_guest_code;
+        }
+    }
+    
+    return guest_code;
+
+    
+
+}
+
+template<typename THword>
+tval TR::MEM<THword>::_Iex_Load(PAGE* P, THword address, UShort size)
 {
     PAGE* nP = get_mem_page(address + 0x1000);
     MEM_ACCESS_ASSERT_R(nP, address + 0x1000);
@@ -170,8 +232,8 @@ tval TR::MEM<ADDR>::_Iex_Load(PAGE* P, ADDR address, UShort size)
 }
 ;
 
-template<typename ADDR>
-tval MEM<ADDR>::Iex_Load(ADDR address, IRType ty)
+template<typename THword>
+tval MEM<THword>::Iex_Load(THword address, IRType ty)
 {
     switch (ty) {
     case Ity_I8: return load<Ity_I8>(address);
@@ -188,20 +250,20 @@ tval MEM<ADDR>::Iex_Load(ADDR address, IRType ty)
     }
 }
 
-template<typename ADDR>
-inline tval TR::MEM<ADDR>::Iex_Load(const tval& address, IRType ty)
+template<typename THword>
+inline tval TR::MEM<THword>::Iex_Load(const tval& address, IRType ty)
 {
-    using vc = sv::sv_cty<ADDR>;
+    using vc = sv::sv_cty<THword>;
     if (address.real()) {
-        return Iex_Load((ADDR)address.tor<false, wide>(), ty);
+        return Iex_Load((THword)address.tor<false, wide>(), ty);
     }
     else {
         return Iex_Load((Z3_ast)address.tos<false, wide>(), ty);
     }
 }
 
-template<typename ADDR>
-tval TR::MEM<ADDR>::Iex_Load(const tval& address, int nbits)
+template<typename THword>
+tval TR::MEM<THword>::Iex_Load(const tval& address, int nbits)
 {
     switch (nbits) {
     case 8: return load<Ity_I8>(address);
@@ -215,19 +277,19 @@ tval TR::MEM<ADDR>::Iex_Load(const tval& address, int nbits)
     }
 }
 
-template<typename ADDR>
-tval TR::MEM<ADDR>::Iex_Load(const sv::rsval<false, wide>& address, IRType ty)
+template<typename THword>
+tval TR::MEM<THword>::Iex_Load(const sv::rsval<false, wide>& address, IRType ty)
 {
     if (address.real()) {
-        return Iex_Load((ADDR)address.tor(), ty);
+        return Iex_Load((THword)address.tor(), ty);
     }
     else {
         return Iex_Load((Z3_ast)address.tos(), ty);
     }
 }
 
-template<typename ADDR>
-tval MEM<ADDR>::Iex_Load(Z3_ast address, IRType ty) {
+template<typename THword>
+tval MEM<THword>::Iex_Load(Z3_ast address, IRType ty) {
     switch (ty) {
     case Ity_I8: return load<Ity_I8>(address);
     case Ity_I16: return load<Ity_I16>(address);
@@ -243,8 +305,8 @@ tval MEM<ADDR>::Iex_Load(Z3_ast address, IRType ty) {
     }
 }
 
-template<typename ADDR>
-void TR::MEM<ADDR>::Ist_Store(ADDR address, tval const& data)
+template<typename THword>
+void TR::MEM<THword>::Ist_Store(THword address, tval const& data)
 {
     if (data.real()) {
         switch (data.nbits()) {
@@ -274,8 +336,8 @@ void TR::MEM<ADDR>::Ist_Store(ADDR address, tval const& data)
 
 }
 
-template<typename ADDR>
-void TR::MEM<ADDR>::Ist_Store(Z3_ast address, tval const& data)
+template<typename THword>
+void TR::MEM<THword>::Ist_Store(Z3_ast address, tval const& data)
 {
     if (data.real()) {
         switch (data.nbits()) {
@@ -309,8 +371,8 @@ void TR::MEM<ADDR>::Ist_Store(Z3_ast address, tval const& data)
 
 
 
-template<typename ADDR>
-bool MEM<ADDR>::check_page(PAGE*& P, PAGE** PT)
+template<typename THword>
+bool MEM<THword>::check_page(PAGE*& P, PAGE** PT)
 {
 #ifndef CLOSECNW
     Int xchg_user = 0;
@@ -342,8 +404,8 @@ bool MEM<ADDR>::check_page(PAGE*& P, PAGE** PT)
     return true;
 }
 
-template<typename ADDR>
-PAGE* TR::MEM<ADDR>::get_write_page(ADDR address)
+template<typename THword>
+PAGE* TR::MEM<THword>::get_write_page(THword address)
 {
     CODEBLOCKISWRITECHECK(address);
     PAGE** pt = get_pointer_of_mem_page(address);
@@ -357,8 +419,8 @@ PAGE* TR::MEM<ADDR>::get_write_page(ADDR address)
     return page;
 }
 
-template<typename ADDR>
-void MEM<ADDR>::init_page(PAGE*& P, ADDR address)
+template<typename THword>
+void MEM<THword>::init_page(PAGE*& P, THword address)
 {
     Int xchg_user = 0;
     P->lock(xchg_user);
@@ -377,17 +439,17 @@ void MEM<ADDR>::init_page(PAGE*& P, ADDR address)
 }
 
 static bool sse_cmp(__m256i& pad, void* data, unsigned long size) {
-    unsigned long index;
+    int index;
     if (!size) return true;
-    if (_BitScanForward(&index, _mm256_movemask_epi8(_mm256_cmpeq_epi8(pad, _mm256_loadu_si256((__m256i*)data))))) {
+    if (ctz(index, _mm256_movemask_epi8(_mm256_cmpeq_epi8(pad, _mm256_loadu_si256((__m256i*)data))))) {
         return index == size - 1;
     }
     return false;
 }
 
 //very fast this api have no record
-template<typename ADDR>
-UInt MEM<ADDR>::write_bytes(ULong address, ULong length, UChar* data) {
+template<typename THword>
+UInt MEM<THword>::write_bytes(ULong address, ULong length, UChar* data) {
     UInt write_count = 0;
     if (length < 32) {
         {
@@ -449,7 +511,7 @@ UInt MEM<ADDR>::write_bytes(ULong address, ULong length, UChar* data) {
                 if (!need_check) {
                     pad = _mm256_set1_epi8(data[count]);
                 }
-                for (ADDR idx = 0; idx < smax; idx += 32) {
+                for (THword idx = 0; idx < smax; idx += 32) {
                     if (!sse_cmp(pad, &data[count + idx], 32)) {
                         need_mem = true;
                         break;
@@ -495,5 +557,6 @@ UInt MEM<ADDR>::write_bytes(ULong address, ULong length, UChar* data) {
     return write_count;
 }
 
-template MEM<Addr32>;
-template MEM<Addr64>;
+
+template class TR::MEM<Addr32>;
+template class TR::MEM<Addr64>;

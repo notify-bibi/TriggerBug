@@ -33,7 +33,7 @@
 
 #ifndef __LIBVEX_BASICTYPES_H
 #define __LIBVEX_BASICTYPES_H
-
+#define LibVEX_GUEST_STATE_ALIGN 16
 /* It is important that the sizes of the following data types (on the
    host) are as stated.  LibVEX_Init therefore checks these at
    startup. */
@@ -56,6 +56,8 @@ typedef    signed int    Int;
 /* Always 64 bits. */
 typedef  unsigned long long int   ULong;
 typedef    signed long long int   Long;
+
+
 
 /* Equivalent of C's size_t type. The type is unsigned and has this
    storage requirement:
@@ -131,14 +133,14 @@ typedef  UInt      Addr32;
 typedef  ULong     Addr64;
 
 /* An address: 32-bit or 64-bit wide depending on host architecture */
-typedef unsigned long Addr;
+typedef ULong Addr;
 
 
 /* Something which has the same size as void* on the host.  That is,
    it is 32 bits on a 32-bit host and 64 bits on a 64-bit host, and so
    it can safely be coerced to and from a pointer type on the host
    machine. */
-typedef  unsigned long HWord;
+typedef ULong HWord;
 
 /* Size of GPRs */
 #if defined(__mips__) && (__mips == 64) && (_MIPS_SIM == _ABIN32)

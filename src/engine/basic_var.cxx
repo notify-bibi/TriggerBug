@@ -2,21 +2,22 @@
 
 
 
-static Z3_ast bool2bv(Z3_context ctx, Z3_ast ast) {
-    Z3_inc_ref(ctx, ast);
-    Z3_sort sort = Z3_mk_bv_sort(ctx, 1);
-    Z3_inc_ref(ctx, (Z3_ast)sort);
-    Z3_ast zero = Z3_mk_int(ctx, 0, sort);
-    Z3_inc_ref(ctx, zero);
-    Z3_ast one = Z3_mk_int(ctx, 1, sort);
-    Z3_inc_ref(ctx, one);
-    Z3_ast result = Z3_mk_ite(ctx, ast, one, zero);
-    Z3_dec_ref(ctx, one);
-    Z3_dec_ref(ctx, zero);
-    Z3_dec_ref(ctx, ast);
-    Z3_dec_ref(ctx, (Z3_ast)sort);
-    return result;
-}
+
+//static Z3_ast bool2bv(Z3_context ctx, Z3_ast ast) {
+//    Z3_inc_ref(ctx, ast);
+//    Z3_sort sort = Z3_mk_bv_sort(ctx, 1);
+//    Z3_inc_ref(ctx, (Z3_ast)sort);
+//    Z3_ast zero = Z3_mk_int(ctx, 0, sort);
+//    Z3_inc_ref(ctx, zero);
+//    Z3_ast one = Z3_mk_int(ctx, 1, sort);
+//    Z3_inc_ref(ctx, one);
+//    Z3_ast result = Z3_mk_ite(ctx, ast, one, zero);
+//    Z3_dec_ref(ctx, one);
+//    Z3_dec_ref(ctx, zero);
+//    Z3_dec_ref(ctx, ast);
+//    Z3_dec_ref(ctx, (Z3_ast)sort);
+//    return result;
+//}
 
 namespace sv {
     symbol::symbol(Z3_context ctx, uint64_t v, unsigned nbits)
@@ -67,8 +68,10 @@ namespace sv {
     Z3_error_code symbol::check_error() const
     {
         Z3_error_code e = Z3_get_error_code((Z3_context)m_ctx);
-        if (e != Z3_OK)
-            throw (z3::exception(Z3_get_error_msg((Z3_context)m_ctx, e)));
+        if (e != Z3_OK) {
+            Z3_string err = Z3_get_error_msg((Z3_context)m_ctx, e);
+            throw (z3::exception(err));
+        }
         return e;
     }
 
@@ -375,7 +378,20 @@ namespace sv {
 };
 
 
-bool Z3_API Z3_get_numeral_bytes(Z3_context c, Z3_ast a, int64_t* num, int64_t* den) {
+bool Z3_API Z3_get_numeral_bytes(Z3_context c, Z3_ast a, int64_t* num, UInt* den) {
+    size_t* expr, *decl, * m_info, * m_parameters, * m_rational,  *m_ptr, * m_digits;
+    expr = (size_t*)a;
+    decl = (size_t*)expr[4];
+    m_info = (size_t*)decl[5];
+    m_parameters = (size_t*)m_info[1];
+    m_rational = (size_t*)m_parameters[1];
+    m_ptr = (size_t*)m_rational[1];
+    m_digits = &m_ptr[1];
+    //Z3_string s = Z3_get_numeral_binary_string(c, a);
+
+    *(__m256i*)num = _mm256_loadu_si256((__m256i*)m_digits);
+    den[0] = *(UInt*)m_ptr;
+    return true;
 #warning "!!!!!!!!!!!!!!!!!!!!"
 }
 
@@ -389,8 +405,9 @@ bool z3_get_all_256(Z3_context ctx, Z3_ast rnum, int64_t* num)
             return true;
         }
     }
-    if (Z3_get_numeral_bytes(ctx, rnum, (int64_t*)num, &den)) {
-        for (int i = den; i < 8; i++) {
+    UInt dword_den;
+    if (Z3_get_numeral_bytes(ctx, rnum, (int64_t*)num, &dword_den)) {
+        for (int i = dword_den; i < 8; i++) {
             ((int32_t*)num)[i] = 0;
         }
         return true;
@@ -440,3 +457,5 @@ tval sv::ite(const sbool& cond, const tval& iftrue, const tval& iffalse)
     VPANIC("GG");
 }
 ;
+
+static_assert(sizeof(tval) == 48, "error align");

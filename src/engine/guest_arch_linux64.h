@@ -4,7 +4,7 @@
 #include "engine/tr_main.h"
 
 namespace TR {
-    class linux64 :public StateAMD64 {
+    class linux64 : public StateAMD64 {
         friend class SP::StatePrinter<Addr64, linux64>;
         ULong g_brk = ALIGN(0x0000000000603000, 64);
         linux64(StateAMD64* father_state, Addr64 gse) :StateAMD64(father_state, gse) {};

@@ -17,7 +17,6 @@
  * ---------------------------------------------------------------------------------------
  */
 
-
 #ifndef _BASIC_VAR_HEAD_
 #define _BASIC_VAR_HEAD_
 
@@ -151,39 +150,16 @@ namespace sv {
 #else
 #define _INLINE_VAR inline
 
-// STRUCT TEMPLATE disjunction
-    template <bool _First_value, class _First, class... _Rest>
-    struct _Disjunction { // handle true trait or last trait
-        using type = _First;
-    };
-
-    template <class _False, class _Next, class... _Rest>
-    struct _Disjunction<false, _False, _Next, _Rest...> { // first trait is false, try the next trait
-        using type = typename _Disjunction<_Next::value, _Next, _Rest...>::type;
-    };
-
-    template <class... _Traits>
-    struct disjunction : std::false_type {}; // If _Traits is empty, false_type
-
-    template <class _First, class... _Rest>
-    struct disjunction<_First, _Rest...> : _Disjunction<_First::value, _First, _Rest...>::type {
-        // the first true trait in _Traits, or the last trait if none are true
-    };
-
-    template <class... _Traits>
-    _INLINE_VAR constexpr bool disjunction_v = disjunction<_Traits...>::value;
-
     // VARIABLE TEMPLATE _Is_any_of_v
     template <class _Ty, class... _Types>
     _INLINE_VAR constexpr bool _Is_any_of_v = // true if and only if _Ty is in _Types
-        disjunction_v<std::is_same<_Ty, _Types>...>;
-
-
-
+        std::disjunction_v<std::is_same<_Ty, _Types>...>;
+    
 #define IS_ANY_OF_V _Is_any_of_v
 #endif 
 
-
+    //conjunction_v  bool and
+    //disjunction_v  bool or
 
     template <class _Ty>
     constexpr bool is_sse_v = IS_ANY_OF_V < std::remove_cv_t<std::remove_reference_t<_Ty>>, __m128d, __m128i, __m128, __m256d, __m256, __m256i, __m64>;
@@ -315,7 +291,7 @@ namespace sv {
         inline Z3_sort_kind sort_kind() const { return Z3_get_sort_kind(m_ctx, *this); };
         inline ~sort() { Z3_dec_ref(m_ctx, m_sort); }
         inline sort(const sort& b) : sort(b.m_ctx, b.m_sort) {    };
-        inline void operator =(const sort& b) { this->~sort(); this->sort::sort(b); }
+        inline void operator =(const sort& b) { this->~sort(); new(this) sort(b); }
     };
 
     inline sort bool_sort(Z3_context m_ctx) { return sort((Z3_context)m_ctx, Z3_mk_bool_sort((Z3_context)m_ctx)); }
@@ -327,11 +303,12 @@ namespace sv {
     inline sort fpa_sort(Z3_context ctx, unsigned ebits, unsigned sbits) { return sort((Z3_context)ctx, Z3_mk_fpa_sort((Z3_context)ctx, ebits, sbits)); }
     sort fpRM(Z3_context m_ctx, IRRoundingMode md);
 
+    /*__attribute__((__aligned__(16))) same as __declspec(align(16)) isn't /Zp16*/
     __declspec(align(16))
-    class symbol {
+    class __attribute__((__aligned__(16))) symbol {
         using _CTX_ = size_t;
         using _AST_ = size_t;
-        _CTX_ m_ctx : 48;
+        _CTX_ m_ctx : 48 __attribute__((__aligned__(16)));
         _CTX_ m_sk: 8;
         _CTX_ m_data_inuse : 8;
 
@@ -2222,7 +2199,7 @@ namespace sv{
                     *(__m256i*)m_data = _mm256_load_si256((__m256i*)b.m_data);
             }
             else {
-                this->symbol::symbol(target_ctx, Z3_translate(b, b, target_ctx));
+                new(this) symbol(target_ctx, Z3_translate(b, b, target_ctx));
             }
         }
 
@@ -2344,7 +2321,7 @@ namespace sv{
 
         inline void operator=(const tval& b) {
             this->~tval();
-            this->tval::tval(b);
+            new(this) tval(b);
         }
 
         template<class T, TASSERT(is_sse<T>::value)>
@@ -2460,5 +2437,7 @@ static inline std::ostream& operator<<(std::ostream& out, sv::tval const& n) { r
 
 
 static inline tval concat(const tval& a, const tval& b) { return a.concat(b); }
+
+static constexpr int tval_align_size = ALIGN(sizeof(tval), 16) + 16;
 
 #endif

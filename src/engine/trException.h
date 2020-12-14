@@ -186,7 +186,7 @@ inline std::ostream& operator << (std::ostream& out, const Expt::ExceptionBase& 
 #if defined(_DEBUG)
 #undef dassert
 #define dassert(xexpr)                                           \
-  ((void) ((xexpr) ? 0 :                                        \
+  ((void) (LIKELY(xexpr) ? 0 :                                        \
            (throw Expt::IRfailureExit (#xexpr,                            \
                              __FILE__, __LINE__,                \
                              __PRETTY_FUNCTION__), 0)))
@@ -196,7 +196,7 @@ inline std::ostream& operator << (std::ostream& out, const Expt::ExceptionBase& 
 
 #if !defined(RELEASE_OFFICIALLY)||defined(_DEBUG)
 #define vassert(xexpr)                                           \
-  ((void) ((xexpr) ? 0 :                                         \
+  ((void) (LIKELY(xexpr) ? 0 :                                         \
            (throw Expt::IRfailureExit (#xexpr,                             \
                              __FILE__, __LINE__,                 \
                              __PRETTY_FUNCTION__), 0)))

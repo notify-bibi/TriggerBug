@@ -35,7 +35,7 @@
 /*--- Vex's representation of the s390 CPU state.          ---*/
 /*------------------------------------------------------------*/
 
-typedef struct {
+typedef struct __attribute__((__aligned__(LibVEX_GUEST_STATE_ALIGN))) {
 
 /*------------------------------------------------------------*/
 /*--- ar registers                                         ---*/

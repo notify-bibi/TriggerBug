@@ -37,7 +37,7 @@
 /*---------------------------------------------------------------*/
 
 typedef
-   struct {
+   struct __attribute__((__aligned__(LibVEX_GUEST_STATE_ALIGN))) {
       /* Event check fail addr and counter. */
       /* 0 */  ULong host_EvC_FAILADDR;
       /* 8 */  UInt  host_EvC_COUNTER;

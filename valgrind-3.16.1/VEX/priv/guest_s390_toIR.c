@@ -30,7 +30,6 @@
 
 /* Translates s390 code to IR. */
 
-extern "C" {
 #include "libvex_basictypes.h"
 #include "libvex_ir.h"
 #include "libvex_emnote.h"
@@ -42,7 +41,6 @@ extern "C" {
 #include "s390_disasm.h"
 #include "s390_defs.h"               /* S390_BFP_ROUND_xyzzy */
 #include "host_s390_defs.h"          /* s390_host_has_xyzzy */
-}
 
 
 /*------------------------------------------------------------*/
@@ -58,27 +56,23 @@ static const HChar *s390_irgen_BIC(UChar r1, IRTemp op2addr);
 /*------------------------------------------------------------*/
 
 /* The IRSB* into which we're generating code. */
-thread_local static IRSB *irsb;
+static IRSB *irsb;
 
 /* The guest address for the instruction currently being
    translated. */
-thread_local static Addr64 guest_IA_curr_instr;
+static Addr64 guest_IA_curr_instr;
 
 /* The guest address for the instruction following the current instruction. */
-thread_local static Addr64 guest_IA_next_instr;
+static Addr64 guest_IA_next_instr;
 
 /* Result of disassembly step. */
-thread_local static DisResult *dis_res;
-
-/* Resteer function and callback data */
-thread_local static Bool (*resteer_fn)(void *, Addr);
-thread_local static void *resteer_data;
+static DisResult *dis_res;
 
 /* Whether to print diagnostics for illegal instructions. */
-thread_local static Bool sigill_diag;
+static Bool sigill_diag;
 
 /* The last seen execute target instruction */
-thread_local ULong last_execute_target;
+ULong last_execute_target;
 
 /* The possible outcomes of a decoding operation */
 typedef enum {

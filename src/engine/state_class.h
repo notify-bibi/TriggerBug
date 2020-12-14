@@ -24,6 +24,9 @@ Revision History:
 #include "z3_target_call/z3_target_call.h"
 #include <deque>
 
+
+extern std::deque<void*> LibVEX_Alloc_transfer(void);
+
 namespace cmpr {
     using Context32 = CmprsContext<TR::State<Addr32>, TR::State_Tag>;
     using Context64 = CmprsContext<TR::State<Addr64>, TR::State_Tag>;
@@ -49,6 +52,9 @@ namespace cmpr {
 
 template<typename ADDR>
 class StateCmprsInterface;
+
+template<typename ADDR>
+class StateAnalyzer;
 
 namespace TR {
 
@@ -146,8 +152,20 @@ namespace TR {
             m_state(s), m_oep(start), m_guard(guard), m_addr_eq(guard.ctx(), false)
         { };
 
-        inline BTS(STATE& s, Addr64 start, rsbool& guard, rsbool&& addr_eq) :
+        inline BTS(STATE& s, Addr64 start, rsbool&& guard) :
+            m_state(s), m_oep(start), m_guard(guard), m_addr_eq(guard.ctx(), false)
+        { };
+
+        inline BTS(STATE& s, Addr64 start, rsbool& guard, rsbool& addr_eq) :
             m_state(s), m_oep(start), m_guard(guard), m_addr_eq(addr_eq) 
+        { };
+
+        inline BTS(STATE& s, Addr64 start, rsbool&& guard, rsbool& addr_eq) :
+            m_state(s), m_oep(start), m_guard(guard), m_addr_eq(addr_eq)
+        { };
+
+        inline BTS(STATE& s, Addr64 start, rsbool&& guard, rsbool&& addr_eq) :
+            m_state(s), m_oep(start), m_guard(guard), m_addr_eq(addr_eq)
         { };
 
         inline IRJumpKind jump_kd() const { return m_jump_kd; }
@@ -261,10 +279,6 @@ namespace TR {
     };
 
 
-    template<typename ADDR>
-    class StateAnalyzer;
-
-
 
 
     template<typename ADDR>
@@ -272,8 +286,8 @@ namespace TR {
         State<ADDR>& m_state;
 
     public:
-        StateMEM(TR::vctx_base &vb, State<ADDR>& state, z3::solver& so, z3::vcontext& ctx, Bool _need_record) :MEM(vb, so, ctx, _need_record), m_state(state) {}
-        StateMEM(State<ADDR>& state, z3::solver& so, z3::vcontext& ctx, StateMEM& father_mem, Bool _need_record) :MEM(so, ctx, father_mem, _need_record), m_state(state) {}
+        StateMEM(TR::vctx_base &vb, State<ADDR>& state, z3::solver& so, z3::vcontext& ctx, Bool _need_record) :MEM<ADDR>(vb, so, ctx, _need_record), m_state(state) {}
+        StateMEM(State<ADDR>& state, z3::solver& so, z3::vcontext& ctx, StateMEM& father_mem, Bool _need_record) :MEM<ADDR>(so, ctx, father_mem, _need_record), m_state(state) {}
 
         z3::expr idx2Value(Addr64 base, Z3_ast idx) override;
     };
@@ -289,6 +303,7 @@ namespace TR {
         friend class StateAnalyzer<ADDR>;
         friend class StateCmprsInterface<ADDR>;
         using vsize_t = rsval<ADDR>;
+        using VexIRTemp = EmuEnvironment<MAX_IRTEMP>;
         using BTS = BTS<State<ADDR>>;
         static constexpr int wide = sizeof(ADDR) << 3;
 
@@ -311,22 +326,21 @@ namespace TR {
         State_Tag   m_status;
         IRJumpKind  m_jump_kd;
     public:
-        tval* m_ir_temp = nullptr;
         InvocationStack<ADDR>   m_InvokStack;
         TRsolver                solv;
         //客户机寄存器
         Register<REGISTER_LEN>  regs;
         //客户机内存 （多线程设置相同user，不同state设置不同user）
         StateMEM<ADDR>          mem;
+        VexIRTemp                  ir_temp;
         BranchManager<State<ADDR>> branch;
         std::deque<BTS> m_tmp_branch;
 
         State(TR::vex_context<ADDR>& vex_info, ADDR gse, Bool _need_record);
         State(State* father_state, ADDR gse);
         void read_mem_dump(const char*);
-
+    public:
         ~State();
-        inline void setTemp(tval* t) { m_ir_temp = t; }
         void start();
         void start(ADDR oep) { guest_start = oep; start(); }
         void branchGo();
@@ -339,7 +353,7 @@ namespace TR {
 
         cmpr::CmprsContext<State<ADDR>, State_Tag> cmprContext(ADDR target_addr, State_Tag tag) { return cmpr::CmprsContext<State<ADDR>, State_Tag>(m_ctx, target_addr, tag); }
         void compress(cmpr::CmprsContext<State<ADDR>, State_Tag>& ctx);//最大化缩合状态 
-        inline tval tIRExpr(IRExpr*);
+        tval tIRExpr(IRExpr*);
         tval CCall(IRCallee* cee, IRExpr** exp_args, IRType ty);
         inline tval ILGop(IRLoadG* lg);
 
@@ -359,10 +373,9 @@ namespace TR {
         inline void set_jump_kd(IRJumpKind kd) { m_jump_kd = kd; }
         operator std::string() const;
 
-        DirtyCtx getDirtyVexCtx();
         tval dirty_call(IRCallee* cee, IRExpr** exp_args, IRType ty);
         tval dirty_call(const HChar* name, void* func, std::initializer_list<rsval<Addr64>> parms, IRType ty);
-        Addr64 getGSPTR() { return dirty_get_gsptr<ADDR>(getDirtyVexCtx()); }
+        //Addr64 getGSPTR() { return dirty_get_gsptr<ADDR>(getDirtyVexCtx()); }
 
         void vex_push(const rsval<ADDR>& v);
         template<typename T, TASSERT(std::is_arithmetic<T>::value)>

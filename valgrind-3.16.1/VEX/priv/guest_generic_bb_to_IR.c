@@ -901,6 +901,8 @@ static IRSB* disassemble_basic_block_till_stop(
    *extent_len      = 0;
 
    while (True) {
+       guest_code = guest_generic_bb_insn_control(guest_IP_sbstart, delta, guest_code);
+
       vassert(*n_instrs < n_instrs_allowed);
 
       /* This is the IP of the instruction we're just about to deal

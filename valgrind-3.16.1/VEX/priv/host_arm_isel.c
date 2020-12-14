@@ -6560,7 +6560,7 @@ HInstrArray* iselSB_ARM ( const IRSB* bb,
    vassert(archinfo_host->endness == VexEndnessLE);
 
    /* guard against unexpected space regressions */
-   vassert(sizeof(ARMInstr) <= 28);
+   //vassert(sizeof(ARMInstr) <= 28);
 
    /* hwcaps should not change from one ISEL call to another. */
    arm_hwcaps = hwcaps_host; // JRS 2012 Mar 31: FIXME (RM)

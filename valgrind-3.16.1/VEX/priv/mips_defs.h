@@ -33,14 +33,14 @@
 #include "libvex.h"
 
 /* MOD: The IRSB* into which we're generating code. */
-extern IRSB *irsb;
+//extern IRSB *irsb;
 
 /* Is our guest binary 32 or 64bit? Set at each call to
    disInstr_MIPS below. */
-extern Bool mode64;
+//extern Bool mode64;
 
 /* Pointer to the guest code area. */
-extern const UChar *guest_code;
+//extern const UChar *guest_code;
 
 /*------------------------------------------------------------*/
 /*---              DSP to IR function                      ---*/

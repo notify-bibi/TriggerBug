@@ -310,7 +310,7 @@ tval Kernel::tBinop(IROp op, tval const& a, tval const& b){
 	    case Iop_Min8Ux16:{ dassert(a.nbits() == 128); dassert(b.nbits() == 128); return tval(a, _mm_min_epu8(ato(__m128i), bto(__m128i)));  }//ok pminub  xmm0, xmm1
 	    case Iop_Min16Ux8:{ dassert(a.nbits() == 128); dassert(b.nbits() == 128); return tval(a, _mm_min_epu16(ato(__m128i), bto(__m128i))); }//ok
 	    case Iop_Min32Ux4:{ dassert(a.nbits() == 128); dassert(b.nbits() == 128); return tval(a, _mm_min_epu32(ato(__m128i), bto(__m128i))); }//ok
-	    case Iop_Min64Ux2:{ dassert(a.nbits() == 128); dassert(b.nbits() == 128); return tval(a, _mm_min_epu64(ato(__m128i), bto(__m128i))); }//ok
+	    //case Iop_Min64Ux2:{ dassert(a.nbits() == 128); dassert(b.nbits() == 128); return tval(a, _mm_min_epu64(ato(__m128i), bto(__m128i))); }//ok
 
         case Iop_CmpEQ64F0x2: { dassert(a.nbits() == 128); dassert(b.nbits() == 128); return tval(a, _mm_cmpeq_sd(ato(__m128d), bto(__m128d))); }
         case Iop_CmpLT64F0x2: { dassert(a.nbits() == 128); dassert(b.nbits() == 128); return tval(a, _mm_cmplt_sd(ato(__m128d), bto(__m128d))); }
@@ -367,29 +367,29 @@ tval Kernel::tBinop(IROp op, tval const& a, tval const& b){
         case Iop_64HLtoV128: { return tval(a, _mm_set_epi64x(ato(long long), bto(long long))); }//ok
 
 
-        case Iop_F64toI16S: { return ((Int)ato(Int) == 0) ? tval(a, (int16_t)(double)bto(double)) : ((sfpval<64>&)b).toInteger_sbv<16>(sv::fpRM(a, atorm)); }//ok
-        case Iop_F64toI32S: { return ((Int)ato(Int) == 0) ? tval(a, (int32_t)(double)bto(double)) : ((sfpval<64>&)b).toInteger_sbv<32>(sv::fpRM(a, atorm)); }//ok
-        case Iop_F64toI32U: { return ((Int)ato(Int) == 0) ? tval(a, (uint32_t)(double)bto(double)) : ((sfpval<64>&)b).toInteger_ubv<32>(sv::fpRM(a, atorm)); }//ok
-        case Iop_F64toI64S: { return ((Int)ato(Int) == 0) ? tval(a, (int64_t)(double)bto(double)) : ((sfpval<64>&)b).toInteger_sbv<64>(sv::fpRM(a, atorm)); }//ok
-        case Iop_F64toI64U: { return ((Int)ato(Int) == 0) ? tval(a, (uint64_t)(double)bto(double)) : ((sfpval<64>&)b).toInteger_ubv<64>(sv::fpRM(a, atorm)); }//ok
+        case Iop_F64toI16S: { return ((Int)ato(Int) == 0) ? tval(a, (int16_t)(double)bto(double)) : tval(((sfpval<64>&)b).toInteger_sbv<16>(sv::fpRM(a, atorm))); }//ok
+        case Iop_F64toI32S: { return ((Int)ato(Int) == 0) ? tval(a, (int32_t)(double)bto(double)) : tval(((sfpval<64>&)b).toInteger_sbv<32>(sv::fpRM(a, atorm))); }//ok
+        case Iop_F64toI32U: { return ((Int)ato(Int) == 0) ? tval(a, (uint32_t)(double)bto(double)) : tval(((sfpval<64>&)b).toInteger_ubv<32>(sv::fpRM(a, atorm))); }//ok
+        case Iop_F64toI64S: { return ((Int)ato(Int) == 0) ? tval(a, (int64_t)(double)bto(double)) : tval(((sfpval<64>&)b).toInteger_sbv<64>(sv::fpRM(a, atorm))); }//ok
+        case Iop_F64toI64U: { return ((Int)ato(Int) == 0) ? tval(a, (uint64_t)(double)bto(double)) : tval(((sfpval<64>&)b).toInteger_ubv<64>(sv::fpRM(a, atorm))); }//ok
 
-        case Iop_I32StoF64: { return ((Int)ato(Int) == 0) ? tval(a, (double)(int32_t)bto(int32_t)) : ((ssbval<32>&)b).Integer2fpa<11, 53>(sv::fpRM(a, atorm)); }//ok
-        case Iop_I32UtoF64: { return ((Int)ato(Int) == 0) ? tval(a, (double)(uint32_t)bto(uint32_t)) : ((subval<32>&)b).Integer2fpa<11, 53>(sv::fpRM(a, atorm)); }//ok
-        case Iop_I64StoF64: { return ((Int)ato(Int) == 0) ? tval(a, (double)(int64_t)bto(int64_t)) : ((ssbval<64>&)b).Integer2fpa<11, 53>(sv::fpRM(a, atorm)); }//ok
-        case Iop_I64UtoF64: { return ((Int)ato(Int) == 0) ? tval(a, (double)(uint64_t)bto(uint64_t)) : ((subval<64>&)b).Integer2fpa<11, 53>(sv::fpRM(a, atorm)); }//ok
+        case Iop_I32StoF64: { return ((Int)ato(Int) == 0) ? tval(a, (double)(int32_t)bto(int32_t)) : tval(((ssbval<32>&)b).Integer2fpa<11, 53>(sv::fpRM(a, atorm))); }//ok
+        case Iop_I32UtoF64: { return ((Int)ato(Int) == 0) ? tval(a, (double)(uint32_t)bto(uint32_t)) : tval(((subval<32>&)b).Integer2fpa<11, 53>(sv::fpRM(a, atorm))); }//ok
+        case Iop_I64StoF64: { return ((Int)ato(Int) == 0) ? tval(a, (double)(int64_t)bto(int64_t)) : tval(((ssbval<64>&)b).Integer2fpa<11, 53>(sv::fpRM(a, atorm))); }//ok
+        case Iop_I64UtoF64: { return ((Int)ato(Int) == 0) ? tval(a, (double)(uint64_t)bto(uint64_t)) : tval(((subval<64>&)b).Integer2fpa<11, 53>(sv::fpRM(a, atorm))); }//ok
 
-        case Iop_I32StoF32: { return ((Int)ato(Int) == 0) ? tval(a, (float)(int32_t)bto(int32_t)) : ((ssbval<32>&)b).Integer2fpa<8, 24>(sv::fpRM(a, atorm)); }//ok
-        case Iop_I32UtoF32: { return ((Int)ato(Int) == 0) ? tval(a, (float)(uint32_t)bto(uint32_t)) : ((subval<32>&)b).Integer2fpa<8, 24>(sv::fpRM(a, atorm)); }//ok
-        case Iop_I64StoF32: { return ((Int)ato(Int) == 0) ? tval(a, (float)(int64_t)bto(int64_t)) : ((ssbval<64>&)b).Integer2fpa<8, 24>(sv::fpRM(a, atorm)); }//ok
-        case Iop_I64UtoF32: { return ((Int)ato(Int) == 0) ? tval(a, (float)(uint64_t)bto(uint64_t)) : ((subval<64>&)b).Integer2fpa<8, 24>(sv::fpRM(a, atorm)); }//ok
+        case Iop_I32StoF32: { return ((Int)ato(Int) == 0) ? tval(a, (float)(int32_t)bto(int32_t)) : tval(((ssbval<32>&)b).Integer2fpa<8, 24>(sv::fpRM(a, atorm))); }//ok
+        case Iop_I32UtoF32: { return ((Int)ato(Int) == 0) ? tval(a, (float)(uint32_t)bto(uint32_t)) : tval(((subval<32>&)b).Integer2fpa<8, 24>(sv::fpRM(a, atorm))); }//ok
+        case Iop_I64StoF32: { return ((Int)ato(Int) == 0) ? tval(a, (float)(int64_t)bto(int64_t)) : tval(((ssbval<64>&)b).Integer2fpa<8, 24>(sv::fpRM(a, atorm))); }//ok
+        case Iop_I64UtoF32: { return ((Int)ato(Int) == 0) ? tval(a, (float)(uint64_t)bto(uint64_t)) : tval(((subval<64>&)b).Integer2fpa<8, 24>(sv::fpRM(a, atorm))); }//ok
 
-        case Iop_F32toI32S: { return ((Int)ato(Int) == 0) ? tval(a, (int32_t)(float)bto(float)) : ((sfpval<32>&)b).toInteger_sbv<32>(sv::fpRM(a, atorm)); }//ok
-        case Iop_F32toI32U: { return ((Int)ato(Int) == 0) ? tval(a, (uint32_t)(float)bto(float)) : ((sfpval<32>&)b).toInteger_ubv<32>(sv::fpRM(a, atorm)); }//ok
-        case Iop_F32toI64S: { return ((Int)ato(Int) == 0) ? tval(a, (int64_t)(float)bto(float)) : ((sfpval<32>&)b).toInteger_sbv<64>(sv::fpRM(a, atorm)); }//ok
-        case Iop_F32toI64U: { return ((Int)ato(Int) == 0) ? tval(a, (uint64_t)(float)bto(float)) : ((sfpval<32>&)b).toInteger_ubv<64>(sv::fpRM(a, atorm)); }//ok
+        case Iop_F32toI32S: { return ((Int)ato(Int) == 0) ? tval(a, (int32_t)(float)bto(float)) : tval(((sfpval<32>&)b).toInteger_sbv<32>(sv::fpRM(a, atorm))); }//ok
+        case Iop_F32toI32U: { return ((Int)ato(Int) == 0) ? tval(a, (uint32_t)(float)bto(float)) : tval(((sfpval<32>&)b).toInteger_ubv<32>(sv::fpRM(a, atorm))); }//ok
+        case Iop_F32toI64S: { return ((Int)ato(Int) == 0) ? tval(a, (int64_t)(float)bto(float)) : tval(((sfpval<32>&)b).toInteger_sbv<64>(sv::fpRM(a, atorm))); }//ok
+        case Iop_F32toI64U: { return ((Int)ato(Int) == 0) ? tval(a, (uint64_t)(float)bto(float)) : tval(((sfpval<32>&)b).toInteger_ubv<64>(sv::fpRM(a, atorm))); }//ok
 
-        case Iop_F64toF32: { return ((Int)ato(Int) == 0) ? tval(a, (float)(double)bto(double)) : ((sfpval<64>&)b).fpa2fpa<8, 24>(sv::fpRM(a, atorm)).simplify(); }
-        case Iop_F32toF64: { return ((Int)ato(Int) == 0) ? tval(a, (double)(float)bto(float)) : ((sfpval<32>&)b).fpa2fpa<11, 53>(sv::fpRM(a, atorm)).simplify(); }
+        case Iop_F64toF32: { return ((Int)ato(Int) == 0) ? tval(a, (float)(double)bto(double)) : tval(((sfpval<64>&)b).fpa2fpa<8, 24>(sv::fpRM(a, atorm)).simplify()); }
+        case Iop_F32toF64: { return ((Int)ato(Int) == 0) ? tval(a, (double)(float)bto(float)) : tval(((sfpval<32>&)b).fpa2fpa<11, 53>(sv::fpRM(a, atorm)).simplify()); }
 
 	    case Iop_CmpF64: {
 		    double da = ato(double);
@@ -438,9 +438,9 @@ tval Kernel::tBinop(IROp op, tval const& a, tval const& b){
                 "idiv %%ecx;\n\t"
                 "mov %%eax,%[s];\n\t"
                 "mov %%edx,%[rem];\n\t"
-                : [s] "=r"(s)[rem] "=r"(rem)
+                : [s]"=r"(s), [rem]"=r"(rem)
                 : [hi32] "r"(na >> 32), [lo32] "r"(na & 0xffffffff), [bcs] "r"(nb)
-                : "rax", "rdx", "rcx"
+                : "memory", "%rax", "rdx", "rcx"
             );
             ULong re = (((ULong)rem) << 32) | s;
             return tval(a, re);
@@ -459,7 +459,7 @@ tval Kernel::tBinop(IROp op, tval const& a, tval const& b){
                 "div %%ecx;\n\t"
                 "mov %%eax,%[s];\n\t"
                 "mov %%edx,%[rem];\n\t"
-                : [s] "=r"(s)[rem] "=r"(rem)
+                : [s] "=r"(s), [rem] "=r"(rem)
                 : [hi32] "r"(na >> 32), [lo32] "r"(na & 0xffffffff), [bcs] "r"(nb)
                 : "rax", "rdx", "rcx"
             );
@@ -477,8 +477,8 @@ tval Kernel::tBinop(IROp op, tval const& a, tval const& b){
                 "div %%rcx;\n\t"
                 "mov %%rax,%[s];\n\t"
                 "mov %%rdx,%[rem];\n\t"
-                : [s] "=r"(re.m128i_u64[0])[rem] "=r"(re.m128i_u64[1])
-                : [hi64] "r"(na.m128i_u64[1]), [lo64] "r"(na.m128i_u64[0]), [bcs] "r"(nb)
+                : [s] "=r"(M128i(re).m128i_u64[0]), [rem] "=r"(M128i(re).m128i_u64[1])
+                : [hi64] "r"(M128i(na).m128i_u64[1]), [lo64] "r"(M128i(na).m128i_u64[0]), [bcs] "r"(nb)
                 : "rax", "rdx", "rcx"
             );
             return tval(a, re);
@@ -495,8 +495,8 @@ tval Kernel::tBinop(IROp op, tval const& a, tval const& b){
                 "idiv %%rcx;\n\t"
                 "mov %%rax,%[s];\n\t"
                 "mov %%rdx,%[rem];\n\t"
-                : [s] "=r"(re.m128i_u64[0])[rem] "=r"(re.m128i_u64[1])
-                : [hi64] "r"(na.m128i_u64[1]), [lo64] "r"(na.m128i_u64[0]), [bcs] "r"(nb)
+                : [s] "=r"(M128i(re).m128i_u64[0]), [rem] "=r"(M128i(re).m128i_u64[1])
+                : [hi64] "r"(M128i(na).m128i_u64[1]), [lo64] "r"(M128i(na).m128i_u64[0]), [bcs] "r"(nb)
                 : "rax", "rdx", "rcx"
             );
             return tval(a, re);
@@ -514,7 +514,7 @@ tval Kernel::tBinop(IROp op, tval const& a, tval const& b){
                 "mul %%ebx;\n\t"
                 "mov %%eax,%[lo32];\n\t"
                 "mov %%edx,%[hi32];\n\t"
-                : [lo32] "=r"(*(UInt*)(&re)) [hi32] "=r"(((UInt*)&re)[1])
+                : [lo32] "=r"(*(UInt*)(&re)), [hi32] "=r"(((UInt*)&re)[1])
                 : [a] "r"(na), [b] "r"(nb)
                 : "rax", "edx"
             );
@@ -533,7 +533,7 @@ tval Kernel::tBinop(IROp op, tval const& a, tval const& b){
                 "imul %%ebx;\n\t"
                 "mov %%eax,%[lo32];\n\t"
                 "mov %%edx,%[hi32];\n\t"
-                : [lo32] "=r"(*(UInt*)(&re))[hi32] "=r"(((UInt*)&re)[1])
+                : [lo32] "=r"(*(UInt*)(&re)), [hi32] "=r"(((UInt*)&re)[1])
                 : [a] "r"(na), [b] "r"(nb)
                 : "rax", "edx"
             );
@@ -550,7 +550,7 @@ tval Kernel::tBinop(IROp op, tval const& a, tval const& b){
                 "mul %%rbx;\n\t"
                 "mov %%rax,%[lo64];\n\t"
                 "mov %%rdx,%[hi64];\n\t"
-                : [lo64] "=r"(re.m128i_u64[0])[hi64] "=r"(re.m128i_u64[1])
+                : [lo64] "=r"(M128i(re).m128i_u64[0]), [hi64] "=r"(M128i(re).m128i_u64[1])
                 : [a] "r"(na), [b] "r"(nb)
                 : "rax", "edx"
             );
@@ -567,7 +567,7 @@ tval Kernel::tBinop(IROp op, tval const& a, tval const& b){
                 "imul %%rbx;\n\t"
                 "mov %%rax,%[lo64];\n\t"
                 "mov %%rdx,%[hi64];\n\t"
-                : [lo64] "=r"(re.m128i_u64[0])[hi64] "=r"(re.m128i_u64[1])
+                : [lo64]"=r"(M128i(re).m128i_u64[0]), [hi64]"=r"(M128i(re).m128i_u64[1])
                 : [a] "r"(na), [b] "r"(nb)
                 : "rax", "edx"
             );

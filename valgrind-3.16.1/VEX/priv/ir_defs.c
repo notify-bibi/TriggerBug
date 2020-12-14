@@ -4376,7 +4376,8 @@ inline Bool isFlatIRStmt ( const IRStmt* st )
 
 Bool isFlatIRSB ( const IRSB* sb )
 {
-   for (Int i = 0; i < sb->stmts_used; i++) {
+    Int i;
+   for (i = 0; i < sb->stmts_used; i++) {
       if (!isFlatIRStmt(sb->stmts[i]))
           return False;
    }

@@ -1,6 +1,17 @@
 #ifndef _TR_head
 #define _TR_head
-#define _SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS
+
+//注：高优化下编译器对四个及四个一下的switch case会自动使用if else结构。勿喷用switch效率低下
+
+#if 0 // building with MSVC
+# define LIKELY(x)          (x)
+# define UNLIKELY(x)        (x)
+# define CAST_TO_TYPEOF(x)  /**/
+#else
+# define LIKELY(x)          __builtin_expect(!!(x), 1)
+# define UNLIKELY(x)        __builtin_expect(!!(x), 0)
+# define CAST_TO_TYPEOF(x)  (__typeof__(x))
+#endif // defined(_MSC_VER)
 
 
 #include <mmintrin.h>  //SSE(include mmintrin.h)
@@ -97,9 +108,12 @@ typedef union __declspec(align(16)) _m128 {
 
 #if defined(_MSC_VER)
 #include <intrin.h>
-#include <hash_map>
-#define HASH_MAP std::hash_map
+//#include <hash_map>
+//#define HASH_MAP std::hash_map
+#include <unordered_map>
+#define HASH_MAP std::unordered_map
 #define FAILD_ASSERT(any_cond, msg) static_assert(any_cond, msg);
+
 #else
 #include <x86intrin.h>
 #include <unordered_map>
@@ -107,6 +121,7 @@ typedef union __declspec(align(16)) _m128 {
 template <class...> constexpr std::false_type always_false{};
 //#define FAILD_ASSERT(any_cond, msg) static_assert(always_false<any_cond>, msg);
 #define FAILD_ASSERT(any_cond, msg) static_assert(false, msg); // if dont support please use -fdelayed-template-parsing
+#define sprintf_s snprintf
 #endif
 
 
@@ -157,17 +172,14 @@ unsigned int ty2bit(IRType ty);
 IRType       length2ty(UShort bit);
 
 #define __i386__
-#define TESTCODE(code)                                                                                                  \
-{                                                                                                                       \
-    LARGE_INTEGER   freq = { 0 };                                                                                       \
-    LARGE_INTEGER   beginPerformanceCount = { 0 };                                                                      \
-    LARGE_INTEGER   closePerformanceCount = { 0 };                                                                      \
-    QueryPerformanceFrequency(&freq);                                                                                   \
-    QueryPerformanceCounter(&beginPerformanceCount);                                                                    \
-    {   code    }                                                                                                       \
-    QueryPerformanceCounter(&closePerformanceCount);                                                                    \
-    double delta_seconds = (double)(closePerformanceCount.QuadPart - beginPerformanceCount.QuadPart) / freq.QuadPart;   \
-    printf("%s line:%d spend %lf \n",__FILE__, __LINE__, delta_seconds);                                                \
+#define TESTCODE(code) \
+{                      \
+    clock_t start;     \
+    start = clock();   \
+    {code; }           \
+    printf("%s line:%d spend %lf \n",\
+               __FILE__, __LINE__, \
+               (double)(clock() - start) / CLOCKS_PER_SEC);\
 }
 
 
@@ -277,9 +289,12 @@ namespace z3 {
 struct no_inc {};
 
 
-//注：intel编译器对四个及四个一下的switch case会自动使用if else结构。勿喷用switch效率低下
+ 
+static inline bool clzll(int& r, unsigned long long v) { if (v == 0) return false; r = __builtin_clzll(v); return true; };
+static inline bool clz(int& r, unsigned int v) { if (v == 0) return false; r = __builtin_clz(v); return true; };
 
-
+static inline bool ctzll(int& r, unsigned long long v) { if (v == 0) return false; r = __builtin_ctzll(v); return true; };
+static inline bool ctz(int& r, unsigned int v) { if (v == 0) return false; r = __builtin_ctz(v); return true; };
 
 
 //inline unsigned short mscv_tid2temp() {

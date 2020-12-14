@@ -1,7 +1,6 @@
 #include "engine/engine.h"
 #include "z3_target_call.h"
 #include "z3_target_defs.h"
-#include "engine/variable.h"
 
 
 
@@ -80,7 +79,7 @@ UChar* extern_dealy_call(UChar* fuc) {
 
 thread_local static UChar* old_fuc = NULL;
 thread_local static UChar* old_z3_fuc = NULL;
-HASH_MAP<UChar*, UChar*> fuc_2_Z3_Func_Map;
+static HASH_MAP<UChar*, UChar*> fuc_2_Z3_Func_Map;
 
 
 static void Func_Map_Add(UChar* ir_fuc, UChar* z3_fuc) {

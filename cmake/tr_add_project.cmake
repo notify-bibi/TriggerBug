@@ -24,47 +24,63 @@ macro(TR_lib_add target_name subdir need_build)
             message(FATAL_ERROR "Target \"${target_name}\" does not exist")
         endif()
     ELSE()
+		set(lib_hint ${LIB_PATH} "${CMAKE_SOURCE_DIR}/lib" "${CMAKE_SOURCE_DIR}/bin" "${CMAKE_INSTALL_DIR}/bin/" "${CMAKE_INSTALL_DIR}/lib/")
         find_library(
-            ${target_name}
-            NAMES ${target_name}
-            HINTS ${CMAKE_INSTALL_LIBDIR} ${LIB_PATH}
-            )
+                ${target_name}
+                NAMES ${target_name}
+                PATHS ${lib_hint}
+                PATH_SUFFIXES lib
+        )
         IF(NOT ${target_name})
-			IF(${DEBUG_GABLE})
-				MESSAGE(STATUS "[--------] TriggerBug::${CMAKE_INSTALL_LIBDIR}/${target_name} not found")
-            ENDIF()
+			message(STATUS "[+++++] Target \"${target_name}\" does not exist try to make" )
+			
+			# 不存在就构建
 			add_subdirectory(${subdir})
             if (NOT(TARGET ${target_name}))
-                message(FATAL_ERROR "Target \"${target_name}\" does not exist")
+				IF(${DEBUG_GABLE})
+					MESSAGE(STATUS "[--------] TriggerBug:: ${target_name} not found \nhints:${lib_hint}")
+				ENDIF()
+                message(FATAL_ERROR "[--------] Target \"${target_name}\" does not exist " )
             endif()
         ELSE()
 			IF(${DEBUG_GABLE}) 
-				MESSAGE(STATUS "[++++++++] TriggerBug::${CMAKE_INSTALL_LIBDIR}/${target_name} found")
+				MESSAGE(STATUS "[++++++++] TriggerBug:: ${target_name} found")
 			ENDIF()
 		ENDIF()
     ENDIF()
     if (TARGET ${target_name})
+
         set(DIR_HDRS)
         _TR_find_header_(DIR_HDRS ${subdir} "*.h;*.hpp")
-        set_target_properties(${target_name} PROPERTIES PUBLIC_HEADER "${DIR_HDRS}")
-        SET_TARGET_PROPERTIES(${target_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${BUILD_RUNTIME_OUTPUT_DIRECTORY})
-        
+		
         STRING(REGEX REPLACE ".+/(.+)" "\\1" FILE_DIR ${subdir})
         IF(${DEBUG_GABLE}) 
 			MESSAGE(STATUS "[........] build ${target_name} PUBLIC_HEADER >> ${CMAKE_INSTALL_INCLUDEDIR}/${FILE_DIR}")
         ENDIF()
-		unset(DIR_HDRS)
+		
+		#生成路径
+        set_target_properties(${target_name}
+		  PROPERTIES
+		  ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_INSTALL_DIR}/lib"
+		  LIBRARY_OUTPUT_DIRECTORY "${CMAKE_INSTALL_DIR}/lib"
+		  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_INSTALL_DIR}/bin"
+		)
+		
+		#target_include_directories(${target_name} PUBLIC ${DIR_HDRS})
+		#target_include_directories(${target_name} PRIVATE "src/")
+		#target_include_directories(${target_name} PUBLIC $<BUILD_INTERFACE:${CMAKE_INCLUDE_PATH}>)
+
         install(TARGETS ${target_name}
-           RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-           LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-           ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-		   PRIVATE_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${FILE_DIR}
+           # RUNTIME DESTINATION ${CMAKE_INSTALL_DIR}/lib
+           # LIBRARY DESTINATION ${CMAKE_INSTALL_DIR}/lib
+           # ARCHIVE DESTINATION ${CMAKE_INSTALL_DIR}/bin
+		   # PRIVATE_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${FILE_DIR}
            PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${FILE_DIR}
         )
+		unset(DIR_HDRS)
         unset(FILE_DIR)
     endif() 
 	
-	target_include_directories(${target_name} PUBLIC $<BUILD_INTERFACE:${CMAKE_INCLUDE_PATH}>)
 endmacro()
 
 function(TR_add_include target_name subdir )
@@ -120,11 +136,13 @@ macro(TR_add_library)
         IF(LIB_CONFIGURE_TYPE MATCHES "SHARED")
 			set(CMAKE_ENABLE_EXPORTS ON)
 			IF (WIN32)
-				message(STATUS "    CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON")
+				IF(${DEBUG_GABLE}) 
+					message(STATUS "    CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON")
+				ENDIF()
 				set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 			ENDIF()
         ENDIF()
-        ADD_LIBRARY(${LIB_TARGET} ${LIB_CONFIGURE_TYPE} ${LIB_SOURCES})
+        add_library(${LIB_TARGET} ${LIB_CONFIGURE_TYPE} ${LIB_SOURCES})
     ENDIF()
     # target_compile_options(${LIB_TARGET} PRIVATE -O3 -openmp)
     # IF (WIN32)
@@ -135,7 +153,7 @@ macro(TR_add_library)
 	ENDIF()
     foreach(cfile ${LIB_SOURCES})
         IF(${DEBUG_GABLE}) 
-			message(STATUS "        add ${cfile} ")
+			message(STATUS "        + ${cfile} ")
 		ENDIF()
 	endforeach()
     

@@ -1,6 +1,6 @@
-﻿TR_add_library( TARGET libcrypto_analyzer 
+﻿TR_add_library( TARGET libcryptoAnalyzer
                 CONFIGURE_TYPE SHARED 
-                REQUIRE libTriggerBug)
+                REQUIRE libtriggerBug)
                 
 
-TR_ADD_INCLUDE_DIRECTORIES(libcrypto_analyzer libz3 libvalgrind z3_target_call)
+TR_ADD_INCLUDE_DIRECTORIES(libcryptoAnalyzer libz3 libvalgrind z3_target_call)

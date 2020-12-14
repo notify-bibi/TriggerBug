@@ -21,11 +21,11 @@ Revision History:
 
 using namespace TR;
 
-template<typename ADDR>
+template<typename THword>
 class StateAnalyzer {
-    State<ADDR>& m_state;
+    State<THword>& m_state;
 public:
-    StateAnalyzer(State<ADDR>& state) :
+    StateAnalyzer(State<THword>& state) :
         m_state(state)
     {
     }
@@ -35,8 +35,8 @@ public:
 
 };
 
-template<typename ADDR>
-bool check_has_loop(State<ADDR>*s, ADDR oep) {
+template<typename THword>
+bool check_has_loop(State<THword>*s, THword oep) {
     while (s) {
         if (s->get_state_ep() == oep) {
             return true;
@@ -46,13 +46,13 @@ bool check_has_loop(State<ADDR>*s, ADDR oep) {
     return false;
 }
 
-template<typename ADDR>
-void find_explore_state(State<ADDR> &state, std::vector<State<ADDR>*>& explore, HASH_MAP<ADDR, UInt> &Fork_addr) {
+template<typename THword>
+void find_explore_state(State<THword> &state, std::vector<State<THword>*>& explore, HASH_MAP<THword, UInt> &Fork_addr) {
    if (state.branch.empty()) {
         if (state.status() == Fork) {
             auto _where = Fork_addr.find(state.get_cpu_ip());
             if (_where == Fork_addr.end()) {
-                for (State<ADDR>* nstate : state.branch) {
+                for (State<THword>* nstate : state.branch) {
                     explore.emplace_back(nstate);
                 }
             }
@@ -65,35 +65,35 @@ void find_explore_state(State<ADDR> &state, std::vector<State<ADDR>*>& explore, 
         return;
    }
    else {
-       for (State<ADDR>* cs : state.branch) {
+       for (State<THword>* cs : state.branch) {
            find_explore_state(*cs, explore, Fork_addr);
        }
    }
 }
 
 
-template<typename ADDR>
-void find_fork_state(State<ADDR>& state, HASH_MAP<ADDR, UInt>& Fork_addr) {
+template<typename THword>
+void find_fork_state(State<THword>& state, HASH_MAP<THword, UInt>& Fork_addr) {
     if (!state.branch.empty()) {
         Fork_addr[state.get_cpu_ip()] = 0;
-        for (State<ADDR>* cs : state.branch) {
+        for (State<THword>* cs : state.branch) {
             find_fork_state(*cs, Fork_addr);
         }
     }
 }
 
-template<typename ADDR>
-bool task_explorer(State<ADDR>* top) {
-    vex_context<ADDR>& vctx = top->vctx();
+template<typename THword>
+bool task_explorer(State<THword>* top) {
+    vex_context<THword>& vctx = top->vctx();
     while (true) {
-        HASH_MAP<ADDR, UInt> Fork_addr;
-        std::vector<State<ADDR>*> explore;
+        HASH_MAP<THword, UInt> Fork_addr;
+        std::vector<State<THword>*> explore;
         find_fork_state(*top, Fork_addr);
         find_explore_state(*top, explore, Fork_addr);
 
         if (!explore.empty()) {
             std::cout << *top << std::endl;
-            for (State<ADDR>* nstate : explore) {
+            for (State<THword>* nstate : explore) {
                 vctx.pool().enqueue([nstate] {
                     nstate->start();
                     });
@@ -106,7 +106,7 @@ bool task_explorer(State<ADDR>* top) {
                 return false;
             std::cout << *top << std::endl;
             for (auto SD : Fork_addr) {
-                printf("%p  %d ", SD.first, SD.second);
+                printf("%p  %d ", (void*)(size_t)SD.first, SD.second);
                 if (SD.second) {
                     std::vector<State_Tag> avoid;
                     avoid.emplace_back(Death);
@@ -119,10 +119,10 @@ bool task_explorer(State<ADDR>* top) {
 
     return false;
 
-    //std::vector<State<ADDR>*> ForkTree;
+    //std::vector<State<THword>*> ForkTree;
     //ForkTree.emplace_back(top);
-    //HASH_MAP<ADDR, UInt> Fork_addr;
-    //HASH_MAP<ADDR, UInt> CompStates;
+    //HASH_MAP<THword, UInt> Fork_addr;
+    //HASH_MAP<THword, UInt> CompStates;
     //while (true)
     //{
     //    printf("++++2++++ {\n");
@@ -138,10 +138,10 @@ bool task_explorer(State<ADDR>* top) {
     //        }
     //    }
 
-    //    for (State<ADDR>* s : ForkTree) {
+    //    for (State<THword>* s : ForkTree) {
     //        s->branchGo();
     //    }
-    //    State<ADDR>::pool->wait();
+    //    State<THword>::pool->wait();
     //    std::cout << *top << std::endl;
     //    printf("}----2-----\n");
 
@@ -150,7 +150,7 @@ bool task_explorer(State<ADDR>* top) {
     //    for (State* bs : ForkTree) {
     //        if (!bs->branch.size()) {
     //            if (bs->status != Fork) continue;
-    //            ADDR end_addr = bs->get_cpu_ip();
+    //            THword end_addr = bs->get_cpu_ip();
     //            CompStates[end_addr] = 1;
     //        }
     //        for (State* s : bs->branch) {
@@ -177,8 +177,8 @@ bool task_explorer(State<ADDR>* top) {
     //return false;
 }
 
-template<typename ADDR>
-void StateAnalyzer<ADDR>::Run() {
+template<typename THword>
+void StateAnalyzer<THword>::Run() {
 
     while (task_explorer(&m_state)) {
         std::cout << m_state << std::endl;
@@ -186,36 +186,38 @@ void StateAnalyzer<ADDR>::Run() {
 }
 
 
-template<typename ADDR, class _jmps = std::forward_list<ADDR>>
+template<typename THword, class _jmps = std::forward_list<THword>>
 class GraphView {
-    template<typename ADDR> friend class PathExplorer;
+    template<typename Ta> friend class PathExplorer;
     vex_info& m_info;
-    MEM<ADDR>& m_mem;
+    MEM<THword>& m_mem;
     spin_mutex translate_mutex;
     typedef struct blockEnd {
         IRJumpKind kd;
-        ADDR addr;
+        THword addr;
     };
     typedef enum { Loop_INVALID, Loop_True, Loop_False } loop_kind;
     typedef struct jmp_info {
-        ADDR addr;
+        THword addr;
         loop_kind loop;
     };
+public:
     using jmps = _jmps;
     using jmp_kind = std::forward_list<jmp_info>;
-    std::map<ADDR, jmp_kind> m_jmp;
-    std::map<ADDR, _jmps> m_in;
-    std::map<ADDR, ADDR> m_block_begin;
-    std::map<ADDR, blockEnd> m_block_end;
+private:
+    std::map<THword, jmp_kind> m_jmp;
+    std::map<THword, _jmps> m_in;
+    std::map<THword, THword> m_block_begin;
+    std::map<THword, blockEnd> m_block_end;
     ThreadPool m_pool;
     
-    inline ADDR tIRExpr(IRExpr* e, tval* ir_temp)
+    inline THword tIRExpr(IRExpr* e, EmuEnvironment<MAX_IRTEMP>& ir_temp)
     {
         switch (e->tag) {
         case Iex_RdTmp: { return ir_temp[e->Iex.RdTmp.tmp]; }
-        case Iex_Const: { return (ADDR)e->Iex.Const.con->Ico.U64; }
+        case Iex_Const: { return (THword)e->Iex.Const.con->Ico.U64; }
         case Iex_Load: {
-            ADDR addr = tIRExpr(e->Iex.Load.addr, ir_temp);
+            THword addr = tIRExpr(e->Iex.Load.addr, ir_temp);
             if (!addr) return 0;
             try {
                 tval v = m_mem.Iex_Load(addr, e->Iex.Get.ty);
@@ -231,10 +233,10 @@ class GraphView {
         return 0;
     }
 
-    void _add_block(ADDR block_start) {
-        EmuEnvironment<MAX_IRTEMP> emu(info(), m_mem);
-        ADDR     block_task = 0;
-        ADDR guest_start = block_start;
+    void _add_block(THword block_start) {
+        EmuEnvironment<MAX_IRTEMP> emu(info(), m_mem, info().gguest());
+        THword     block_task = 0;
+        THword guest_start = block_start;
         bool fresh = false; 
         for (;;) {
             if (getEnd(guest_start)) {
@@ -242,11 +244,11 @@ class GraphView {
             }
             else
             {
-                m_mem.set_double_page(guest_start, emu);
-                emu.set_guest_bytes_addr(emu->t_page_addr, guest_start);
+                //m_mem.set_double_page(guest_start, emu);
+                //emu.set_guest_bytes_addr(emu->t_page_addr, guest_start);
                 VexRegisterUpdates pxControl;
                 VexTranslateResult res;
-                IRSB* irsb = LibVEX_FrontEnd(emu, &res, &pxControl, emu);
+                IRSB* irsb = LibVEX_FrontEnd(emu.get_ir_vex_translate_args(), &res, &pxControl);
 
                 IRStmt* s = irsb->stmts[0];
                 UInt code_len = 0;
@@ -259,7 +261,7 @@ class GraphView {
                     case Ist_WrTmp: { emu[s->Ist.WrTmp.tmp] = tIRExpr(s->Ist.WrTmp.data, emu); break; };
                     case Ist_Exit: {
                         if (s->Ist.Exit.jk != Ijk_SigSEGV) {
-                            add_block(block_start, guest_start, s->Ist.Exit.jk, emu);
+                            add_block(block_start, guest_start, s->Ist.Exit.jk, emu.get_ir_vex_translate_args());
                             _jmp_to(guest_start, s->Ist.Exit.dst->Ico.U64);
                             explore_block(block_task, s->Ist.Exit.dst->Ico.U64);
                             fresh = true;
@@ -267,7 +269,7 @@ class GraphView {
                         break;
                     }
                     case Ist_AbiHint: {
-                        ADDR call_start = tIRExpr(s->Ist.AbiHint.nia, emu);
+                        THword call_start = tIRExpr(s->Ist.AbiHint.nia, emu);
                         if (call_start) {
                             explore_block(block_task, call_start);
                             _jmp_to(guest_start, call_start);
@@ -293,12 +295,12 @@ class GraphView {
                 }
 
 
-                ADDR next = tIRExpr(irsb->next, emu);
+                THword next = tIRExpr(irsb->next, emu);
                 if (fresh) {
                     fresh = false;
                 }
                 else {
-                    add_block(block_start, guest_start, irsb->jumpkind, emu);
+                    add_block(block_start, guest_start, irsb->jumpkind, emu.get_ir_vex_translate_args());
                 }
 
                 if (next) {
@@ -345,19 +347,19 @@ class GraphView {
 
     }
 
-    ADDR prev_code_addr(ADDR addr, ADDR this_code, VexTranslateArgs* vta) {
-        vexSetAllocModeTEMP_and_save_curr();
-        Pap pap;
+    THword prev_code_addr(THword addr, THword this_code, VexTranslateArgs* vta) {
+        //vexSetAllocModeTEMP_and_save_curr();
+        /*
         m_mem.set_double_page(addr, pap);
         pap.mem_obj = (void*)&m_mem;
-        pap.n_page_mem = EmuEnvironment<MAX_IRTEMP>::mem_next_page<ADDR>;
+        pap.n_page_mem = EmuEnvironment<MAX_IRTEMP>::mem_next_page<THword>;
         pap.start_swap = 0;
-        pap.guest_max_insns = m_info.gmax_insns();
-        vta->guest_bytes = pap.t_page_addr;
+        pap.guest_max_insns = m_info.gmax_insns();*/
+        //vta->guest_bytes = pap.t_page_addr;
         vta->guest_bytes_addr = addr;
         VexRegisterUpdates pxControl;
         VexTranslateResult res;
-        IRSB* irsb = LibVEX_FrontEnd_coexistence(vta, &res, &pxControl, &pap);
+        IRSB* irsb = LibVEX_FrontEnd(vta, &res, &pxControl);
         IRStmt* s = irsb->stmts[0];
         for (UInt stmtn = 0; stmtn < irsb->stmts_used;
             s = irsb->stmts[++stmtn])
@@ -369,16 +371,16 @@ class GraphView {
         return 0;
     }
 
-    void add_block(ADDR block_start, ADDR block_end, IRJumpKind kd, VexTranslateArgs* vta) {
+    void add_block(THword block_start, THword block_end, IRJumpKind kd, VexTranslateArgs* vta) {
         if (kd == Ijk_SigSEGV) return;
         spin_unique_lock lock(translate_mutex);
-        std::map<ADDR, blockEnd>::iterator it = m_block_end.find(block_end);
+        std::map<THword, blockEnd>::iterator it = m_block_end.find(block_end);
         /*if (0x00007ffff7a8d33d == block_start||0x00007ffff7a8d34a == block_start) {
             printf("");
         }*/
         if (it != m_block_end.end()) { 
             if (block_start > it->second.addr) {
-                ADDR nEnd = prev_code_addr(it->second.addr, block_start, vta);
+                THword nEnd = prev_code_addr(it->second.addr, block_start, vta);
                 m_block_begin[it->second.addr] = nEnd;
                 //m_block_begin.insert(std::make_pair(it->second.addr, nEnd));
                 _jmp_to_no_mutex(nEnd, block_start);
@@ -412,7 +414,7 @@ class GraphView {
 
     }
 
-    void explore_block(ADDR& block_task, ADDR block_start) {
+    void explore_block(THword& block_task, THword block_start) {
         if (block_task) {
             enqueue(block_start);
         }
@@ -421,7 +423,7 @@ class GraphView {
         }
     }
 
-    void enqueue(ADDR block_start) {
+    void enqueue(THword block_start) {
         if(!getEnd(block_start))
             m_pool.enqueue(
                 [this, block_start] {
@@ -430,19 +432,19 @@ class GraphView {
             );
     }
 
-    void _jmp_to(ADDR from, ADDR to) {
+    void _jmp_to(THword from, THword to) {
         spin_unique_lock lock(translate_mutex);
         _jmp_to_no_mutex(from, to);
     }
 
-    inline  void _jmp_to_no_mutex(ADDR from, ADDR to) {
+    inline  void _jmp_to_no_mutex(THword from, THword to) {
         if (from == 0) {
             vassert(0);
         }
 #ifdef OUTPUT
         printf("_jmp_to %p   %p \n", from, to);
 #endif
-        std::map<ADDR, jmp_kind>::iterator it = m_jmp.find(from);
+        std::map<THword, jmp_kind>::iterator it = m_jmp.find(from);
         if (it == m_jmp.end()) {
             m_jmp[from] = jmp_kind{ jmp_info{to, Loop_INVALID } };
         }
@@ -450,7 +452,7 @@ class GraphView {
             it->second.push_front(jmp_info{ to, Loop_INVALID });
         }
 
-        std::map<ADDR, _jmps>::iterator it_in = m_in.find(to);
+        std::map<THword, _jmps>::iterator it_in = m_in.find(to);
         if (it_in == m_in.end()) {
             m_in[to] = _jmps{ from };
         }
@@ -459,41 +461,41 @@ class GraphView {
         }
     }
 
-    ADDR getBegin(ADDR block_end) {
-        std::map<ADDR, blockEnd>::iterator it = m_block_end.find(block_end);
+    THword getBegin(THword block_end) {
+        std::map<THword, blockEnd>::iterator it = m_block_end.find(block_end);
         if (it == m_block_end.end()) { return 0; }
         return it->second.addr;
     }
 
-    ADDR getEnd(ADDR block_begin) {
-        std::map<ADDR, ADDR>::iterator it = m_block_begin.find(block_begin);
+    THword getEnd(THword block_begin) {
+        std::map<THword, THword>::iterator it = m_block_begin.find(block_begin);
         if (it == m_block_begin.end()) { return 0; }
         return it->second;
     }
 
 
 public:
-    GraphView(vex_info const& info, MEM<ADDR>& mem, ADDR oep) :m_pool(8), m_info(info), m_mem(mem) {
+    GraphView(vex_info const& info, MEM<THword>& mem, THword oep) :m_pool(8), m_info(const_cast<vex_info&>(info)), m_mem(mem) {
         enqueue(oep);
     }
     inline const vex_info& info() const { return m_info; }
     void wait() { m_pool.wait(); }
 
-    void explore_block(ADDR block_start) {
-        std::map<ADDR, ADDR>::iterator it = m_block_begin.find(block_start);
+    void explore_block(THword block_start) {
+        std::map<THword, THword>::iterator it = m_block_begin.find(block_start);
         if (it != m_block_begin.end()) return;
         enqueue(block_start);
     }
 
-    void add_jmp(ADDR from, ADDR to) {
+    void add_jmp(THword from, THword to) {
         _jmp_to(from, to);
         explore_block(to);
     }
 
 
 
-    ADDR begin2End(ADDR block_begin) {
-        std::map<ADDR, ADDR>::iterator ait = m_block_begin.find(block_begin);
+    THword begin2End(THword block_begin) {
+        typename std::map<THword, THword>::iterator ait = m_block_begin.find(block_begin);
         if (ait == m_block_begin.end()) {
             if (0x00007ffff7a8d34a == block_begin) {
                 printf("");
@@ -505,7 +507,7 @@ public:
             );
             wait();
         }
-        std::map<ADDR, ADDR>::iterator it = m_block_begin.find(block_begin);
+        typename std::map<THword, THword>::iterator it = m_block_begin.find(block_begin);
         if (it == m_block_begin.end()) {
             return 0;
         }
@@ -514,8 +516,8 @@ public:
 
 };
 
-template<typename ADDR>
-class PathExplorer : public GraphView<ADDR> {
+template<typename THword>
+class PathExplorer : public GraphView<THword> {
 
     template <class _Ty, class _Container = std::deque<_Ty>, class _jmps = std::forward_list<_Ty>>
     class Stack :protected _Container {
@@ -531,17 +533,17 @@ class PathExplorer : public GraphView<ADDR> {
             _Container::pop_back();
         }
 
-        void push(const _Container::value_type && v) {
+        void push(const typename _Container::value_type && v) {
             m_stack_map[v] = _jmps{};
             _Container::push_back(v);
         }
 
-        void push(const _Container::value_type& v) {
+        void push(const typename _Container::value_type& v) {
             m_stack_map[v] = _jmps{};
             _Container::push_back(v);
         }
 
-        _Container::reference top() { return _Container::back(); }
+        typename _Container::reference top() { return _Container::back(); }
 
         bool contains(_Ty v) {
             return m_stack_map.find(v) != m_stack_map.end();
@@ -568,19 +570,19 @@ class PathExplorer : public GraphView<ADDR> {
     };
 
 public:
-    PathExplorer(vex_info const& info, MEM<ADDR>& mem, ADDR oep) :GraphView(info, mem, oep) {
+    PathExplorer(vex_info const& info, MEM<THword>& mem, THword oep) :GraphView<THword>(info, mem, oep) {
         
     }
 
-    void set_visited(Int _itor, Stack<ADDR>& stack, HASH_MAP<ADDR, bool>& target) {
-        Stack<ADDR>::iterator itor = stack.begin() + _itor;
+    void set_visited(Int _itor, Stack<THword>& stack, HASH_MAP<THword, bool>& target) {
+        typename Stack<THword>::iterator itor = stack.begin() + _itor;
 #ifdef OUTPUT_PATH
         std::cout << *itor << " -> ";
 #endif
         vassert(_itor + 1 < stack.size());
         target[*itor] = true;
         for (;;) {
-            ADDR end = GraphView<ADDR>::getEnd(*itor++);
+            THword end = GraphView<THword>::getEnd(*itor++);
             if (itor == stack.end()) {
                 break;
             }
@@ -588,11 +590,11 @@ public:
             if (m_block_end[end].kd == Ijk_Call) {
                 dealt = 5;
             }
-            std::map<ADDR, GraphView<ADDR>::jmp_kind>::iterator to = m_jmp.find(end);
-            GraphView<ADDR>::jmp_kind& vertexs = to->second;
-            GraphView<ADDR>::jmp_kind::iterator  next = vertexs.begin();
+            std::map<THword, GraphView<THword>::jmp_kind>::iterator to = m_jmp.find(end);
+            typename GraphView<THword>::jmp_kind& vertexs = to->second;
+            typename GraphView<THword>::jmp_kind::iterator  next = vertexs.begin();
             while (next != vertexs.end()) {
-                ADDR addr = dealt ? (end + dealt) : next->addr;
+                THword addr = dealt ? (end + dealt) : next->addr;
                 if (addr == *itor) {
 #ifdef OUTPUT_PATH
                     std::cout << addr << " -> ";
@@ -609,9 +611,9 @@ public:
 #endif
     }
 
-    ADDR getUnvisitedVertex(Stack<ADDR>& stack, ADDR vertex, HASH_MAP<ADDR, bool>& avoid) {
-        ADDR block_end = begin2End(vertex);
-        std::map<ADDR, GraphView<ADDR>::jmp_kind>::iterator to = m_jmp.find(block_end);
+    THword getUnvisitedVertex(Stack<THword>& stack, THword vertex, HASH_MAP<THword, bool>& avoid) {
+        THword block_end = begin2End(vertex);
+        std::map<THword, GraphView<THword>::jmp_kind>::iterator to = m_jmp.find(block_end);
         if (to == m_jmp.end()) {
             return 0;
         }
@@ -619,11 +621,11 @@ public:
         if (m_block_end[block_end].kd == Ijk_Call) {
             dealt = 5;
         }
-        GraphView<ADDR>::jmp_kind& vertexs = to->second;
-        GraphView<ADDR>::jmp_kind::iterator  next = vertexs.begin();
+       typename GraphView<THword>::jmp_kind& vertexs = to->second;
+       typename GraphView<THword>::jmp_kind::iterator  next = vertexs.begin();
         while (next != vertexs.end()) {
-            ADDR addr = dealt ? (block_end + dealt) : next->addr;
-            Stack<ADDR>::jmps& vl = stack.getVertex();
+            THword addr = dealt ? (block_end + dealt) : next->addr;
+            typename Stack<THword>::jmps& vl = stack.getVertex();
 
             if (avoid.find(addr) == avoid.end()) {
                 if (!stack.contains(addr)) {
@@ -640,18 +642,18 @@ public:
     }
 
 
-    void get_path(ADDR start, ADDR end = 0) {
-        Stack<ADDR> stack;
-        HASH_MAP<ADDR, bool> block_target;
-        HASH_MAP<ADDR, bool> avoid;
+    void get_path(THword start, THword end = 0) {
+        Stack<THword> stack;
+        HASH_MAP<THword, bool> block_target;
+        HASH_MAP<THword, bool> avoid;
         stack.push(start);
         UInt prev_itor = 0;
         while (!stack.empty()) {
-            ADDR TOP = stack.top();
+            THword TOP = stack.top();
             if (0x0007FFFF7A8D33D == TOP) {
                 printf("");
             }
-            ADDR next = getUnvisitedVertex(stack, TOP, avoid);
+            THword next = getUnvisitedVertex(stack, TOP, avoid);
             if (next) {
                 if (block_target.find(next) == block_target.end()) {
                     stack.push(next);

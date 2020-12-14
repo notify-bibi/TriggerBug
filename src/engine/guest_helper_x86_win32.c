@@ -1,6 +1,25 @@
-#include "engine/guest_helper_defs.h"
+
 #include "guest_x86_defs.h"
+
+#include <mmintrin.h>  //SSE(include mmintrin.h)
+#include <xmmintrin.h> //SSE2(include xmmintrin.h)
+#include <emmintrin.h> //SSE3(include emmintrin.h)
+#include <pmmintrin.h> //SSSE3(include pmmintrin.h)
+#include <tmmintrin.h> //SSE4.1(include tmmintrin.h)
+#include <smmintrin.h> //SSE4.2(include smmintrin.h)
+#include <nmmintrin.h> //AES(include nmmintrin.h)
+#include <wmmintrin.h> //AVX(include wmmintrin.h)
+#include <immintrin.h> //(include immintrin.h)
+
+
+#if defined(_MSC_VER)
+#include <intrin.h>
+#else
+#include <x86intrin.h>
+#endif
+
 #include <Windows.h>
+#include <winnt.h>
 
 
 static UInt x86g_create_mxcsr(UInt sseround)
@@ -14,7 +33,6 @@ static UInt x86g_create_sseround(UInt mxcsr)
     return (mxcsr >> 13) & 3;
 }
 
-namespace Kc32 {
 
     /*
     The first element of the array contains a read-write flag that indicates the type of operation that caused the access violation.
@@ -148,4 +166,3 @@ namespace Kc32 {
 
         return gst->guest_EIP;
     }
-};

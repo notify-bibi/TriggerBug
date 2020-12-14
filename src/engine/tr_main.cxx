@@ -2,6 +2,8 @@
 //#undef _DEBUG
 
 #include "engine/tr_main.h"
+#include "engine/guest_arch_linux32.h"
+#include "engine/guest_arch_linux64.h"
 
 
 using namespace TR;
@@ -32,7 +34,7 @@ void TR::vex_write(State<ADDR>& s, const rsval<ADDR>& addr, const rsval<ADDR>& l
     char buff[2];
     buff[1] = 0;
     for (UInt n = 0; n < size; n += 1) {
-        auto chr = s.mem.load<Ity_I8>(addr + n);
+        auto chr = s.mem.template load<Ity_I8>(addr + n);
         if (chr.real()) {
             buff[0] = chr.tor();
             st.append(buff);

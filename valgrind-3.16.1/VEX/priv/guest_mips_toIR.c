@@ -2,7 +2,7 @@
 /*--------------------------------------------------------------------*/
 /*--- begin                                      guest_mips_toIR.c ---*/
 /*--------------------------------------------------------------------*/
-
+#define MKG_MIPS
 /*
    This file is part of Valgrind, a dynamic binary instrumentation
    framework.
@@ -28,7 +28,6 @@
 
 /* Translates MIPS code to IR. */
 
-extern "C" {
 #include "libvex_basictypes.h"
 #include "libvex_ir.h"
 #include "libvex.h"
@@ -39,8 +38,17 @@ extern "C" {
 #include "main_globals.h"
 #include "guest_generic_bb_to_IR.h"
 #include "guest_mips_defs.h"
+#define  irsb (*mips_irsb_var_call())
 #include "mips_defs.h"
-}
+
+#define  host_endness (*mips_host_endness_var_call())
+#define  guest_code (*mips_guest_code_var_call())
+#define  guest_PC_curr_instr (*mips_guest_PC_curr_instr_var_call())
+#define  mode64 (*mips_mode64_var_call())
+#define  fp_mode64 (*mips_fp_mode64_var_call())
+#define  fp_mode64_fre (*mips_fp_mode64_fre_var_call())
+#define  has_msa (*mips_has_msa_var_call())
+
 
 /*------------------------------------------------------------*/
 /*---                      Globals                         ---*/
@@ -53,34 +61,34 @@ extern "C" {
 /* CONST: what is the host's endianness?  This has to do with float vs
    double register accesses on VFP, but it's complex and not properly
    thought out. */
-thread_local static VexEndness host_endness;
+//static VexEndness host_endness;
 
 /* Pointer to the guest code area. */
-thread_local const UChar *guest_code;
+//const UChar *guest_code;
 
 /* CONST: The guest address for the instruction currently being
    translated. */
 #if defined(VGP_mips32_linux)
-thread_local static Addr32 guest_PC_curr_instr;
+//static Addr32 guest_PC_curr_instr;
 #else
-thread_local static Addr64 guest_PC_curr_instr;
+//static Addr64 guest_PC_curr_instr;
 #endif
 
 /* MOD: The IRSB* into which we're generating code. */
-thread_local IRSB *irsb;
+//IRSB *irsb;
 
 /* Is our guest binary 32 or 64bit? Set at each call to
    disInstr_MIPS below. */
-thread_local Bool mode64 = False;
+//Bool mode64 = False;
 
 /* CPU has FPU and 32 dbl. prec. FP registers. */
-thread_local static Bool fp_mode64 = False;
+ //static Bool fp_mode64 = False;
 
 /* FPU works in FRE mode */
-thread_local static Bool fp_mode64_fre = False;
+//static Bool fp_mode64_fre = False;
 
 /* CPU has MSA unit */
-thread_local static Bool has_msa = False;
+//static Bool has_msa = False;
 
 /* Define 1.0 in single and double precision. */
 #define ONE_SINGLE 0x3F800000

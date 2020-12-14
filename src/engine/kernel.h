@@ -33,12 +33,13 @@ public:
     inline const TR::vex_info& info() const { return m_vex_info; }
     
 
-    inline operator TR::State<Addr32>& () { return *this; };
-    inline operator TR::State<Addr64>& () { return *this; };
+    inline operator TR::State<Addr32>& () { return *reinterpret_cast <TR::State<Addr32>*>(this); };
+    inline operator TR::State<Addr64>& () { return *reinterpret_cast <TR::State<Addr64>*>(this); };
     inline operator TR::State<Addr32>* () { return reinterpret_cast <TR::State<Addr32>*>(this); };
     inline operator TR::State<Addr64>* () { return reinterpret_cast <TR::State<Addr64>*>(this); };
     //必须存在至少一个virtual喔，不然上面4句转换就会产生错位
     virtual Addr64 get_cpu_ip() { return 0; };
+
 private:
 
 

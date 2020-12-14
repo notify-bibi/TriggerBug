@@ -1,6 +1,7 @@
-#pragma once
+
 #include "test.h"
 #include "engine/basic_var.hpp"
+#include <Windows.h>
 
 
 using namespace TR;
@@ -13,11 +14,10 @@ using namespace TR;
 void test1() {
     z3::context c;
     
-    const int dfd = _LIBCPP_STD_VER;
     
     cbool bo1(c, false);
     cbool bo2(c, true);
-
+    
     std::cout << (bo1 ^ bo2) << std::endl;
     std::cout << (bo1 ||  bo2) << std::endl;
     std::cout << (bo1 && bo2) << std::endl;
@@ -35,7 +35,7 @@ void test1() {
     sv::ctype_val<false, 128, Z3_BV_SORT>  m128a(c, 9);
     sv::ctype_val<false, 256, Z3_BV_SORT>  m128b(c, 9);
     sv::ctype_val<true, 256, Z3_BV_SORT>  m128d(c, -999);
-    sv::ctype_val<false, 78, Z3_BV_SORT>  m128c(c, 9);
+    sv::ctype_val<false, 78, Z3_BV_SORT>  m128c(c, -9);
 
     sv::ctype_val<true, 63, Z3_BV_SORT>  sm78(c, -1);
     sv::ctype_val<false, 63, Z3_BV_SORT>  um78(c, -1);
@@ -92,6 +92,7 @@ void test2() {
     //sv::rsval<true, 128, Z3_FLOATING_POINT_SORT> fff128 = s128t;
 
 
+    std::cout << s128t.tos().simplify() << std::endl;
     std::cout << hjk1 + hjk2 << std::endl;
     std::cout << hjk1 + sss1 << std::endl;
     std::cout << hjk1.tos() << sss2 << std::endl;
@@ -360,7 +361,6 @@ void test2() {
 //}
 //
 
-
 State_Tag test_ir_dirty_hook(State<Addr32>& state) {
     UInt esp = 0x8000 - 532;
     PWOW64_CONTEXT ContextRecord = (PWOW64_CONTEXT)(esp - sizeof(WOW64_CONTEXT));
@@ -379,7 +379,7 @@ bool test_ir_dirty() {
 
     SP::win32 state(v, 0, True);
     state.setFlag(CF_traceJmp);
-    //state.setFlag(CF_ppStmts);
+    state.setFlag(CF_ppStmts);
     state.mem.map(0x1000, 0x2000);
     state.mem.map(0x5000, 0x5000);
     state.hook_add(0x2000, test_ir_dirty_hook);
@@ -479,7 +479,7 @@ bool test_cmpress() {
 //}
 //
 
-bool check(TRsolver &solver, sbool &s) {
+bool check(TRsolver &solver, sbool &&s) {
     solver.add(s);
     auto f = solver.check();
     if (!(f == z3::unsat)) {
@@ -560,6 +560,9 @@ bool test_ir_dirty_rflags() {
 
 
 bool test_mem() {
+    //static_assert(sizeof(VexGuestX86State) % 16 == 0, "error align"); 
+
+
     ctx32 v(VexArchX86, "");
     SP::win32 state(v, 0, True);
     state.mem.map(0x1000, 0x3000);

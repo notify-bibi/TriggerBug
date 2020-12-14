@@ -4,13 +4,25 @@
 
 using namespace TR;
 
-
+#ifdef _MSC_VER
+#include<WIndows.h>
+#include <sysinfoapi.h>
 UInt vex_info::gMaxThreadsNum() {
     SYSTEM_INFO SysInfo;
     GetSystemInfo(&SysInfo);
     return SysInfo.dwNumberOfProcessors;
 }
-
+#elif defined(LINUX) || defined(SOLARIS) || defined(AIX)
+#include <sys/sysinfo.h>
+UInt vex_info::gMaxThreadsNum() {
+    return get_nprocs();   //GNU fuction 
+}
+#else
+UInt vex_info::gMaxThreadsNum() {
+    return 8;   //
+}
+#warning  gMaxThreadsNum ret 8
+#endif
 
  IRConst vex_info::gsoftwareBpt(VexArch guest)
 {
@@ -181,11 +193,11 @@ UInt vex_info::gMaxThreadsNum() {
 
 namespace TR {
     template<typename ADDR>
-    inline void vex_context<ADDR>::hook_add(IN State<ADDR>& state, ADDR addr, State_Tag(*_func)(State<ADDR>&), TRControlFlags cflag)
+    inline void vex_context<ADDR>::hook_add( State<ADDR>& state, ADDR addr, State_Tag(*_func)(State<ADDR>&), TRControlFlags cflag)
     {
         Hook_CB func = (Hook_CB) _func;
         if (m_callBackDict.find(addr) == m_callBackDict.end()) {
-            auto o = state.mem.load<Ity_I64>(addr);
+            auto o = state.mem.template load<Ity_I64>(addr);
             vassert(o.real());
             m_callBackDict[addr] = Hook_struct{ func , IRConstTag2nb(state.info().softwareBptConst()->tag) , o.tor() , cflag };
             state.mem.Ist_Store(addr, tval(state.ctx(), state.info().softwareBptConst()));
@@ -223,7 +235,7 @@ namespace TR {
     }
 
     template<typename ADDR>
-    z3::expr vex_context<ADDR>::idx2value(const TR::State<ADDR>& state, ADDR base, Z3_ast index)
+    z3::expr vex_context<ADDR>::idx2value(TR::State<ADDR>& state, ADDR base, Z3_ast index)
     {
         HASH_MAP<Addr64, Hook_idx2Value>::iterator _where = m_tableIdxDict.find(base);
         return (_where != m_tableIdxDict.end()) ? _where->second(state, base, index) : z3::expr(state);
@@ -244,26 +256,96 @@ namespace TR {
     {
     }
 
+    static VexEndness running_endness(void)
+    {
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+        return VexEndnessLE;
+#elif __BYTE_ORDER == __BIG_ENDIAN
+        return VexEndnessBE;
+#else
+        fprintf(stderr, "cannot determine endianness\n");
+        exit(1);
+#endif
+    }
 
+    static VexEndness arch_endness(VexArch va) {
+        switch (va) {
+        case VexArch_INVALID: vassert(0);
+        case VexArchX86:    return VexEndnessLE;
+        case VexArchAMD64:  return VexEndnessLE;
+        case VexArchARM:    return VexEndnessLE;
+        case VexArchARM64:  return VexEndnessLE;
+        case VexArchPPC32:  return VexEndnessBE;
+        case VexArchPPC64:
+            /* ppc64 supports BE or LE at run time. So, on a LE system,
+               returns LE, on a BE system, return BE. */
+            return running_endness();
+        case VexArchS390X:  return VexEndnessBE;
+        case VexArchMIPS32:
+        case VexArchMIPS64:
+            /* mips32/64 supports BE or LE, but at compile time.
+               If mips64 is compiled on a non mips system, the VEX lib
+               is missing bit and pieces of code related to endianness.
+               The mandatory code for this test is then compiled as BE.
+               So, if this test runs on a mips system, returns the
+               running endianness. Otherwise, returns BE as this one
+               has the more chances to work. */
+        {
+        }
+        default: vassert(0);
+        }
+    }
+    /* returns whatever kind of hwcaps needed to make
+   the host and/or guest VexArch happy. */
+    static UInt arch_hwcaps(VexArch va) {
+        switch (va) {
+        case VexArch_INVALID: vassert(0);
+        case VexArchX86:    return 0;
+        case VexArchAMD64:  return 0;
+        case VexArchARM:    return 7;
+        case VexArchARM64:  return 0;
+        case VexArchPPC32:  return 0;
+        case VexArchPPC64:  return 0;
+        case VexArchS390X:  return VEX_HWCAPS_S390X_LDISP;
+#if (__mips_isa_rev>=6)
+        case VexArchMIPS32: return VEX_PRID_COMP_MIPS | VEX_MIPS_CPU_ISA_M32R6 |
+            VEX_MIPS_HOST_FR;
+        case VexArchMIPS64: return VEX_PRID_COMP_MIPS | VEX_MIPS_CPU_ISA_M64R6 |
+            VEX_MIPS_HOST_FR;
+#else
+        case VexArchMIPS32: return VEX_PRID_COMP_MIPS;
+        case VexArchMIPS64: return VEX_PRID_COMP_MIPS | VEX_MIPS_HOST_FR;
+#endif
+        default: vassert(0);
+        }
+    }
 
-    void vex_info::init_vta_chunk(VexTranslateArgs& vta_chunk, VexGuestExtents& vge_chunk, VexArch guest, ULong traceflags) {
-        VexArchInfo vai_guest;
-        VexArchInfo vai_host;
-        VexAbiInfo vbi;
-
+    void vex_info::init_vta_chunk(VexTranslateArgs& vta_chunk, VexGuestExtents& vge_chunk, VexArch guest_arch, ULong traceflags) {
+        //HOSTARCH
+        VexArch host_arch = guest_arch;
         /*vai_host vai_guest*/
-        LibVEX_default_VexArchInfo(&vai_host);
-        LibVEX_default_VexArchInfo(&vai_guest);
-        vex_hwcaps_vai(HOSTARCH, &vai_host);
-        vex_hwcaps_vai(guest, &vai_guest);
-        vai_host.endness = VexEndnessLE;//VexEndnessBE
-        vai_guest.endness = VexEndnessLE;//VexEndnessBE
+        VexEndness guest_endness = arch_endness(guest_arch);
+        VexEndness host_endness = arch_endness(host_arch);
+
+        LibVEX_default_VexArchInfo(&vta_chunk.archinfo_guest);
+        LibVEX_default_VexArchInfo(&vta_chunk.archinfo_host);
+
+        vex_hwcaps_vai(guest_arch, &vta_chunk.archinfo_guest);
+        vex_hwcaps_vai(host_arch, &vta_chunk.archinfo_host);
+
 
         /*vbi*/
-        LibVEX_default_VexAbiInfo(&vbi);
-        vbi.guest_amd64_assume_gs_is_const = True;
-        vbi.guest_amd64_assume_fs_is_const = True;
-        vex_prepare_vbi(guest, &vbi);
+        LibVEX_default_VexAbiInfo(&vta_chunk.abiinfo_both);
+        vta_chunk.abiinfo_both.guest_amd64_assume_gs_is_const = True;
+        vta_chunk.abiinfo_both.guest_amd64_assume_fs_is_const = True;
+
+        // Use some values that makes ARM64 happy.
+        vta_chunk.archinfo_guest.arm64_dMinLine_lg2_szB = 6;
+        vta_chunk.archinfo_guest.arm64_iMinLine_lg2_szB = 6;
+
+        // Use some values that makes AMD64 happy.
+        vta_chunk.abiinfo_both.guest_stack_redzone_size = 128;
+        vex_prepare_vbi(guest_arch, &vta_chunk.abiinfo_both);
 
         vta_chunk.callback_opaque = NULL;
         vta_chunk.preamble_function = NULL;
@@ -277,11 +359,14 @@ namespace TR {
         vta_chunk.disp_cp_xindir = (void*)dispatch;
         vta_chunk.disp_cp_xassisted = (void*)dispatch;
 
-        vta_chunk.abiinfo_both = vbi;
-        vta_chunk.archinfo_guest = vai_guest;
-        vta_chunk.archinfo_host = vai_host;
-        vta_chunk.arch_guest = guest;
-        vta_chunk.arch_host = HOSTARCH;
+        vta_chunk.arch_guest = guest_arch;
+        vta_chunk.archinfo_guest.endness = guest_endness;
+        vta_chunk.archinfo_guest.hwcaps = arch_hwcaps(vta_chunk.arch_guest);
+        vta_chunk.arch_host = guest_arch;
+        vta_chunk.archinfo_host.endness = guest_endness;
+        vta_chunk.archinfo_host.hwcaps = arch_hwcaps(vta_chunk.arch_host);
+
+
         vta_chunk.guest_extents = &vge_chunk;
         vta_chunk.chase_into_ok = chase_into_ok;
         vta_chunk.needs_self_check = needs_self_check;
@@ -291,5 +376,5 @@ namespace TR {
 
 };
 
-template TR::ctx32;
-template TR::ctx64;
+template class TR::vex_context<Addr32>;
+template class TR::vex_context<Addr64>;

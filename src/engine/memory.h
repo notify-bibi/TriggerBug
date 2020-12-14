@@ -45,11 +45,11 @@ const UChar fastalignD1[257] = { LZDEF(0),  LZDEF(1),  LZDEF(2),  LZDEF(3),  LZD
 #define CONCATSTR(A, B) " ACCESS MEM ERR UNMAPPED; " A " AT Line: " LINETOSTR(B)
 
 //客户机内存访问检查
-#define MEM_ACCESS_ASSERT_R(CODE, ADDRESS) if (!(CODE)) throw Expt::GuestMemReadErr(CONCATSTR(__FILE__, __LINE__), ADDRESS);
-#define MEM_ACCESS_ASSERT_W(CODE, ADDRESS) if (!(CODE)) throw Expt::GuestMemWriteErr(CONCATSTR(__FILE__, __LINE__), ADDRESS);
+#define MEM_ACCESS_ASSERT_R(CODE, THwordESS) if (!(CODE)) throw Expt::GuestMemReadErr(CONCATSTR(__FILE__, __LINE__), THwordESS);
+#define MEM_ACCESS_ASSERT_W(CODE, THwordESS) if (!(CODE)) throw Expt::GuestMemWriteErr(CONCATSTR(__FILE__, __LINE__), THwordESS);
 
 //检查是否将ir translate的block区代码修改了，避免某些vmp或者ctf的恶作剧
-#define CODEBLOCKISWRITECHECK(address) if(m_ee) m_ee->block_integrity(address);
+#define CODEBLOCKISWRITECHECK(address) if(m_ee) m_ee->block_integrity(address, this->m_insn_linear.insn_block_delta);
 
 
 
@@ -154,16 +154,32 @@ public:
     }
 };
 
-class DMEM;
+class DMem;
 
 namespace TR {
-    template<typename ADDR>
+    typedef enum {
+        enough,
+        swap_state,
+        next_page
+    }Insn_linear_flag;
+
+    typedef struct __declspec(align(16)) {
+        unsigned char swap[32];
+        Insn_linear_flag flag;
+        UInt the_rest_n;
+        const UChar* guest_addr_in_page;
+        Addr guest_block_start;
+        Int insn_block_delta;
+    } Insn_linear;
+
+    template<typename THword>
     class MEM : public mapping<PAGE> {
-        friend class State<ADDR>;
+        friend class State<THword>;
+        friend class ::DMem;
         template<typename _> friend class vex_context;
-        friend class DMEM;
         //wide
-        static constexpr int wide = sizeof(ADDR) << 3;
+        static constexpr int wide = sizeof(THword) << 3;
+        
     public:
 
         class Itaddress {
@@ -175,11 +191,11 @@ namespace TR {
             Z3_lbool m_lbool;
             //std::vector<Z3_model> v_model;
         public:
-            Itaddress(z3::solver& s, Z3_ast addr) :m_ctx(m_solver.ctx()), m_solver(s), m_addr(addr) {
+            Itaddress(z3::solver& s, Z3_ast addr) :m_solver(s), m_ctx(m_solver.ctx()), m_addr(addr) {
                 m_addr = Z3_simplify(s.ctx(), m_addr);
                 Z3_inc_ref(m_ctx, m_addr);
                 m_solver.push();
-                Z3_ast so = Z3_mk_bvule(m_ctx, m_addr, m_ctx.bv_val((ADDR)-1, wide));
+                Z3_ast so = Z3_mk_bvule(m_ctx, m_addr, m_ctx.bv_val((THword)-1, wide));
                 Z3_inc_ref(m_ctx, so);
                 Z3_solver_assert(m_ctx, m_solver, so);
                 Z3_dec_ref(m_ctx, so);
@@ -204,7 +220,7 @@ namespace TR {
                 Z3_dec_ref(m_ctx, last_avoid_addr);
             }
 
-            rsval<ADDR> operator*()
+            rsval<THword> operator*()
             {
                 Z3_model m_model = Z3_solver_get_model(m_ctx, m_solver); vassert(m_model);
                 Z3_model_inc_ref(m_ctx, m_model);
@@ -217,7 +233,7 @@ namespace TR {
                 vassert(Z3_get_ast_kind(m_ctx, r) == Z3_NUMERAL_AST);
                 vassert(Z3_get_numeral_uint64(m_ctx, r, &ret));
                 Z3_model_dec_ref(m_ctx, m_model);
-                return rsval<ADDR>(m_ctx, ret, r);
+                return rsval<THword>(m_ctx, ret, r);
             }
             inline ~Itaddress() {
                 Z3_dec_ref(m_ctx, m_addr);
@@ -226,13 +242,14 @@ namespace TR {
             }
         };
     private:
-        HASH_MAP<ADDR, TR::Register<0x1000>*> mem_change_map;
+        HASH_MAP<THword, TR::Register<0x1000>*> mem_change_map;
         TR::vctx_base&  m_vctx;
         Bool            need_record;
         Int             user;
         z3::vcontext&   m_ctx;
         z3::solver&     m_solver;
         EmuEnvironment<MAX_IRTEMP>* m_ee = nullptr;
+        Insn_linear     m_insn_linear;
 
         virtual PAGE* map_interface(ULong address) override;
         virtual void copy_interface(PAGE* pt_dst[1], PAGE* pt_src[1]) override;
@@ -240,9 +257,9 @@ namespace TR {
 
     private:
         bool check_page(PAGE*& P, PAGE** PT);
-        PAGE* get_write_page(ADDR addr);
-        tval _Iex_Load(PAGE* P, ADDR address, UShort size);
-        void init_page(PAGE*& P, ADDR address);
+        PAGE* get_write_page(THword addr);
+        tval _Iex_Load(PAGE* P, THword address, UShort size);
+        void init_page(PAGE*& P, THword address);
         UInt write_bytes(ULong address, ULong length, UChar* data);
         MEM(TR::vctx_base & vctxb, z3::solver& s, z3::vcontext& ctx, PML4T** cr3, Int _user, Bool _need_record) :
             m_vctx(vctxb),
@@ -262,19 +279,19 @@ namespace TR {
         virtual z3::expr idx2Value(Addr64 base, Z3_ast idx) { return z3::expr(m_ctx); };
         //清空写入记录
         void clearRecord();
-        ULong find_block_forward(ULong start, ADDR size);
-        ULong find_block_reverse(ULong start, ADDR size);
-        inline HASH_MAP<ADDR, TR::Register<0x1000>*> change_map() { return mem_change_map; }
+        ULong find_block_forward(ULong start, THword size);
+        ULong find_block_reverse(ULong start, THword size);
+        inline HASH_MAP<THword, TR::Register<0x1000>*> change_map() { return mem_change_map; }
         inline Int get_user() { return user; }
-        //把两个不连续的页放到Pap里，以支持valgrind的跨页翻译
-        inline void set_double_page(ADDR address, Pap& addrlst) {
-            addrlst.guest_addr = address;
-            addrlst.Surplus = 0x1000 - (address & 0xfff);
-            PAGE* P = get_mem_page(address);
-            MEM_ACCESS_ASSERT_R(P, address);
-            addrlst.t_page_addr = (UChar*)(*P)->m_bytes + (address & 0xfff);
-        }
 
+
+        //把两个不连续的页放到insn_linear里，以支持valgrind的跨页翻译
+        //第一次调用
+        const UChar* get_vex_insn_linear(Addr guest_IP_sbstart);
+
+        //多次调用即返回线性地址
+        //使用之必须调用 get_vex_insn_linear
+        const UChar* libvex_guest_insn_control(Addr guest_IP_sbstart, Long delta, const UChar* /*in guest_code*/ guest_code);
 
         inline UChar* get_next_page(Addr32 address) {
             PAGE* P = get_mem_page(address + 0x1000);
@@ -292,7 +309,7 @@ namespace TR {
         //----------------------- real address -----------------------
 
         template<bool sign, int nbits, sv::z3sk sk>
-        inline sv::rsval<sign, nbits, sk> load(ADDR address) {
+        inline sv::rsval<sign, nbits, sk> load(THword address) {
             static_assert((nbits & 7) == 0, "err load");
             PAGE* page = get_mem_page(address);
             MEM_ACCESS_ASSERT_R(page, address);
@@ -301,7 +318,7 @@ namespace TR {
             };
 
             if ((address & 0xfff) >= (0x1001 - (nbits >> 3))) {
-                return _Iex_Load(page, address, nbits >> 3).tors<sign, nbits, sk>();
+                return _Iex_Load(page, address, nbits >> 3).template tors<sign, nbits, sk>();
             }
 
             if (user == page->get_user()) {
@@ -314,13 +331,13 @@ namespace TR {
 
         // IRType 
         template<IRType ty, class _svc = sv::IRty<ty>>
-        inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> load(ADDR address) {
+        inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> load(THword address) {
             return load<_svc::is_signed, _svc::nbits, _svc::sk>(address);
         }
 
         // load arithmetic
         template<typename ty, class _svc = sv::sv_cty<ty>, TASSERT(sv::is_ret_type<ty>::value)>
-        inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> load(ADDR address) {
+        inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> load(THword address) {
             return load<_svc::is_signed, _svc::nbits, _svc::sk>(address);
         }
 
@@ -328,14 +345,14 @@ namespace TR {
         //----------------------- ast address -----------------------
 
         template<bool sign, int nbits, sv::z3sk sk>
-        sv::rsval<sign, nbits, sk> load_all(const sval<ADDR>& address) {
+        sv::rsval<sign, nbits, sk> load_all(const sval<THword>& address) {
             sv::symbolic<sign, nbits, sk> ret(m_ctx);
             bool first = true;
             {
                 Itaddress it = this->addr_begin(m_solver, address);
                 while (it.check()) {
-                    rsval<ADDR> addr = *it;
-                    sv::rsval<sign, nbits, sk>  data = load<sign, nbits, sk>((ADDR)addr.tor());
+                    rsval<THword> addr = *it;
+                    sv::rsval<sign, nbits, sk>  data = load<sign, nbits, sk>((THword)addr.tor());
                     if (first) {
                         first = false;
                         ret = data.tos();
@@ -356,27 +373,27 @@ namespace TR {
         template<bool sign, int nbits, sv::z3sk sk>
         inline sv::rsval<sign, nbits, sk> load(Z3_ast address) {
             static_assert((nbits & 7) == 0, "err load");
-            TR::addressingMode<ADDR> am(z3::expr(m_ctx, address));
+            TR::addressingMode<THword> am(z3::expr(m_ctx, address));
             auto kind = am.analysis_kind();
-            if (kind != TR::addressingMode<ADDR>::cant_analysis) {
+            if (kind != TR::addressingMode<THword>::cant_analysis) {
 #ifdef TRACE_AM
-                printf("Iex_Load  base: %p {\n", am.getBase());
+                printf("Iex_Load  base: %p {\n", (void*)(size_t)am.getBase());
                 am.print();
                 printf("}\n");
                 //am.print_offset();
 #endif
                 z3::expr tast = idx2Value(am.getBase(), am.getoffset());
                 if ((Z3_ast)tast) {
-                    return sv::rsval<sign, nbits, sk>(m_ctx, tast);
+                    return sv::rsval<sign, nbits, sk>(m_ctx, (Z3_ast)tast);
                 }
                 else {
-                    if (kind == TR::addressingMode<ADDR>::support_bit_blast) {
+                    if (kind == TR::addressingMode<THword>::support_bit_blast) {
                         sv::symbolic<sign, nbits, sk> ret(m_ctx);
                         bool first = true;
-                        for (TR::addressingMode<ADDR>::iterator off_it = am.begin();
+                        for (typename TR::addressingMode<THword>::iterator off_it = am.begin();
                             off_it.check();
                             off_it.next()) {
-                            ADDR offset = *off_it;
+                            THword offset = *off_it;
                             sv::rsval<sign, nbits, sk> data = load<sign, nbits, sk>(am.getBase() + offset);
 
                             if (first) {
@@ -393,7 +410,7 @@ namespace TR {
                     }
                 }
             }
-            return load_all<sign, nbits, sk>(sval<ADDR>(m_ctx, address));
+            return load_all<sign, nbits, sk>(sval<THword>(m_ctx, address));
         }
 
         // IRType 
@@ -417,7 +434,7 @@ namespace TR {
         inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> load(const sv::rsval<_Ts, nbits, Z3_BV_SORT>& address) {
             static_assert(nbits == wide, "err sz");
             if (address.real()) {
-                return load<_svc::is_signed, _svc::nbits, _svc::sk>((ADDR)address.tor());
+                return load<_svc::is_signed, _svc::nbits, _svc::sk>((THword)address.tor());
             }
             else {
                 return load<_svc::is_signed, _svc::nbits, _svc::sk>((Z3_ast)address.tos());
@@ -429,7 +446,7 @@ namespace TR {
         inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> load(const sv::rsval<_Ts, nbits, Z3_BV_SORT>& address) {
             static_assert(nbits == wide, "err sz");
             if (address.real()) {
-                return load<_svc::is_signed, _svc::nbits, _svc::sk>((ADDR)address.tor());
+                return load<_svc::is_signed, _svc::nbits, _svc::sk>((THword)address.tor());
             }
             else {
                 return load<_svc::is_signed, _svc::nbits, _svc::sk>((Z3_ast)address.tos());
@@ -440,7 +457,7 @@ namespace TR {
         template<IRType ty, class _svc = sv::IRty<ty> >
         inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> load(tval const& address) {
             if (address.real()) {
-                return load<_svc::is_signed, _svc::nbits, _svc::sk>((ADDR)address.tor<false, wide>());
+                return load<_svc::is_signed, _svc::nbits, _svc::sk>((THword)address.tor<false, wide>());
             }
             else {
                 return load<_svc::is_signed, _svc::nbits, _svc::sk>((Z3_ast)address.tos<false, wide>());
@@ -451,7 +468,7 @@ namespace TR {
         template<typename ty, class _svc = sv::sv_cty<ty>, TASSERT(sv::is_ret_type<ty>::value)>
         inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> load(tval const& address) {
             if (address.real()) {
-                return load<_svc::is_signed, _svc::nbits, _svc::sk>((ADDR)address.tor<false, wide>());
+                return load<_svc::is_signed, _svc::nbits, _svc::sk>((THword)address.tor<false, wide>());
             }
             else {
                 return load<_svc::is_signed, _svc::nbits, _svc::sk>((Z3_ast)address.tos<false, wide>());
@@ -462,7 +479,7 @@ namespace TR {
         inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> load(sv::ctype_val<sign, nbits, Z3_BV_SORT> const& address) {
             static_assert(nbits == wide, "err sz");
             if (address.real()) {
-                return load<_svc::is_signed, _svc::nbits, _svc::sk>((ADDR)address.tor<false, wide>());
+                return load<_svc::is_signed, _svc::nbits, _svc::sk>((THword)address.tor<false, wide>());
             }
             else {
                 return load<_svc::is_signed, _svc::nbits, _svc::sk>((Z3_ast)address.tos<false, wide>());
@@ -473,7 +490,7 @@ namespace TR {
         inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> load(sv::ctype_val<sign, nbits, Z3_BV_SORT> const& address) {
             static_assert(nbits == wide, "err sz");
             if (address.real()) {
-                return load<_svc::is_signed, _svc::nbits, _svc::sk>((ADDR)address.tor<false, wide>());
+                return load<_svc::is_signed, _svc::nbits, _svc::sk>((THword)address.tor<false, wide>());
             }
             else {
                 return load<_svc::is_signed, _svc::nbits, _svc::sk>((Z3_ast)address.tos<false, wide>());
@@ -482,7 +499,7 @@ namespace TR {
 
 
         tval Iex_Load(Z3_ast address, IRType ty);
-        tval Iex_Load(ADDR address, IRType ty);
+        tval Iex_Load(THword address, IRType ty);
         tval Iex_Load(const tval& address, IRType ty);
         tval Iex_Load(const tval& address, int nbytes);
         tval Iex_Load(const sv::rsval<false, wide>& address, IRType ty);
@@ -490,7 +507,7 @@ namespace TR {
         //----------------------- real addr store real -----------------------
 
         template<typename DataTy, TASSERT(std::is_arithmetic<DataTy>::value)>
-        void store(ADDR address, DataTy data) {
+        void store(THword address, DataTy data) {
             PAGE* page = get_write_page(address);
             UShort offset = address & 0xfff;
             if (fastalignD1[sizeof(data) << 3] > 0xFFF - offset) {
@@ -508,7 +525,7 @@ namespace TR {
         //----------------------- real addr store simd -----------------------
 
         template<typename DataTy, TASSERT(sv::is_sse<DataTy>::value)>
-        void store(ADDR address, const DataTy& data) {
+        void store(THword address, const DataTy& data) {
             PAGE* page = get_write_page(address);
             UShort offset = address & 0xfff;
             if (fastalignD1[sizeof(data) << 3] > 0xFFF - offset) {
@@ -526,7 +543,7 @@ namespace TR {
 
         // only n_bit 8, 16, 32, 64 ,128 ,256
         template<int nbits>
-        inline void store(ADDR address, Z3_ast data) {
+        inline void store(THword address, Z3_ast data) {
             static_assert((nbits & 7) == 0, "err store");
             PAGE* page = get_write_page(address);
             UShort offset = address & 0xfff;
@@ -551,21 +568,21 @@ namespace TR {
 
         template<typename DataTy, TASSERT(std::is_arithmetic<DataTy>::value || sv::is_sse<DataTy>::value)>
         void store(Z3_ast address, DataTy data) {
-            TR::addressingMode<ADDR> am(z3::expr(m_ctx, address));
+            TR::addressingMode<THword> am(z3::expr(m_ctx, address));
             auto kind = am.analysis_kind();
             int count = 0;
-            if (kind == TR::addressingMode<ADDR>::support_bit_blast) {
+            if (kind == TR::addressingMode<THword>::support_bit_blast) {
 #ifdef TRACE_AM
-                printf("Ist_Store base: %p {\n", am.getBase());
+                printf("Ist_Store base: %p {\n", (void*)(size_t)am.getBase());
                 am.print();
                 printf("}\n");
 #endif
-                for (TR::addressingMode<ADDR>::iterator off_it = am.begin();
+                for (typename TR::addressingMode<THword>::iterator off_it = am.begin();
                     off_it.check();
                     off_it.next()) {
                     count++;
                     auto offset = *off_it;
-                    ADDR raddr = am.getBase() + offset;
+                    THword raddr = am.getBase() + offset;
                     auto oData = load<DataTy>(raddr);
                     auto rData = ite(subval<wide>(am.getoffset()) == offset, sval<DataTy>(m_ctx, data), oData.tos());
                     store(raddr, rData);
@@ -575,8 +592,8 @@ namespace TR {
                 Itaddress it = this->addr_begin(m_solver, address);
                 while (it.check()) {
                     count++;
-                    rsval<ADDR> addr = *it;
-                    ADDR addr_re = addr.tor();
+                    rsval<THword> addr = *it;
+                    THword addr_re = addr.tor();
                     auto oData = load<DataTy>(addr_re);
                     auto rData = ite(subval<wide>(m_ctx, address) == addr.tos(), sval<DataTy>(m_ctx, data), oData.tos());
                     store(addr, rData);
@@ -591,21 +608,21 @@ namespace TR {
         template<int nbits>
         void store(Z3_ast address, Z3_ast data) {
             static_assert((nbits & 7) == 0, "err store");
-            TR::addressingMode<ADDR> am(z3::expr(m_ctx, address));
+            TR::addressingMode<THword> am(z3::expr(m_ctx, address));
             auto kind = am.analysis_kind();
             int count = 0;
-            if (kind == TR::addressingMode<ADDR>::support_bit_blast) {
+            if (kind == TR::addressingMode<THword>::support_bit_blast) {
 #ifdef TRACE_AM
-                printf("Ist_Store base: %p {\n", am.getBase());
+                printf("Ist_Store base: %p {\n", (void*)(size_t)am.getBase());
                 am.print();
                 printf("}\n");
 #endif
-                for (TR::addressingMode<ADDR>::iterator off_it = am.begin();
+                for (typename TR::addressingMode<THword>::iterator off_it = am.begin();
                     off_it.check();
                     off_it.next()) {
                     count++;
-                    ADDR offset = *off_it;
-                    ADDR raddr = am.getBase() + offset;
+                    THword offset = *off_it;
+                    THword raddr = am.getBase() + offset;
                     auto oData = load<(IRType)nbits>(raddr);
                     auto rData = ite(subval<wide>(am.getoffset()) == offset, subval<nbits>(m_ctx, data), oData.tos());
                     store(raddr, rData);
@@ -615,7 +632,7 @@ namespace TR {
                 Itaddress it = this->addr_begin(m_solver, address);
                 while (it.check()) {
                     count++;
-                    rsval<ADDR> addr = *it;
+                    rsval<THword> addr = *it;
                     auto oData = load<(IRType)nbits>(addr);
                     auto rData = ite(subval<wide>(m_ctx, address) == addr.tos(), subval<nbits>(m_ctx, data), oData.tos());
                     store(addr, rData);
@@ -627,17 +644,17 @@ namespace TR {
 
 
         template<bool sign, int nbits, TASSERT(nbits <= 64)>
-        inline void store(ADDR address, const sv::ctype_val<sign, nbits, Z3_BV_SORT>& data) {
+        inline void store(THword address, const sv::ctype_val<sign, nbits, Z3_BV_SORT>& data) {
             store(address, data.value());
         }
 
         template<bool sign, int nbits, TASSERT((nbits & 0x7) == 0)>
-        inline void store(ADDR address, const sv::symbolic<sign, nbits, Z3_BV_SORT>& data) {
+        inline void store(THword address, const sv::symbolic<sign, nbits, Z3_BV_SORT>& data) {
             store<nbits>(address, (Z3_ast)data);
         }
 
         template<bool sign, int nbits, TASSERT((nbits & 0x7) == 0)>
-        inline void store(ADDR address, const sv::rsval<sign, nbits, Z3_BV_SORT>& data) {
+        inline void store(THword address, const sv::rsval<sign, nbits, Z3_BV_SORT>& data) {
             if (data.real()) {
                 store(address, data.tor());
             }
@@ -659,7 +676,7 @@ namespace TR {
         template<bool sign, int nbits, TASSERT((nbits & 0x7) == 0)>
         inline void store(const sv::rsval<false, wide, Z3_BV_SORT>& address, const sv::rsval<sign, nbits, Z3_BV_SORT>& data) {
             if (address.real()) {
-                store((ADDR)address.tor(), data);
+                store((THword)address.tor(), data);
             }
             else {
                 store((Z3_ast)address.tos(), data);
@@ -670,7 +687,7 @@ namespace TR {
         template<typename DataTy, TASSERT(std::is_arithmetic<DataTy>::value || sv::is_sse<DataTy>::value)>
         inline void store(const sv::rsval<false, wide, Z3_BV_SORT>& address, DataTy data) {
             if (address.real()) {
-                store((ADDR)address.tor(), data);
+                store((THword)address.tor(), data);
             }
             else {
                 store((Z3_ast)address.tos(), data);
@@ -680,7 +697,7 @@ namespace TR {
         template<bool sign, int nbits, TASSERT((nbits & 0x7) == 0)>
         inline void store(const sv::rsval<false, wide, Z3_BV_SORT>& address, const sv::symbolic<sign, nbits, Z3_BV_SORT>& data) {
             if (address.real()) {
-                store<nbits>((ADDR)address.tor(), (Z3_ast)data);
+                store<nbits>((THword)address.tor(), (Z3_ast)data);
             }
             else {
                 store<nbits>((Z3_ast)address.tos(), (Z3_ast)data);
@@ -689,16 +706,16 @@ namespace TR {
 
         inline void Ist_Store(tval const& address, tval const& data) {
             if (address.real()) {
-                Ist_Store((ADDR)address.tor<false, wide>(), data);
+                Ist_Store((THword)address.tor<false, wide>(), data);
             }
             else {
                 Ist_Store((Z3_ast)address.tos<false, wide>(), data);
             }
         }
 
-        void Ist_Store(ADDR address, tval const& data);
+        void Ist_Store(THword address, tval const& data);
         void Ist_Store(Z3_ast address, tval const& data);
-
+    public:
         inline operator Z3_context() const { return m_ctx; };
         inline operator z3::vcontext& () { return m_ctx; };
         inline z3::vcontext& ctx() { return m_ctx; };

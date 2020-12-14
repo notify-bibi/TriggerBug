@@ -352,4 +352,4 @@ void TR::mapping<ST>::recycle()
 
 
 
-template TR::mapping<PAGE>;
+template class TR::mapping<PAGE>;

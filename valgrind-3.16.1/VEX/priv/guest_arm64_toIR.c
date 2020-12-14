@@ -1,5 +1,6 @@
 /* -*- mode: C; c-basic-offset: 3; -*- */
 
+#define MKG_ARM64
 /*--------------------------------------------------------------------*/
 /*--- begin                                     guest_arm64_toIR.c ---*/
 /*--------------------------------------------------------------------*/
@@ -78,7 +79,6 @@
 
 /* Translates ARM64 code to IR. */
 
-extern "C" {
 #include "libvex_basictypes.h"
 #include "libvex_ir.h"
 #include "libvex.h"
@@ -88,7 +88,6 @@ extern "C" {
 #include "main_globals.h"
 #include "guest_generic_bb_to_IR.h"
 #include "guest_arm64_defs.h"
-}
 
 
 /*------------------------------------------------------------*/
@@ -103,14 +102,19 @@ extern "C" {
 /* CONST: what is the host's endianness?  We need to know this in
    order to do sub-register accesses to the SIMD/FP registers
    correctly. */
-thread_local static VexEndness host_endness;
+//static VexEndness host_endness;
 
 /* CONST: The guest address for the instruction currently being
    translated.  */
-thread_local static Addr64 guest_PC_curr_instr;
+//static Addr64 guest_PC_curr_instr;
 
 /* MOD: The IRSB* into which we're generating code. */
-thread_local static IRSB* irsb;
+//static IRSB* irsb;
+
+
+#define  host_endness (*arm64_host_endness_var_call())
+#define  guest_PC_curr_instr (*arm64_guest_PC_curr_instr_var_call())
+#define  irsb (*arm64_irsb_var_call())
 
 
 /*------------------------------------------------------------*/

@@ -49,22 +49,23 @@ namespace TR {
 
 #endif
 
-#ifdef USE_HASH_AST_MANAGER
-    extern Z3_ast Reg2Ast(int nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX& m_ast, z3::vcontext& ctx);
-    extern Z3_ast Reg2AstSSE(int nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX& m_ast, z3::vcontext& ctx);
-#else
-    extern Z3_ast Reg2Ast(int nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, Z3_context ctx);
-    extern Z3_ast Reg2AstSSE(int nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, Z3_context ctx);
-#endif
 
 #ifdef USE_HASH_AST_MANAGER
-    extern Z3_ast Reg2Ast(int nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX& m_ast, z3::vcontext& ctx, z3::vcontext& toctx);
-    extern Z3_ast Reg2AstSSE(int nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX& m_ast, z3::vcontext& ctx, z3::vcontext& toctx);
+    extern Z3_ast freg2Ast(int nbytes, UChar* m_bytes, UChar* m_fastindex, TR::AstManager::AstManagerX& m_ast, z3::vcontext& ctx);
+    extern Z3_ast freg2AstSSE(int nbytes, UChar* m_bytes, UChar* m_fastindex, TR::AstManager::AstManagerX& m_ast, z3::vcontext& ctx);
 #else
-    extern Z3_ast Reg2Ast(int nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, Z3_context ctx, Z3_context toctx);
-    extern Z3_ast Reg2AstSSE(int nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, Z3_context ctx, Z3_context toctx);
+    extern Z3_ast freg2Ast(int nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, Z3_context ctx);
+    extern Z3_ast freg2AstSSE(int nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, Z3_context ctx);
 #endif
 
+// ctx convert
+#ifdef USE_HASH_AST_MANAGER
+    extern Z3_ast freg2Ast_cov(int nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX& m_ast, z3::vcontext& ctx, z3::vcontext& toctx);
+    extern Z3_ast freg2AstSSE_cov(int nbytes, UChar* m_bytes, UChar* m_fastindex, AstManager::AstManagerX& m_ast, z3::vcontext& ctx, z3::vcontext& toctx);
+#else
+    extern Z3_ast freg2Ast_cov(int nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, Z3_context ctx, Z3_context toctx);
+    extern Z3_ast freg2AstSSE_cov(int nbytes, UChar* m_bytes, UChar* m_fastindex, Z3_ast* m_ast, Z3_context ctx, Z3_context toctx);
+#endif
 
 
 
@@ -105,7 +106,7 @@ namespace TR {
     template<int maxlength>
     class Symbolic
     {
-        template <int maxlength>
+        template <int _maxlength>
         friend class Register;
     public:
         z3::vcontext& m_ctx;
@@ -129,10 +130,10 @@ namespace TR {
 
         inline ~Symbolic<maxlength>() {
             int _pcur = maxlength - 1;
-            unsigned int N;
+            int N;
             for (; _pcur > 0; ) {
-				N = __builtin_clzll(((ULong*)(m_fastindex))[_pcur >> 3] & fastMaskBI1(_pcur % 8));
-                if ( N!=64 ) {
+				
+                if (clzll(N, ((ULong*)(m_fastindex))[_pcur >> 3] & fastMaskBI1(_pcur % 8))) {
 					N = 63 - N;
                     _pcur = ALIGN(_pcur, 8) + (N >> 3);
                     _pcur = _pcur - m_fastindex[_pcur] + 1;
@@ -207,10 +208,9 @@ namespace TR {
             ULong* m_flag;
         public:
             inline iterator(UChar* flag) :_pcur(0), m_flag((ULong*)flag), m_len(0) {
-                UInt N;
+                Int N;
                 for (; ; _pcur += 64) {
-					N = __builtin_ctzll(m_flag[_pcur >> 6]);
-                    if (N != 64) {
+                    if (ctzll(N, m_flag[_pcur >> 6])) {
                         _pcur += N;
                         return;
                     }
@@ -228,10 +228,9 @@ namespace TR {
 
             inline void operator++()
             {
-                unsigned int N;
+                int N;
                 for (;;) {
-					N = __builtin_ctzll(m_flag[_pcur >> 6] & fastMaskReverse(_pcur % 64));
-                    if (N != 64) {
+                    if (ctzll(N, m_flag[_pcur >> 6] & fastMaskReverse(_pcur % 64))) {
                         _pcur = ALIGN(_pcur, 64) + N;
                         return;
                     }
@@ -346,23 +345,27 @@ namespace TR {
 
 
         template<int nbytes, TASSERT(nbytes <= 8)>
-        inline Z3_ast reg2Ast(UInt offset) {
-            return Reg2Ast((int)nbytes, &m_bytes[offset], &symbolic->m_fastindex[offset], symbolic->m_ast + offset, m_ctx);
+        inline Z3_ast freg2Ast(UInt offset) {
+            auto past = symbolic->m_ast + offset;
+            return TR::freg2Ast((int)nbytes, &m_bytes[offset], &symbolic->m_fastindex[offset], past, m_ctx);
         }
 
         template<int nbytes, TASSERT(nbytes > 8)>
-        inline Z3_ast reg2Ast(UInt offset) {
-            return Reg2AstSSE((int)nbytes, &m_bytes[offset], &symbolic->m_fastindex[offset], symbolic->m_ast + offset, m_ctx);
+        inline Z3_ast freg2Ast(UInt offset) {
+            auto past = symbolic->m_ast + offset;
+            return TR::freg2AstSSE((int)nbytes, &m_bytes[offset], &symbolic->m_fastindex[offset], past, m_ctx);
         }
 
         template<int nbytes, TASSERT(nbytes <= 8)>
-        inline Z3_ast reg2Ast(UInt offset, z3::vcontext& toctx) {
-            return Reg2Ast((int)nbytes, &m_bytes[offset], &symbolic->m_fastindex[offset], symbolic->m_ast + offset, m_ctx, toctx);
+        inline Z3_ast freg2Ast(UInt offset, z3::vcontext& toctx) {
+            auto past = symbolic->m_ast + offset;
+            return TR::freg2Ast_cov((int)nbytes, &m_bytes[offset], &symbolic->m_fastindex[offset], past, m_ctx, toctx);
         }
 
         template<int nbytes, TASSERT(nbytes > 8)>
-        inline Z3_ast reg2Ast(UInt offset, z3::vcontext& toctx) {
-            return Reg2AstSSE((int)nbytes, &m_bytes[offset], &symbolic->m_fastindex[offset], symbolic->m_ast + offset, m_ctx, toctx);
+        inline Z3_ast freg2Ast(UInt offset, z3::vcontext& toctx) {
+            auto past = symbolic->m_ast + offset;
+            return TR::freg2AstSSE_cov((int)nbytes, &m_bytes[offset], &symbolic->m_fastindex[offset], past, m_ctx, toctx);
         }
 
         //-------------------------------- get --------------------------------------
@@ -370,7 +373,7 @@ namespace TR {
         template<bool sign, int nbits, sv::z3sk sk, TASSERT(sk == Z3_BV_SORT)>
         inline sv::rsval<sign, nbits, sk> get(UInt offset) {
             if (symbolic && fast_check<nbits>(offset)) {
-                return sv::rsval<sign, nbits, Z3_BV_SORT>(m_ctx, reg2Ast< (nbits >> 3) >(offset), no_inc{});
+                return sv::rsval<sign, nbits, Z3_BV_SORT>(m_ctx, freg2Ast< (nbits >> 3) >(offset), no_inc{});
             }
             else {
                 return sv::rsval<sign, nbits, Z3_BV_SORT>(m_ctx, &m_bytes[offset]);
@@ -380,7 +383,7 @@ namespace TR {
         template<bool sign, int nbits, sv::z3sk sk, TASSERT(sk == Z3_FLOATING_POINT_SORT)>
         inline sv::rsval<sign, nbits, sk> get(UInt offset) {
             if (symbolic && fast_check<nbits>(offset)) {
-                return sv::symbolic<sign, nbits, Z3_BV_SORT>(m_ctx, reg2Ast< (nbits >> 3) >(offset), no_inc{}).tofpa();
+                return sv::symbolic<sign, nbits, Z3_BV_SORT>(m_ctx, freg2Ast< (nbits >> 3) >(offset), no_inc{}).tofpa();
             }
             else {
                 return sv::rsval<sign, nbits, Z3_FLOATING_POINT_SORT>(m_ctx, &m_bytes[offset]);
@@ -400,7 +403,7 @@ namespace TR {
         template<bool sign, int nbits, sv::z3sk sk, TASSERT(sk == Z3_BV_SORT)>
         inline sv::rsval<sign, nbits, sk> get(UInt offset, z3::vcontext& ctx) {
             if (symbolic && fast_check<nbits>(offset)) {
-                return sv::rsval<sign, nbits, Z3_BV_SORT>(ctx, reg2Ast< (nbits >> 3) >(offset, ctx), no_inc{});
+                return sv::rsval<sign, nbits, Z3_BV_SORT>(ctx, freg2Ast< (nbits >> 3) >(offset, ctx), no_inc{});
             }
             else {
                 return sv::rsval<sign, nbits, sk>(ctx, &m_bytes[offset]);
@@ -410,7 +413,7 @@ namespace TR {
         template<bool sign, int nbits, sv::z3sk sk, TASSERT(sk == Z3_FLOATING_POINT_SORT)>
         inline sv::rsval<sign, nbits, sk> get(UInt offset, z3::vcontext& ctx) {
             if (symbolic && fast_check<nbits>(offset)) {
-                return sv::symbolic<sign, nbits, Z3_BV_SORT>(ctx, reg2Ast< (nbits >> 3) >(offset, ctx), no_inc{}).tofpa();
+                return sv::symbolic<sign, nbits, Z3_BV_SORT>(ctx, freg2Ast< (nbits >> 3) >(offset, ctx), no_inc{}).tofpa();
             }
             else {
                 return sv::rsval<sign, nbits, sk>(ctx, &m_bytes[offset]);
@@ -437,7 +440,7 @@ namespace TR {
                 fast_set_zero<(sizeof(DataTy) << 3)>(offset);
             }
             *(DataTy*)(m_bytes + offset) = data;
-            if (record)  record->write<sizeof(DataTy)>(offset);
+            if (record)  record->template write<sizeof(DataTy)>(offset);
         }
 
 
@@ -449,7 +452,7 @@ namespace TR {
                 fast_set_zero<128>(offset);
             }
             _mm_storeu_si128((__m128i*)(m_bytes + offset), _mm_loadu_si128((__m128i*) & data));
-            if (record)  record->write<16>(offset);
+            if (record)  record->template write<16>(offset);
         }
 
         //simd 256
@@ -460,7 +463,7 @@ namespace TR {
                 fast_set_zero<256>(offset);
             }
             _mm256_storeu_si256((__m256i*)(m_bytes + offset), _mm256_loadu_si256((__m256i*) & data));
-            if (record)  record->write<32>(offset);
+            if (record)  record->template write<32>(offset);
         }
 
         template<bool sign, int nbits, TASSERT(nbits <= 64)>
@@ -482,7 +485,7 @@ namespace TR {
             symbolic->m_ast[offset] = _ast;
             Z3_inc_ref(m_ctx, _ast);
             if (record)
-                record->write<(nbits >> 3)>(offset);
+                record->template write<(nbits >> 3)>(offset);
         }
         
         template<bool sign, int nbits>
@@ -594,10 +597,10 @@ namespace TR {
             if (record) {
                 auto _nbytes = nbytes;
                 while (_nbytes) {
-                    if (_nbytes >= 8) { _nbytes -= 8; record->write<8>(offset + _nbytes); }
-                    else if (_nbytes >= 4) { _nbytes -= 4; record->write<4>(offset + _nbytes); }
-                    else if (_nbytes >= 2) { _nbytes -= 2; record->write<2>(offset + _nbytes); }
-                    else { _nbytes--; record->write<1>(offset + _nbytes); }
+                    if (_nbytes >= 8) { _nbytes -= 8; record->template write<8>(offset + _nbytes); }
+                    else if (_nbytes >= 4) { _nbytes -= 4; record->template write<4>(offset + _nbytes); }
+                    else if (_nbytes >= 2) { _nbytes -= 2; record->template write<2>(offset + _nbytes); }
+                    else { _nbytes--; record->template write<1>(offset + _nbytes); }
                 }
             }
         }
@@ -614,10 +617,10 @@ namespace TR {
             if (record) {
                 auto _nbytes = nbytes;
                 while (_nbytes) {
-                    if (_nbytes >= 8) { _nbytes -= 8; record->write<8>(offset + _nbytes); }
-                    else if (_nbytes >= 4) { _nbytes -= 4; record->write<4>(offset + _nbytes); }
-                    else if (_nbytes >= 2) { _nbytes -= 2; record->write<2>(offset + _nbytes); }
-                    else { _nbytes--; record->write<1>(offset + _nbytes); }
+                    if (_nbytes >= 8) { _nbytes -= 8; record->template write<8>(offset + _nbytes); }
+                    else if (_nbytes >= 4) { _nbytes -= 4; record->template write<4>(offset + _nbytes); }
+                    else if (_nbytes >= 2) { _nbytes -= 2; record->template write<2>(offset + _nbytes); }
+                    else { _nbytes--; record->template write<1>(offset + _nbytes); }
                 }
             }
         }
@@ -640,7 +643,8 @@ namespace TR {
             }
             return tval(m_ctx, GET32(m_bytes + offset), nbytes << 3);
         has_sym:
-            return tval(m_ctx, Reg2AstSSE(nbytes, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx), Z3_BV_SORT, nbytes << 3, no_inc{});
+            auto past = m_ast + offset;
+            return tval(m_ctx, TR::freg2AstSSE(nbytes, m_bytes + offset, m_fastindex + offset, past, m_ctx), Z3_BV_SORT, nbytes << 3, no_inc{});
         }
 
         //is slowly 变长取值
@@ -656,7 +660,8 @@ namespace TR {
             }
             return tval(ctx, GET32(m_bytes + offset), nbytes << 3);
         has_sym:
-            return tval(ctx, Reg2AstSSE(nbytes, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx, ctx), Z3_BV_SORT, nbytes << 3, no_inc{});
+            auto past = m_ast + offset;
+            return tval(ctx, TR::freg2AstSSE_cov(nbytes, m_bytes + offset, m_fastindex + offset, past, m_ctx, ctx), Z3_BV_SORT, nbytes << 3, no_inc{});
         }
 
 
@@ -698,12 +703,11 @@ namespace TR {
                 org_offset += (sort_size - fastL);
                 length -= (sort_size - fastL);
             }
-            UInt index;
+            Int index;
             if (LEN <= 8) {
                 ULong fast_index = GET8(m_fastindex + org_offset);
                 while (length > 0) {
-					index = __builtin_clzll(fast_index & fastMaskB(length));
-                    if (index != 64) {
+                    if (clzll(index, fast_index & fastMaskB(length))) {
 						index = 63 - index;
                         index >>= 3;
                         auto fast = m_fastindex[org_offset + index] - 1;
@@ -721,8 +725,8 @@ namespace TR {
                 if (_pcur < org_offset)
                     return;
                 for (; ; ) {
-					index = __builtin_clzll(((ULong*)(m_fastindex))[_pcur >> 3] & fastMaskBI1(_pcur % 8));
-                    if (index != 64) {
+					
+                    if (clzll(index, ((ULong*)(m_fastindex))[_pcur >> 3] & fastMaskBI1(_pcur % 8))) {
 						index = 63 - index;
                         _pcur = ALIGN(_pcur, 8) + (index >> 3);
                         _pcur = _pcur - m_fastindex[_pcur] + 1;

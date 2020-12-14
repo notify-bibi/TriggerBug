@@ -1,4 +1,4 @@
-
+#define MKG_PPC
 /*--------------------------------------------------------------------*/
 /*--- begin                                       guest_ppc_toIR.c ---*/
 /*--------------------------------------------------------------------*/
@@ -206,7 +206,6 @@
    http://www-3.ibm.com/chips/techlib/techlib.nsf/techdocs/FBFA164F824370F987256D6A006F424D
 */
 
-extern "C" {
 #include "libvex_basictypes.h"
 #include "libvex_ir.h"
 #include "libvex.h"
@@ -218,8 +217,15 @@ extern "C" {
 #include "main_globals.h"
 #include "guest_generic_bb_to_IR.h"
 #include "guest_ppc_defs.h"
-}
 
+
+#define  host_endness (*ppc_host_endness_var_call())
+#define  guest_code (*ppc_guest_code_var_call())
+#define  guest_CIA_bbstart (*ppc_guest_CIA_bbstart_var_call())
+#define  guest_CIA_curr_instr (*ppc_guest_CIA_curr_instr_var_call())
+#define  irsb (*ppc_irsb_var_call())
+#define  mode64 (*ppc_mode64_var_call())
+#define  OV32_CA32_supported (*ppc_OV32_CA32_supported_var_call())
 /*------------------------------------------------------------*/
 /*--- Globals                                              ---*/
 /*------------------------------------------------------------*/
@@ -230,24 +236,24 @@ extern "C" {
    given insn. */
 
 /* We need to know this to do sub-register accesses correctly. */
-thread_local static VexEndness host_endness;
+//static VexEndness host_endness;
 
 /* Pointer to the guest code area. */
-thread_local static const UChar* guest_code;
+//static const UChar* guest_code;
 
 /* The guest address corresponding to guest_code[0]. */
-thread_local static Addr64 guest_CIA_bbstart;
+//static Addr64 guest_CIA_bbstart;
 
 /* The guest address for the instruction currently being
    translated. */
-thread_local static Addr64 guest_CIA_curr_instr;
+//static Addr64 guest_CIA_curr_instr;
 
 /* The IRSB* into which we're generating code. */
-thread_local static IRSB* irsb;
+//static IRSB* irsb;
 
 /* Is our guest binary 32 or 64bit?  Set at each call to
    disInstr_PPC below. */
-thread_local static Bool mode64 = False;
+//static Bool mode64 = False;
 
 // Given a pointer to a function as obtained by "& functionname" in C,
 // produce a pointer to the actual entry point for the function.  For
@@ -269,7 +275,7 @@ static void* fnptr_to_fnentry( const VexAbiInfo* vbi, void* f )
 }
 
 /* The OV32 and CA32 bits were added with ISA3.0 */
-thread_local static Bool OV32_CA32_supported = False;
+//static Bool OV32_CA32_supported = False;
 
 #define SIGN_BIT  0x8000000000000000ULL
 #define SIGN_MASK 0x7fffffffffffffffULL

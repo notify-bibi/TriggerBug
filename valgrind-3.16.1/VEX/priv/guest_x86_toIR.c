@@ -1,4 +1,4 @@
-
+#define MKG_X86
 /*--------------------------------------------------------------------*/
 /*--- begin                                       guest_x86_toIR.c ---*/
 /*--------------------------------------------------------------------*/
@@ -171,7 +171,6 @@
 */
 
 
-extern "C" {
 #include "libvex_basictypes.h"
 #include "libvex_ir.h"
 #include "libvex.h"
@@ -182,7 +181,6 @@ extern "C" {
 #include "guest_generic_bb_to_IR.h"
 #include "guest_generic_x87.h"
 #include "guest_x86_defs.h"
-}
 
 
 /*------------------------------------------------------------*/
@@ -195,21 +193,29 @@ extern "C" {
    given insn. */
 
 /* We need to know this to do sub-register accesses correctly. */
-thread_local static VexEndness host_endness;
+//static VexEndness host_endness;
 
 /* Pointer to the guest code area (points to start of BB, not to the
    insn being processed). */
-thread_local static const UChar* guest_code;
+//static const UChar* guest_code;
 
 /* The guest address corresponding to guest_code[0]. */
-thread_local static Addr32 guest_EIP_bbstart;
+//static Addr32 guest_EIP_bbstart;
 
 /* The guest address for the instruction currently being
    translated. */
-thread_local static Addr32 guest_EIP_curr_instr;
+//static Addr32 guest_EIP_curr_instr;
 
 /* The IRSB* into which we're generating code. */
-thread_local static IRSB* irsb;
+//static IRSB* irsb;
+
+
+#define  host_endness (*x86_host_endness_var_call())
+#define  guest_code (*x86_guest_code_var_call())
+#define  guest_EIP_bbstart (*x86_guest_EIP_bbstart_var_call())
+#define  guest_EIP_curr_instr (*x86_guest_EIP_curr_instr_var_call())
+#define  irsb (*x86_irsb_var_call())
+
 
 
 /*------------------------------------------------------------*/

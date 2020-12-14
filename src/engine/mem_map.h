@@ -78,7 +78,7 @@ namespace TR {
         
         void recycle();
 
-        ~mapping() { vassert(!CR3[0]); }
+        ~mapping() noexcept(false) { vassert(!CR3[0]); }
 
         //虚拟映射一个虚拟地址
         inline ST** get_pointer_of_mem_page(Addr64 address) {

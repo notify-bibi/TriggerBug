@@ -148,7 +148,7 @@ namespace cmpr {
 
     template<class STATEinterface /*= StateCmprsInterface<Addr64>*/>
     class CmprsFork :public STATEinterface {
-        template<class STATEinterface, class CompressClass, typename StateStatus> friend class Compress;
+        template<class _STATEinterface, class CompressClass, typename StateStatus> friend class Compress;
         StateType m_compr_ty;
         std::vector<STATEinterface*> m_child_nodes;
         bool m_has_survive = false;
@@ -162,7 +162,7 @@ namespace cmpr {
             vassert(!this->branch().empty());
             m_child_nodes.reserve(this->branch().size());
             for (auto bstate : this->branch()) {
-                STATEinterface* ns = mk(bstate, tag(bstate));
+                STATEinterface* ns = mk(bstate, this->tag(bstate));
                 m_child_nodes.emplace_back(ns);
                 if (ns->type() == Survive_Node) {
                     m_has_survive = true;

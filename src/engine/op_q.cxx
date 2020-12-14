@@ -20,6 +20,8 @@ tval Kernel::tQop(IROp op, tval const& a, tval const& b, tval const& c, tval con
         case Iop_MSubF64r32:
         case Iop_MAddF32:
         case Iop_MSubF32:
+        default:
+            break;
         }
     }
     else {
@@ -31,7 +33,8 @@ tval Kernel::tQop(IROp op, tval const& a, tval const& b, tval const& c, tval con
         case Iop_MSubF64r32:
         case Iop_MAddF32:
         case Iop_MSubF32:
-
+        default:
+            break;
         }
     }
 FAILD:

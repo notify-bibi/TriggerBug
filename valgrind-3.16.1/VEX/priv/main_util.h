@@ -48,7 +48,7 @@
 
 #define NULL ((void*)0)
 
-#if defined(_MSC_VER) // building with MSVC
+#if 0 // building with MSVC
 # define LIKELY(x)          (x)
 # define UNLIKELY(x)        (x)
 # define CAST_TO_TYPEOF(x)  /**/
@@ -125,9 +125,9 @@ extern void vexSetAllocModeTEMP_and_clear ( void );
    LibVEX_Translate.  The storage allocated will only stay alive until
    translation of the current basic block is complete.
  */
-extern HChar* private_LibVEX_alloc_first;
-extern HChar* private_LibVEX_alloc_curr;
-extern HChar* private_LibVEX_alloc_last;
+//extern HChar* private_LibVEX_alloc_first;
+//extern HChar* private_LibVEX_alloc_curr;
+//extern HChar* private_LibVEX_alloc_last;
 extern void   private_LibVEX_alloc_OOM(void) __attribute__((noreturn));
 
 /* Allocated memory as returned by LibVEX_Alloc will be aligned on this
@@ -138,49 +138,7 @@ extern void   private_LibVEX_alloc_OOM(void) __attribute__((noreturn));
 #define VEX_REDZONE_SIZEB (2*REQ_ALIGN)
 #endif
 
-static inline void* LibVEX_Alloc_inline ( SizeT nbytes )
-{
-   struct align {
-      char c;
-      union {
-         char c;
-         short s;
-         int i;
-         long l;
-         long long ll;
-         float f;
-         double d;
-         /* long double is currently not used and would increase alignment
-            unnecessarily. */
-         /* long double ld; */
-         void *pto;
-         void (*ptf)(void);
-      } x;
-   };
-
-   /* Make sure the compiler does no surprise us */
-   vassert(offsetof(struct align,x) <= REQ_ALIGN);
-
-#if 0
-  /* Nasty debugging hack, do not use. */
-  return malloc(nbytes);
-#else
-   HChar* curr;
-   HChar* next;
-   SizeT  ALIGN;
-   ALIGN  = offsetof(struct align,x) - 1;
-   curr   = private_LibVEX_alloc_curr;
-   next   = curr + ((nbytes + ALIGN) & ~ALIGN);
-   INNER_REQUEST(next += 2 * VEX_REDZONE_SIZEB);
-   if (next >= private_LibVEX_alloc_last)
-      private_LibVEX_alloc_OOM();
-   private_LibVEX_alloc_curr = next;
-   INNER_REQUEST(curr += VEX_REDZONE_SIZEB);
-   INNER_REQUEST(VALGRIND_MEMPOOL_ALLOC(private_LibVEX_alloc_first,
-                                        curr, nbytes));
-   return curr;
-#endif
-}
+extern void* LibVEX_Alloc_inline ( SizeT nbytes );
 
 /* Misaligned memory access support. */
 

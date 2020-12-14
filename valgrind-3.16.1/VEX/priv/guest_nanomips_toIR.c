@@ -1,4 +1,4 @@
-
+#define MKG_NANOMIPS
 /*--------------------------------------------------------------------*/
 /*--- begin                                  guest_nanomips_toIR.c ---*/
 /*--------------------------------------------------------------------*/
@@ -40,6 +40,12 @@
 #include "guest_generic_bb_to_IR.h"
 #include "guest_nanomips_defs.h"
 
+
+#define  irsb (*nanomips_irsb_var_call())
+#define  guest_PC_curr_instr (*nanomips_guest_PC_curr_instr_var_call())
+
+
+
 #define P16 0x4
 
 #define DIP(format, args...)           \
@@ -55,11 +61,11 @@
 #define LLADDR_INVALID (mkU32(0xFFFFFFFF))
 
 /* MOD: The IRSB* into which we're generating code. */
-static IRSB *irsb;
+//static IRSB *irsb;
 
 /* CONST: The guest address for the instruction currently being
    translated. */
-static Addr32 guest_PC_curr_instr;
+//static Addr32 guest_PC_curr_instr;
 
 /* Do a endian load of a 16-bit word, regardless of the endianness of the
    underlying host. */

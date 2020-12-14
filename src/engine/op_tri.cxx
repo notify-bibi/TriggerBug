@@ -29,7 +29,7 @@ tval Kernel::tTriop(IROp op, tval const&a, tval const&b, tval const&c) {
             sv::sort rm = sv::fpRM(a, atorm);
             return ((sfpval<32>&)b).mul(rm, ((sfpval<32>&)c));
         }
-        default:
+        default: break;
         }
     }
     else {
@@ -50,7 +50,7 @@ tval Kernel::tTriop(IROp op, tval const&a, tval const&b, tval const&c) {
             if ((Int)(ato(int)) == 0) return (bto(float) * cto(float));
             return ((sfpval<32>&)b).mul(sv::fpRM(a, atorm), ((sfpval<32>&)c)).simplify();
         }
-        default:
+        default: break;
         }
     }
 FAILD:

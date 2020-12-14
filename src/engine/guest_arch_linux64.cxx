@@ -1,10 +1,10 @@
+#include "engine/tr_main.h"
 #include "guest_arch_linux64.h"
 
 namespace TR {
 
     void TR::linux64::avoid_anti_debugging()
     {
-        int hg;
         return;
     }
 
@@ -28,7 +28,7 @@ namespace TR {
             }
 
             case 0x3: {//LINUX - sys_close
-                vex_printf("system call: sys_close description:0x%x\n", rdi);
+                vex_printf("system call: sys_close description:0x%x\n", (ULong)rdi.tor());
                 regs.set(AMD64_IR_OFFSET::RAX, 1);
                 break;
             }

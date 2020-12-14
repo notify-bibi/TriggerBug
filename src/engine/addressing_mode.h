@@ -7,7 +7,7 @@
 extern "C"{
 #include "libvex_basictypes.h"
 }
-#define BIT_BLAST_MAX_BIT 14
+constexpr auto BIT_BLAST_MAX_BIT = 14;
 
 namespace TR {
     template<typename ADDR>
