@@ -10,6 +10,8 @@ Author:
 Revision History:
 --*/
 #include "state_class.h"
+#include "gen_global_var_call.hpp"
+
 #ifdef _MSC_VER
 #include <Windows.h>
 #endif
@@ -222,7 +224,7 @@ template <typename THword> State<THword>::State(vex_context<THword>& vctx, THwor
     m_vctx(vctx),
     solv(m_ctx),
     mem(vctx, *this, solv, m_ctx, need_record),
-    ir_temp(vctx, mem, vctx.gguest()),
+    irvex(vctx, mem, vctx.gguest()),
     regs(m_ctx, need_record), 
     need_record(_need_record),
     m_status(NewState),
@@ -271,7 +273,7 @@ template <typename THword> State<THword>::State(State<THword>* father_state, THw
     Kernel(*father_state),
     m_vctx(father_state->m_vctx),
     mem(*this, solv, m_ctx, father_state->mem, father_state->need_record),
-    ir_temp(m_vctx, mem, m_vctx.gguest()),
+    irvex(m_vctx, mem, m_vctx.gguest()),
     guest_start_ep(gse),
     guest_start(guest_start_ep), 
     solv(m_ctx, father_state->solv,  z3::solver::translate{}),
@@ -426,12 +428,28 @@ tval TR::State<THword>::dirty_call(IRCallee* cee, IRExpr** exp_args, IRType ty)
 template<typename THword>
 tval TR::State<THword>::dirty_call(const HChar* name, void* func, std::initializer_list<rsval<Addr64>> parms, IRType ty)
 {
+
+    ctx64 v(VexArchAMD64, "");
+    TR::EmuEnvironment emu_ev(v, mem, VexArchAMD64);
+    IRSB* bb = emu_ev.translate_front(mem, (Addr)func);
+
     //getDirtyVexCtx();
     //dirty_call_np<THword>(m_dctx, name, func, parms);
     //return dirty_result<THword>(m_dctx, ty);
 }
 
 
+
+TR::TRsolver::TRsolver(z3::context& c)
+    :
+#if 1
+    z3::solver(mk_tactic_solver_default(c))
+#else
+    z3::solver(c)
+#endif
+{
+    m_asserts.reserve(2);
+};
 
 void TR::TRsolver::add(sbool const& e)
 {
@@ -699,7 +717,7 @@ tval State<THword>::tIRExpr(IRExpr* e)
 {
     switch (e->tag) {
     case Iex_Get: { return regs.Iex_Get(e->Iex.Get.offset, e->Iex.Get.ty); }
-    case Iex_RdTmp: { return ir_temp[e->Iex.RdTmp.tmp]; }
+    case Iex_RdTmp: { return irvex[e->Iex.RdTmp.tmp]; }
     case Iex_Unop: { return tUnop(e->Iex.Unop.op, tIRExpr(e->Iex.Unop.arg)); }
     case Iex_Binop: { return tBinop(e->Iex.Binop.op, tIRExpr(e->Iex.Binop.arg1), tIRExpr(e->Iex.Binop.arg2)); }
     case Iex_Triop: { return tTriop(e->Iex.Triop.details->op, tIRExpr(e->Iex.Triop.details->arg1), tIRExpr(e->Iex.Triop.details->arg2), tIRExpr(e->Iex.Triop.details->arg3)); }
@@ -762,14 +780,12 @@ rsval<THword> TR::State<THword>::vex_stack_get(int n)
 template <typename THword>
 bool State<THword>::vex_start() {
     Hook_struct hs;
-    //mem.set(&emu);
-
 
     IRSB* irsb = nullptr;
     rsbool fork_guard(m_ctx, false);
     bool call_stack_is_empty = false;
 
-    if (jump_kd() != Ijk_Boring) {
+    if UNLIKELY(jump_kd() != Ijk_Boring) {
         m_status = Ijk_call(jump_kd());
         set_jump_kd(Ijk_Boring);
         if (m_status != Running) {
@@ -777,39 +793,29 @@ bool State<THword>::vex_start() {
         }
     }
 
-    if (m_delta) {
+    if UNLIKELY(m_delta) {
         guest_start = guest_start + m_delta;
         m_delta = 0;
     }
 
-    if (m_vctx.get_hook(hs, guest_start)) {
-        goto bkp_pass;
-    }
 
     for (;;) {
     For_Begin:
-        IRSB* irsb = ir_temp.translate_front(mem, guest_start);;
-        traceIRSB(irsb);
-        goto For_Begin_NO_Trans;
-    deal_bkp:
-        {
+
+        if UNLIKELY(m_vctx.get_hook(hs, guest_start)) {
+        deal_bkp:
             m_status = _call_back_hook(hs);
-            if (m_status != Running) {
+            if UNLIKELY(m_status != Running) {
                 goto EXIT;
             }
-            if (m_delta) {
+            if UNLIKELY(m_delta) {
                 guest_start = guest_start + m_delta;
                 m_delta = 0;
                 goto For_Begin;
             }
-            else {
-            bkp_pass:
-                ir_temp.set_guest_code_temp(mem, guest_start, hs);
-                irsb = ir_temp.translate_front(mem, guest_start);
-                vassert(0);
-            }
         }
-    For_Begin_NO_Trans:
+        irsb = irvex.translate_front(mem, guest_start);;
+        traceIRSB(irsb);
         IRStmt* s = irsb->stmts[0];
         for (UInt stmtn = 0; stmtn < irsb->stmts_used;
             traceIRStmtEnd(s),
@@ -818,7 +824,7 @@ bool State<THword>::vex_start() {
             switch (s->tag) {
             case Ist_Put: { regs.Ist_Put(s->Ist.Put.offset, tIRExpr(s->Ist.Put.data)); break; }
             case Ist_Store: { mem.Ist_Store(tIRExpr(s->Ist.Store.addr), tIRExpr(s->Ist.Store.data)); break; };
-            case Ist_WrTmp: { ir_temp[s->Ist.WrTmp.tmp] = tIRExpr(s->Ist.WrTmp.data); break; };
+            case Ist_WrTmp: { irvex[s->Ist.WrTmp.tmp] = tIRExpr(s->Ist.WrTmp.data); break; };
             case Ist_CAS /*比较和交换*/: {//xchg    rax, [r10]
                 std::unique_lock<std::mutex> lock(m_state_lock);
                 IRCAS cas = *(s->Ist.CAS.details);
@@ -828,21 +834,21 @@ bool State<THword>::vex_start() {
                 if ((cas.oldHi != IRTemp_INVALID) && (cas.expdHi)) {//double
                     tval expdHi = tIRExpr(cas.expdHi);
                     tval dataHi = tIRExpr(cas.dataHi);
-                    ir_temp[cas.oldHi] = mem.Iex_Load(addr, expdLo.nbits());
-                    ir_temp[cas.oldLo] = mem.Iex_Load(addr, expdLo.nbits());
+                    irvex[cas.oldHi] = mem.Iex_Load(addr, expdLo.nbits());
+                    irvex[cas.oldLo] = mem.Iex_Load(addr, expdLo.nbits());
                     mem.Ist_Store(addr, dataLo);
                     mem.Ist_Store(tval(addr.tors<false, wide>() + (dataLo.nbits() >> 3)), dataHi);
                 }
                 else {//single
-                    ir_temp[cas.oldLo] = mem.Iex_Load(addr, expdLo.nbits());
+                    irvex[cas.oldLo] = mem.Iex_Load(addr, expdLo.nbits());
                     mem.Ist_Store(addr, dataLo);
                 }
                 break;
             }
             case Ist_Exit: {
                 rsbool guard = tIRExpr(s->Ist.Exit.guard).tobool();
-                if (guard.real()) {
-                    if (guard.tor()) {
+                if LIKELY(guard.real()) {
+                    if LIKELY(guard.tor()) {
                     Exit_guard_true:
                         if (s->Ist.Exit.jk != Ijk_Boring)
                         {
@@ -890,12 +896,12 @@ bool State<THword>::vex_start() {
             }
             case Ist_NoOp: break;
             case Ist_IMark: {
-                if (m_status == Fork) {
+                if UNLIKELY(m_status == Fork) {
                     m_tmp_branch.push_back(BTS(*this, (THword)s->Ist.IMark.addr, !fork_guard));
                     goto EXIT;
                 }
                 guest_start = (THword)s->Ist.IMark.addr;
-                if (ir_temp.check()) {
+                if UNLIKELY(irvex.check()) {
                     goto For_Begin;// fresh changed block
                 }
                 break;
@@ -930,10 +936,10 @@ bool State<THword>::vex_start() {
                 traceIRStmtEnd(s);
                 IRDirty* dirty = s->Ist.Dirty.details;
                 rsbool guard = tIRExpr(dirty->guard).tobool();
-                if (guard.symb()) {
+                if UNLIKELY(guard.symb()) {
                     VPANIC("auto guard = m_state.tIRExpr(dirty->guard); symbolic");
                 }
-                if (guard.tor()) {
+                if LIKELY(guard.tor()) {
                     //getDirtyVexCtx();
                     //dirty_run<THword>(m_dctx, dirty);
                     if (dirty->tmp != IRTemp_INVALID) {
@@ -945,18 +951,18 @@ bool State<THword>::vex_start() {
             case Ist_LoadG: {
                 IRLoadG* lg = s->Ist.LoadG.details;
                 auto guard = tIRExpr(lg->guard).tobool();
-                if (guard.real()) {
-                    ir_temp[lg->dst] = (guard.tor()) ? ILGop(lg) : tIRExpr(lg->alt);
+                if LIKELY(guard.real()) {
+                    irvex[lg->dst] = (guard.tor()) ? ILGop(lg) : tIRExpr(lg->alt);
                 }
                 else {
-                    ir_temp[lg->dst] = ite(guard.tos(), ILGop(lg), tIRExpr(lg->alt));
+                    irvex[lg->dst] = ite(guard.tos(), ILGop(lg), tIRExpr(lg->alt));
                 }
                 break;
             }
             case Ist_StoreG: {
                 IRStoreG* sg = s->Ist.StoreG.details;
                 auto guard = tIRExpr(sg->guard).tobool();
-                if (guard.real()) {
+                if LIKELY(guard.real()) {
                     if (guard.tor())
                         mem.Ist_Store(tIRExpr(sg->addr), tIRExpr(sg->data));
                 }
@@ -984,7 +990,7 @@ bool State<THword>::vex_start() {
         traceIrsbEnd(irsb);
         switch (irsb->jumpkind) {
         case Ijk_Ret: {
-            if (call_stack_is_empty || m_InvokStack.empty()) {
+            if UNLIKELY(call_stack_is_empty || m_InvokStack.empty()) {
                 if (!call_stack_is_empty) {
                     call_stack_is_empty = true;
                     std::cout << "call stack end :: " << std::hex << guest_start << std::endl;
@@ -1005,15 +1011,15 @@ bool State<THword>::vex_start() {
         }
         case Ijk_SigTRAP: {
             //software backpoint
-            if (m_vctx.get_hook(hs, guest_start)) { goto deal_bkp; }
+            // if (m_vctx.get_hook(hs, guest_start)) { goto deal_bkp; }
             m_status = Exception;
         }
         default: {
             m_status = Ijk_call(irsb->jumpkind);
-            if (m_status != Running) {
+            if UNLIKELY(m_status != Running) {
                 goto EXIT;
             }
-            if (m_delta) {
+            if UNLIKELY(m_delta) {
                 guest_start = guest_start + m_delta;
                 m_delta = 0;
                 goto For_Begin;
@@ -1022,8 +1028,8 @@ bool State<THword>::vex_start() {
         };
     Isb_next:
         sv::rsval<false, wide> next = tIRExpr(irsb->next).template tors<false, wide>();
-        if (m_status == Fork) {
-            if (next.real()) {
+        if UNLIKELY(m_status == Fork) {
+            if LIKELY(next.real()) {
                 m_tmp_branch.push_back(BTS(*this, (THword)next.tor(), !fork_guard));
             }
             else {
@@ -1045,7 +1051,7 @@ bool State<THword>::vex_start() {
             goto EXIT;
         }
 
-        if (next.real()) {
+        if LIKELY(next.real()) {
             guest_start = next.tor();
         }
         else {
@@ -1071,6 +1077,7 @@ bool State<THword>::vex_start() {
 
 EXIT:
     mem.set(nullptr);
+    return true;
 }
 
 template <typename THword>
@@ -1082,13 +1089,13 @@ void State<THword>::start() {
     traceStart();
 Begin_try:
     try {
-        ir_temp.malloc_ir_buff(ctx());
+        irvex.malloc_ir_buff(ctx());
         vex_start();
-        ir_temp.free_ir_buff();
+        irvex.free_ir_buff();
     }
     catch (Expt::ExceptionBase & error) {
         mem.set(nullptr);
-        ir_temp.free_ir_buff();
+        irvex.free_ir_buff();
         switch (error.errTag()) {
         case Expt::GuestRuntime_exception:
         case Expt::GuestMem_read_err:

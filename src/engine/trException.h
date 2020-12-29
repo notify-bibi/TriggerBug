@@ -1,4 +1,7 @@
-#pragma once
+#ifndef TR_EXCEPTION_H
+#define TR_EXCEPTION_H
+
+
 #include "engine/engine.h"
 
 unsigned int TRCurrentThreadId();
@@ -38,17 +41,7 @@ namespace Expt {
         ExceptionTag m_errorId;
         /*！！！！在这里下个断！！！！*/
         /*！！！！add a backpoint here！！！！*/
-        ExceptionBase(ExceptionTag t) :m_errorId(t) {
-            //错误过滤器 error filter
-            ExceptionTag dbg;
-            switch (t) {
-            case GuestMem_read_err:dbg = t; break;
-            case GuestMem_write_err:dbg = t; break;
-            case GuestRuntime_exception:dbg = t; break;
-            case IR_failure_exit:dbg = t; break;
-            case Solver_no_solution:dbg = t; break;
-            }
-        }
+        ExceptionBase(ExceptionTag t);
     public:
         ExceptionTag errTag() const { return m_errorId; };
         virtual std::string msg() const { printf("GG"); exit(1); };
@@ -61,46 +54,28 @@ namespace Expt {
         friend class GuestMemWriteErr;
         Addr64 m_gaddr;
         std::string m_msg;
-        GuestMem(char const* msg, Addr64 gaddr, ExceptionTag err) :ExceptionBase(err),
-            m_gaddr(gaddr), m_msg(msg){
-        }
+        GuestMem(char const* msg, Addr64 gaddr, ExceptionTag err);
         virtual Addr64 addr() const override { return m_gaddr; }
     };
 
     class GuestMemReadErr :public GuestMem {
     public:
         GuestMemReadErr(char const* msg, Addr64 gaddr) :GuestMem(msg, gaddr, GuestMem_read_err) {}
-        std::string msg() const override {
-            assert(m_errorId == GuestMem_read_err);
-            char buffer[50];
-            snprintf(buffer, 50, "Gest : mem read addr(%llu) :::  ", m_gaddr);
-            std::string ret;
-            return ret.assign(buffer) + m_msg;
-        }
+        std::string msg() const override;
     };
 
     class GuestMemWriteErr :public GuestMem {
     public:
         GuestMemWriteErr(char const* msg, Addr64 gaddr) :GuestMem(msg, gaddr, GuestMem_write_err) {}
-        std::string msg() const override {
-            assert(m_errorId == GuestMem_write_err);
-            char buffer[50];
-            snprintf(buffer, 50, "Gest : mem write addr(%llu) :::  ", m_gaddr);
-            std::string ret;
-            return ret.assign(buffer) + m_msg;
-        }
+        std::string msg() const override;
     };
 
     class SolverNoSolution :public ExceptionBase {
         z3::solver& m_solver;
         const char* m_msg;
     public:
-        SolverNoSolution(char const* msg, z3::solver& solver) :ExceptionBase(Solver_no_solution), m_solver(solver), m_msg(msg) {}
-        std::string msg() const override {
-            assert(m_errorId == Solver_no_solution);
-            return std::string("Solver no solution ::: ") + m_msg + "\nsolver's assertions:\n" +
-                Z3_solver_to_string(m_solver.ctx(), m_solver);
-        }
+        SolverNoSolution(char const* msg, z3::solver& solver);
+        std::string msg() const override;
         operator z3::solver& () { return m_solver; };
     };
 
@@ -113,50 +88,16 @@ namespace Expt {
         const HChar* m_expr;
         const HChar* m_fn;
     public:
-        IRfailureExit(char* msg) :ExceptionBase(IR_failure_exit),
-            m_thread_id(TRCurrentThreadId()),
-            m_error_message(msg),
-            m_file(nullptr),
-            m_line(0),
-            m_expr(nullptr),
-            m_fn(nullptr)
-        {
-        }
+        IRfailureExit(char* msg);
         IRfailureExit(
             const HChar* expr, const HChar* file, Int line, const HChar* fn
-        ) :ExceptionBase(IR_failure_exit),
-            m_thread_id(TRCurrentThreadId()), m_file(file), m_line(line), m_expr(expr), m_fn(fn)
-        {
-        }
+        );
 
         IRfailureExit(
             const HChar* file, Int line, const HChar* expr
-        ) :ExceptionBase(IR_failure_exit),
-            m_thread_id(TRCurrentThreadId()), m_file(file), m_line(line), m_expr(expr), m_fn(nullptr)
-        {
-        }
+        );
 
-        std::string msg() const override {
-            assert(m_errorId == IR_failure_exit);
-            if (m_expr && m_file) {
-                char buffer[50];
-                char tline[10];
-                snprintf(buffer, 50, "IRfailureExit ::: Thread id: %d\n", m_thread_id);
-                snprintf(tline, 10, "%d", m_line);
-                std::string ret;
-                ret = ret.assign(buffer) +
-                    "file: " + m_file + "\n"
-                    "line: " + tline + "\n"
-                    "expr: " + m_expr;
-                if (m_fn) { return ret + "\n""func: " + m_fn; }
-                return ret;
-            }
-            else {
-                char buffer[50];
-                snprintf(buffer, 50, "IRfailureExit ::: Thread id: %d\n", m_thread_id);
-                return buffer + m_error_message;
-            }
-        }
+        std::string msg() const override;
     };
 
 
@@ -164,14 +105,8 @@ namespace Expt {
         Addr64 m_sig_addr;
         IRJumpKind m_jk;
     public:
-        RuntimeIrSig(Addr64 a, IRJumpKind k) :ExceptionBase(GuestRuntime_exception), m_sig_addr(a), m_jk(k) {}
-        std::string msg() const override {
-            assert(m_errorId == GuestRuntime_exception);
-            char buffer[50];
-            snprintf(buffer, 50, "Guest : Sig(%s) at (%llu) :::  ", constStrIRJumpKind(m_jk), m_sig_addr);
-            std::string ret;
-            return ret.assign(buffer);
-        }
+        RuntimeIrSig(Addr64 a, IRJumpKind k);
+        std::string msg() const override;
         virtual IRJumpKind jkd() const override { return m_jk; }
     };
 };
@@ -203,3 +138,7 @@ inline std::ostream& operator << (std::ostream& out, const Expt::ExceptionBase& 
 #else
 #define vassert(...) 
 #endif
+
+
+
+#endif // TR_EXCEPTION_H

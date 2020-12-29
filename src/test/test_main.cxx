@@ -9,74 +9,77 @@ using namespace TR;
 
 //using Vns = sv::tval;
 
+#define cbool_assert(expr) if UNLIKELY(!(expr)) return false;
 
-
-void test1() {
+bool test_basic_var_real() {
     z3::context c;
     
     
     cbool bo1(c, false);
     cbool bo2(c, true);
     
-    std::cout << (bo1 ^ bo2) << std::endl;
-    std::cout << (bo1 ||  bo2) << std::endl;
-    std::cout << (bo1 && bo2) << std::endl;
+    cbool_assert(bo1 ^ bo2);
+    cbool_assert(bo1 || bo2);
+    cbool_assert(!(bo1 && bo2));
 
     rcval<uint16_t>  uint16(c, 0xffff);
     rcval<int16_t>  int16(c, 0xffff);
     rcval<int32_t>  int32(c, -1);
-    rcval<uint32_t>  uint32(c, -1ull);
+    rcval<uint32_t>  uint32(c, -1);
+
+    cbool_assert(uint16 == 0xffff);
+    cbool_assert(int16 == -1);
+    cbool_assert(int32 == -1);
+    cbool_assert(uint32 == 0xffffffff);
+
+
     sv::ctype_val< true, 48, Z3_BV_SORT> int48(c, 1ll << 47);
     sv::ctype_val< false, 48, Z3_BV_SORT> uint48(c, 1ll << 47);
-
+    cbool_assert(int48 == -(1ll << 47));
+    cbool_assert(uint48 == (1ll << 47));
     rcval<__m128i>  m128(c, _mm_set1_epi8(9));
 
-
+    //cbool_assert((m128.extract<127, 120>()) == 9);
     sv::ctype_val<false, 128, Z3_BV_SORT>  m128a(c, 9);
     sv::ctype_val<false, 256, Z3_BV_SORT>  m128b(c, 9);
-    sv::ctype_val<true, 256, Z3_BV_SORT>  m128d(c, -999);
+    sv::ctype_val<true, 256, Z3_BV_SORT>  m256d(c, -999);
     sv::ctype_val<false, 78, Z3_BV_SORT>  m128c(c, -9);
+
+    int kk1 = m128c;
+    int kk2 = m256d;
+    cbool_assert(kk1 == -9);
+    cbool_assert(kk2 == -999);
 
     sv::ctype_val<true, 63, Z3_BV_SORT>  sm78(c, -1);
     sv::ctype_val<false, 63, Z3_BV_SORT>  um78(c, -1);
 
-    std::cout << sv::ctype_val<false, 64, Z3_BV_SORT>(sm78) << std::endl;
-    std::cout << sv::ctype_val<false, 64, Z3_BV_SORT>(um78) << std::endl;
-
-
-
     rcval<__m256i>  m256(c, _mm256_set_epi64x(9, 6, 3, 1));
+
+
 
     __m128i i128 = m128;
 
 
-    std::cout << int16 << std::endl;
-    std::cout << uint32 << std::endl;
-    std::cout << uint32 << std::endl;
-    std::cout << int48 << std::endl;
-    std::cout <<(int48 >> 8) << std::endl;
-    std::cout << (uint48 >> 8) << std::endl;
-    std::cout << (int48 > 0) << std::endl;
-    std::cout << (uint48 > 0) << std::endl;
+    cbool_assert(( int48 >> 8) == (-(1ll << 47))/0b100000000);
+    cbool_assert((uint48 >> 8) == 0x008000000000);
+    cbool_assert(int48 < 0);
+    cbool_assert(uint48 > 0);
 
 
 
-    std::cout << (int16 >= 8) << std::endl;
-    std::cout << uint32 + 8989 << std::endl;
-    std::cout << uint32 - 89 << std::endl;
-
-
-    std::cout << m128 << std::endl;
-    std::cout << m256 << std::endl;
+    cbool_assert(int16 < 8);
+    cbool_assert(uint32 + 8989 == 0x000231C);
+    cbool_assert(uint32 - 89 == 0xFFFFFFA6);
 
 
 
+    return true;
 }
 
 
 
 
-void test2() {
+bool test_basic_var_sym() {
     z3::context c;
     sv::symbolic<true, 32, Z3_BV_SORT > s32t(c, -5);
     sv::symbolic<true, 16, Z3_BV_SORT > s16t(c, -5);
@@ -91,8 +94,9 @@ void test2() {
     sv::rsval<true, 128, Z3_BV_SORT > s128t(c, _mm_setr_epi32(1, 2, 3, 4));
     //sv::rsval<true, 128, Z3_FLOATING_POINT_SORT> fff128 = s128t;
 
-
-    std::cout << s128t.tos().simplify() << std::endl;
+    __m128i m = s128t.tos().simplify().tor();
+    int bb128 = _mm_movemask_epi8(_mm_cmpeq_epi64(_mm_setr_epi32(1, 2, 3, 4), m));
+    cbool_assert(0xffff == bb128);
     std::cout << hjk1 + hjk2 << std::endl;
     std::cout << hjk1 + sss1 << std::endl;
     std::cout << hjk1.tos() << sss2 << std::endl;
@@ -164,7 +168,9 @@ void test2() {
 
     std::cout << f1 << std::endl;
     std::cout << f10_62 << std::endl;
-    std::cout << f10_62.tobv().simplify() << std::endl;
+    __m128i mb72 = f10_62.tobv().simplify().tor();
+    int bbmb72 = _mm_movemask_epi8(_mm_cmpeq_epi64(_mm_setr_epi32(1, 2, 3, 0), mb72));
+    cbool_assert(0xffff == bbmb72);
     std::cout << d2 << std::endl;
 
 
@@ -234,20 +240,27 @@ void test2() {
 
     
 
-    std::cout << Kernel::tUnop(Iop_Clz32, sv::rsval<true, 32, Z3_BV_SORT> (c, 0b1111100)) << std::endl;
-    std::cout << Kernel::tUnop(Iop_Ctz32, sv::rsval<true, 32, Z3_BV_SORT>(c, 0b1111100)) << std::endl;
-    std::cout << Kernel::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100)) << std::endl;
-    std::cout << Kernel::tUnop(Iop_Ctz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100)) << std::endl;
+    auto v_Iop_Clz32 = Kernel::tUnop(Iop_Clz32, sv::rsval<true, 32, Z3_BV_SORT>(c, 0b1111100)).tors<true, 32, Z3_BV_SORT>();
+    auto v_Iop_Ctz32 = Kernel::tUnop(Iop_Ctz32, sv::rsval<true, 32, Z3_BV_SORT>(c, 0b1111100)).tors<true, 32, Z3_BV_SORT>();
+    auto v_Iop_Clz64 = Kernel::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100)).tors<true, 64, Z3_BV_SORT>();
+    auto v_Iop_Ctz64 = Kernel::tUnop(Iop_Ctz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100)).tors<true, 64, Z3_BV_SORT>();
 
-    std::cout << Kernel::tUnop(Iop_Clz32, sv::rsval<true, 32, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 32, Z3_BV_SORT>().simplify() << std::endl;
-    std::cout << Kernel::tUnop(Iop_Ctz32, sv::rsval<true, 32, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 32, Z3_BV_SORT>().simplify() << std::endl;
-    std::cout << Kernel::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 64, Z3_BV_SORT>().simplify() << std::endl;
-    std::cout << Kernel::tUnop(Iop_Ctz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 64, Z3_BV_SORT>().simplify() << std::endl;
+    auto s_Iop_Clz32 = Kernel::tUnop(Iop_Clz32, sv::rsval<true, 32, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 32, Z3_BV_SORT>().simplify();
+    auto s_Iop_Ctz32 = Kernel::tUnop(Iop_Ctz32, sv::rsval<true, 32, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 32, Z3_BV_SORT>().simplify();
+    auto s_Iop_Clz64 = Kernel::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 64, Z3_BV_SORT>().simplify();
+    auto s_Iop_Ctz64 = Kernel::tUnop(Iop_Ctz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 64, Z3_BV_SORT>().simplify();
+                      
+    auto s_Iop_Clz64_O = Kernel::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 1)).tors<true, 64, Z3_BV_SORT>();;
+    auto s_Iop_Clz64_0 = Kernel::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 1).tos()).tos<true, 64, Z3_BV_SORT>().simplify();
 
-    std::cout << Kernel::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 1)) << std::endl;
-    std::cout << Kernel::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 1).tos()).tos<true, 64, Z3_BV_SORT>().simplify() << std::endl;
 
-    
+    cbool_assert((v_Iop_Clz32 == s_Iop_Clz32).tor());
+    cbool_assert((v_Iop_Ctz32 == s_Iop_Ctz32).tor());
+    cbool_assert((v_Iop_Clz64 == s_Iop_Clz64).tor());
+    cbool_assert((v_Iop_Ctz64 == s_Iop_Ctz64).tor());
+    cbool_assert((s_Iop_Clz64_O == s_Iop_Clz64_0).tor());
+
+    return true;
     //Z3_inc_ref(sg240, sg240);
 }
 
@@ -504,12 +517,12 @@ bool test_ir_dirty_rflags() {
 
 
         solver.add((z3_amd64g_calculate_condition(rsval<uint64_t>(c, AMD64CondLE), rsval<uint64_t>(c, AMD64G_CC_OP_SUBB), dep1, dep2, ndep).tos().extract<0, 0>() == 1) != dep1.extract<7,0>() <= dep2.extract<7, 0>());
-        if (!solver.check() == z3::unsat) return false;
+        if (solver.check() != z3::unsat) return false;
         solver.pop();
 
 
         solver.add((z3_amd64g_calculate_condition(rsval<uint64_t>(c, AMD64CondLE), rsval<uint64_t>(c, AMD64G_CC_OP_SUBQ), dep1, dep2, ndep).tos().extract<0, 0>() == 1) != dep1 <= dep2);
-        if (!solver.check() == z3::unsat) return false;
+        if (solver.check() != z3::unsat) return false;
         solver.pop();
 
     };
@@ -519,12 +532,12 @@ bool test_ir_dirty_rflags() {
         subval<64> ndep(c, c.bv_const("ndep", 64));
 
         solver.add((z3_amd64g_calculate_condition(rsval<uint64_t>(c, AMD64CondBE), rsval<uint64_t>(c, AMD64G_CC_OP_SUBB), dep1, dep2, ndep).tos().extract<0, 0>() == 1) != dep1.extract<7, 0>() <= dep2.extract<7, 0>());
-        if (!solver.check() == z3::unsat) return false;
+        if (solver.check() != z3::unsat) return false;
         solver.pop();
 
 
         solver.add((z3_amd64g_calculate_condition(rsval<uint64_t>(c, AMD64CondB), rsval<uint64_t>(c, AMD64G_CC_OP_SUBQ), dep1, dep2, ndep).tos().extract<0, 0>() == 1) != dep1 < dep2);
-        if (!solver.check() == z3::unsat) return false;
+        if (solver.check() != z3::unsat) return false;
         solver.pop();
 
     };
@@ -557,26 +570,26 @@ bool test_ir_dirty_rflags() {
     std::cout << std::endl;
     return true;
 }
+bool test_mem_at(int base) {
 
-
-bool test_mem() {
     //static_assert(sizeof(VexGuestX86State) % 16 == 0, "error align"); 
 
 
     ctx32 v(VexArchX86, "");
     SP::win32 state(v, 0, True);
-    state.mem.map(0x1000, 0x3000);
+    state.mem.map(base - 0x1000,  0x2000);
+    state.mem.map(0x0000026db91e2770,  0x2000);
 
 
     subval<64> v64 = state.ctx().bv_const("v64", 64);
     ssbval<32> v32 = state.ctx().bv_const("v32", 32);
 
-    state.mem.store(0x2000 - 2, v64);
-    auto c = (state.mem.load<Ity_I64>(0x2000 - 2).tos() == v64).simplify();
-    
-    if (!c.real()) { 
+    state.mem.store(base - 2, v64);
+    auto c = (state.mem.load<Ity_I64>(base - 2).tos() == v64).simplify();
+
+    if (!c.real()) {
         std::cout << c << std::endl;
-        return false; 
+        return false;
     }
     if (!c.tor()) {
         std::cout << c << std::endl;
@@ -587,22 +600,34 @@ bool test_mem() {
     auto tv64 = v64.translate(fork.ctx());
     auto tv32 = v32.translate(fork.ctx());
 
-    c = (fork.mem.load<Ity_I64>(0x2000 - 2).tos() == tv64).simplify();
+    c = (fork.mem.load<Ity_I64>(base - 2).tos() == tv64).simplify();
     if (!c.real())
         return false;
     if (!c.tor())
         return false;
 
-    fork.mem.store(0x2000 - 2, tv32);
+    fork.mem.store(base - 2, tv32);
 
-    c = (fork.mem.load<Ity_I64>(0x2000 - 2).tos() == tv64.extract<63, 32>().concat(tv32)).simplify();
+    c = (fork.mem.load<Ity_I64>(base - 2).tos() == tv64.extract<63, 32>().concat(tv32)).simplify();
     if (!c.real())
         return false;
     if (!c.tor())
         return false;
 
 
+    for (int i = 0; i <= 20; i++) {
+
+        SP::win32 fork(&state, 0x1000);
+
+    }
     return true;
+}
+
+bool test_mem() {
+
+    bool a = test_mem_at(0x1000);
+    bool b = test_mem_at(0x1000 + 0x500);
+    return a&&b;
 }
 
 bool test_mem_GPMana() {
@@ -627,15 +652,45 @@ bool test_mem_GPMana() {
     return true;
 }
 
+bool test_code_no_linear() {
+    ctx64 v(VexArchAMD64, "");
+    SP::linux64 state(v, 0, True);
+    state.setFlag(CF_traceJmp);
+    state.setFlag(CF_ppStmts);
+
+    state.mem.map(0x1000, 0x6000);
+    /* xor rax,rax  48 31 C0
+    *  add rax, 0x7f237234   48 05 34 72 23 7F
+    * 
+    */
+    int i;
+    ULong vic = 0x8000;
+    for (i = 0; i <= 0x1000/2; i++) {
+        state.mem.store(0x1900 + i * 6, 0x7f2372340548);
+        vic += 0x7f237234;
+    }
+
+    state.mem.store(0x1900 + i * 6, 0xf4);
+
+    state.regs.set(AMD64_IR_OFFSET::RAX, 0x8000);
+    state.start(0x1900);
+
+    auto rax = state.regs.get<false, 64, Z3_BV_SORT>(AMD64_IR_OFFSET::RAX);
+
+    return (rax.tor() == vic);
+}
+
+
 
 int main() {
-    test1();
-    test2();
 
+    IR_TEST(test_basic_var_real);
+    IR_TEST(test_basic_var_sym);
 
     //testz3();
     IR_TEST(test_mem_GPMana);
     IR_TEST(test_mem);
+    IR_TEST(test_code_no_linear);
     IR_TEST(test_ir_dirty_rflags);
     IR_TEST(test_ir_dirty);
     IR_TEST(creakme);

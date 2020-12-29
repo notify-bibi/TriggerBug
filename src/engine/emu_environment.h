@@ -4,10 +4,60 @@
 
 #include "engine/engine.h"
 #include "engine/vex_context.h"
+#include <map>   
 
 namespace TR {
 
-    template<unsigned int MAX_TMP>
+    template<class T, std::size_t N>
+    class static_vector
+    {
+        // properly aligned uninitialized storage for N T's
+        typename std::aligned_storage<sizeof(T), alignof(T)>::type data[N];
+        std::size_t m_size = 0;
+
+    public:
+        // Create an object in aligned storage
+        template<typename ...Args> void emplace_back(Args&&... args)
+        {
+            if (m_size >= N) // possible error handling
+                throw std::bad_alloc{};
+
+            // construct value in memory of aligned storage
+            // using inplace operator new
+            new(&data[m_size]) T(std::forward<Args>(args)...);
+            ++m_size;
+        }
+
+        // Access an object in aligned storage
+        T& operator[](std::size_t pos)
+        {
+            // note: needs std::launder as of C++17
+            return *reinterpret_cast<T*>(&data[pos]);
+        }
+
+        // Delete objects from aligned storage
+        ~static_vector()
+        {
+            for (std::size_t pos = 0; pos < m_size; ++pos) {
+                // note: needs std::launder as of C++17
+                reinterpret_cast<T*>(&data[pos])->~T();
+            }
+        }
+    };
+
+
+    class IR_Manager {
+        friend class EmuEnvironment;
+        void** m_ir_temp_trunk;
+        std::deque<static_vector<tval, MAX_IRTEMP>> m_ir_unit;
+        UInt   m_size_ir_temp;
+        IR_Manager();
+        tval& operator[](UInt idx);
+        ~IR_Manager();
+    };
+
+
+
     __declspec(align(32))
     class EmuEnvironment {
         Addr64 m_guest_start_of_block = 0;
@@ -15,7 +65,8 @@ namespace TR {
         VexTranslateArgs    m_vta_chunk;
         VexGuestExtents     m_vge_chunk;
         vex_info&           m_info;
-        UChar*              m_ir_temp_trunk;
+        std::map<Addr, UInt> m_cache_map;/*block address -> size*/
+        IR_Manager          m_ir_temp;
     public:
         //init vex
         template<typename THword>
@@ -38,8 +89,8 @@ namespace TR {
 
         void set_guest_bytes_addr(const UChar* bytes, Addr64 virtual_addr);
 
-        template<typename THword>
-        void set_guest_code_temp(MEM<THword>& mem_obj, Addr64 virtual_addr, Hook_struct const& hs);
+        /*template<typename THword>
+        void set_guest_code_temp(MEM<THword>& mem_obj, Addr64 virtual_addr, Hook_struct const& hs);*/
 
         
 
@@ -48,21 +99,17 @@ namespace TR {
             m_vta_chunk.guest_bytes_addr = host_virtual_addr;
         }
 
-        inline tval& operator[](UInt idx) {
-            vassert(idx < MAX_TMP);
-            return *reinterpret_cast<tval*>(&m_ir_temp_trunk[idx * tval_align_size]);
-            //return reinterpret_cast<tval*>(&m_ir_temp_trunk)[idx];
-        }
+        /*inline static_vector<tval, MAX_TMP>& ir_tmp() {
+            return *m_ir_temp_trunk;
+        }*/
+
+        inline tval& operator[](UInt idx) { return  m_ir_temp[idx]; }
+
         inline VexTranslateArgs* get_ir_vex_translate_args() { return &m_vta_chunk; }
         inline VexGuestExtents* get_ir_vex_guest_extents() { return &m_vge_chunk; }
+        //emu process write method will call back
+        void block_integrity(bool is_code, Addr address, UInt insn_block_delta);
 
-        inline void block_integrity(Addr address, UInt insn_block_delta) {
-            Addr delta = (address)-m_guest_start_of_block;
-            if (delta > 0 && delta < insn_block_delta) {
-                vex_printf("\n********* code: %p has been patched!! *********\n", (address));
-                m_is_dynamic_block = true;
-            }
-        }
         inline bool check() { return m_is_dynamic_block; };
 
         ~EmuEnvironment();

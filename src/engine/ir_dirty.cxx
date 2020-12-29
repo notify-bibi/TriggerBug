@@ -115,7 +115,7 @@ class DState {
     TRsolver& m_solv;
     Register<REGISTER_LEN>  regs;
     DMem mem;
-    EmuEnvironment<MAX_IRTEMP> ir_temp;
+    EmuEnvironment ir_temp;
 
     bool    m_dirty_vex_mode = false;
     DState* m_dctx = nullptr;

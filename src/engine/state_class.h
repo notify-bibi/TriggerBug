@@ -25,7 +25,6 @@ Revision History:
 #include <deque>
 
 
-extern std::deque<void*> LibVEX_Alloc_transfer(void);
 
 namespace cmpr {
     using Context32 = CmprsContext<TR::State<Addr32>, TR::State_Tag>;
@@ -67,12 +66,7 @@ namespace TR {
         bool                    m_solver_snapshot = false;//if solver::push() m_solver_snapshot = true
         std::vector<sbool>        m_asserts;
     public:
-        TRsolver(z3::context& c) :
-            z3::solver(mk_tactic_solver_default(c))
-            /*z3::solver(c)*/
-        {
-            m_asserts.reserve(2);
-        };
+        TRsolver(z3::context& c);
         TRsolver(z3::context& c, solver const& src, translate x) : z3::solver(c, src, x) { m_asserts.reserve(2); }
         void push() { m_solver_snapshot = true; z3::solver::push(); }
         void pop() { z3::solver::pop(); m_solver_snapshot = false; }
@@ -303,7 +297,7 @@ namespace TR {
         friend class StateAnalyzer<ADDR>;
         friend class StateCmprsInterface<ADDR>;
         using vsize_t = rsval<ADDR>;
-        using VexIRTemp = EmuEnvironment<MAX_IRTEMP>;
+        using VexIRTemp = EmuEnvironment;
         using BTS = BTS<State<ADDR>>;
         static constexpr int wide = sizeof(ADDR) << 3;
 
@@ -332,7 +326,7 @@ namespace TR {
         Register<REGISTER_LEN>  regs;
         //客户机内存 （多线程设置相同user，不同state设置不同user）
         StateMEM<ADDR>          mem;
-        VexIRTemp                  ir_temp;
+        VexIRTemp                  irvex;
         BranchManager<State<ADDR>> branch;
         std::deque<BTS> m_tmp_branch;
 

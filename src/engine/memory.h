@@ -1,3 +1,4 @@
+#pragma once
 /*++
 Copyright (c) 2019 Microsoft Corporation
 Module Name:
@@ -13,8 +14,10 @@ Author:
     WXC 2019-10-28
 Revision History:
 --*/
-#ifndef MEMORY_DEFS_H
-#define MEMORY_DEFS_H
+
+
+//#ifndef MEMORY_DEFS_H
+//#define MEMORY_DEFS_H
 
 //#include <Windows.h>
 #include "engine/engine.h"
@@ -25,12 +28,6 @@ Revision History:
 #include "engine/mem_map.h"
 
 
-#define fastMaskI1(n) fastMask(((n)+1))
-#define fastMaskReverseI1(N) (~fastMaskI1(N))
-
-#define LZDEF(n) ((unsigned char)(((((((int)(n))-1) & -8) + 8) >> 3) - 1))
-const UChar fastalignD1[257] = { LZDEF(0),  LZDEF(1),  LZDEF(2),  LZDEF(3),  LZDEF(4),  LZDEF(5),  LZDEF(6),  LZDEF(7),  LZDEF(8),  LZDEF(9),  LZDEF(10),  LZDEF(11),  LZDEF(12),  LZDEF(13),  LZDEF(14),  LZDEF(15),  LZDEF(16),  LZDEF(17),  LZDEF(18),  LZDEF(19),  LZDEF(20),  LZDEF(21),  LZDEF(22),  LZDEF(23),  LZDEF(24),  LZDEF(25),  LZDEF(26),  LZDEF(27),  LZDEF(28),  LZDEF(29),  LZDEF(30),  LZDEF(31),  LZDEF(32),  LZDEF(33),  LZDEF(34),  LZDEF(35),  LZDEF(36),  LZDEF(37),  LZDEF(38),  LZDEF(39),  LZDEF(40),  LZDEF(41),  LZDEF(42),  LZDEF(43),  LZDEF(44),  LZDEF(45),  LZDEF(46),  LZDEF(47),  LZDEF(48),  LZDEF(49),  LZDEF(50),  LZDEF(51),  LZDEF(52),  LZDEF(53),  LZDEF(54),  LZDEF(55),  LZDEF(56),  LZDEF(57),  LZDEF(58),  LZDEF(59),  LZDEF(60),  LZDEF(61),  LZDEF(62),  LZDEF(63),  LZDEF(64),  LZDEF(65),  LZDEF(66),  LZDEF(67),  LZDEF(68),  LZDEF(69),  LZDEF(70),  LZDEF(71),  LZDEF(72),  LZDEF(73),  LZDEF(74),  LZDEF(75),  LZDEF(76),  LZDEF(77),  LZDEF(78),  LZDEF(79),  LZDEF(80),  LZDEF(81),  LZDEF(82),  LZDEF(83),  LZDEF(84),  LZDEF(85),  LZDEF(86),  LZDEF(87),  LZDEF(88),  LZDEF(89),  LZDEF(90),  LZDEF(91),  LZDEF(92),  LZDEF(93),  LZDEF(94),  LZDEF(95),  LZDEF(96),  LZDEF(97),  LZDEF(98),  LZDEF(99),  LZDEF(100),  LZDEF(101),  LZDEF(102),  LZDEF(103),  LZDEF(104),  LZDEF(105),  LZDEF(106),  LZDEF(107),  LZDEF(108),  LZDEF(109),  LZDEF(110),  LZDEF(111),  LZDEF(112),  LZDEF(113),  LZDEF(114),  LZDEF(115),  LZDEF(116),  LZDEF(117),  LZDEF(118),  LZDEF(119),  LZDEF(120),  LZDEF(121),  LZDEF(122),  LZDEF(123),  LZDEF(124),  LZDEF(125),  LZDEF(126),  LZDEF(127),  LZDEF(128),  LZDEF(129),  LZDEF(130),  LZDEF(131),  LZDEF(132),  LZDEF(133),  LZDEF(134),  LZDEF(135),  LZDEF(136),  LZDEF(137),  LZDEF(138),  LZDEF(139),  LZDEF(140),  LZDEF(141),  LZDEF(142),  LZDEF(143),  LZDEF(144),  LZDEF(145),  LZDEF(146),  LZDEF(147),  LZDEF(148),  LZDEF(149),  LZDEF(150),  LZDEF(151),  LZDEF(152),  LZDEF(153),  LZDEF(154),  LZDEF(155),  LZDEF(156),  LZDEF(157),  LZDEF(158),  LZDEF(159),  LZDEF(160),  LZDEF(161),  LZDEF(162),  LZDEF(163),  LZDEF(164),  LZDEF(165),  LZDEF(166),  LZDEF(167),  LZDEF(168),  LZDEF(169),  LZDEF(170),  LZDEF(171),  LZDEF(172),  LZDEF(173),  LZDEF(174),  LZDEF(175),  LZDEF(176),  LZDEF(177),  LZDEF(178),  LZDEF(179),  LZDEF(180),  LZDEF(181),  LZDEF(182),  LZDEF(183),  LZDEF(184),  LZDEF(185),  LZDEF(186),  LZDEF(187),  LZDEF(188),  LZDEF(189),  LZDEF(190),  LZDEF(191),  LZDEF(192),  LZDEF(193),  LZDEF(194),  LZDEF(195),  LZDEF(196),  LZDEF(197),  LZDEF(198),  LZDEF(199),  LZDEF(200),  LZDEF(201),  LZDEF(202),  LZDEF(203),  LZDEF(204),  LZDEF(205),  LZDEF(206),  LZDEF(207),  LZDEF(208),  LZDEF(209),  LZDEF(210),  LZDEF(211),  LZDEF(212),  LZDEF(213),  LZDEF(214),  LZDEF(215),  LZDEF(216),  LZDEF(217),  LZDEF(218),  LZDEF(219),  LZDEF(220),  LZDEF(221),  LZDEF(222),  LZDEF(223),  LZDEF(224),  LZDEF(225),  LZDEF(226),  LZDEF(227),  LZDEF(228),  LZDEF(229),  LZDEF(230),  LZDEF(231),  LZDEF(232),  LZDEF(233),  LZDEF(234),  LZDEF(235),  LZDEF(236),  LZDEF(237),  LZDEF(238),  LZDEF(239),  LZDEF(240),  LZDEF(241),  LZDEF(242),  LZDEF(243),  LZDEF(244),  LZDEF(245),  LZDEF(246),  LZDEF(247),  LZDEF(248),  LZDEF(249),  LZDEF(250),  LZDEF(251),  LZDEF(252),  LZDEF(253),  LZDEF(254),  LZDEF(255),  LZDEF(256) };
-#undef  LZDEF
 
 
 
@@ -39,120 +36,144 @@ const UChar fastalignD1[257] = { LZDEF(0),  LZDEF(1),  LZDEF(2),  LZDEF(3),  LZD
 #define TRACE_AM
 #endif
 
-#define ANALYZER_TIMEOUT 0.4d
+constexpr double ANALYZER_TIMEOUT = 0.4;
 
 #define LINETOSTR(A) #A
 #define CONCATSTR(A, B) " ACCESS MEM ERR UNMAPPED; " A " AT Line: " LINETOSTR(B)
 
 //客户机内存访问检查
-#define MEM_ACCESS_ASSERT_R(CODE, THwordESS) if (!(CODE)) throw Expt::GuestMemReadErr(CONCATSTR(__FILE__, __LINE__), THwordESS);
-#define MEM_ACCESS_ASSERT_W(CODE, THwordESS) if (!(CODE)) throw Expt::GuestMemWriteErr(CONCATSTR(__FILE__, __LINE__), THwordESS);
+#define MEM_ACCESS_ASSERT_R(CODE, THwordESS) if UNLIKELY(!(CODE)) throw Expt::GuestMemReadErr(CONCATSTR(__FILE__, __LINE__), THwordESS);
+#define MEM_ACCESS_ASSERT_W(CODE, THwordESS) if UNLIKELY(!(CODE)) throw Expt::GuestMemWriteErr(CONCATSTR(__FILE__, __LINE__), THwordESS);
 
-//检查是否将ir translate的block区代码修改了，避免某些vmp或者ctf的恶作剧
-#define CODEBLOCKISWRITECHECK(address) if(m_ee) m_ee->block_integrity(address, this->m_insn_linear.insn_block_delta);
-
-
+class PAGE_DATA;
+class PAGE_PADDING;
 
 class PAGE {
-    Int _m_user_;
+    enum PageTy
+    {
+        mem_INVALID,
+        mem_PADDING,
+        mem_CODE,
+        mem_DATA
+    };
+
     Int m_user;
     std::atomic_int m_ref_cound;
-    UChar m_pad = 0xcc;
-    UChar m_is_pad = true;
-    TR::Register<0x1000>* m_unit = nullptr;
+    PageTy m_mem_ty = mem_INVALID;
+    friend class PAGE_DATA;
+    friend class PAGE_PADDING;
+
+    inline PAGE(Int u, PageTy mem_ty) : m_user(u), m_ref_cound(1), m_mem_ty(mem_ty){};
 public:
-    inline bool is_pad() { return m_is_pad; };
-    inline PAGE(Int u) :_m_user_(u), m_user(u), m_ref_cound(1){};
-    inline Int get_user() const { return _m_user_; };
-    inline UChar get_pad() const { return m_pad; };
-    inline void set_pad(UChar pad) { 
-        m_pad = pad; m_is_pad = true;
-        vassert(!m_unit);
-    };
-    void copy(PAGE const* P, z3::vcontext& ctx, bool nr) {
-        if (P->m_is_pad) {// 该页是填充区，则开始分配该页
-            vassert(P->m_unit == NULL);
-            m_unit = new TR::Register<0x1000>(ctx, nr);
-            //memset(m_unit->m_bytes, P->m_pad, 0x1000);
-        }
-        else {
-            m_unit = new TR::Register<0x1000>(*(P->m_unit), ctx, nr);
-        }
-        m_is_pad = false;
-    }
-    inline void disable_pad(z3::vcontext& ctx, bool nr) {
-        // 该页是填充区，则开始分配该页
-        if (m_is_pad) {
-            vassert(m_unit == NULL);
-            m_unit = new TR::Register<0x1000>(ctx, nr);
-            //memset(m_unit->m_bytes, m_pad, 0x1000);
-            m_is_pad = false;
-        }
-    }
-    inline void malloc_unit(z3::vcontext& ctx, bool nr) {
-        // 该页是填充区，则开始分配该页
-        if (m_is_pad) {
-            vassert(m_unit == NULL);
-            m_unit = new TR::Register<0x1000>(ctx, nr);
-            m_is_pad = false;
-        }
-    }
-    inline  TR::Register<0x1000>* operator->() { return m_unit; }
-    inline  operator TR::Register<0x1000>* () { return m_unit; }
-    template<int MAX>
-    void mount_regs(TR::Register<MAX>* s) {
-        if (m_is_pad) {
-            m_is_pad = false;
-        }
-        m_unit = (TR::Register<0x1000>*)s;
-    }
-    inline void lock(Int& xchg_user) {
-        xchg_user = 0;
-        while (!xchg_user) {
-            __asm__ __volatile(
-                "xchgl %0,%1"
-                : "=r"(xchg_user) 
-                : "m"(m_user), "0"(xchg_user) 
-                : "memory");
-        }
-    }
-    inline void unlock(Int xchg_user) {
-        vassert(xchg_user == _m_user_);
-        m_user = xchg_user;
-    }
+    inline ~PAGE() noexcept(false) { vassert(m_ref_cound == 0); }
+    inline Int  get_user() const { return m_user; };
+    inline bool is_code() { return m_mem_ty == mem_CODE; };
+    inline bool is_data() { return m_mem_ty == mem_DATA || m_mem_ty == mem_CODE; };
+    inline bool is_padding() { return m_mem_ty == mem_PADDING; };
+    inline void set_code_flag() { m_mem_ty = mem_CODE; };
 
     inline void inc_used_ref() {
-        vassert(m_ref_cound);
-        m_ref_cound++;
+        vassert(m_ref_cound); m_ref_cound++;
     }
+
+    inline int get_used_ref() const { return m_ref_cound; }
 
     inline bool dec_used_ref() {
-        vassert(m_ref_cound);
-        if (--m_ref_cound) {
-            return True;
+        vassert(m_ref_cound); return (bool)(--m_ref_cound);
+    }
+
+    inline void check_ref_cound(int n) { vassert(m_ref_cound == n); }
+
+};
+
+class TR::mem_unit : public TR::Register<0x1000> {
+    Int m_user;
+    using page_class = TR::Register<0x1000>;
+    friend class PAGE_DATA;
+    friend class PAGE_PADDING;
+
+    inline mem_unit(Int u, z3::vcontext& ctx, Bool need_record) : page_class(ctx, need_record), m_user(u){ }
+    inline mem_unit(Int u, z3::vcontext& ctx, Bool _need_record, UChar init_value) : page_class(ctx, _need_record), m_user(u) { memset(m_bytes, init_value, sizeof(m_bytes)); }
+    //翻译转换父register
+    inline mem_unit(Int u, TR::mem_unit& father_page, z3::vcontext& ctx, Bool need_record) : page_class((page_class&)father_page, ctx, need_record), m_user(u) { }
+public:
+    template<bool sign, int nbits, sv::z3sk sk>
+    inline sv::rsval<sign, nbits, sk> load(Int target_user, UInt idx, z3::vcontext& target_ctx) {
+        if UNLIKELY(m_user == target_user) {
+            return page_class::get<sign, nbits, sk>(idx);
         }
         else {
-            return False;
+            return page_class::get<sign, nbits, sk>(idx, target_ctx);
         }
     }
 
-    inline void check_ref_cound() {
-        vassert(m_ref_cound == 1);
-    }
-
-    template<bool sign, int nbits, sv::z3sk sk>
-    inline sv::rsval<sign, nbits, sk> value(Z3_context ctx) {
-        __m256i pad = _mm256_set1_epi8(m_pad);
-        return sv::rsval<sign, nbits, sk>(ctx, M256i(pad).m256i_i8);
-    };
-
-    ~PAGE() noexcept(false) {
-        vassert(m_ref_cound == 0); 
-        if (m_unit) {
-            delete m_unit;
+    inline tval Iex_Get(Int target_user, UInt offset, UInt nbytes, z3::vcontext& target_ctx) {
+        if UNLIKELY(m_user == target_user) {
+            return page_class::Iex_Get(offset, nbytes);
+        }
+        else {
+            return page_class::Iex_Get(offset, nbytes, target_ctx);
         }
     }
+    const UChar* get_bytes(UInt offst) { return &page_class::m_bytes[offst]; }
 };
+
+
+class PAGE_DATA : public PAGE {
+    TR::mem_unit m_unit;
+    template<typename _> friend class TR::MEM;
+    friend class PAGE_PADDING;
+    inline PAGE_DATA(Int u,
+        z3::vcontext& ctx, Bool need_record
+    ) : PAGE(u, mem_DATA), m_unit(u, ctx, need_record) { }
+
+
+    inline PAGE_DATA(Int u,
+        z3::vcontext& ctx, Bool need_record, UChar init_value
+    ) : PAGE(u, mem_DATA), m_unit(u, ctx, need_record, init_value) { }
+
+    // translate
+    inline PAGE_DATA(Int u,
+        PAGE_DATA& father, z3::vcontext& ctx, Bool need_record
+    ) : PAGE(u, mem_DATA), m_unit(u, father.get_unit(), ctx, need_record) { }
+
+    TR::mem_unit& get_unit() { return m_unit; }
+    const UChar* get_bytes(UInt offst) { return m_unit.get_bytes(offst); }
+
+    inline bool is_code() = delete;
+    inline bool is_data() = delete;
+    inline bool is_padding() = delete;
+};
+
+
+// 该页是填充区
+class PAGE_PADDING : public PAGE {
+    UChar m_padding_value = 0xcc;
+    __m256i m_padding;
+
+    friend class PAGE_DATA;
+
+    template<typename _> friend class TR::MEM;
+    inline PAGE_PADDING(Int u, UChar pad_value) : PAGE(u, mem_PADDING), m_padding_value(pad_value) { m_padding = _mm256_set1_epi8(m_padding_value); }
+public:
+    template<bool sign, int nbits, sv::z3sk sk>
+    inline sv::rsval<sign, nbits, sk> load(UInt idx, Z3_context target_ctx) {
+        return sv::rsval<sign, nbits, sk>(target_ctx, (UChar*)&m_padding);
+    }
+    inline void set_padding_value(UChar v) { m_padding_value = v;  m_padding = _mm256_set1_epi8(v); }
+    inline UChar get_padding_value() const { return m_padding_value; }
+    static PAGE_DATA* convert_to_data(PAGE* pt[1]/*in&out*/, z3::vcontext& ctx, bool nr);
+
+    inline bool is_code() = delete;
+    inline bool is_data() = delete;
+    inline bool is_padding() = delete;
+};
+
+#define pto_data(p)      ((PAGE_DATA*)  (p))
+#define pto_padding(p)  ((PAGE_PADDING*)(p))
+
+
+
 
 class DMem;
 
@@ -242,24 +263,26 @@ namespace TR {
             }
         };
     private:
-        HASH_MAP<THword, TR::Register<0x1000>*> mem_change_map;
+        HASH_MAP<THword, mem_unit*> mem_change_map;
         TR::vctx_base&  m_vctx;
         Bool            need_record;
         Int             user;
         z3::vcontext&   m_ctx;
         z3::solver&     m_solver;
-        EmuEnvironment<MAX_IRTEMP>* m_ee = nullptr;
+        EmuEnvironment* m_ee = nullptr;
         Insn_linear     m_insn_linear;
 
+    public:
         virtual PAGE* map_interface(ULong address) override;
+    private:
         virtual void copy_interface(PAGE* pt_dst[1], PAGE* pt_src[1]) override;
         virtual void unmap_interface(PAGE* pt[1]) override;
 
     private:
-        bool check_page(PAGE*& P, PAGE** PT);
+        bool checkup_page_ref(PAGE*& P, PAGE** PT);
         PAGE* get_write_page(THword addr);
         tval _Iex_Load(PAGE* P, THword address, UShort size);
-        void init_page(PAGE*& P, THword address);
+        
         UInt write_bytes(ULong address, ULong length, UChar* data);
         MEM(TR::vctx_base & vctxb, z3::solver& s, z3::vcontext& ctx, PML4T** cr3, Int _user, Bool _need_record) :
             m_vctx(vctxb),
@@ -275,15 +298,17 @@ namespace TR {
         MEM(TR::vctx_base& vctxb, z3::solver& so, z3::vcontext& ctx, Bool _need_record);
         MEM(z3::solver& so, z3::vcontext& ctx, MEM& father_mem, Bool _need_record);
         ~MEM() { recycle(); }
-        void set(EmuEnvironment<MAX_IRTEMP>* e) { m_ee = e; }
+        void set(EmuEnvironment* e) { m_ee = e; }
         virtual z3::expr idx2Value(Addr64 base, Z3_ast idx) { return z3::expr(m_ctx); };
         //清空写入记录
         void clearRecord();
+        inline bool is_need_record() { return need_record; }
         ULong find_block_forward(ULong start, THword size);
         ULong find_block_reverse(ULong start, THword size);
-        inline HASH_MAP<THword, TR::Register<0x1000>*> change_map() { return mem_change_map; }
+        inline HASH_MAP<THword, TR::mem_unit*> change_map() { return mem_change_map; }
         inline Int get_user() { return user; }
 
+        //unsigned long long mem_real_hash(Addr guest_addr, unsigned length);
 
         //把两个不连续的页放到insn_linear里，以支持valgrind的跨页翻译
         //第一次调用
@@ -293,14 +318,14 @@ namespace TR {
         //使用之必须调用 get_vex_insn_linear
         const UChar* libvex_guest_insn_control(Addr guest_IP_sbstart, Long delta, const UChar* /*in guest_code*/ guest_code);
 
-        inline UChar* get_next_page(Addr32 address) {
+        inline const UChar* get_next_page(Addr32 address) {
             PAGE* P = get_mem_page(address + 0x1000);
-            return P ? (*P)->m_bytes : nullptr;
+            return P ? pto_data(P)->get_bytes(0) : nullptr;
         }
 
-        inline UChar* get_next_page(Addr64 address) {
+        inline const UChar* get_next_page(Addr64 address) {
             PAGE* P = get_mem_page(address + 0x1000);
-            return P ? (*P)->m_bytes : nullptr;
+            return P ? pto_data(P)->get_bytes(0) : nullptr;
         }
         Itaddress addr_begin(z3::solver& s, Z3_ast addr) { return Itaddress(s, addr); }
 
@@ -313,20 +338,13 @@ namespace TR {
             static_assert((nbits & 7) == 0, "err load");
             PAGE* page = get_mem_page(address);
             MEM_ACCESS_ASSERT_R(page, address);
-            if (page->is_pad()) {
-                return page->value<sign, nbits, sk>(m_ctx);
-            };
-
-            if ((address & 0xfff) >= (0x1001 - (nbits >> 3))) {
+            if UNLIKELY((address & 0xfff) >= (0x1001 - (nbits >> 3))) {
                 return _Iex_Load(page, address, nbits >> 3).template tors<sign, nbits, sk>();
             }
-
-            if (user == page->get_user()) {
-                return (*page)->get<sign, nbits, sk>(address & 0xfff);
-            }
-            else {
-                return (*page)->get<sign, nbits, sk >(address & 0xfff, m_ctx);
-            }
+            if(page->is_data())
+                return pto_data(page)->get_unit().load<sign, nbits, sk>(get_user(), (UInt)address & 0xfff, m_ctx);
+            else
+                return pto_padding(page)->load<sign, nbits, sk>((UInt)address & 0xfff, m_ctx);
         }
 
         // IRType 
@@ -433,7 +451,7 @@ namespace TR {
         template<IRType ty, bool _Ts, int nbits, class _svc = sv::IRty<ty>>
         inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> load(const sv::rsval<_Ts, nbits, Z3_BV_SORT>& address) {
             static_assert(nbits == wide, "err sz");
-            if (address.real()) {
+            if LIKELY(address.real()) {
                 return load<_svc::is_signed, _svc::nbits, _svc::sk>((THword)address.tor());
             }
             else {
@@ -445,7 +463,7 @@ namespace TR {
         template<typename ty, bool _Ts, int nbits, class _svc = sv::sv_cty<ty>, TASSERT(sv::is_ret_type<ty>::value)>
         inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> load(const sv::rsval<_Ts, nbits, Z3_BV_SORT>& address) {
             static_assert(nbits == wide, "err sz");
-            if (address.real()) {
+            if LIKELY(address.real()) {
                 return load<_svc::is_signed, _svc::nbits, _svc::sk>((THword)address.tor());
             }
             else {
@@ -456,7 +474,7 @@ namespace TR {
         // load tval
         template<IRType ty, class _svc = sv::IRty<ty> >
         inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> load(tval const& address) {
-            if (address.real()) {
+            if LIKELY(address.real()) {
                 return load<_svc::is_signed, _svc::nbits, _svc::sk>((THword)address.tor<false, wide>());
             }
             else {
@@ -467,7 +485,7 @@ namespace TR {
         // load tval
         template<typename ty, class _svc = sv::sv_cty<ty>, TASSERT(sv::is_ret_type<ty>::value)>
         inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> load(tval const& address) {
-            if (address.real()) {
+            if LIKELY(address.real()) {
                 return load<_svc::is_signed, _svc::nbits, _svc::sk>((THword)address.tor<false, wide>());
             }
             else {
@@ -478,7 +496,7 @@ namespace TR {
         template<IRType ty, class _svc = sv::IRty<ty>, bool sign, int nbits>
         inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> load(sv::ctype_val<sign, nbits, Z3_BV_SORT> const& address) {
             static_assert(nbits == wide, "err sz");
-            if (address.real()) {
+            if LIKELY(address.real()) {
                 return load<_svc::is_signed, _svc::nbits, _svc::sk>((THword)address.tor<false, wide>());
             }
             else {
@@ -489,7 +507,7 @@ namespace TR {
         template<typename ty, class _svc = sv::sv_cty<ty>, bool sign, int nbits, TASSERT(sv::is_ret_type<ty>::value)>
         inline sv::rsval<_svc::is_signed, _svc::nbits, _svc::sk> load(sv::ctype_val<sign, nbits, Z3_BV_SORT> const& address) {
             static_assert(nbits == wide, "err sz");
-            if (address.real()) {
+            if LIKELY(address.real()) {
                 return load<_svc::is_signed, _svc::nbits, _svc::sk>((THword)address.tor<false, wide>());
             }
             else {
@@ -510,14 +528,14 @@ namespace TR {
         void store(THword address, DataTy data) {
             PAGE* page = get_write_page(address);
             UShort offset = address & 0xfff;
-            if (fastalignD1[sizeof(data) << 3] > 0xFFF - offset) {
+            if UNLIKELY( ALLOC_ALIGN_BIT(sizeof(data) << 3,  3) > 0x1000 - offset) {
                 PAGE* npage = get_write_page(address + 0x1000);
                 UInt plength = (0x1000 - offset);
-                (*page)->Ist_Put(offset, (void*)&data, plength);
-                (*npage)->Ist_Put(0, ((UChar*)((void*)&data)) + plength, (sizeof(data) - plength));
+                pto_data(page)->get_unit().Ist_Put(offset, (void*)&data, plength);
+                pto_data(npage)->get_unit().Ist_Put(0, ((UChar*)((void*)&data)) + plength, (sizeof(data) - plength));
             }
             else {
-                (*page)->set(offset, data);
+                pto_data(page)->get_unit().set(offset, data);
             }
         }
 
@@ -528,14 +546,14 @@ namespace TR {
         void store(THword address, const DataTy& data) {
             PAGE* page = get_write_page(address);
             UShort offset = address & 0xfff;
-            if (fastalignD1[sizeof(data) << 3] > 0xFFF - offset) {
+            if UNLIKELY(ALLOC_ALIGN_BIT(sizeof(data) << 3, 3)> 0x1000 - offset) {
                 PAGE* npage = get_write_page(address + 0x1000);
                 UInt plength = (0x1000 - offset);
-                (*page)->Ist_Put(offset, (void*)&data, plength);
-                (*npage)->Ist_Put(0, ((UChar*)((void*)&data)) + plength, (sizeof(data) - plength));
+                pto_data(page)->get_unit().Ist_Put(offset, (void*)&data, plength);
+                pto_data(npage)->get_unit().Ist_Put(0, ((UChar*)((void*)&data)) + plength, (sizeof(data) - plength));
             }
             else {
-                (*page)->set(offset, data);
+                pto_data(page)->get_unit().set(offset, data);
             }
         }
 
@@ -547,20 +565,20 @@ namespace TR {
             static_assert((nbits & 7) == 0, "err store");
             PAGE* page = get_write_page(address);
             UShort offset = address & 0xfff;
-            if (fastalignD1[nbits] > 0xFFF - offset) {
+            if UNLIKELY(ALLOC_ALIGN_BIT(nbits, 3) > 0x1000 - offset) {
                 PAGE* npage = get_write_page(address + 0x1000);
                 UInt plength = (0x1000 - offset);
                 Z3_ast Low = Z3_mk_extract(m_ctx, (plength << 3) - 1, 0, data);
                 Z3_inc_ref(m_ctx, Low);
                 Z3_ast HI = Z3_mk_extract(m_ctx, nbits - 1, plength << 3, data);
                 Z3_inc_ref(m_ctx, HI);
-                (*page)->Ist_Put(offset, Low, plength);
-                (*npage)->Ist_Put(0, HI, (nbits >> 3) - plength);
+                pto_data(page)->get_unit().Ist_Put(offset, Low, plength);
+                pto_data(npage)->get_unit().Ist_Put(0, HI, (nbits >> 3) - plength);
                 Z3_dec_ref(m_ctx, Low);
                 Z3_dec_ref(m_ctx, HI);
             }
             else {
-                (*page)->set<nbits>(offset, data);
+                pto_data(page)->get_unit().set<nbits>(offset, data);
             }
         }
 
@@ -655,7 +673,7 @@ namespace TR {
 
         template<bool sign, int nbits, TASSERT((nbits & 0x7) == 0)>
         inline void store(THword address, const sv::rsval<sign, nbits, Z3_BV_SORT>& data) {
-            if (data.real()) {
+            if LIKELY(data.real()) {
                 store(address, data.tor());
             }
             else {
@@ -665,7 +683,7 @@ namespace TR {
 
         template<bool sign, int nbits, TASSERT((nbits & 0x7) == 0)>
         inline void store(Z3_ast address, const sv::rsval<sign, nbits, Z3_BV_SORT>& data) {
-            if (data.real()) {
+            if LIKELY(data.real()) {
                 store(address, data.tor().value());
             }
             else {
@@ -675,7 +693,7 @@ namespace TR {
 
         template<bool sign, int nbits, TASSERT((nbits & 0x7) == 0)>
         inline void store(const sv::rsval<false, wide, Z3_BV_SORT>& address, const sv::rsval<sign, nbits, Z3_BV_SORT>& data) {
-            if (address.real()) {
+            if LIKELY(address.real()) {
                 store((THword)address.tor(), data);
             }
             else {
@@ -686,7 +704,7 @@ namespace TR {
 
         template<typename DataTy, TASSERT(std::is_arithmetic<DataTy>::value || sv::is_sse<DataTy>::value)>
         inline void store(const sv::rsval<false, wide, Z3_BV_SORT>& address, DataTy data) {
-            if (address.real()) {
+            if LIKELY(address.real()) {
                 store((THword)address.tor(), data);
             }
             else {
@@ -696,7 +714,7 @@ namespace TR {
 
         template<bool sign, int nbits, TASSERT((nbits & 0x7) == 0)>
         inline void store(const sv::rsval<false, wide, Z3_BV_SORT>& address, const sv::symbolic<sign, nbits, Z3_BV_SORT>& data) {
-            if (address.real()) {
+            if LIKELY(address.real()) {
                 store<nbits>((THword)address.tor(), (Z3_ast)data);
             }
             else {
@@ -705,7 +723,7 @@ namespace TR {
         }
 
         inline void Ist_Store(tval const& address, tval const& data) {
-            if (address.real()) {
+            if LIKELY(address.real()) {
                 Ist_Store((THword)address.tor<false, wide>(), data);
             }
             else {
@@ -726,6 +744,8 @@ namespace TR {
 };
 
 #ifndef UNDEFMEM
+#undef pto_data
+#undef pto_padding
 #undef GETPT
 #undef GETPAGE
 #undef COPY_SYM
@@ -758,4 +778,4 @@ namespace TR {
 #undef MEMACCESSERR
 #endif
 
-#endif //  MEMORY_DEFS_H
+//#endif //  MEMORY_DEFS_H

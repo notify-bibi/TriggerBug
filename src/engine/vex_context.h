@@ -11,7 +11,6 @@ namespace TR {
 
     template<typename ADDR>
     class MEM;
-    template<unsigned int MAX_TMP>
     class EmuEnvironment;
     template<typename ADDR>
     class StateMEM;

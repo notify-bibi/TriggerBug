@@ -1025,7 +1025,7 @@ static IRSB* disassemble_basic_block_till_stop(
          each insn is at max 20 bytes long, this limit of 5000 then
          seems reasonable since the max possible extent length will be
          100 * 20 == 2000. */
-      vassert(*extent_len < 5000);
+     // vassert(*extent_len < 5000);
       (*extent_len) += dres.len;
       (*n_instrs)++;
 
@@ -1296,8 +1296,8 @@ IRSB* bb_to_IR (
 
    /* check sanity .. */
    vassert(sizeof(HWord) == sizeof(void*));
-   vassert(vex_control.guest_max_insns >= 1);
-   vassert(vex_control.guest_max_insns <= 100);
+   //vassert(vex_control.guest_max_insns >= 1);
+   //vassert(vex_control.guest_max_insns <= 100);
    vassert(vex_control.guest_chase == False || vex_control.guest_chase == True);
    vassert(guest_word_type == Ity_I32 || guest_word_type == Ity_I64);
 

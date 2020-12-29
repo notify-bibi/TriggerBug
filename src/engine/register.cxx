@@ -17,29 +17,37 @@
 namespace TR{
 
 
-
-__m256i RegisterStatic::m32_fast[33];
-__m256i RegisterStatic::m32_mask_reverse[33];
-
-RegisterStatic::RegisterStatic(){
-    __m256i m32 = _mm256_setr_epi64x(0x0807060504030201, 0x100f0e0d0c0b0a09, 0x1817161514131211, 0x201f1e1d1c1b1a19);
-    for (int i = 0; i <= 32; i++) {
-        m32_fast[i] = m32;
-        for (int j = i; j <= 32; j++) {
-            M256i(m32_fast[i]).m256i_i8[j] = 0;
+void setfast(void* fast_ptr, UInt __nbytes) {
+    class RegisterStatic final {
+        __m256i data_A[33];
+        __m256i data_B[33];
+    public:
+        RegisterStatic() {
+            __m256i* m32_fast = reinterpret_cast<__m256i*>(&data_A);
+            __m256i* m32_mask_reverse = reinterpret_cast<__m256i*>(&data_B);
+            const __m256i m32 = _mm256_setr_epi64x(0x0807060504030201, 0x100f0e0d0c0b0a09, 0x1817161514131211, 0x201f1e1d1c1b1a19);
+            for (int i = 0; i <= 32; i++) {
+                m32_fast[i] = m32;
+                for (int j = i; j <= 32; j++) {
+                    M256i(m32_fast[i]).m256i_i8[j] = 0;
+                }
+                m32_mask_reverse[i] = _mm256_setzero_si256();
+                memset(&M256i(m32_mask_reverse[i]).m256i_i8[i], -1ul, 32 - i);
+            }
         }
-        m32_mask_reverse[i] = _mm256_setzero_si256();
-        memset(&M256i(m32_mask_reverse[i]).m256i_i8[i], -1ul, 32 - i);
-    }
-}
+        const __m256i* mask_ptr() const { return reinterpret_cast<const __m256i*>(&data_A); }
+        const __m256i* re_mask_ptr() const { return reinterpret_cast<const __m256i*>(&data_B); }
+    };
+    static RegisterStatic table;
 
-void RegisterStatic::setfast(void* fast_ptr, UInt __nbytes) {
     if ((__nbytes) <= 8) {
         if ((__nbytes) == 8) {
             SET8(fast_ptr, 0x0807060504030201);
         }
         else {
-            __asm__(
+#if 0
+            __asm__ 
+            (
                 "mov %[nbytes],%%cl;\n\t"
                 "shl $3,%%rcx;\n\t"
                 "mov %[fast],%%rax;\n\t"
@@ -52,10 +60,18 @@ void RegisterStatic::setfast(void* fast_ptr, UInt __nbytes) {
                 "shr %%cl,%%rbx;\n\t"
                 "or %%rbx,%%rax;\n\t"
                 "mov %%rax,%[out];\n\t"
-                : [out] "=r"(GET8((fast_ptr)))
-                : [fast] "r"(GET8((fast_ptr))), [nbytes] "r"((UChar)(__nbytes))
-                : "rax", "rbx", "rcx"
+                : 
+                    [out] "=r"(GET8((fast_ptr)))
+                : 
+                    [fast] "r"(GET8((fast_ptr))), [nbytes] "r"((UChar)(__nbytes))
+                : 
+                    "rbx", "rax", "rcx" /* clobber */
             );
+#else
+            UChar sl = (__nbytes << 3);
+            ULong res = GET8(fast_ptr) >> sl << sl;
+            GET8(fast_ptr) = (0x0807060504030201 << (~(sl - 65)) >> (~(sl - 65)))| res;
+#endif
         }
     }
     else if ((__nbytes) <= 16) {
@@ -64,9 +80,9 @@ void RegisterStatic::setfast(void* fast_ptr, UInt __nbytes) {
             _mm_or_si128(
                 _mm_and_si128(
                     GET16((fast_ptr)),
-                    GET16(&m32_mask_reverse[__nbytes])
+                    GET16(&table.re_mask_ptr()[__nbytes])
                 ),
-                GET16(&m32_fast[__nbytes])
+                GET16(&table.mask_ptr()[__nbytes])
             )
         );
     }
@@ -76,9 +92,9 @@ void RegisterStatic::setfast(void* fast_ptr, UInt __nbytes) {
             _mm256_or_si256(
                 _mm256_and_si256(
                     GET32((fast_ptr)),
-                    m32_mask_reverse[__nbytes]
+                    table.re_mask_ptr()[__nbytes]
                 ),
-                m32_fast[__nbytes]
+                table.mask_ptr()[__nbytes]
             )
         );
     }

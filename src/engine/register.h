@@ -21,6 +21,7 @@ Revision History:
 #define fastMaskBI1(n) fastMask((((n)+1)<<3))
 
 namespace TR {
+    class mem_unit;
 
 #ifdef USE_HASH_AST_MANAGER
     class AstManager {
@@ -271,16 +272,10 @@ namespace TR {
                 GET8(__VA_ARGS__):\
                 GET1(23333)//imPOSSIBLE
 
-    class RegisterStatic {
-        static __m256i m32_fast[33];
-        static __m256i m32_mask_reverse[33];
-    protected:
-        RegisterStatic();
-        static void setfast(void* fast_ptr, UInt __nbytes);
-    };
+    void setfast(void* fast_ptr, UInt __nbytes);
 
     template<int maxlength>
-    class Register : protected RegisterStatic {
+    class Register {
         z3::vcontext& m_ctx;
         Symbolic<maxlength>* symbolic;
         Record<maxlength>* record;
@@ -289,6 +284,7 @@ namespace TR {
 
         template<typename _> friend class MEM;
         template<typename _> friend class State;
+        friend class mem_unit;
     public:
 
         inline Register(z3::vcontext& ctx, Bool _need_record) :
@@ -296,6 +292,7 @@ namespace TR {
             symbolic(NULL),
             record(_need_record ? new Record<maxlength>() : NULL)
         { }
+
         //翻译转换父register
         inline Register(Register<maxlength>& father_regs, z3::vcontext& ctx, Bool _need_record) :
             m_ctx(ctx),
@@ -472,6 +469,7 @@ namespace TR {
         }
 
         //---------------------------------------------- set ast ---------------------------------------------------
+
 
         // only n_bit 8, 16, 32, 64 ,128 ,256
         template<int nbits>

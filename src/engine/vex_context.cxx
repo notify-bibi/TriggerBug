@@ -200,7 +200,8 @@ namespace TR {
             auto o = state.mem.template load<Ity_I64>(addr);
             vassert(o.real());
             m_callBackDict[addr] = Hook_struct{ func , IRConstTag2nb(state.info().softwareBptConst()->tag) , o.tor() , cflag };
-            state.mem.Ist_Store(addr, tval(state.ctx(), state.info().softwareBptConst()));
+            // i dont want break irsb
+            // state.mem.Ist_Store(addr, tval(state.ctx(), state.info().softwareBptConst()));
         }
         else {
             if (func) {
@@ -229,7 +230,8 @@ namespace TR {
         if (m_callBackDict.find(addr) != m_callBackDict.end()) {
             //pool->wait();
             HASH_MAP<Addr64, Hook_struct>::iterator h = m_callBackDict.find(addr);
-            m_top_state->mem.Ist_Store(addr, tval(m_top_state->ctx(), h->second.original, h->second.nbytes));
+            // i dont want break irsb
+            // m_top_state->mem.Ist_Store(addr, tval(m_top_state->ctx(), h->second.original, h->second.nbytes)); 
             m_callBackDict.erase(h);
         }
     }
@@ -246,7 +248,7 @@ namespace TR {
         m_bin(filename),
         m_guest(guest),
         m_iropt_level(2),
-        m_guest_max_insns(100),
+        m_guest_max_insns(0xffff), //not limit size
         m_iropt_register_updates_default(VexRegUpdSpAtMemAccess),
         m_guest_system(TR::unknowSystem),
         m_traceflags(0),

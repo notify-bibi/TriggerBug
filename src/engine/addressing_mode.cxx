@@ -1,9 +1,6 @@
 #include "engine/addressing_mode.h"
 #include "engine/engine.h"
 
-#define fastMask(n) ((ULong)((((int)(n))<64)?((1ull << ((int)(n))) - 1):-1ll))
-#define fastMaskI1(n) fastMask(((n)+1))
-#define fastMaskReverseI1(N) (~fastMaskI1(N))
 using namespace z3;
 
 
@@ -53,7 +50,7 @@ TR::addressingMode<THword>::iterator::iterator(TR::addressingMode<THword>& am) :
         nb = 1;
 
         for (; ; ) {
-            if (ctzll(N, m_sym_mask & fastMaskReverseI1(_pcur))) {
+            if (ctzll(N, m_sym_mask & fastMaskI1Reverse(_pcur))) {
                 if (N == _pcur + 1) {
                     m_sym_ml[m_sym_ml_n - 1].mask |= ((THword)1) << N;
                 }

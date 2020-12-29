@@ -1,6 +1,33 @@
 #ifndef _TR_head
 #define _TR_head
 
+// std::aligned_storage
+#define _DISABLE_EXTENDED_ALIGNED_STORAGE  
+
+// (4) return 0b000[1111] ull  (>=64) -1ull
+#define fastMask(nb) ((((int)(nb)) < 64)? (ULong)-1ll :((1ull << ((int)(nb))) - 1))
+
+// (4) return 0b..1111[0000] ull  (>=64) 0ull
+#define fastMaskReverse(nb) (~fastMask(nb))
+
+// (4) return 0b001[1111] ull  (>=63) -1ull
+#define fastMaskI1(nb) fastMask(((nb)+1))
+
+// (4) return 0b..11110[0000] ull  (>=63) 0ull
+#define fastMaskI1Reverse(nb) (~fastMaskI1(nb))
+
+// nb => [0, 63]
+// (0bhhhh000, 3) result 0bhhhh
+// (0bhhhhLLL, 3) result 0bhhhh + 1
+#define ALLOC_ALIGN_BIT(v, nb)  ((((v) + ((1ull<<(nb))-1))) >> (nb))
+
+// nb => [0, 63]
+// (0bhhhLLL, 3) result 0bhhh000
+#define ALIGN_BIT(v, nb) ((v) & -(1ull<<(nb)))
+
+// (0bhhhLLL, 0b1000) result 0bhhh000
+#define ALIGN(v, size) ((v) & ~((size) - 1))
+
 //注：高优化下编译器对四个及四个一下的switch case会自动使用if else结构。勿喷用switch效率低下
 
 #if 0 // building with MSVC
@@ -8,8 +35,8 @@
 # define UNLIKELY(x)        (x)
 # define CAST_TO_TYPEOF(x)  /**/
 #else
-# define LIKELY(x)          __builtin_expect(!!(x), 1)
-# define UNLIKELY(x)        __builtin_expect(!!(x), 0)
+# define LIKELY(x)          (__builtin_expect((bool)(x), 1))
+# define UNLIKELY(x)        (__builtin_expect((bool)(x), 0))
 # define CAST_TO_TYPEOF(x)  (__typeof__(x))
 #endif // defined(_MSC_VER)
 
@@ -112,7 +139,7 @@ typedef union __declspec(align(16)) _m128 {
 //#define HASH_MAP std::hash_map
 #include <unordered_map>
 #define HASH_MAP std::unordered_map
-#define FAILD_ASSERT(any_cond, msg) static_assert(any_cond, msg);
+#define FAILD_ASSERT(false_any_cond, msg) static_assert(false, msg);
 
 #else
 #include <x86intrin.h>
@@ -120,7 +147,7 @@ typedef union __declspec(align(16)) _m128 {
 #define HASH_MAP std::unordered_map
 template <class...> constexpr std::false_type always_false{};
 //#define FAILD_ASSERT(any_cond, msg) static_assert(always_false<any_cond>, msg);
-#define FAILD_ASSERT(any_cond, msg) static_assert(false, msg); // if dont support please use -fdelayed-template-parsing
+#define FAILD_ASSERT(false_any_cond, msg) static_assert(false, msg); // if dont support please use -fdelayed-template-parsing
 #define sprintf_s snprintf
 #endif
 
@@ -183,7 +210,6 @@ IRType       length2ty(UShort bit);
 }
 
 
-#define ALIGN(Value,size) ((Value) & ~((size) - 1))
 #define Z3_Get_Ref(exp) (((int*)((Z3_ast)((exp))))[2])
 #define MMEMPTY _mm_empty() //x87浮点
 

@@ -139,7 +139,7 @@ namespace SP {
                 if (s->tag == Ist_WrTmp) {
                     UInt tmp = s->Ist.WrTmp.tmp;
                     vex_printf("t%u = ", tmp);
-                    std::cout << TC::ir_temp[tmp];
+                    std::cout << TC::irvex[tmp];
                     vex_printf(" = ");
                     ppIRExpr(s->Ist.WrTmp.data);
                 }

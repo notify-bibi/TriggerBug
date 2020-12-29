@@ -381,8 +381,13 @@ namespace sv {
 bool Z3_API Z3_get_numeral_bytes(Z3_context c, Z3_ast a, int64_t* num, UInt* den) {
     size_t* expr, *decl, * m_info, * m_parameters, * m_rational,  *m_ptr, * m_digits;
     expr = (size_t*)a;
+#if 0
     decl = (size_t*)expr[4];
     m_info = (size_t*)decl[5];
+#else
+    decl = (size_t*)expr[2];
+    m_info = (size_t*)decl[3];
+#endif
     m_parameters = (size_t*)m_info[1];
     m_rational = (size_t*)m_parameters[1];
     m_ptr = (size_t*)m_rational[1];

@@ -226,8 +226,8 @@ void LibVEX_Init (
    vassert(vcon->iropt_level <= 2);
    vassert(vcon->iropt_unroll_thresh >= 0);
    vassert(vcon->iropt_unroll_thresh <= 400);
-   vassert(vcon->guest_max_insns >= 1);
-   vassert(vcon->guest_max_insns <= 100);
+   //vassert(vcon->guest_max_insns >= 1);
+   //vassert(vcon->guest_max_insns <= 100);
    vassert(vcon->guest_chase == False || vcon->guest_chase == True);
    vassert(vcon->regalloc_version == 2 || vcon->regalloc_version == 3);
 

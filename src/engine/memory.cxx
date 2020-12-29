@@ -16,6 +16,26 @@ Revision History:
 #include "engine/memory.h"
 using namespace TR;
 
+template<typename THword>
+PAGE* TR::MEM<THword>::get_write_page(THword address)
+{
+    PAGE** pt = get_pointer_of_mem_page(address);
+    PAGE* page = (pt) ? pt[0] : nullptr;
+    MEM_ACCESS_ASSERT_W(page, address);
+
+    //检查是否将ir translate的block区代码修改了，避免某些vmp或者ctf的恶作剧
+    if UNLIKELY(m_ee) {
+        m_ee->block_integrity(page->is_code(), address, this->m_insn_linear.insn_block_delta);
+    }
+
+    if UNLIKELY(checkup_page_ref(page, pt)) {
+        mem_change_map[ALIGN(address, 0x1000)] = &pto_data(page)->get_unit();
+    }
+    vassert(page->get_user() == user);
+    page->check_ref_cound(1);
+    return page;
+}
+
 
 template <typename THword>
 static const UChar* guest_insn_control_method_imp(void* instance, Addr guest_IP_sbstart, Long delta, const UChar* /*in guest_code*/ guest_code) {
@@ -27,7 +47,7 @@ static const UChar* guest_insn_control_method_imp(void* instance, Addr guest_IP_
 
 template<typename THword>
 PAGE* MEM<THword>::map_interface(ULong address) {
-    return new PAGE(user);;
+    return new PAGE_PADDING(get_user(), 0xCC);;
 }
 
 template<typename THword>
@@ -79,18 +99,45 @@ void MEM<THword>::unmap_interface(PAGE* pt[1]) {
     PAGE* page = pt[0];
     page->dec_used_ref();
     if (page->get_user() == user) {
-        delete page;
-        pt[0] = 0;
+        page->check_ref_cound(0);
+        if (page->is_padding()) {
+            delete pto_padding(page);
+        }
+        else {
+            delete pto_data(page);
+        }
+        
+        pt[0] = nullptr;
+    }else{
+        vassert(page->get_used_ref() >= 1);
     }
+}
+
+PAGE_DATA* PAGE_PADDING::convert_to_data(PAGE* pt[1], z3::vcontext& ctx, bool nr)
+{
+
+    PAGE_PADDING* p_bak = (PAGE_PADDING*)pt[0];
+    vassert(pt[0]->is_padding());
+    PAGE_DATA* res = new PAGE_DATA(p_bak->get_user(), ctx, nr, p_bak->get_padding_value());
+    if UNLIKELY(p_bak->dec_used_ref()==0) {
+        if (((PAGE*)p_bak)->is_padding()) {
+            delete pto_padding(p_bak);
+        }
+        else {
+            delete pto_data(p_bak);
+        }
+    }
+    pt[0] = res;
+    return res;
 }
 
 
 template<typename THword>
 MEM<THword>::MEM(vctx_base& vctx, z3::solver& so, z3::vcontext& ctx, Bool _need_record) :
     m_vctx(vctx),
-    m_solver(so),
     m_ctx(ctx),
     need_record(_need_record),
+    m_solver(so),
     user(vctx.mk_user_id())
 {
 }
@@ -98,9 +145,9 @@ MEM<THword>::MEM(vctx_base& vctx, z3::solver& so, z3::vcontext& ctx, Bool _need_
 template<typename THword>
 MEM<THword>::MEM(z3::solver& so, z3::vcontext& ctx, MEM& father_mem, Bool _need_record) :
     m_vctx(father_mem.m_vctx),
-    m_solver(so),
     m_ctx(ctx),
     need_record(_need_record),
+    m_solver(so),
     user(m_vctx.mk_user_id())
 {
     vassert(this->user != father_mem.user);
@@ -157,7 +204,7 @@ const UChar* TR::MEM<THword>::get_vex_insn_linear(Addr guest_IP_sbstart)
 {
     PAGE* p = get_mem_page(guest_IP_sbstart);
     MEM_ACCESS_ASSERT_R(p, guest_IP_sbstart);
-    const UChar* guest_addr_in_page = (const UChar*)(*p)->m_bytes + (guest_IP_sbstart & 0xfff);
+    const UChar* guest_addr_in_page = (const UChar*)pto_data(p)->get_bytes(guest_IP_sbstart & 0xfff);
     this->m_insn_linear = Insn_linear{
         .flag = enough,
         .the_rest_n = 0x1000 - (UInt)(guest_IP_sbstart & 0xfff),
@@ -167,6 +214,7 @@ const UChar* TR::MEM<THword>::get_vex_insn_linear(Addr guest_IP_sbstart)
 
     };
     const UChar* res = this->libvex_guest_insn_control(guest_IP_sbstart, 0, guest_addr_in_page);
+    p->set_code_flag();
     return res;
 }
 
@@ -181,11 +229,15 @@ const UChar* TR::MEM<THword>::libvex_guest_insn_control(Addr guest_IP_sbstart, L
     
     if (insn_linear.flag == enough) {
         if (the_rest_n - delta <= 16) {
+            PAGE* next_p = get_mem_page(guest_IP_sbstart + 0x1000);
+            MEM_ACCESS_ASSERT_R(next_p, guest_IP_sbstart + 0x1000);
+            next_p->set_code_flag();
+
             insn_linear.flag = swap_state;
             const UChar* align_address = insn_linear.guest_addr_in_page + the_rest_n - 0x10;
             const UChar* now_address = insn_linear.guest_addr_in_page + delta;
             *(__m128i*)(insn_linear.swap) = *(__m128i*)(align_address);
-            *(__m128i*)(insn_linear.swap + 16) = *(__m128i*)(this->get_next_page(guest_IP_sbstart));
+            *(__m128i*)(insn_linear.swap + 16) = *(__m128i*)(pto_data(next_p)->get_bytes(0));
             //delta = (insn_linear.swap + (now_address - align_address)) - guest_code;
             const UChar* ret_guest_code = (unsigned char*)(insn_linear.swap + (now_address - align_address)) - delta;
             return ret_guest_code;
@@ -214,20 +266,9 @@ tval TR::MEM<THword>::_Iex_Load(PAGE* P, THword address, UShort size)
     PAGE* nP = get_mem_page(address + 0x1000);
     MEM_ACCESS_ASSERT_R(nP, address + 0x1000);
     UInt plength = 0x1000 - ((UShort)address & 0xfff);
-    tval L, R;
-    if (user == nP->get_user()) {
-        L = (*nP)->Iex_Get(0, size - plength);
-    }
-    else {
-        L = (*nP)->Iex_Get(0, size - plength, m_ctx);
-    }
 
-    if (user == P->get_user()) {
-        R = (*P)->Iex_Get(((UShort)address & 0xfff), plength);
-    }
-    else {
-        R = (*P)->Iex_Get(((UShort)address & 0xfff), plength, m_ctx);
-    }
+    tval L = pto_data(nP)->get_unit().Iex_Get(user, 0, size - plength, m_ctx);
+    tval R = pto_data(P)->get_unit().Iex_Get(user, ((UShort)address & 0xfff), plength, m_ctx);
     return L.concat(R);
 }
 ;
@@ -369,104 +410,86 @@ void TR::MEM<THword>::Ist_Store(Z3_ast address, tval const& data)
 
 
 
-
-
 template<typename THword>
-bool MEM<THword>::check_page(PAGE*& P, PAGE** PT)
+bool MEM<THword>::checkup_page_ref(PAGE*& P, PAGE** PT)
 {
 #ifndef CLOSECNW
-    Int xchg_user = 0;
-    P->lock(xchg_user);
-    if (user == xchg_user) {
-        P->unlock(xchg_user);
+    if LIKELY(user == P->get_user()) {
 #ifdef USECNWNOAST
         mem_change_map[ALIGN(address, 0x1000)] = (*P);
 #endif
-        P->disable_pad(m_ctx, need_record);
+        if UNLIKELY(P->is_padding()) {
+            P = pto_padding(P)->convert_to_data(PT, m_ctx, this->is_need_record());
+        }
         return false;
     }
-    P->dec_used_ref();
-    if (user == PT[0]->get_user()) {
-        VPANIC("ERROR");
-    }
-
-    P->unlock(xchg_user);
-
-    PAGE* np = new PAGE(user);
-    np->copy(P, m_ctx, need_record);
-    PT[0] = np;
-
-    P = np;
+    else {
+        P->dec_used_ref();
+        PAGE* np;
+        if UNLIKELY(P->is_padding()) {
+            np = new PAGE_DATA(get_user(), m_ctx, this->is_need_record(), pto_padding(P)->get_padding_value());
+        }
+        else {
+            np = new PAGE_DATA(get_user(), *pto_data(P), m_ctx, this->is_need_record());
+        }
+        PT[0] = np;
+        P = np;
 #else
-    vassert(user == P->user);
-    mem_change_map[ALIGN(address, 0x1000)] = (*P);
+        vassert(user == P->user);
+        mem_change_map[ALIGN(address, 0x1000)] = (*P);
 #endif
-    return true;
+        return true;
+    }
 }
 
-template<typename THword>
-PAGE* TR::MEM<THword>::get_write_page(THword address)
-{
-    CODEBLOCKISWRITECHECK(address);
-    PAGE** pt = get_pointer_of_mem_page(address);
-    PAGE* page = (pt) ? pt[0] : nullptr;
-    MEM_ACCESS_ASSERT_W(page, address);
-    if (check_page(page, pt)) {
-        mem_change_map[ALIGN(address, 0x1000)] = (*page);
-    }
-    vassert(page->get_user() == user);
-    page->check_ref_cound();
-    return page;
-}
-
-template<typename THword>
-void MEM<THword>::init_page(PAGE*& P, THword address)
-{
-    Int xchg_user = 0;
-    P->lock(xchg_user);
-    if (user == xchg_user) {
-        P->unlock(xchg_user);
-        return;
-    }
-    PAGE** page = get_pointer_of_mem_page(address);
-    //P->check_ref_cound();
-    P->dec_used_ref();
-    PAGE* np = new PAGE(user);
-    page[0] = np;
-    P->unlock(xchg_user);
-    P = np;
-    return;
-}
 
 static bool sse_cmp(__m256i& pad, void* data, unsigned long size) {
     int index;
-    if (!size) return true;
-    if (ctz(index, _mm256_movemask_epi8(_mm256_cmpeq_epi8(pad, _mm256_loadu_si256((__m256i*)data))))) {
+    if UNLIKELY(!size) return true;
+    if LIKELY(ctz(index, _mm256_movemask_epi8(_mm256_cmpeq_epi8(pad, _mm256_loadu_si256((__m256i*)data))))) {
         return index == size - 1;
     }
     return false;
 }
 
+template<typename THword>
+static void _init_page(MEM<THword>* m, PAGE*& P, THword address)
+{
+
+    PAGE** pt = m->get_pointer_of_mem_page(address);
+    PAGE* page = (pt) ? pt[0] : nullptr;
+    MEM_ACCESS_ASSERT_W(page, address);
+    if UNLIKELY(m->get_user() != page->get_user()) {
+        page->dec_used_ref();
+        page = m->map_interface(address);
+        pt[0] = page;
+    }
+    vassert(page->get_user() == m->get_user());
+    page->check_ref_cound(1);
+    P = page;
+}
+
+#define init_page(ref, addr) _init_page<THword>(this, ref, addr)
 //very fast this api have no record
 template<typename THword>
 UInt MEM<THword>::write_bytes(ULong address, ULong length, UChar* data) {
     UInt write_count = 0;
-    if (length < 32) {
+    if LIKELY(length < 32) {
         {
             ULong max = address + length;
             PAGE* p_page = get_mem_page(address);
             MEM_ACCESS_ASSERT_W(p_page, address);
             init_page(p_page, address);
-            p_page->malloc_unit(m_ctx, need_record);
+            //p_page->malloc_unit(m_ctx, need_record);
             UInt count = 0;
             while (address < max) {
                 if (!(address % 0x1000)) {
                     p_page = get_mem_page(address);
                     MEM_ACCESS_ASSERT_W(p_page, address);
                     init_page(p_page, address);
-                    p_page->malloc_unit(m_ctx, need_record);
+                    //p_page->malloc_unit(m_ctx, need_record);
                 }
-                (*p_page)->m_bytes[address & 0xfff] = data[count];
+                pto_data(p_page)->get_unit().set(address & 0xfff, data[count]);
                 address += 1;
                 count += 1;
             };
@@ -484,10 +507,10 @@ UInt MEM<THword>::write_bytes(ULong address, ULong length, UChar* data) {
         MEM_ACCESS_ASSERT_W(p_page, address);
         init_page(p_page, address);
         pad = _mm256_set1_epi8(data[0]);
-        if (!sse_cmp(pad, data, align_l) || !p_page->is_pad()) {
-            p_page->malloc_unit(m_ctx, need_record);
+        if UNLIKELY(!sse_cmp(pad, data, align_l) || !p_page->is_padding()) {
+            //p_page->malloc_unit(m_ctx, need_record);
             first_flag = true;
-            memcpy(&(*p_page)->m_bytes[address & 0xfff], data, align_l);
+            pto_data(p_page)->get_unit().Ist_Put(address & 0xfff, data, align_l);
             write_count += align_l;
         }
         data += align_l;
@@ -497,17 +520,19 @@ UInt MEM<THword>::write_bytes(ULong address, ULong length, UChar* data) {
     UInt count = 0;
     ULong max = (ALIGN(address + length, 32) - address);
     PAGE* p_page = nullptr;
+    PAGE** p_pt = nullptr;
 
     bool need_mem = false;
     bool need_check = true;
     while (count < max) {
         if ((!((address + count) & 0xfff)) || (need_check)) {
-            p_page = get_mem_page(address + count);
+            p_pt = get_pointer_of_mem_page(address + count);
+            p_page = p_pt[0];
             MEM_ACCESS_ASSERT_W(p_page, address + count);
             init_page(p_page, address + count);
             ULong smax = (count + 0x1000 <= max) ? 0x1000 : max - count;
             need_mem = false;
-            if (p_page->is_pad()) {
+            if UNLIKELY(p_page->is_padding()) {
                 if (!need_check) {
                     pad = _mm256_set1_epi8(data[count]);
                 }
@@ -523,34 +548,35 @@ UInt MEM<THword>::write_bytes(ULong address, ULong length, UChar* data) {
                         need_mem = true;
                     }
                 }
-                if (need_mem) {
-                    p_page->malloc_unit(m_ctx, need_record);
+                if LIKELY(need_mem) {
+                    p_page = ((PAGE_PADDING*)p_page)->convert_to_data(p_pt, m_ctx, need_record);
                 }
                 else {
-                    p_page->set_pad(M256i(pad).m256i_u8[0]);
+                    pto_padding(p_page)->set_padding_value(M256i(pad).m256i_u8[0]);
                     count = ALIGN(address + count + 0x1000, 0x1000) - address;
                     continue;
                 }
             }
         }
-        SET32((&(*p_page)->m_bytes[(address + count) & 0xfff]), *(__m256i*)(data + count));
+        pto_data(p_page)->get_unit().set((address + count) & 0xfff, _mm256_loadu_si256((__m256i*) (data + count)));
         count += 32;
         write_count += 32;
     };
     if (align_r) {
         if ((!((address + count) & 0xfff)) || !p_page) {
-            p_page = get_mem_page(address + count);
+            p_pt = get_pointer_of_mem_page(address + count);
+            p_page = p_pt[0];
             MEM_ACCESS_ASSERT_W(p_page, address + count);
             init_page(p_page, address + count);
             pad = _mm256_set1_epi8(data[count]);
         }
-        if ((!sse_cmp(pad, data + count, align_r)) || need_mem || !p_page->is_pad()) {
-            p_page->malloc_unit(m_ctx, need_record);
-            memcpy(&(*p_page)->m_bytes[(address + count) & 0xfff], &data[count], align_r);
+        if ((!sse_cmp(pad, data + count, align_r)) || need_mem || !p_page->is_padding()) {
+            p_page = ((PAGE_PADDING*)p_page)->convert_to_data(p_pt, m_ctx, need_record);
+            pto_data(p_page)->get_unit().Ist_Put((address + count) & 0xfff, &data[count], align_r);
             write_count += align_r;
         }
         else {
-            p_page->set_pad(M256i(pad).m256i_u8[0]);
+            pto_padding(p_page)->set_padding_value(M256i(pad).m256i_u8[0]);
         }
     }
 
@@ -558,5 +584,10 @@ UInt MEM<THword>::write_bytes(ULong address, ULong length, UChar* data) {
 }
 
 
+
+
+
+
 template class TR::MEM<Addr32>;
 template class TR::MEM<Addr64>;
+

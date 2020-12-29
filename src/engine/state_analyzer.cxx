@@ -211,7 +211,7 @@ private:
     std::map<THword, blockEnd> m_block_end;
     ThreadPool m_pool;
     
-    inline THword tIRExpr(IRExpr* e, EmuEnvironment<MAX_IRTEMP>& ir_temp)
+    inline THword tIRExpr(IRExpr* e, EmuEnvironment& ir_temp)
     {
         switch (e->tag) {
         case Iex_RdTmp: { return ir_temp[e->Iex.RdTmp.tmp]; }
@@ -234,7 +234,7 @@ private:
     }
 
     void _add_block(THword block_start) {
-        EmuEnvironment<MAX_IRTEMP> emu(info(), m_mem, info().gguest());
+        EmuEnvironment emu(info(), m_mem, info().gguest());
         THword     block_task = 0;
         THword guest_start = block_start;
         bool fresh = false; 
@@ -352,7 +352,7 @@ private:
         /*
         m_mem.set_double_page(addr, pap);
         pap.mem_obj = (void*)&m_mem;
-        pap.n_page_mem = EmuEnvironment<MAX_IRTEMP>::mem_next_page<THword>;
+        pap.n_page_mem = EmuEnvironment::mem_next_page<THword>;
         pap.start_swap = 0;
         pap.guest_max_insns = m_info.gmax_insns();*/
         //vta->guest_bytes = pap.t_page_addr;

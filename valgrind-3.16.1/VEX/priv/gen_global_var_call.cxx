@@ -35,6 +35,8 @@ extern "C" {
 
 #undef MKG_VAR_CALL
 
+#include "gen_global_var_call.hpp"
+
 static_assert(sizeof(IRExpr) == 32, "gggg");
 //static constexpr int sizeofARMInstr = sizeof(ARMInstr);
 //static_assert(sizeofARMInstr <= 28, "gggg");
@@ -73,12 +75,11 @@ class __attribute__((aligned(16)))  LibVEX_Alloc_M {
     HChar* private_LibVEX_alloc_last;
     std::deque<void*> m_alloc_list;
     VexAllocMode mode;
-    bool life_cycle_transfer;
 
 public:
-    inline LibVEX_Alloc_M() :temporary(nullptr), life_cycle_transfer(false){
-        m_alloc_list.clear();
-        private_LibVEX_alloc_OOM();
+    inline LibVEX_Alloc_M() :temporary(nullptr){
+        this->m_alloc_list.clear();
+        this->private_LibVEX_alloc_OOM();
     }
 
     inline void* LibVEX_Alloc_inline(SizeT nbytes) {
@@ -164,18 +165,17 @@ public:
     }
     
     std::deque<void*> transfer() {
-        vassert(!life_cycle_transfer);
-        life_cycle_transfer = true;
+        //life_cycle_transfer = true;
         std::deque<void*> res = m_alloc_list;
         m_alloc_list.clear();
         return res;
     }
     
     inline ~LibVEX_Alloc_M() {
-        if (life_cycle_transfer) { 
+        /*if (life_cycle_transfer) { 
             vassert(m_alloc_list.empty());
             return;
-        }
+        }*/
         for (auto alloc_tmp : m_alloc_list) {
             free(alloc_tmp);
         }
@@ -209,6 +209,6 @@ void vexSetAllocModeTEMP_and_clear(void) {
     gLibVEX_Alloc_M.vexSetAllocModeTEMP_and_clear();
 }
 
-std::deque<void*> LibVEX_Alloc_transfer(void) {
+std::deque<void*> LibVEX_IRSB_transfer(void) {
     return gLibVEX_Alloc_M.transfer();
 }
