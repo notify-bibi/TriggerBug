@@ -35,6 +35,8 @@ namespace TR {
             return *reinterpret_cast<T*>(&data[pos]);
         }
 
+        inline std::size_t size() { return m_size; }
+
         // Delete objects from aligned storage
         ~static_vector()
         {
@@ -46,12 +48,26 @@ namespace TR {
     };
 
 
+    template<std::size_t N>
+    class ir_temp_vector : public static_vector<tval, N> {
+        Z3_context m_ctx;
+    public:
+        ir_temp_vector(Z3_context ctx) :m_ctx(ctx) {
+            for (std::size_t pos = 0; pos < N; ++pos) {
+                static_vector::emplace_back(tval());
+            }
+        }
+    };
+
+
     class IR_Manager {
         friend class EmuEnvironment;
-        void** m_ir_temp_trunk;
-        std::deque<static_vector<tval, MAX_IRTEMP>> m_ir_unit;
+        using tval_thunk = ir_temp_vector<MAX_IRTEMP>;
+        Z3_context m_ctx;
+        std::vector<tval_thunk*> m_ir_unit;
         UInt   m_size_ir_temp;
-        IR_Manager();
+        void clear();
+        IR_Manager(Z3_context ctx);
         tval& operator[](UInt idx);
         ~IR_Manager();
     };
@@ -85,7 +101,7 @@ namespace TR {
         template<typename THword>
         IRSB* translate_front(MEM<THword>& mem, Addr guest_addr);
         //set guest_start_of_block to check block changed by guest
-        inline void set_start(Addr64 s) { m_guest_start_of_block = s; m_is_dynamic_block = false; }
+        void set_start(Addr64 s);
 
         void set_guest_bytes_addr(const UChar* bytes, Addr64 virtual_addr);
 
@@ -103,7 +119,7 @@ namespace TR {
             return *m_ir_temp_trunk;
         }*/
 
-        inline tval& operator[](UInt idx) { return  m_ir_temp[idx]; }
+        tval& operator[](UInt idx) { return  m_ir_temp[idx]; }
 
         inline VexTranslateArgs* get_ir_vex_translate_args() { return &m_vta_chunk; }
         inline VexGuestExtents* get_ir_vex_guest_extents() { return &m_vge_chunk; }

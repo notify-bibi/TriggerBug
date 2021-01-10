@@ -221,36 +221,42 @@ const UChar* TR::MEM<THword>::get_vex_insn_linear(Addr guest_IP_sbstart)
 template<typename THword>
 const UChar* TR::MEM<THword>::libvex_guest_insn_control(Addr guest_IP_sbstart, Long delta, const UChar* guest_code)
 {
-
+    guest_IP_sbstart += delta;
     Addr the_rest_n = 0x1000 - (guest_IP_sbstart & 0xfff);
     Insn_linear& insn_linear = this->m_insn_linear;
     vassert(insn_linear.insn_block_delta <= delta);
     insn_linear.insn_block_delta = delta;
-    
-    if (insn_linear.flag == enough) {
-        if (the_rest_n - delta <= 16) {
+    constexpr int size_swap = sizeof(Insn_linear::swap);
+    constexpr int Threshold = size_swap/2;
+    if LIKELY(insn_linear.flag == enough) {
+        if UNLIKELY(the_rest_n <= Threshold) {
+
+            PAGE* p = get_mem_page(guest_IP_sbstart);
+            MEM_ACCESS_ASSERT_R(p, guest_IP_sbstart);
+
             PAGE* next_p = get_mem_page(guest_IP_sbstart + 0x1000);
             MEM_ACCESS_ASSERT_R(next_p, guest_IP_sbstart + 0x1000);
             next_p->set_code_flag();
 
+
             insn_linear.flag = swap_state;
-            const UChar* align_address = insn_linear.guest_addr_in_page + the_rest_n - 0x10;
-            const UChar* now_address = insn_linear.guest_addr_in_page + delta;
-            *(__m128i*)(insn_linear.swap) = *(__m128i*)(align_address);
-            *(__m128i*)(insn_linear.swap + 16) = *(__m128i*)(pto_data(next_p)->get_bytes(0));
-            //delta = (insn_linear.swap + (now_address - align_address)) - guest_code;
-            const UChar* ret_guest_code = (unsigned char*)(insn_linear.swap + (now_address - align_address)) - delta;
+            const UChar* align_address = (const UChar*)pto_data(p)->get_bytes(0x1000 - Threshold);
+            
+            memcpy(insn_linear.swap, align_address, Threshold);
+            memcpy(insn_linear.swap + Threshold, pto_data(next_p)->get_bytes(0), Threshold);
+            const UChar* ret_guest_code = (unsigned char*)(insn_linear.swap + (Threshold - the_rest_n)) - delta;
             return ret_guest_code;
         }
     }
-    else if (insn_linear.flag == swap_state) {
+    else if UNLIKELY(insn_linear.flag == swap_state) {
         ULong offset = ((delta + guest_code) - insn_linear.swap);
-        if (offset >= 16) {
-            insn_linear.flag = next_page;
-            vassert((offset <= 32));
-            //delta = insn_linear.n_page_mem(insn_linear) + (offset - 16) - guest_code;
-            const UChar* ret_guest_code = this->get_next_page(guest_IP_sbstart) + (offset - 16) - delta;
-            return ret_guest_code;
+        if UNLIKELY(offset >= Threshold) {
+            insn_linear.flag = enough;
+            vassert((offset <= size_swap));
+            PAGE* p = get_mem_page(guest_IP_sbstart);
+            MEM_ACCESS_ASSERT_R(p, guest_IP_sbstart);
+            p->set_code_flag();
+            return (const UChar*)pto_data(p)->get_bytes((offset - Threshold)) - delta;
         }
     }
     

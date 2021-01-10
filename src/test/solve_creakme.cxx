@@ -34,7 +34,7 @@ State_Tag hook2(State<Addr32>& s) {
 
 bool creakme() {
 
-    ctx32 v(VexArchX86, PROJECT_DIR"PythonFrontEnd\\examples\\SCTF-creakMe\\creakme.exe.dump");
+    ctx32 v(VexArchX86, PROJECT_DIR"PythonFrontEnd\examples\SCTF-creakMe\creakme.exe.idb.dump");
     v.set_system(windows);
     //v.setFlag(CF_traceJmp);
     v.param().set("ntdll_KiUserExceptionDispatcher", 0x774F4200);

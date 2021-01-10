@@ -34,6 +34,8 @@ static UInt x86g_create_sseround(UInt mxcsr)
 }
 
 
+
+namespace Kc32 {
     /*
     The first element of the array contains a read-write flag that indicates the type of operation that caused the access violation.
     数组的第一个元素包含了一个读写标志，表示引起访问违规的操作类型。
@@ -78,8 +80,8 @@ static UInt x86g_create_sseround(UInt mxcsr)
         ExceptionRecord->ExceptionInformation[0] = info0;
         ExceptionRecord->ExceptionInformation[1] = info1;
         ExceptionRecord->ExceptionInformation[2] = info2;
-
-        for (int i = 3; i < EXCEPTION_MAXIMUM_PARAMETERS; i++) { ExceptionRecord->ExceptionInformation[i] = 0; }
+        int i;
+        for (i = 3; i < EXCEPTION_MAXIMUM_PARAMETERS; i++) { ExceptionRecord->ExceptionInformation[i] = 0; }
 
 
 
@@ -124,24 +126,24 @@ static UInt x86g_create_sseround(UInt mxcsr)
 
 
     //ntdll::ntdll_NtContinue
-    UInt getExecptionCtx(IN PWOW64_CONTEXT ContextRecord,OUT VexGuestX86State* gst) {
+    UInt getExecptionCtx(IN PWOW64_CONTEXT ContextRecord, OUT VexGuestX86State* gst) {
 
         gst->guest_GS = ContextRecord->SegGs;
         gst->guest_FS = ContextRecord->SegFs;
         gst->guest_ES = ContextRecord->SegEs;
         gst->guest_DS = ContextRecord->SegDs;
-                           
+
         gst->guest_EDI = ContextRecord->Edi;
         gst->guest_ESI = ContextRecord->Esi;
         gst->guest_EBX = ContextRecord->Ebx;
         gst->guest_EDX = ContextRecord->Edx;
         gst->guest_ECX = ContextRecord->Ecx;
         gst->guest_EAX = ContextRecord->Eax;
-                           
+
         gst->guest_EBP = ContextRecord->Ebp;
         gst->guest_EIP = ContextRecord->Eip;
         gst->guest_CS = ContextRecord->SegCs;
-                           
+
         gst->guest_CC_OP = X86G_CC_OP_COPY;
         gst->guest_CC_DEP1 = ContextRecord->EFlags;
 
@@ -166,3 +168,5 @@ static UInt x86g_create_sseround(UInt mxcsr)
 
         return gst->guest_EIP;
     }
+
+};

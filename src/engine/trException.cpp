@@ -27,7 +27,7 @@ std::string Expt::RuntimeIrSig::msg() const {
     return ret.assign(buffer);
 }
 
-Expt::IRfailureExit::IRfailureExit(char* msg) :ExceptionBase(IR_failure_exit),
+Expt::IRfailureExit::IRfailureExit(const char* msg) :ExceptionBase(IR_failure_exit),
     m_thread_id(TRCurrentThreadId()),
     m_error_message(msg),
     m_file(nullptr),

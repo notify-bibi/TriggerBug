@@ -542,27 +542,19 @@ bool test_ir_dirty_rflags() {
 
     };
 
-
     {
 
         ssbval<8> dep1(c.bv_const("dep1", 8));
         ssbval<8> dep2(c, c.bv_const("dep2", 8));
         subval<64> ndep(c, c.bv_const("ndep", 64));;
 
-        
-
         sbool s0 = z3_amd64g_calculate_condition(rsval<uint64_t>(c, AMD64CondLE), rsval<uint64_t>(c, AMD64G_CC_OP_SUBL), dep1.ext<true, 24>() - 0xa, ssbval<64>(c, 0x55), ndep).tos().extract<0, 0>() == 1;
         sbool s1 = z3_amd64g_calculate_condition(rsval<uint64_t>(c, AMD64CondLE), rsval<uint64_t>(c, AMD64G_CC_OP_SUBB), dep1.to_ubv(), ssbval<64>(c, 0x2f), ndep).tos().extract<0, 0>() == 1;
         sbool s2 = z3_amd64g_calculate_condition(rsval<uint64_t>(c, AMD64CondLE), rsval<uint64_t>(c, AMD64G_CC_OP_SUBB), dep1.to_ubv(), ssbval<64>(c, 0x39), ndep).tos().extract<0, 0>() == 1;
             
-
-        check(solver, !s0 != (dep1.ext<true, 24>() - 0xa) > ssbval<32>(c, 0x55));
-
-
-        check(solver, !s1 != dep1 > ssbval<8>(c, 0x2f));
-
-
-        check(solver, s2 != dep1 <= ssbval<8>(c, 0x39));
+        cbool_assert( check(solver, !s0 != (dep1.ext<true, 24>() - 0xa) > ssbval<32>(c, 0x55)));
+        cbool_assert(check(solver, !s1 != dep1 > ssbval<8>(c, 0x2f)));
+        cbool_assert(check(solver, s2 != dep1 <= ssbval<8>(c, 0x39)));
         
     }
 
@@ -655,7 +647,7 @@ bool test_mem_GPMana() {
 bool test_code_no_linear() {
     ctx64 v(VexArchAMD64, "");
     SP::linux64 state(v, 0, True);
-    state.setFlag(CF_traceJmp);
+    //state.setFlag(CF_traceJmp);
     state.setFlag(CF_ppStmts);
 
     state.mem.map(0x1000, 0x6000);
@@ -672,18 +664,81 @@ bool test_code_no_linear() {
 
     state.mem.store(0x1900 + i * 6, 0xf4);
 
-    state.regs.set(AMD64_IR_OFFSET::RAX, 0x8000);
+    state.regs.set(AMD64_IR_OFFSET::RAX, 0x8000ll);
     state.start(0x1900);
 
     auto rax = state.regs.get<false, 64, Z3_BV_SORT>(AMD64_IR_OFFSET::RAX);
 
     return (rax.tor() == vic);
 }
+//#define TESTZ3
+
+#ifdef TESTZ3
+#include "test/example.hpp"
+
+void z3_lean() {
+
+    std::cout << "consequence example\n";
+    context c;
+    expr A = c.bv_const("a", 8);
+    expr B = c.bv_const("b", 8);
+    expr C = c.bv_const("c", 8);
+    solver s(c);
+    s.add((A>B));
+    s.add((B>=C));
+    expr_vector assumptions(c), vars(c), consequences(c);
+    assumptions.push_back(C<B);
+    vars.push_back(A);
+    vars.push_back(B);
+    vars.push_back(C);
+    std::cout << s.consequences(assumptions, vars, consequences) << "\n";
+    std::cout << vars << "\n";
+    std::cout << consequences << "\n";
+}
+
+
+void recfun_example_2() {
+    std::cout << "recfun example\n";
+    context c;
+    expr i = c.int_const("i");
+    expr x = c.int_const("x");
+    expr ix = c.int_const("ix");
+    sort I = c.int_sort();
+    sort B = c.bool_sort();
+
+    sort dom[] = { I, I, I };
+    func_decl f = c.recfun(c.str_symbol("f"), 3, dom, I);
+
+    expr_vector args(c);
+    args.push_back(i); args.push_back(x); args.push_back(ix);
+    c.recdef(f, args, ite(i<=ix, f( i*2+2 , x+i*i , ix), x+i));
+    model m(c);
+    expr zero_numeral = c.int_val(0);
+    expr one_numeral = c.int_val(1);
+    //m.add_const_interp(f, zero_numeral);
+    std::cout << f(c.int_val(12), c.int_val(5), c.int_val(5000)).simplify() << std::endl;;
+    prove(f(c.int_val(0), i, c.int_val(0)) > 0);
+}
+
+#endif
+
+
+
+
+
+
+
+
+
 
 
 
 int main() {
 
+#ifdef TESTZ3
+    recfun_example_2();
+    testz3();
+#endif
     IR_TEST(test_basic_var_real);
     IR_TEST(test_basic_var_sym);
 

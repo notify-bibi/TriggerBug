@@ -47,6 +47,7 @@ __pycache__
 *.nam
 *.til
 *.dump
+*.idb
 
 # OS generated files #
 ######################

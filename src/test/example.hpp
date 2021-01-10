@@ -12,7 +12,6 @@ using namespace z3;
 
 
 
-
 /**
    Demonstration of how Z3 can be used to prove validity of
    De Morgan's Duality Law: {e not(x and y) <-> (not x) or ( not y) }
@@ -59,9 +58,7 @@ void find_model_example1() {
         func_decl v = m[i];
         // this problem contains only constants
         assert(v.arity() == 0); 
-
-
-        std::cout  << v.name() << " = " << m.get_const_interp(v) << "\n";
+        std::cout << v.name() << " = " << m.get_const_interp(v) << "\n";
     }
     // we can evaluate expressions in the model.
     std::cout << "x + y + 1 = " << m.eval(x + y + 1) << "\n";
@@ -107,8 +104,6 @@ void prove_example1() {
         std::cout << "counterexample:\n" << m << "\n";
         std::cout << "g(g(x)) = " << m.eval(g(g(x))) << "\n";
         std::cout << "g(y)    = " << m.eval(g(y)) << "\n";
-        std::cout << "x    = " << m.eval(x) << "\n";
-        std::cout << "y    = " << m.eval(y) << "\n";
     }
 }
 
@@ -309,7 +304,7 @@ void error_example() {
         // The next call fails because x is a Boolean.
         expr n = x + 1;
     }
-    catch (z3exception ex) {
+    catch (exception ex) {
         std::cout << "failed: " << ex << "\n";
     }
 
@@ -317,7 +312,7 @@ void error_example() {
     try {
         expr arg = to_expr(c, Z3_get_app_arg(c, x, 0));
     }
-    catch (z3exception ex) {
+    catch (exception ex) {
         std::cout << "failed: " << ex << "\n";
     }
 }
@@ -461,9 +456,9 @@ void unsat_core_example2() {
     assert(F.is_app()); // I'm assuming F is an application.
     if (F.decl().decl_kind() == Z3_OP_AND) {
         // F is a conjunction
-        std::cout << "F num. args (before simplify): " << F.num_args() << F << "\n";
+        std::cout << "F num. args (before simplify): " << F.num_args() << "\n";
         F = F.simplify();
-        std::cout << "F num. args (after simplify):  " << F.num_args() << F <<"\n";
+        std::cout << "F num. args (after simplify):  " << F.num_args() << "\n";
         for (unsigned i = 0; i < F.num_args(); i++) {
             std::cout << "Creating answer literal q" << i << " for " << F.arg(i) << "\n";
             std::stringstream qname; qname << "q" << i;
@@ -575,7 +570,7 @@ void tactic_example3() {
       - The choice combinator t | s first applies t to the given goal, if it fails then returns the result of s applied to the given goal.      
       - repeat(t) Keep applying the given tactic until no subgoal is modified by it.
       - repeat(t, n) Keep applying the given tactic until no subgoal is modified by it, or the number of iterations is greater than n.
-      - try_for(t, ms) Apply tactic t to the input goal, if it does not return in ms millisenconds, it fails.
+      - try_for(t, ms) Apply tactic t to the input goal, if it does not return in ms milliseconds, it fails.
       - with(t, params) Apply the given tactic using the given parameters.      
     */
     std::cout << "tactic example 3\n";
@@ -708,7 +703,6 @@ void tactic_example7() {
     goal subgoal = r[0];
     for (unsigned i = 0; i < subgoal.size(); i++) {
         s.add(subgoal[i]);
-        std::cout << subgoal[i] << "\n";
     }
     std::cout << s.check() << "\n";
     model m = s.get_model();
@@ -743,7 +737,7 @@ void tactic_example8() {
     try {
         t(g);
     }
-    catch (z3exception) {
+    catch (exception) {
         std::cout << "tactic failed...\n";
     }
     std::cout << "trying again...\n";
@@ -808,11 +802,19 @@ void tactic_qe() {
     std::cout << s.get_model() << "\n";
 }
 
-void visit(expr const & e) {
+void visit(std::vector<bool>& visited, expr const & e) {
+    if (visited.size() <= e.id()) {
+        visited.resize(e.id()+1, false);
+    }
+    if (visited[e.id()]) {
+        return;
+    }
+    visited[e.id()] = true;
+
     if (e.is_app()) {
         unsigned num = e.num_args();
         for (unsigned i = 0; i < num; i++) {
-            visit(e.arg(i));
+            visit(visited, e.arg(i));
         }
         // do something
         // Example: print the visited expression
@@ -820,7 +822,7 @@ void visit(expr const & e) {
         std::cout << "application of " << f.name() << ": " << e << "\n";
     }
     else if (e.is_quantifier()) {
-        visit(e.body());
+        visit(visited, e.body());
         // do something
     }
     else { 
@@ -833,15 +835,18 @@ void tst_visit() {
     std::cout << "visit example\n";
     context c;
 
+    // only one of the occurrences of x*x is visited 
+    // because they are the same subterms
     expr x = c.int_const("x");
     expr y = c.int_const("y");
     expr z = c.int_const("z");
-    expr f = x*x - y*y >= 0;
-    
-    visit(f);
+    expr f = x*x + x*x - y*y >= 0;
+    std::vector<bool> visited;
+    visit(visited, f);
 }
 
 void tst_numeral() {
+    std::cout << "numeral example\n";
     context c;
     expr x = c.real_val("1/3");
     double d = 0;
@@ -1039,6 +1044,27 @@ void opt_example() {
     }
 }
 
+/**
+ * translate from one optimization context to another.
+ */
+void opt_translate_example() {
+    context c1, c2;
+    optimize o1(c1);
+    expr x = c1.int_const("x");
+    expr y = c1.int_const("y");
+    o1.add(10 >= x && x >= 0);
+    o1.add(10 >= y && y >= 0);
+    o1.add(x + y <= 11);
+    optimize::handle h1 = o1.maximize(x);
+    optimize::handle h2 = o1.maximize(y);
+    optimize o2(c2, o1);
+    expr z = c2.int_const("z");
+    expr x2 = c2.int_const("x");
+    o2.add(x2 + z == 2);
+    o2.minimize(z);
+    std::cout << o2 << "\n";
+}
+
 void extract_example() {
     std::cout << "extract example\n";
     context c;
@@ -1151,11 +1177,12 @@ void consequence_example() {
     s.add(implies(A, B));
     s.add(implies(B, C));
     expr_vector assumptions(c), vars(c), consequences(c);
-    assumptions.push_back(!C);
+    assumptions.push_back(C);
     vars.push_back(A);
     vars.push_back(B);
     vars.push_back(C);
     std::cout << s.consequences(assumptions, vars, consequences) << "\n";
+    std::cout << vars << "\n";
     std::cout << consequences << "\n";
 }
 
@@ -1199,7 +1226,6 @@ void mk_model_example() {
     // add assignment to model
     m.add_const_interp(a_decl, zero_numeral);
     m.add_const_interp(b_decl, one_numeral);
-    std::cout << m << std::endl;
 
     // evaluate a + b < 2 in the model
     std::cout << m.eval(a + b < 2)<< std::endl;
@@ -1301,6 +1327,7 @@ int testz3() {
         exists_expr_vector_example(); std::cout << "\n";
         substitute_example(); std::cout << "\n";
         opt_example(); std::cout << "\n";
+        opt_translate_example(); std::cout << "\n";
         extract_example(); std::cout << "\n";
         param_descrs_example(); std::cout << "\n";
         sudoku_example(); std::cout << "\n";
@@ -1313,7 +1340,7 @@ int testz3() {
         string_issue_2298(); std::cout << "\n";
         std::cout << "done\n";
     }
-    catch (z3exception & ex) {
+    catch (exception & ex) {
         std::cout << "unexpected error: " << ex << "\n";
     }
     return 0;

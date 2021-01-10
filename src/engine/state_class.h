@@ -49,16 +49,16 @@ namespace cmpr {
 
 }
 
-template<typename ADDR>
+template<typename THword>
 class StateCmprsInterface;
 
-template<typename ADDR>
+template<typename THword>
 class StateAnalyzer;
 
 namespace TR {
 
     class TRsolver :public z3::solver {
-        template<typename ADDR>
+        template<typename THword>
         friend class State;
         friend class BranchChunk;
         friend class StateX86;
@@ -94,17 +94,17 @@ namespace TR {
     };
 
     //Functional programming
-    template<typename ADDR>
+    template<typename THword>
     class InvocationStack {
-        std::deque<ADDR> guest_call_stack;
-        std::deque<ADDR> guest_stack;
+        std::deque<THword> guest_call_stack;
+        std::deque<THword> guest_stack;
     public:
         inline InvocationStack() {}
-        inline InvocationStack(InvocationStack<ADDR> const& fsk) {
+        inline InvocationStack(InvocationStack<THword> const& fsk) {
             guest_call_stack = fsk.guest_call_stack;
             guest_stack = fsk.guest_stack;
         }
-        inline void push(ADDR call_ptr, ADDR bp/*栈底*/) {
+        inline void push(THword call_ptr, THword bp/*栈底*/) {
             guest_call_stack.push_back(call_ptr);
             guest_stack.push_back(bp);
         }
@@ -114,8 +114,8 @@ namespace TR {
                 guest_stack.pop_back();
             }
         }
-        template<typename ADDR> friend bool operator==(InvocationStack<ADDR> const& a, InvocationStack<ADDR> const& b);
-        void operator=(InvocationStack<ADDR> const& b) {
+        template<typename THword> friend bool operator==(InvocationStack<THword> const& a, InvocationStack<THword> const& b);
+        void operator=(InvocationStack<THword> const& b) {
             guest_call_stack = b.guest_call_stack;
             guest_stack = b.guest_stack;
         }
@@ -127,8 +127,8 @@ namespace TR {
     };
 
 
-    template<typename ADDR>
-    inline bool operator==(InvocationStack<ADDR> const& a, InvocationStack<ADDR> const& b) {
+    template<typename THword>
+    inline bool operator==(InvocationStack<THword> const& a, InvocationStack<THword> const& b) {
         return (a.guest_call_stack == b.guest_call_stack) && (a.guest_stack == b.guest_stack);
     }
 
@@ -275,13 +275,13 @@ namespace TR {
 
 
 
-    template<typename ADDR>
-    class StateMEM : public MEM<ADDR> {
-        State<ADDR>& m_state;
+    template<typename THword>
+    class StateMEM : public MEM<THword> {
+        State<THword>& m_state;
 
     public:
-        StateMEM(TR::vctx_base &vb, State<ADDR>& state, z3::solver& so, z3::vcontext& ctx, Bool _need_record) :MEM<ADDR>(vb, so, ctx, _need_record), m_state(state) {}
-        StateMEM(State<ADDR>& state, z3::solver& so, z3::vcontext& ctx, StateMEM& father_mem, Bool _need_record) :MEM<ADDR>(so, ctx, father_mem, _need_record), m_state(state) {}
+        StateMEM(TR::vctx_base &vb, State<THword>& state, z3::solver& so, z3::vcontext& ctx, Bool _need_record) :MEM<THword>(vb, so, ctx, _need_record), m_state(state) {}
+        StateMEM(State<THword>& state, z3::solver& so, z3::vcontext& ctx, StateMEM& father_mem, Bool _need_record) :MEM<THword>(so, ctx, father_mem, _need_record), m_state(state) {}
 
         z3::expr idx2Value(Addr64 base, Z3_ast idx) override;
     };
@@ -291,23 +291,23 @@ namespace TR {
 
 
 
-    template<typename ADDR>
+    template<typename THword>
     class State :public Kernel {
-        friend class MEM<ADDR>;
-        friend class StateAnalyzer<ADDR>;
-        friend class StateCmprsInterface<ADDR>;
-        using vsize_t = rsval<ADDR>;
+        friend class MEM<THword>;
+        friend class StateAnalyzer<THword>;
+        friend class StateCmprsInterface<THword>;
+        using vsize_t = rsval<THword>;
         using VexIRTemp = EmuEnvironment;
-        using BTS = BTS<State<ADDR>>;
-        static constexpr int wide = sizeof(ADDR) << 3;
+        using BTS = BTS<State<THword>>;
+        static constexpr int wide = sizeof(THword) << 3;
 
     public:
-        vex_context<ADDR>& m_vctx;
+        vex_context<THword>& m_vctx;
     private:
         //当前state的入口点
-        ADDR        guest_start_ep;
+        THword        guest_start_ep;
         //客户机state的eip（计数器eip）
-        ADDR        guest_start;
+        THword        guest_start;
     private:
         bool        m_dirty_vex_mode = false;
         DirtyCtx    m_dctx = nullptr;
@@ -316,68 +316,69 @@ namespace TR {
         Bool        need_record;
         UInt        m_z3_bv_const_n;
         std::mutex  m_state_lock;
-        ADDR        m_delta;
+        THword        m_delta;
         State_Tag   m_status;
         IRJumpKind  m_jump_kd;
     public:
-        InvocationStack<ADDR>   m_InvokStack;
+        InvocationStack<THword>   m_InvokStack;
         TRsolver                solv;
         //客户机寄存器
         Register<REGISTER_LEN>  regs;
         //客户机内存 （多线程设置相同user，不同state设置不同user）
-        StateMEM<ADDR>          mem;
+        StateMEM<THword>          mem;
         VexIRTemp                  irvex;
-        BranchManager<State<ADDR>> branch;
+        BranchManager<State<THword>> branch;
         std::deque<BTS> m_tmp_branch;
 
-        State(TR::vex_context<ADDR>& vex_info, ADDR gse, Bool _need_record);
-        State(State* father_state, ADDR gse);
+        State(TR::vex_context<THword>& vex_info, THword gse, Bool _need_record);
+        State(State* father_state, THword gse);
         void read_mem_dump(const char*);
     public:
         ~State();
         void start();
-        void start(ADDR oep) { guest_start = oep; start(); }
+        void start(THword oep) { guest_start = oep; start(); }
         void branchGo();
         //ip = ip + offset
-        inline void set_delta(ADDR offset) { m_delta = offset; };
-        inline void goto_ptr(ADDR addr) { m_delta = addr - guest_start; };
+        inline void set_delta(THword offset) { m_delta = offset; };
+        inline void goto_ptr(THword addr) { m_delta = addr - guest_start; };
         //backpoint add
-        void hook_add(ADDR addr, State_Tag(*_func)(State<ADDR>&), TRControlFlags cflag = CF_None) { m_vctx.hook_add(*this, addr, _func, cflag); }
-        vex_context<ADDR>& vctx() { return m_vctx; }
+        void hook_add(THword addr, State_Tag(*_func)(State<THword>&), TRControlFlags cflag = CF_None) { m_vctx.hook_add(*this, addr, _func, cflag); }
+        vex_context<THword>& vctx() { return m_vctx; }
 
-        cmpr::CmprsContext<State<ADDR>, State_Tag> cmprContext(ADDR target_addr, State_Tag tag) { return cmpr::CmprsContext<State<ADDR>, State_Tag>(m_ctx, target_addr, tag); }
-        void compress(cmpr::CmprsContext<State<ADDR>, State_Tag>& ctx);//最大化缩合状态 
+        cmpr::CmprsContext<State<THword>, State_Tag> cmprContext(THword target_addr, State_Tag tag) { return cmpr::CmprsContext<State<THword>, State_Tag>(m_ctx, target_addr, tag); }
+        void compress(cmpr::CmprsContext<State<THword>, State_Tag>& ctx);//最大化缩合状态 
         tval tIRExpr(IRExpr*);
         tval CCall(IRCallee* cee, IRExpr** exp_args, IRType ty);
         inline tval ILGop(IRLoadG* lg);
 
         tval mk_int_const(UShort nbit);
         tval mk_int_const(UShort n, UShort nbit);
-        UInt getStr(std::stringstream& st, ADDR addr);
+        UInt getStr(std::stringstream& st, THword addr);
         inline TRsolver& solver() { return solv; }
-        inline operator MEM<ADDR>& () { return mem; }
+        inline operator MEM<THword>& () { return mem; }
         inline operator Register<REGISTER_LEN>& () { return regs; }
-        inline operator z3::context& () const { return const_cast<State<ADDR>*>(this)->m_ctx; }
+        inline operator z3::context& () const { return const_cast<State<THword>*>(this)->m_ctx; }
         
         Addr64 get_cpu_ip() override { return guest_start; }
-        inline ADDR get_state_ep() { return guest_start_ep; }
+        inline THword get_state_ep() { return guest_start_ep; }
         inline State_Tag status() { return m_status; }
         inline void set_status(State_Tag t) { m_status = t; };
         inline IRJumpKind jump_kd() const { return m_jump_kd; }
         inline void set_jump_kd(IRJumpKind kd) { m_jump_kd = kd; }
         operator std::string() const;
 
+        DirtyCtx getDirtyVexCtx();
         tval dirty_call(IRCallee* cee, IRExpr** exp_args, IRType ty);
         tval dirty_call(const HChar* name, void* func, std::initializer_list<rsval<Addr64>> parms, IRType ty);
-        //Addr64 getGSPTR() { return dirty_get_gsptr<ADDR>(getDirtyVexCtx()); }
+        HWord getGSPTR() { return dirty_get_gsptr<THword>(getDirtyVexCtx()); }
 
-        void vex_push(const rsval<ADDR>& v);
+        void vex_push(const rsval<THword>& v);
         template<typename T, TASSERT(std::is_arithmetic<T>::value)>
-        void vex_push(T v) { vex_push(rsval<ADDR>(m_ctx, v)); }
+        void vex_push(T v) { vex_push(rsval<THword>(m_ctx, v)); }
 
-        rsval<ADDR> vex_pop();
+        rsval<THword> vex_pop();
         //sp[n*size_t]
-        rsval<ADDR> vex_stack_get(int n);
+        rsval<THword> vex_stack_get(int n);
 
         //interface :
 
@@ -386,11 +387,11 @@ namespace TR {
         virtual inline void traceIRSB(IRSB*) { return; };
         virtual inline void traceIrsbEnd(IRSB*) { return; };
         virtual inline void traceIRStmtEnd(IRStmt*) { return; };
-        virtual inline void traceInvoke(ADDR call, ADDR bp) { return; };
+        virtual inline void traceInvoke(THword call, THword bp) { return; };
 
-        Kernel* mkState(ADDR ges) { return ForkState(ges); }
-        virtual rsval<ADDR> TEB() { VPANIC("need to implement the method"); }
-        virtual Kernel* ForkState(ADDR ges) { VPANIC("need to implement the method"); return nullptr; }
+        Kernel* mkState(THword ges) { return ForkState(ges); }
+        virtual rsval<THword> TEB() { VPANIC("need to implement the method"); }
+        virtual Kernel* ForkState(THword ges) { VPANIC("need to implement the method"); return nullptr; }
     private:
         virtual State_Tag Ijk_call(IRJumpKind) { VPANIC("need to implement the method"); m_status = Death; };
         virtual void  cpu_exception(Expt::ExceptionBase const& e) { VPANIC("need to implement the method"); m_status = Death; }
@@ -398,7 +399,7 @@ namespace TR {
         virtual void  StateCompressMkSymbol(State const& newState) {  };
         //State::delta maybe changed by callback
         virtual State_Tag call_back_hook(Hook_struct const& hs) {
-            State_Tag(*CB) (State<ADDR>&) = (State_Tag(*) (State<ADDR>&))hs.cb;
+            State_Tag(*CB) (State<THword>&) = (State_Tag(*) (State<THword>&))hs.cb;
             return (CB) ? (CB)(*this) : Running;
         }
         State_Tag _call_back_hook(Hook_struct const& hs) {
@@ -417,13 +418,13 @@ namespace TR {
 
 
 
-template<typename ADDR>
-static inline std::ostream& operator<<(std::ostream& out, const TR::State<ADDR> & n) {
+template<typename THword>
+static inline std::ostream& operator<<(std::ostream& out, const TR::State<THword> & n) {
     return out << (std::string)n;
 }
 
-template<typename ADDR>
-inline std::ostream& operator << (std::ostream& out, const TR::InvocationStack<ADDR>& e) {
+template<typename THword>
+inline std::ostream& operator << (std::ostream& out, const TR::InvocationStack<THword>& e) {
     return out << (std::string)e; 
 }
 

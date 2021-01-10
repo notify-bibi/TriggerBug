@@ -1,6 +1,6 @@
 # CMakeList.txt: 顶层 CMake 项目文件，在此处执行全局配置
 # 并包含子项目。
-# λ cmake.exe -G "Visual Studio 16 2019" -T ClangCL X:\TriggerBug
+# λ cmake.exe -G "Visual Studio 16 2019" -T ClangCL Y:\TriggerBug
 # λ -DDEBUG_GABLE=ON -DZ3_BUILD_LIBZ3_SHARED=ON -DZ3_USE_LIB_GMP=OFF -DZ3_SINGLE_THREADED=OFF
 #  rm -rf CMakeCache.txt CMakeFiles\
 

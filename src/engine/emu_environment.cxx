@@ -8,20 +8,39 @@
 namespace TR {
 
 
+    void IR_Manager::clear()
+    {
 
-    IR_Manager::IR_Manager()
-    {
     }
-    tval& IR_Manager::operator[](UInt idx)
+
+    IR_Manager::IR_Manager(Z3_context ctx) :m_ctx(ctx), m_size_ir_temp(0)
     {
-        // TODO: 在此处插入 return 语句
-        tval k;
-        return k;
+        for (std::size_t pos = 0; pos < m_ir_unit.size();++pos) {
+            tval_thunk* p = m_ir_unit[pos];
+            if (p)  delete p;
+            m_ir_unit[pos] = nullptr;
+        }
+    }
+
+    tval& IR_Manager::operator[](UInt idx) 
+    {
+        UInt tidx = idx / MAX_IRTEMP;
+        if (m_size_ir_temp <= tidx || !m_ir_unit[tidx]) {
+            vassert(m_size_ir_temp == m_ir_unit.size());
+            for (UInt idx = m_ir_unit.size(); idx <= tidx; idx++) {
+                m_ir_unit.emplace_back(nullptr);
+            }
+            m_ir_unit[tidx] = new tval_thunk(m_ctx);
+            m_size_ir_temp = tidx + 1;
+        }
+        return m_ir_unit[tidx]->operator[](idx% MAX_IRTEMP);
     }
 
     IR_Manager::~IR_Manager()
     {
-
+        for (auto p : m_ir_unit) {
+            if(p) delete p;
+        }
     }
 
     typedef struct IRSB_CHUNK {
@@ -83,7 +102,7 @@ namespace TR {
 
     template<typename THword>
     EmuEnvironment::EmuEnvironment(vex_info const& info, MEM<THword>& mem_obj, VexArch host)
-        :m_info(const_cast<vex_info&>(info)), m_ir_temp_trunk() {
+        : m_info(const_cast<vex_info&>(info)), m_ir_temp(mem_obj.ctx()) {
         vassert((((size_t)this) & 0xf) == 0);
         vex_info::init_vta_chunk(m_vta_chunk, m_vge_chunk, host, info.gtraceflags());
         //set guest code bytes unlinear addr
@@ -93,15 +112,12 @@ namespace TR {
 
     void EmuEnvironment::malloc_ir_buff(Z3_context ctx)
     {
-        for (unsigned j = 0; j < MAX_IRTEMP; j++) { new(&this->operator[](j)) tval(ctx, 0); }
+        
     }
 
     void EmuEnvironment::free_ir_buff()
     {
-        //vassert(m_ir_temp_trunk != nullptr);
-        /*for (int j = 0; j < MAX_TMP; j++) {
-            this->ir_tmp()[j].tval::~tval();
-        }*/
+        m_ir_temp.clear();
     }
 
     template<typename THword>
@@ -118,8 +134,15 @@ namespace TR {
         const UChar* bytes_insn = mem.get_vex_insn_linear(guest_addr);
         set_guest_bytes_addr(bytes_insn, guest_addr);
         IRSB* irsb = LibVEX_FrontEnd(vta, &res, &pxControl);
-        irsbCache.push(irsb, LibVEX_IRSB_transfer());
+        //irsb = dirty_code_deal_BB(irsb);
+
+        //irsbCache.push(irsb, LibVEX_IRSB_transfer());
         return irsb;
+    }
+
+    void EmuEnvironment::set_start(Addr64 s)
+    {
+        m_guest_start_of_block = s; m_is_dynamic_block = false;
     }
 
     void EmuEnvironment::set_guest_bytes_addr(const UChar* bytes, Addr64 virtual_addr)
@@ -172,6 +195,8 @@ namespace TR {
 
     template EmuEnvironment::EmuEnvironment(vex_info const& info, MEM<Addr32>& mem_obj, VexArch host);
     template EmuEnvironment::EmuEnvironment(vex_info const& info, MEM<Addr64>& mem_obj, VexArch host);
+    template IRSB* EmuEnvironment::translate_front(MEM<Addr32>& mem, Addr guest_addr);
+    template IRSB* EmuEnvironment::translate_front(MEM<Addr64>& mem, Addr guest_addr);
 };
 
 

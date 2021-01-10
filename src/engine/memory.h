@@ -185,7 +185,7 @@ namespace TR {
     }Insn_linear_flag;
 
     typedef struct __declspec(align(16)) {
-        unsigned char swap[32];
+        unsigned char swap[48];
         Insn_linear_flag flag;
         UInt the_rest_n;
         const UChar* guest_addr_in_page;

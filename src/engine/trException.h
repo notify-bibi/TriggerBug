@@ -88,7 +88,7 @@ namespace Expt {
         const HChar* m_expr;
         const HChar* m_fn;
     public:
-        IRfailureExit(char* msg);
+        IRfailureExit(const char* msg);
         IRfailureExit(
             const HChar* expr, const HChar* file, Int line, const HChar* fn
         );

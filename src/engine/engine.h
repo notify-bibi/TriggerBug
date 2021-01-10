@@ -5,7 +5,7 @@
 #define _DISABLE_EXTENDED_ALIGNED_STORAGE  
 
 // (4) return 0b000[1111] ull  (>=64) -1ull
-#define fastMask(nb) ((((int)(nb)) < 64)? (ULong)-1ll :((1ull << ((int)(nb))) - 1))
+#define fastMask(nb) ((((int)(nb)) >= 64)? (ULong)-1ll :((1ull << ((int)(nb))) - 1))
 
 // (4) return 0b..1111[0000] ull  (>=64) 0ull
 #define fastMaskReverse(nb) (~fastMask(nb))
@@ -175,8 +175,8 @@ template <class...> constexpr std::false_type always_false{};
 //所有客户机寄存器的ir层的最大长度。建议>=100
 #define REGISTER_LEN 0x800
 
-//100条任意客户机指令所需要的最大 IR temp index。建议>=400
-#define MAX_IRTEMP 800
+//任意基本快所需 IR temp 连续块大小，数量无限制
+#define MAX_IRTEMP 0x80
 
 //每个虚拟物理页存在ast时，使用hash保存每一个ast;否则使用Z3_ast[0x1000];前者耗费小，速度稍微慢，后者反之
 #define USE_HASH_AST_MANAGER

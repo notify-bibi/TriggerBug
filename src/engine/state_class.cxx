@@ -222,16 +222,18 @@ z3::expr StateMEM<THword>::idx2Value(Addr64 base, Z3_ast idx)
 template <typename THword> State<THword>::State(vex_context<THword>& vctx, THword gse, Bool _need_record) :
     Kernel(vctx),
     m_vctx(vctx),
-    solv(m_ctx),
-    mem(vctx, *this, solv, m_ctx, need_record),
-    irvex(vctx, mem, vctx.gguest()),
-    regs(m_ctx, need_record), 
+    guest_start_ep(/*oep*/0),
+    guest_start(/*oep*/0),
     need_record(_need_record),
+    m_z3_bv_const_n(0),
+    m_delta(0),
     m_status(NewState),
     m_jump_kd(Ijk_Boring),
-    m_delta(0),
-    m_z3_bv_const_n(0),
     m_InvokStack(),
+    solv(m_ctx),
+    regs(m_ctx, need_record),
+    mem(vctx, *this, solv, m_ctx, need_record),
+    irvex(vctx, mem, vctx.gguest()),
     branch(*this)
 {
     vctx.set_top_state(this);
@@ -272,18 +274,18 @@ template <typename THword> State<THword>::State(vex_context<THword>& vctx, THwor
 template <typename THword> State<THword>::State(State<THword>* father_state, THword gse) :
     Kernel(*father_state),
     m_vctx(father_state->m_vctx),
-    mem(*this, solv, m_ctx, father_state->mem, father_state->need_record),
-    irvex(m_vctx, mem, m_vctx.gguest()),
     guest_start_ep(gse),
-    guest_start(guest_start_ep), 
-    solv(m_ctx, father_state->solv,  z3::solver::translate{}),
-    regs(father_state->regs, m_ctx, father_state->need_record),
+    guest_start(guest_start_ep),
     need_record(father_state->need_record),
+    m_z3_bv_const_n(father_state->m_z3_bv_const_n),
+    m_delta(0),
     m_status(NewState),
     m_jump_kd(Ijk_Boring),
-    m_delta(0),
-    m_z3_bv_const_n(father_state->m_z3_bv_const_n),
     m_InvokStack(father_state->m_InvokStack),
+    solv(m_ctx, father_state->solv, z3::solver::translate{}),
+    regs(father_state->regs, m_ctx, father_state->need_record),
+    mem(*this, solv, m_ctx, father_state->mem, father_state->need_record),
+    irvex(m_vctx, mem, m_vctx.gguest()),
     branch(*this, father_state->branch)
 {
 
@@ -417,25 +419,30 @@ UInt State<THword>::getStr(std::stringstream& st, THword addr)
 
 
 
-template<typename THword>
-tval TR::State<THword>::dirty_call(IRCallee* cee, IRExpr** exp_args, IRType ty)
+template<typename ADDR>
+DirtyCtx TR::State<ADDR>::getDirtyVexCtx()
 {
-    //getDirtyVexCtx();
-    //dirty_ccall<THword>(m_dctx, cee, exp_args);
-    //return dirty_result<THword>(m_dctx, ty);
+    if (!m_dirty_vex_mode) {
+        m_dirty_vex_mode = true;
+        m_dctx = dirty_context(this);
+    }
+    return m_dctx;
 }
 
-template<typename THword>
-tval TR::State<THword>::dirty_call(const HChar* name, void* func, std::initializer_list<rsval<Addr64>> parms, IRType ty)
+template<typename ADDR>
+tval TR::State<ADDR>::dirty_call(IRCallee* cee, IRExpr** exp_args, IRType ty)
 {
+    getDirtyVexCtx();
+    dirty_ccall<ADDR>(m_dctx, cee, exp_args);
+    return dirty_result<ADDR>(m_dctx, ty);
+}
 
-    ctx64 v(VexArchAMD64, "");
-    TR::EmuEnvironment emu_ev(v, mem, VexArchAMD64);
-    IRSB* bb = emu_ev.translate_front(mem, (Addr)func);
-
-    //getDirtyVexCtx();
-    //dirty_call_np<THword>(m_dctx, name, func, parms);
-    //return dirty_result<THword>(m_dctx, ty);
+template<typename ADDR>
+tval TR::State<ADDR>::dirty_call(const HChar* name, void* func, std::initializer_list<rsval<Addr64>> parms, IRType ty)
+{
+    getDirtyVexCtx();
+    dirty_call_np<ADDR>(m_dctx, name, func, parms);
+    return dirty_result<ADDR>(m_dctx, ty);
 }
 
 
@@ -524,18 +531,25 @@ z3::solver TR::TRsolver::mk_tactic_solver_default(z3::context& c)
       timeout(unsigned int) (default: 4294967295)
     */
     z3::params t_params(c);
-    z3::tactic t_tactic(z3::with(z3::tactic(c, "simplify"), t_params) &
-        z3::tactic(c, "sat") &
-        z3::tactic(c, "solve-eqs") &
-        z3::tactic(c, "bit-blast") &
-        z3::tactic(c, "smt")
-        &
-        z3::tactic(c, "factor") &
-        z3::tactic(c, "bv1-blast") &
-       // z3::tactic(c, "qe-sat") &
-        z3::tactic(c, "ctx-solver-simplify") &
-        z3::tactic(c, "nla2bv") &
-        z3::tactic(c, "symmetry-reduce")
+    //t_params.set("parallel.enable", true);
+   
+    z3::tactic t_tactic(
+        z3::with(
+            z3::tactic(c, "simplify"),
+            t_params
+        )
+        & z3::tactic(c, "sat")
+        & z3::tactic(c, "solve-eqs")
+        & z3::tactic(c, "bit-blast")
+        & z3::tactic(c, "smt")
+        
+        & z3::tactic(c, "factor")
+        & z3::tactic(c, "bv1-blast")
+          // z3::tactic(c, "qe-sat") &
+        & z3::tactic(c, "ctx-solver-simplify")
+        & z3::tactic(c, "nla2bv")
+        & z3::tactic(c, "symmetry-reduce")
+        
     );
     return t_tactic.mk_solver();
 }
@@ -1342,6 +1356,8 @@ void State<THword>::compress(cmpr::CmprsContext<State<THword>, State_Tag>& ctx)
         set_status(NewState);
     }
 }
+
+
 
 
 template class TR::State<Addr32>;

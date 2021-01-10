@@ -50,6 +50,8 @@ namespace TR {
 
 #endif
 
+    extern void setfast(void* /*fast_ptr*/, UInt /*__nbytes*/);
+
 
 #ifdef USE_HASH_AST_MANAGER
     extern Z3_ast freg2Ast(int nbytes, UChar* m_bytes, UChar* m_fastindex, TR::AstManager::AstManagerX& m_ast, z3::vcontext& ctx);
@@ -272,7 +274,6 @@ namespace TR {
                 GET8(__VA_ARGS__):\
                 GET1(23333)//imPOSSIBLE
 
-    void setfast(void* fast_ptr, UInt __nbytes);
 
     template<int maxlength>
     class Register {

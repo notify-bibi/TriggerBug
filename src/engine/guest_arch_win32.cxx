@@ -4,14 +4,14 @@
 #include <winternl.h>
 using namespace TR;
 
-//namespace Kc32 {
-//    VOID putExecptionCtx(
-//        PEXCEPTION_RECORD32 ExceptionRecord, PWOW64_CONTEXT ContextRecord,
-//        VexGuestX86State* gst, DWORD eflags,
-//        DWORD ExceptionCode, DWORD ExceptionAddress, DWORD ExceptionFlags, DWORD NumberParameters, DWORD  nextExceptionRecord,
-//        DWORD info0, DWORD info1, DWORD info2);
-//    UInt getExecptionCtx(IN PWOW64_CONTEXT ContextRecord, OUT VexGuestX86State* gst);
-//};
+namespace Kc32 {
+    VOID putExecptionCtx(
+        PEXCEPTION_RECORD32 ExceptionRecord, PWOW64_CONTEXT ContextRecord,
+        VexGuestX86State* gst, DWORD eflags,
+        DWORD ExceptionCode, DWORD ExceptionAddress, DWORD ExceptionFlags, DWORD NumberParameters, DWORD  nextExceptionRecord,
+        DWORD info0, DWORD info1, DWORD info2);
+    UInt getExecptionCtx(IN PWOW64_CONTEXT ContextRecord, OUT VexGuestX86State* gst);
+};
 
 void TR::win32::avoid_anti_debugging()
 {
@@ -98,8 +98,8 @@ State_Tag TR::win32::Sys_syscall()
         }
         case 0x43: {
             PWOW64_CONTEXT wow64_ctx = (PWOW64_CONTEXT)(size_t)(DWORD)arg0.tor();
-            //Addr32 next = dirty_call("getExecptionCtx32", Kc32::getExecptionCtx, { rsval<Addr64>(ctx(), (size_t)wow64_ctx), rsval<Addr64>(ctx(), getGSPTR()) }, Ity_I32);
-            //goto_ptr(next);
+            Addr32 next = dirty_call("getExecptionCtx32", Kc32::getExecptionCtx, { rsval<Addr64>(ctx(), (size_t)wow64_ctx), rsval<Addr64>(ctx(), getGSPTR()) }, Ity_I32);
+            goto_ptr(next);
             m_InvokStack.clear();
             regs.set(X86_IR_OFFSET::EAX, 0);
             return Running;
@@ -265,14 +265,14 @@ void TR::win32::cpu_exception(Expt::ExceptionBase const& e)
     mem.map(0x100000, 99999);
 
 
- /*   dirty_call("putExecptionCtx32", Kc32::putExecptionCtx,
+    dirty_call("putExecptionCtx32", Kc32::putExecptionCtx,
         {
             rcval<Addr32>(ctx(), (size_t)ExceptionRecord), rcval<Addr32>(ctx(), (size_t)ContextRecord),
             rcval<Addr64>(ctx(), gst), eflags,
             rcval<int>(ctx(), ExceptionCode), rcval<Addr32>(ctx(), ExceptionAddress), rcval<int>(ctx(), ExceptionFlags),rcval<int>(ctx(), NumberParameters), rcval<Addr32>(ctx(), nextExceptionRecord),
             rcval<Addr32>(ctx(), info0), rcval<Addr32>(ctx(), info1), rcval<Addr32>(ctx(), info2)
         },
-        Ity_I32);*/
+        Ity_I32);
 
     regs.set(X86_IR_OFFSET::ESP, esp - stack_size);
     vex_push((Addr32)(ULong)ContextRecord);
