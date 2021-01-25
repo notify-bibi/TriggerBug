@@ -70,7 +70,7 @@ case Iop_##IROPNAME##nb: {																			\
 
 #include "engine/basic_var.hpp"
 
-tval Kernel::tBinop(IROp op, tval const& a, tval const& b){
+tval TR::StateBase::tBinop(IROp op, tval const& a, tval const& b){
     if (a.symb() || b.symb()){
         switch (op) {
             Z3caseIop_Arithmetic(Add, false, +);

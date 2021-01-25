@@ -354,7 +354,7 @@ namespace TR {
         vta_chunk.instrument1 = NULL;
         vta_chunk.instrument2 = NULL;
         vta_chunk.finaltidy = NULL;
-        vta_chunk.preamble_function = NULL;
+        vta_chunk.preamble_function = NULL; // first   [Bool    (*preamble_function)(/*callback_opaque*/void*, IRSB*);]
 
         vta_chunk.disp_cp_chain_me_to_slowEP = (void*)dispatch;
         vta_chunk.disp_cp_chain_me_to_fastEP = (void*)dispatch;
@@ -368,7 +368,7 @@ namespace TR {
         vta_chunk.archinfo_host.endness = guest_endness;
         vta_chunk.archinfo_host.hwcaps = arch_hwcaps(vta_chunk.arch_host);
 
-
+        memset(&vge_chunk, 0 , sizeof(vge_chunk));
         vta_chunk.guest_extents = &vge_chunk;
         vta_chunk.chase_into_ok = chase_into_ok;
         vta_chunk.needs_self_check = needs_self_check;

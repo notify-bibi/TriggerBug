@@ -240,18 +240,18 @@ bool test_basic_var_sym() {
 
     
 
-    auto v_Iop_Clz32 = Kernel::tUnop(Iop_Clz32, sv::rsval<true, 32, Z3_BV_SORT>(c, 0b1111100)).tors<true, 32, Z3_BV_SORT>();
-    auto v_Iop_Ctz32 = Kernel::tUnop(Iop_Ctz32, sv::rsval<true, 32, Z3_BV_SORT>(c, 0b1111100)).tors<true, 32, Z3_BV_SORT>();
-    auto v_Iop_Clz64 = Kernel::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100)).tors<true, 64, Z3_BV_SORT>();
-    auto v_Iop_Ctz64 = Kernel::tUnop(Iop_Ctz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100)).tors<true, 64, Z3_BV_SORT>();
+    auto v_Iop_Clz32 = StateBase::tUnop(Iop_Clz32, sv::rsval<true, 32, Z3_BV_SORT>(c, 0b1111100)).tors<true, 32, Z3_BV_SORT>();
+    auto v_Iop_Ctz32 = StateBase::tUnop(Iop_Ctz32, sv::rsval<true, 32, Z3_BV_SORT>(c, 0b1111100)).tors<true, 32, Z3_BV_SORT>();
+    auto v_Iop_Clz64 = StateBase::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100)).tors<true, 64, Z3_BV_SORT>();
+    auto v_Iop_Ctz64 = StateBase::tUnop(Iop_Ctz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100)).tors<true, 64, Z3_BV_SORT>();
 
-    auto s_Iop_Clz32 = Kernel::tUnop(Iop_Clz32, sv::rsval<true, 32, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 32, Z3_BV_SORT>().simplify();
-    auto s_Iop_Ctz32 = Kernel::tUnop(Iop_Ctz32, sv::rsval<true, 32, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 32, Z3_BV_SORT>().simplify();
-    auto s_Iop_Clz64 = Kernel::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 64, Z3_BV_SORT>().simplify();
-    auto s_Iop_Ctz64 = Kernel::tUnop(Iop_Ctz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 64, Z3_BV_SORT>().simplify();
+    auto s_Iop_Clz32 = StateBase::tUnop(Iop_Clz32, sv::rsval<true, 32, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 32, Z3_BV_SORT>().simplify();
+    auto s_Iop_Ctz32 = StateBase::tUnop(Iop_Ctz32, sv::rsval<true, 32, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 32, Z3_BV_SORT>().simplify();
+    auto s_Iop_Clz64 = StateBase::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 64, Z3_BV_SORT>().simplify();
+    auto s_Iop_Ctz64 = StateBase::tUnop(Iop_Ctz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 64, Z3_BV_SORT>().simplify();
                       
-    auto s_Iop_Clz64_O = Kernel::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 1)).tors<true, 64, Z3_BV_SORT>();;
-    auto s_Iop_Clz64_0 = Kernel::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 1).tos()).tos<true, 64, Z3_BV_SORT>().simplify();
+    auto s_Iop_Clz64_O = StateBase::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 1)).tors<true, 64, Z3_BV_SORT>();;
+    auto s_Iop_Clz64_0 = StateBase::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 1).tos()).tos<true, 64, Z3_BV_SORT>().simplify();
 
 
     cbool_assert((v_Iop_Clz32 == s_Iop_Clz32).tor());
@@ -456,7 +456,7 @@ bool test_cmpress() {
         s2->mem.store(0x602081, 100ull + i + (1ull << 63));
         if (i <= 4)
             continue;
-        s2->m_InvokStack.push(787, 87);
+        s2->get_InvokStack().push(787, 87);
     }
 
 
@@ -648,7 +648,7 @@ bool test_code_no_linear() {
     ctx64 v(VexArchAMD64, "");
     SP::linux64 state(v, 0, True);
     //state.setFlag(CF_traceJmp);
-    state.setFlag(CF_ppStmts);
+    //state.setFlag(CF_ppStmts);
 
     state.mem.map(0x1000, 0x6000);
     /* xor rax,rax  48 31 C0
@@ -734,7 +734,6 @@ void recfun_example_2() {
 
 
 int main() {
-
 #ifdef TESTZ3
     recfun_example_2();
     testz3();

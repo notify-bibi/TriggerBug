@@ -17,16 +17,14 @@ Revision History:
 #endif
 using namespace TR;
 
-template<typename THword>
-z3::expr crypto_finder(TR::State<THword>& s, Addr64 base, Z3_ast index);
+template<typename HWord>
+z3::expr crypto_finder(TR::State& s, Addr64 base, Z3_ast index);
 
 HMODULE hMod_crypto_analyzer = LoadLibraryA("libcrypto_analyzer.dll");
 
 TR::vex_context<Addr32>::Hook_idx2Value c_crypto_find32 = (TR::vex_context<Addr32>::Hook_idx2Value)GetProcAddress(hMod_crypto_analyzer, "?crypto_finder32@@YA?AVexpr@z3@@AEAV?$State@I@TR@@IPEAU_Z3_ast@@@Z");;
 TR::vex_context<Addr64>::Hook_idx2Value c_crypto_find64 = (TR::vex_context<Addr64>::Hook_idx2Value)GetProcAddress(hMod_crypto_analyzer, "?crypto_finder64@@YA?AVexpr@z3@@AEAV?$State@_K@TR@@_KPEAU_Z3_ast@@@Z");
 
-static Bool TR_initdone;
-clock_t tr_begin_run = clock();
 
 
 //######################StateMEM START##############################
@@ -38,14 +36,6 @@ template class TR::StateMEM<Addr64>;
 
 
 
-__attribute__((noreturn))
-static void failure_exit() {
-    throw Expt::IRfailureExit("valgrind error exit");
-}
-
-static void _vex_log_bytes(const HChar* bytes, SizeT nbytes) {
-    std::cout << bytes;
-}
 
 
 UInt arch_2_stack_sp_iroffset(VexArch arch) {
@@ -87,24 +77,6 @@ std::string replace(const char* pszSrc, const char* pszOld, const char* pszNew)
     return strContent;
 }
 
-void IR_init(VexControl& vc) {
-    tr_begin_run = clock();
-    if (!TR_initdone) {
-        Func_Map_Init();
-        LibVEX_Init(&failure_exit, &_vex_log_bytes, 0/*debuglevel*/, &vc);
-        TR_initdone = True;
-
-        //for (int i = 0; i < 257; i++) fastalignD1[i] = (((((i)-1) & -8) + 8) >> 3) - 1;
-        //for (int i = 0; i < 257; i++) fastalign[i] = (((((i)-1) & -8) + 8) >> 3);
-        //for (int i = 0; i <= 64; i++) fastMask[i] = (1ull << i) - 1; fastMask[64] = -1ULL;
-        //for (int i = 0; i <= 64; i++) fastMaskI1[i] = (1ull << (i + 1)) - 1; fastMaskI1[63] = -1ULL; fastMaskI1[64] = -1ULL;
-        //for (int i = 0; i <= 7; i++) fastMaskB[i] = (1ull << (i << 3)) - 1; fastMaskB[8] = -1ULL;
-        //for (int i = 0; i <= 7; i++) fastMaskBI1[i] = (1ull << ((i + 1) << 3)) - 1; fastMaskBI1[7] = -1ULL;
-        //for (int i = 0; i <= 64; i++) fastMaskReverse[i] = ~fastMask[i];
-        //for (int i = 0; i <= 64; i++) fastMaskReverseI1[i] = ~fastMaskI1[i];
-
-    }
-}
 
 
 int eval_all(std::deque<tval>& result, z3::solver& solv, Z3_ast _exp) {
@@ -208,8 +180,8 @@ faild: {
 
 
 
-template<typename THword>
-z3::expr StateMEM<THword>::idx2Value(Addr64 base, Z3_ast idx)
+template<typename HWord>
+z3::expr StateMEM::idx2Value(Addr64 base, Z3_ast idx)
 {
     z3::expr result = m_state.m_vctx.idx2value(m_state, base, idx);
     if ((Z3_ast)result) {
@@ -219,74 +191,21 @@ z3::expr StateMEM<THword>::idx2Value(Addr64 base, Z3_ast idx)
     return result;
 }
 
-template <typename THword> State<THword>::State(vex_context<THword>& vctx, THword gse, Bool _need_record) :
-    Kernel(vctx),
+template <typename HWord> State::State(vex_context<HWord>& vctx, HWord gse, Bool _need_record) :
+    StateBase(vctx, gse, _need_record),
     m_vctx(vctx),
-    guest_start_ep(/*oep*/0),
-    guest_start(/*oep*/0),
-    need_record(_need_record),
-    m_z3_bv_const_n(0),
-    m_delta(0),
-    m_status(NewState),
-    m_jump_kd(Ijk_Boring),
-    m_InvokStack(),
-    solv(m_ctx),
-    regs(m_ctx, need_record),
     mem(vctx, *this, solv, m_ctx, need_record),
     irvex(vctx, mem, vctx.gguest()),
-    branch(*this)
-{
-    vctx.set_top_state(this);
-    VexControl vc;
-    LibVEX_default_VexControl(&vc);
-    vc.iropt_verbosity = 0;
-    vc.iropt_level = info().giropt_level();
-#warning "whate is iropt_unroll_thresh"
-    vc.iropt_unroll_thresh = 0;
-    vc.guest_max_insns = info().gmax_insns();
-    //vc.guest_chase_thresh = 0;   
-    vc.guest_chase = True; //不许追赶
-    vc.iropt_register_updates_default = info().gRegisterUpdates();
-    IR_init(vc);
     
-    read_mem_dump(info().gbin());
-    if (gse)
-        guest_start_ep = gse;
-    else {
-        guest_start_ep = regs.get<THword>(info().gRegsIpOffset()).tor();
-    }
-    guest_start = guest_start_ep;
-
-
-    /*auto _TraceIrAddrress = info().doc_debug->FirstChildElement("TraceIrAddrress");
-    if (_TraceIrAddrress) {
-        for (auto ta = _TraceIrAddrress->FirstChildElement(); ta; ta = ta->NextSiblingElement()) {
-            ULong addr; TRControlFlags flag;
-            sscanf(ta->Attribute("addr"), "%llx", &addr);
-            sscanf(ta->Attribute("cflag"), "%llx", &flag);
-            vctx.hook_add(addr, nullptr, flag);
-        }
-    }*/
-
+{
 };
 
 
-template <typename THword> State<THword>::State(State<THword>* father_state, THword gse) :
-    Kernel(*father_state),
+template <typename HWord> State::State(State* father_state, HWord gse) :
+    StateBase(*father_state, gse),
     m_vctx(father_state->m_vctx),
-    guest_start_ep(gse),
-    guest_start(guest_start_ep),
-    need_record(father_state->need_record),
-    m_z3_bv_const_n(father_state->m_z3_bv_const_n),
-    m_delta(0),
-    m_status(NewState),
-    m_jump_kd(Ijk_Boring),
-    m_InvokStack(father_state->m_InvokStack),
-    solv(m_ctx, father_state->solv, z3::solver::translate{}),
-    regs(father_state->regs, m_ctx, father_state->need_record),
     mem(*this, solv, m_ctx, father_state->mem, father_state->need_record),
     irvex(m_vctx, mem, m_vctx.gguest()),
-    branch(*this, father_state->branch)
 {
 
 };
@@ -294,17 +213,17 @@ template <typename THword> State<THword>::State(State<THword>* father_state, THw
 
 
 
-template <typename THword> State<THword>::~State() {
+template <typename HWord> State::~State() {
     if (m_dirty_vex_mode) {
-        //dirty_context_del<THword>(m_dctx);
+        //dirty_context_del<HWord>(m_dctx);
     }
     for (auto b : branch) {
         delete b;
     }
 }
 
-template<typename THword>
-InvocationStack<THword>::operator std::string() const {
+template<typename HWord>
+InvocationStack<HWord>::operator std::string() const {
     std::string ret;
     char buff[100];
     UInt size = guest_call_stack.size();
@@ -319,88 +238,11 @@ InvocationStack<THword>::operator std::string() const {
     return ret;
 }
 
-template <typename THword>
-State<THword>::operator std::string() const{
-    std::string str;
-    char hex[30];
-    std::string strContent;
-    
 
-    str.append("\n#entry:");
-    snprintf(hex, sizeof(hex),  "%llx", (size_t)guest_start_ep);
-    strContent.assign(hex);
-    str.append(strContent);
-    str.append(" end:");
-    snprintf(hex, sizeof(hex),  "%llx ", (size_t)guest_start);
-    strContent.assign(hex);
-    str.append(strContent);
 
-    switch (m_status) {
-    case NewState:str.append("NewState "); break;
-    case Running:str.append("Running "); break;
-    case Fork:str.append("Fork "); break;
-    case Death:str.append("Death "); break;
-    case Exit:str.append("Exit "); break;
-    default:
-        snprintf(hex, sizeof(hex),  "%d ", m_status);
-        strContent.assign(hex);
-        str.append(strContent); break;
-    }
 
-    str.append(" #child{\n");
-    if (branch.empty()) {
-        switch (m_status) {
-        case NewState:str.append("NewState "); break;
-        case Running:str.append("Running "); break;
-        case Fork:str.append("Fork "); break;
-        case Death:str.append("Death "); break;
-        case Exit:str.append("Exit "); break;
-        default:
-            snprintf(hex, sizeof(hex),  "status:%d ", m_status);
-            strContent.assign(hex);
-            str.append(strContent); break;
-        }
-        snprintf(hex, sizeof(hex),  "%llx    \n}\n ", (size_t)guest_start);
-        strContent.assign(hex);
-        str.append(strContent);
-        return str;
-    }
-    else {
-        for (auto state : branch) {
-            std::string child = *state;
-            str.append(replace(child.c_str(), "\n", "\n   >"));
-        }
-    }
-    str.append("\n}\n");
-    return str;
-}
-
-template <typename THword>
-tval State<THword>::mk_int_const(UShort nbit) {
-    std::unique_lock<std::mutex> lock(m_state_lock);
-    auto res = m_z3_bv_const_n++;
-    char buff[20];
-#ifdef _MSC_VER
-    sprintf_s(buff, sizeof(buff), "p_%d", res);
-#else
-    snprintf(buff, sizeof(buff), "p_%d", res);
-#endif
-    return tval(m_ctx, m_ctx.bv_const(buff, nbit), Z3_BV_SORT, nbit);
-}
-
-template <typename THword>
-tval State<THword>::mk_int_const(UShort n, UShort nbit) {
-    char buff[20];
-#ifdef _MSC_VER
-    sprintf_s(buff, sizeof(buff), "p_%d", n);
-#else
-    snprintf(buff, sizeof(buff), "p_%d", n);
-#endif
-    return  tval(m_ctx, m_ctx.bv_const(buff, nbit), Z3_BV_SORT, nbit);
-}
-
-template <typename THword>
-UInt State<THword>::getStr(std::stringstream& st, THword addr)
+template <typename HWord>
+UInt State::getStr(std::stringstream& st, HWord addr)
 {
     UInt p = 0;
     while (True) {
@@ -420,7 +262,7 @@ UInt State<THword>::getStr(std::stringstream& st, THword addr)
 
 
 template<typename ADDR>
-DirtyCtx TR::State<ADDR>::getDirtyVexCtx()
+DirtyCtx TR::State::getDirtyVexCtx()
 {
     if (!m_dirty_vex_mode) {
         m_dirty_vex_mode = true;
@@ -430,7 +272,7 @@ DirtyCtx TR::State<ADDR>::getDirtyVexCtx()
 }
 
 template<typename ADDR>
-tval TR::State<ADDR>::dirty_call(IRCallee* cee, IRExpr** exp_args, IRType ty)
+tval TR::State::dirty_call(IRCallee* cee, IRExpr** exp_args, IRType ty)
 {
     getDirtyVexCtx();
     dirty_ccall<ADDR>(m_dctx, cee, exp_args);
@@ -438,7 +280,7 @@ tval TR::State<ADDR>::dirty_call(IRCallee* cee, IRExpr** exp_args, IRType ty)
 }
 
 template<typename ADDR>
-tval TR::State<ADDR>::dirty_call(const HChar* name, void* func, std::initializer_list<rsval<Addr64>> parms, IRType ty)
+tval TR::State::dirty_call(const HChar* name, void* func, std::initializer_list<rsval<Addr64>> parms, IRType ty)
 {
     getDirtyVexCtx();
     dirty_call_np<ADDR>(m_dctx, name, func, parms);
@@ -642,77 +484,9 @@ tval State<Addr64>::CCall(IRCallee* cee, IRExpr** exp_args, IRType ty)
 }
 #undef CDFCHECK
 
-template <typename THword>
-void State<THword>::read_mem_dump(const char  *filename)
-{
-    struct memdump {
-        unsigned long long nameoffset;
-        unsigned long long address;
-        unsigned long long length;
-        unsigned long long dataoffset;
-    }buf;
-    if (!filename) return;
-    std::ifstream infile;
-    infile.open(filename, std::ios::binary);
-    if (!infile.is_open()) {
-        if (filename[0] == 0) { return; }
-        std::cerr << filename << "not exit/n" << std::endl; return;
-    }
-    unsigned long long length, err, name_start_offset, name_end_offset, need_write_size = 0, write_count = 0;
-    infile.seekg(0, std::ios::beg);
-    infile.read((char*)&length, 8);
-    infile.seekg(24, std::ios::beg);
-    name_start_offset = length;
-    infile.read((char*)&name_end_offset, 8);
-    length /= 32;
-    char* name_buff = (char*)malloc(name_end_offset - name_start_offset);
-    infile.seekg(name_start_offset, std::ios::beg);
-    infile.read(name_buff, name_end_offset - name_start_offset);
-    infile.seekg(0, std::ios::beg);
-    char *name;
-    printf("Initializing Virtual Memory\n/------------------------------+--------------------+--------------------+------------\\\n");
-    printf("|              SN              |         VA         |         FOA        |     LEN    |\n");
-    printf("+------------------------------+--------------------+--------------------+------------+\n");
-                                               \
-    LARGE_INTEGER   freq = { 0 };                                                                                    
-    LARGE_INTEGER   beginPerformanceCount = { 0 };                                                                   
-    LARGE_INTEGER   closePerformanceCount = { 0 };                                                                   
-    QueryPerformanceFrequency(&freq);                                                                                
-    QueryPerformanceCounter(&beginPerformanceCount);
-    for (unsigned int segnum = 0; segnum < length; segnum++) {
-        infile.read((char*)&buf, 32);
-        char *data = (char *)malloc(buf.length);
-        std::streampos fp = infile.tellg();
-        infile.seekg(buf.dataoffset, std::ios::beg);
-        infile.read(data, buf.length);
-        name = &name_buff[buf.nameoffset - name_start_offset];
-        if (GET8(name)== 0x7265747369676572) {
-#if 0
-            printf("name:%18s address:%016llx data offset:%010llx length:%010llx\n", name, buf.address, buf.dataoffset, buf.length);
-#endif
-            memcpy((regs.m_bytes + buf.address), data, buf.length);
-        }else {
-            printf("| %-28s |  %16llx  |  %16llx  | %10llx |\n", name, buf.address, buf.dataoffset, buf.length);
-            if (err = mem.map(buf.address, buf.length))
-                printf("warning %s had maped before length: %llx\n", name, err);
-            need_write_size += buf.length;
-            write_count += mem.write_bytes(buf.address, buf.length,(unsigned char*) data);
-        }
-        infile.seekg(fp);
-        free(data);
-    }
-    printf("\\-------------------------------------------------------------------------------------/\n");
-    QueryPerformanceCounter(&closePerformanceCount);
-    printf(
-        "Spend time in:   %16lf s.\n"
-        "Need to write    %16lf MByte.\n"
-        "Actually written %16lf MByte\n", (double)(closePerformanceCount.QuadPart - beginPerformanceCount.QuadPart) / freq.QuadPart, ((double)need_write_size) / 0x100000,((double)write_count)/0x100000);
-    free(name_buff);
-    infile.close();
-}
 
-template <typename THword>
-inline tval State<THword>::ILGop(IRLoadG *lg) {
+template <typename HWord>
+inline tval State::ILGop(IRLoadG *lg) {
     switch (lg->cvt) {
     case ILGop_IdentV128:{ return mem.Iex_Load(tIRExpr(lg->addr), Ity_V128);            }
     case ILGop_Ident64:  { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I64 );            }
@@ -726,8 +500,8 @@ inline tval State<THword>::ILGop(IRLoadG *lg) {
     }
 }
 
-template <typename THword>
-tval State<THword>::tIRExpr(IRExpr* e)
+template <typename HWord>
+tval State::tIRExpr(IRExpr* e)
 {
     switch (e->tag) {
     case Iex_Get: { return regs.Iex_Get(e->Iex.Get.offset, e->Iex.Get.ty); }
@@ -756,7 +530,7 @@ tval State<THword>::tIRExpr(IRExpr* e)
         assert(ix.real());
         return regs.Iex_Get(e->Iex.GetI.descr->base + (((UInt)(e->Iex.GetI.bias + (int)(ix))) % e->Iex.GetI.descr->nElems)*ty2length(e->Iex.GetI.descr->elemTy), e->Iex.GetI.descr->elemTy);
     };
-    case Iex_GSPTR: { /*return tval(m_ctx, getGSPTR());*/  };
+    case Iex_GSPTR: { return tval(m_ctx, getGSPTR());  };
     case Iex_VECRET:
     case Iex_Binder:
     default:
@@ -765,39 +539,45 @@ tval State<THword>::tIRExpr(IRExpr* e)
     }
 }
 
-template<typename THword>
-void TR::State<THword>::vex_push(const rsval<THword>& v)
+template<typename HWord>
+void TR::State::vex_push(const rsval<HWord>& v)
 {
-    rsval<THword> sp = regs.get<THword>(m_vctx.gRegsSpOffset()) - sizeof(THword);
+    rsval<HWord> sp = regs.get<HWord>(m_vctx.gRegsSpOffset()) - sizeof(HWord);
     regs.set(m_vctx.gRegsSpOffset(), sp);
     mem.store(sp, v);
 }
 
-template<typename THword>
-rsval<THword> TR::State<THword>::vex_pop()
+template<typename HWord>
+rsval<HWord> TR::State::vex_pop()
 {
-    rsval<THword> sp = regs.get<THword>(m_vctx.gRegsSpOffset());
+    rsval<HWord> sp = regs.get<HWord>(m_vctx.gRegsSpOffset());
     regs.set(m_vctx.gRegsSpOffset(), sp + 0x4u);
-    return mem.load<THword>(sp);
+    return mem.load<HWord>(sp);
 }
 
-template<typename THword>
-rsval<THword> TR::State<THword>::vex_stack_get(int n)
+template<typename HWord>
+rsval<HWord> TR::State::vex_stack_get(int n)
 {
-    rsval<THword> sp = regs.get<THword>(m_vctx.gRegsSpOffset());
-    return mem.load<THword>(sp + (THword)(n * sizeof(THword)));
+    rsval<HWord> sp = regs.get<HWord>(m_vctx.gRegsSpOffset());
+    return mem.load<HWord>(sp + (HWord)(n * sizeof(HWord)));
+}
+
+EmuEnvironment* gen_irvex() {
+    /*thread_local EmuEnvironment sl_irvex;
+    return sl_irvex;*/
+
 }
 
 
-
-
-template <typename THword>
-bool State<THword>::vex_start() {
+template <typename HWord>
+bool State::vex_start() {
     Hook_struct hs;
 
     IRSB* irsb = nullptr;
     rsbool fork_guard(m_ctx, false);
     bool call_stack_is_empty = false;
+    
+    irvex = ;
 
     if UNLIKELY(jump_kd() != Ijk_Boring) {
         m_status = Ijk_call(jump_kd());
@@ -911,10 +691,10 @@ bool State<THword>::vex_start() {
             case Ist_NoOp: break;
             case Ist_IMark: {
                 if UNLIKELY(m_status == Fork) {
-                    m_tmp_branch.push_back(BTS(*this, (THword)s->Ist.IMark.addr, !fork_guard));
+                    m_tmp_branch.push_back(BTS(*this, (HWord)s->Ist.IMark.addr, !fork_guard));
                     goto EXIT;
                 }
-                guest_start = (THword)s->Ist.IMark.addr;
+                guest_start = (HWord)s->Ist.IMark.addr;
                 if UNLIKELY(irvex.check()) {
                     goto For_Begin;// fresh changed block
                 }
@@ -922,7 +702,7 @@ bool State<THword>::vex_start() {
             };
             case Ist_AbiHint: { //====== AbiHint(t4, 128, 0x400936:I64) ====== call 0xxxxxxx
                 tval nia = tIRExpr(s->Ist.AbiHint.nia);
-                tval bp = regs.get<THword>(m_vctx.gRegsBpOffset());
+                tval bp = regs.get<HWord>(m_vctx.gRegsBpOffset());
                 traceInvoke(nia, bp);
                 m_InvokStack.push(nia, bp);
                 break;
@@ -955,9 +735,9 @@ bool State<THword>::vex_start() {
                 }
                 if LIKELY(guard.tor()) {
                     //getDirtyVexCtx();
-                    //dirty_run<THword>(m_dctx, dirty);
+                    //dirty_run<HWord>(m_dctx, dirty);
                     if (dirty->tmp != IRTemp_INVALID) {
-                        //ir_temp[dirty->tmp] = dirty_result<THword>(m_dctx, typeOfIRTemp(irsb->tyenv, dirty->tmp));
+                        //ir_temp[dirty->tmp] = dirty_result<HWord>(m_dctx, typeOfIRTemp(irsb->tyenv, dirty->tmp));
                     }
                 }
                 break;// fresh changed block
@@ -1018,7 +798,7 @@ bool State<THword>::vex_start() {
         case Ijk_Boring: break;
         case Ijk_Call: {
             auto next = tIRExpr(irsb->next).template tor<false, wide>();
-            auto bp = regs.get<THword>(m_vctx.gRegsBpOffset()).tor();
+            auto bp = regs.get<HWord>(m_vctx.gRegsBpOffset()).tor();
             traceInvoke(next, bp);
             m_InvokStack.push(next, bp);
             break; 
@@ -1044,7 +824,7 @@ bool State<THword>::vex_start() {
         sv::rsval<false, wide> next = tIRExpr(irsb->next).template tors<false, wide>();
         if UNLIKELY(m_status == Fork) {
             if LIKELY(next.real()) {
-                m_tmp_branch.push_back(BTS(*this, (THword)next.tor(), !fork_guard));
+                m_tmp_branch.push_back(BTS(*this, (HWord)next.tor(), !fork_guard));
             }
             else {
                 std::deque<tval> result;
@@ -1058,7 +838,7 @@ bool State<THword>::vex_start() {
                 else {
                     for (auto re : result) {
                         auto GN = re.tor<false, wide>();//guest next ip
-                        m_tmp_branch.push_back(BTS(*this, (THword)GN, !fork_guard, next == (THword)GN));
+                        m_tmp_branch.push_back(BTS(*this, (HWord)GN, !fork_guard, next == (HWord)GN));
                     }
                 }
             }
@@ -1080,7 +860,7 @@ bool State<THword>::vex_start() {
             else {
                 for (auto re : result) {
                     auto GN = re.tor<false, wide>();//guest next ip
-                    m_tmp_branch.push_back(BTS(*this, (THword)GN, next == (THword)GN));
+                    m_tmp_branch.push_back(BTS(*this, (HWord)GN, next == (HWord)GN));
                     m_tmp_branch.back().set_jump_kd(irsb->jumpkind);
                 }
                 m_status = Fork;
@@ -1094,8 +874,8 @@ EXIT:
     return true;
 }
 
-template <typename THword>
-void State<THword>::start() {
+template <typename HWord>
+void State::start() {
     if (status() != NewState) {
         VPANIC("war: this->m_status != NewState");
     }
@@ -1147,8 +927,8 @@ Begin_try:
 }
 
 
-template <typename THword>
-void State <THword>::branchGo()
+template <typename HWord>
+void State <HWord>::branchGo()
 {
     for(auto b : branch){
        m_vctx.pool().enqueue([b] {
@@ -1157,18 +937,18 @@ void State <THword>::branchGo()
     }
 }
 
-template<typename THword>
+template<typename HWord>
 class StateCmprsInterface {
     cmpr::StateType m_type;
-    cmpr::CmprsContext<State<THword>, State_Tag>& m_ctx;
-    State<THword>& m_state;
+    cmpr::CmprsContext<State, State_Tag>& m_ctx;
+    State& m_state;
     sbool m_condition;
-    static bool StateCompression(State<THword>& a, State<THword> const& next) {
+    static bool StateCompression(State& a, State const& next) {
         bool ret = a.m_InvokStack == next.m_InvokStack;// 压缩条件
         return ret && a.StateCompression(next);//支持扩展条件
     }
 
-    static void StateCompressMkSymbol(State<THword>& a, State<THword> const& newState) {
+    static void StateCompressMkSymbol(State& a, State const& newState) {
         a.m_InvokStack = newState.m_InvokStack;// 使其满足压缩条件
         a.StateCompressMkSymbol(newState);//支持
     }
@@ -1177,14 +957,14 @@ class StateCmprsInterface {
 
 public:
     StateCmprsInterface(
-        cmpr::CmprsContext<State<THword>, State_Tag>& ctx,
-        State<THword>& self,
+        cmpr::CmprsContext<State, State_Tag>& ctx,
+        State& self,
         cmpr::StateType type
     ) :
         m_ctx(ctx), m_state(self), m_type(type), m_condition(m_ctx.ctx())
     { };
 
-    cmpr::CmprsContext<State<THword>, State_Tag>& cctx() { return m_ctx; }
+    cmpr::CmprsContext<State, State_Tag>& cctx() { return m_ctx; }
     cmpr::StateType type() { return m_type; };
 
     sbool const& get_assert() { 
@@ -1215,7 +995,7 @@ public:
 
     auto& branch() { return m_state.branch; };
 
-    cmpr::StateType tag(State<THword>* son) {
+    cmpr::StateType tag(State* son) {
         if (son->status() == Fork) {
             return cmpr::Fork_Node;
         };
@@ -1228,7 +1008,7 @@ public:
         return cmpr::Survive_Node;
     };
 
-    Int get_group_id(State<THword>* s) {
+    Int get_group_id(State* s) {
         UInt group_count = 0;
         for (auto gs : m_ctx.group()) {
             if (StateCompression(*gs, *s)) {
@@ -1244,7 +1024,7 @@ public:
         delete& m_state;
     }
 
-    PACK mem_Load(THword addr) {
+    PACK mem_Load(HWord addr) {
         return m_state.mem.template load<Ity_I64>(addr).translate(m_ctx.ctx());
     }
 
@@ -1252,7 +1032,7 @@ public:
         return m_state.regs.template get<Ity_I64>(offset).translate(m_ctx.ctx());
     }
 
-    PACK read(THword addr) {
+    PACK read(HWord addr) {
         if (addr < REGISTER_LEN) {
             return reg_Get(addr);
         }
@@ -1261,36 +1041,36 @@ public:
         }
     }
 
-    StateCmprsInterface<THword>* mk(State<THword>* son, cmpr::StateType tag) {
+    StateCmprsInterface<HWord>* mk(State* son, cmpr::StateType tag) {
         //实际上少于4个case intel编译器会转为if
         switch (tag) {
-        case cmpr::Fork_Node:return new cmpr::CmprsFork<StateCmprsInterface<THword>>(m_ctx, *son);
-        case cmpr::Avoid_Node:return new cmpr::CmprsAvoid<StateCmprsInterface<THword>>(m_ctx, *son);
-        case cmpr::Survive_Node:return new cmpr::CmprsSurvive<StateCmprsInterface<THword>>(m_ctx, *son);
-        default:return new cmpr::CmprsTarget<StateCmprsInterface<THword>>(m_ctx, *son, tag);
+        case cmpr::Fork_Node:return new cmpr::CmprsFork<StateCmprsInterface<HWord>>(m_ctx, *son);
+        case cmpr::Avoid_Node:return new cmpr::CmprsAvoid<StateCmprsInterface<HWord>>(m_ctx, *son);
+        case cmpr::Survive_Node:return new cmpr::CmprsSurvive<StateCmprsInterface<HWord>>(m_ctx, *son);
+        default:return new cmpr::CmprsTarget<StateCmprsInterface<HWord>>(m_ctx, *son, tag);
         };
 
     }
 
     virtual bool has_survive() { return false; }
-    virtual cmpr::CmprsFork<StateCmprsInterface<THword>>& get_fork_node() { VPANIC("???"); }
-    virtual cmpr::CmprsTarget<StateCmprsInterface<THword>>& get_target_node() { VPANIC("???"); }
+    virtual cmpr::CmprsFork<StateCmprsInterface<HWord>>& get_fork_node() { VPANIC("???"); }
+    virtual cmpr::CmprsTarget<StateCmprsInterface<HWord>>& get_target_node() { VPANIC("???"); }
     virtual ~StateCmprsInterface() {};
 };
 #ifdef _DEBUG
 #define PPCMPR
 #endif
-template <typename THword>
-void State<THword>::compress(cmpr::CmprsContext<State<THword>, State_Tag>& ctx)
+template <typename HWord>
+void State::compress(cmpr::CmprsContext<State, State_Tag>& ctx)
 {
-    cmpr::Compress<StateCmprsInterface<THword>, State<THword>, State_Tag> cmp(ctx, *this);
+    cmpr::Compress<StateCmprsInterface<HWord>, State, State_Tag> cmp(ctx, *this);
     if (!ctx.group().size()) { 
         return;
     }
     else if (ctx.group().size() > 1 || (ctx.group().size() == 1 && cmp.has_survive())) {
 
-        for (cmpr::Compress<StateCmprsInterface<THword>, State<THword>, State_Tag>::Iterator::StateRes state : cmp) {
-            State<THword>* nbranch = (State<THword>*)mkState(ctx.get_target_addr());
+        for (cmpr::Compress<StateCmprsInterface<HWord>, State, State_Tag>::Iterator::StateRes state : cmp) {
+            State* nbranch = (State*)mkState(ctx.get_target_addr());
             tval condition = state.conditions().translate(*nbranch);
 #ifdef  PPCMPR
             printf("%s\n", Z3_ast_to_string(condition, condition));
@@ -1322,7 +1102,7 @@ void State<THword>::compress(cmpr::CmprsContext<State<THword>, State_Tag>& ctx)
         }
     }
     else {
-        for (cmpr::Compress<StateCmprsInterface<THword>, State<THword>, State_Tag>::Iterator::StateRes state : cmp) {
+        for (cmpr::Compress<StateCmprsInterface<HWord>, State, State_Tag>::Iterator::StateRes state : cmp) {
             tval condition = state.conditions();
 #ifdef  PPCMPR
             printf("%s\n", Z3_ast_to_string(condition, condition));

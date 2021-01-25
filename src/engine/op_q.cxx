@@ -10,7 +10,7 @@
  */
 
 
-tval Kernel::tQop(IROp op, tval const& a, tval const& b, tval const& c, tval const& d){
+tval TR::StateBase::tQop(IROp op, tval const& a, tval const& b, tval const& c, tval const& d){
     if (a.symb() || b.symb() || c.symb() || d.symb()) {
         switch (op) {
         case Iop_64x4toV256: { return dtos(64).concat(ctos(64).concat(btos(64).concat(atos(64)))); }

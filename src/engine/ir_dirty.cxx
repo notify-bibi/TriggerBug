@@ -27,113 +27,80 @@ void tAMD64REGS(int offset, int length);
 
 namespace Drt {
 
-    __declspec(align(32))
-        class IRDirtyMode : private EmuEnvironment {
 
-        template<typename THword>
-        IRDirtyMode(TR::vex_info const& info, MEM<THword>& mem_obj, VexArch host) :EmuEnvironment(info, mem_obj, host) {};
-
-        template<typename THword>
-        IRSB* translate_front(MEM<THword>& mem, Addr guest_addr) {
-
-            VexRegisterUpdates pxControl;
-            VexTranslateResult res;
-            IRSB* cache_irsb = irsbCache.find(mem, guest_addr);
-            if (LIKELY(cache_irsb != nullptr)) {
-                return cache_irsb;
-            }
-
-            VexTranslateArgs* vta = get_ir_vex_translate_args();
-            const UChar* bytes_insn = guest_addr;
-            set_guest_bytes_addr(bytes_insn, guest_addr);
-            IRSB* irsb = LibVEX_FrontEnd(vta, &res, &pxControl);
-            irsbCache.push(irsb, LibVEX_IRSB_transfer());
-            return irsb;
-        }
-
-
-
-    };
-
-
-   
 }
 
-
-
-template<typename ADDR>
-DirtyCtx dirty_context(State<ADDR>* s) {
-   // return (DirtyCtx)new VexIRDirty<ADDR>(*s);
-}
-template<typename ADDR>
-Addr64 dirty_get_gsptr(DirtyCtx dctx) {
-   // return ((VexIRDirty<ADDR>*)dctx)->getGSPTR();
-}
-template<typename ADDR>
-void dirty_context_del(DirtyCtx dctx) {
-    //delete ((VexIRDirty<ADDR>*)dctx);
-}
-
-template<typename ADDR>
-void dirty_ccall(DirtyCtx dctx, IRCallee* cee, IRExpr** args) {
-    //VexIRDirty<ADDR>* d = (VexIRDirty<ADDR>*)dctx;
-    Int regparms = cee->regparms;
-    UInt mcx_mask = cee->mcx_mask;
-    //vexSetAllocModeTEMP_and_save_curr();
-    //d->init_param(cee, args);
-   // d->start();
-}
-
-template<typename ADDR>
-void dirty_call_np(DirtyCtx dctx, const HChar* name, void* func, const std::initializer_list<rsval<Addr64>>& parms) {
-    //VexIRDirty<ADDR>* d = (VexIRDirty<ADDR>*)dctx;
-    IRCallee cee = { (Int)parms.size() , name, func, 0xffffffff };
-   // vexSetAllocModeTEMP_and_save_curr();
-   // d->init_param(&cee, parms);
-   // d->start();
-}
-
-template<typename ADDR>
-void dirty_run(DirtyCtx dctx, IRDirty* dirty) {
-    //VexIRDirty<ADDR>* d = (VexIRDirty<ADDR>*)dctx;
-    //dirty_ccall<ADDR>(dctx, dirty->cee, dirty->args);
-}
-
-template<typename ADDR>
-tval dirty_result(DirtyCtx dctx, IRType rty) {
-    //VexIRDirty<ADDR>* d = (VexIRDirty<ADDR>*)dctx;
-    //return d->result(rty);
-}
-
-
-/*
-
-
-    ctx64 v(VexArchAMD64, "");
-    TR::EmuEnvironment emu_ev(v, mem, VexArchAMD64);
-    IRSB* bb = emu_ev.translate_front(mem, (Addr)func);
-
-
-
-
-
-
-
-
-
-
-
-*/
-
-
-
-
-
-
-IRSB* redundant_code_removal_BB(IRSB* bb) {
-    
-}
-
+//
+//
+//template<typename ADDR>
+//DirtyCtx dirty_context(State* s) {
+//    return (DirtyCtx)new VexIRDirty(*s);
+//}
+//
+//template<typename ADDR>
+//Addr64 dirty_get_gsptr(DirtyCtx dctx) {
+//    return ((VexIRDirty<ADDR>*)dctx)->getGSPTR();
+//}
+//
+//template<typename ADDR>
+//void dirty_context_del(DirtyCtx dctx) {
+//    delete ((VexIRDirty<ADDR>*)dctx);
+//}
+//
+//template<typename ADDR>
+//void dirty_ccall(DirtyCtx dctx, IRCallee* cee, IRExpr** args) {
+//    //VexIRDirty<ADDR>* d = (VexIRDirty<ADDR>*)dctx;
+//    Int regparms = cee->regparms;
+//    UInt mcx_mask = cee->mcx_mask;
+//    //vexSetAllocModeTEMP_and_save_curr();
+//    //d->init_param(cee, args);
+//   // d->start();
+//}
+//
+//template<typename ADDR>
+//void dirty_call_np(DirtyCtx dctx, const HChar* name, void* func, const std::initializer_list<rsval<Addr64>>& parms) {
+//    //VexIRDirty<ADDR>* d = (VexIRDirty<ADDR>*)dctx;
+//    IRCallee cee = { (Int)parms.size() , name, func, 0xffffffff };
+//   // vexSetAllocModeTEMP_and_save_curr();
+//   // d->init_param(&cee, parms);
+//   // d->start();
+//}
+//
+//template<typename ADDR>
+//void dirty_run(DirtyCtx dctx, IRDirty* dirty) {
+//    //VexIRDirty<ADDR>* d = (VexIRDirty<ADDR>*)dctx;
+//    //dirty_ccall<ADDR>(dctx, dirty->cee, dirty->args);
+//}
+//
+//template<typename ADDR>
+//tval dirty_result(DirtyCtx dctx, IRType rty) {
+//    //VexIRDirty<ADDR>* d = (VexIRDirty<ADDR>*)dctx;
+//    //return d->result(rty);
+//}
+//
+//
+///*
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//
+//*/
+//
+//
+//
+//
+//
+//
+//IRSB* redundant_code_removal_BB(IRSB* bb) {
+//    
+//}
+//
 
 
 
@@ -379,20 +346,20 @@ void tAMD64REGS(int offset, int length) {
 none:
     vex_printf(" what regoffset = %d ", offset);
 }
-
-template DirtyCtx dirty_context(State<Addr32>* s);
-template DirtyCtx dirty_context(State<Addr64>* s);
-template Addr64 dirty_get_gsptr<Addr32>(DirtyCtx dctx);
-template Addr64 dirty_get_gsptr<Addr64>(DirtyCtx dctx);
-template void dirty_run<Addr32>(DirtyCtx dctx, IRDirty* dirty);
-template void dirty_run<Addr64>(DirtyCtx dctx, IRDirty* dirty);
-template void dirty_context_del<Addr32>(DirtyCtx dctx);
-template void dirty_context_del<Addr64>(DirtyCtx dctx);
-template void dirty_ccall<Addr32>(DirtyCtx dctx, IRCallee* cee, IRExpr** args);
-template void dirty_ccall<Addr64>(DirtyCtx dctx, IRCallee* cee, IRExpr** args);
-template void dirty_call_np<Addr32>(DirtyCtx dctx, const HChar* name, void* func, const std::initializer_list<rsval<Addr64>>& parms);
-template void dirty_call_np<Addr64>(DirtyCtx dctx, const HChar* name, void* func, const std::initializer_list<rsval<Addr64>>& parms);
-template tval dirty_result<Addr32>(DirtyCtx dctx, IRType rty);
-template tval dirty_result<Addr64>(DirtyCtx dctx, IRType rty);
+//
+//template DirtyCtx dirty_context(State<Addr32>* s);
+//template DirtyCtx dirty_context(State<Addr64>* s);
+//template Addr64 dirty_get_gsptr<Addr32>(DirtyCtx dctx);
+//template Addr64 dirty_get_gsptr<Addr64>(DirtyCtx dctx);
+//template void dirty_run<Addr32>(DirtyCtx dctx, IRDirty* dirty);
+//template void dirty_run<Addr64>(DirtyCtx dctx, IRDirty* dirty);
+//template void dirty_context_del<Addr32>(DirtyCtx dctx);
+//template void dirty_context_del<Addr64>(DirtyCtx dctx);
+//template void dirty_ccall<Addr32>(DirtyCtx dctx, IRCallee* cee, IRExpr** args);
+//template void dirty_ccall<Addr64>(DirtyCtx dctx, IRCallee* cee, IRExpr** args);
+//template void dirty_call_np<Addr32>(DirtyCtx dctx, const HChar* name, void* func, const std::initializer_list<rsval<Addr64>>& parms);
+//template void dirty_call_np<Addr64>(DirtyCtx dctx, const HChar* name, void* func, const std::initializer_list<rsval<Addr64>>& parms);
+//template tval dirty_result<Addr32>(DirtyCtx dctx, IRType rty);
+//template tval dirty_result<Addr64>(DirtyCtx dctx, IRType rty);
 
 #endif

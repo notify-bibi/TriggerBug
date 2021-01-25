@@ -283,8 +283,9 @@ namespace TR {
         __declspec(align(32))
         UChar m_bytes[maxlength];
 
-        template<typename _> friend class MEM;
-        template<typename _> friend class State;
+        friend class MEM;
+        friend class MEM_BASE;
+        friend class State;
         friend class mem_unit;
     public:
 

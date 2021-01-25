@@ -40,6 +40,9 @@
 # define CAST_TO_TYPEOF(x)  (__typeof__(x))
 #endif // defined(_MSC_VER)
 
+// rea is real address
+#define dirty2rea(addr) ((ULong)(addr))|(1ull<<63)
+#define rea2dirty(addr) ((ULong)(addr))&(~(1ull<<63))
 
 #include <mmintrin.h>  //SSE(include mmintrin.h)
 #include <xmmintrin.h> //SSE2(include xmmintrin.h)
@@ -198,7 +201,6 @@ unsigned int ty2length(IRType ty);
 unsigned int ty2bit(IRType ty);
 IRType       length2ty(UShort bit);
 
-#define __i386__
 #define TESTCODE(code) \
 {                      \
     clock_t start;     \

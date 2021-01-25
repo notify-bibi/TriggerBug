@@ -67,6 +67,7 @@ namespace TR {
         std::vector<tval_thunk*> m_ir_unit;
         UInt   m_size_ir_temp;
         void clear();
+        IR_Manager() {};
         IR_Manager(Z3_context ctx);
         tval& operator[](UInt idx);
         ~IR_Manager();
@@ -74,64 +75,81 @@ namespace TR {
 
 
 
-    __declspec(align(32))
+    // __declspec(align(32))
+     
     class EmuEnvironment {
-        Addr64 m_guest_start_of_block = 0;
-        bool   m_is_dynamic_block = false;//Need to refresh IRSB memory?
         VexTranslateArgs    m_vta_chunk;
         VexGuestExtents     m_vge_chunk;
-        vex_info&           m_info;
-        std::map<Addr, UInt> m_cache_map;/*block address -> size*/
-        IR_Manager          m_ir_temp;
+        Addr64 m_guest_start_of_block = 0;
+        bool   m_is_dynamic_block = false;//Need to refresh IRSB memory?
+        bool   m_is_dirty_mode = false;   // is dirty call mode
+        std::map<Addr, UInt> m_cache_map; /*block address -> size*/
+
     public:
-        //init vex
-        template<typename THword>
-        EmuEnvironment(vex_info const& info, MEM<THword>& mem_obj, VexArch host);
-        /*
-        template<>
-        EmuEnvironment(vex_info const& info, MEM<Addr32>& mem_obj, VexArch host);
-        template<>
-        EmuEnvironment(vex_info const& info, MEM<Addr64>& mem_obj, VexArch host);*/
-
-        //new ir temp
-        void malloc_ir_buff(Z3_context ctx);
-        //free ir temp
-        void free_ir_buff();
-        // translate
-        template<typename THword>
-        IRSB* translate_front(MEM<THword>& mem, Addr guest_addr);
-        //set guest_start_of_block to check block changed by guest
-        void set_start(Addr64 s);
-
-        void set_guest_bytes_addr(const UChar* bytes, Addr64 virtual_addr);
-
-        /*template<typename THword>
-        void set_guest_code_temp(MEM<THword>& mem_obj, Addr64 virtual_addr, Hook_struct const& hs);*/
-
-        
-
-        inline void set_host_addr(Addr64 host_virtual_addr) {
-            m_vta_chunk.guest_bytes = (UChar*)(host_virtual_addr);
-            m_vta_chunk.guest_bytes_addr = host_virtual_addr;
+        EmuEnvironment(VexArch host, ULong traceflags){
+            vex_info::init_vta_chunk(m_vta_chunk, m_vge_chunk, host, traceflags);
         }
-
-        /*inline static_vector<tval, MAX_TMP>& ir_tmp() {
-            return *m_ir_temp_trunk;
-        }*/
-
-        tval& operator[](UInt idx) { return  m_ir_temp[idx]; }
-
+        inline void set_dirty_mode() { m_is_dirty_mode = true; }
+        inline void clean_dirty_mode() { m_is_dirty_mode = false; }
         inline VexTranslateArgs* get_ir_vex_translate_args() { return &m_vta_chunk; }
         inline VexGuestExtents* get_ir_vex_guest_extents() { return &m_vge_chunk; }
+        inline bool check() { return m_is_dynamic_block; };
         //emu process write method will call back
         void block_integrity(bool is_code, Addr address, UInt insn_block_delta);
 
-        inline bool check() { return m_is_dynamic_block; };
+        //new ir temp
+        virtual void malloc_ir_buff(Z3_context ctx) {};
+        //free ir temp
+        virtual void free_ir_buff() {};
+        // translate
+        virtual IRSB* translate_front(HWord /*dirty/guest_addr*/) {};
+        virtual tval& operator[](UInt idx);
+
+        // 模拟前调用
+        void set_start(HWord s);
+        void set_guest_bytes_addr(const UChar* bytes, Addr64 virtual_addr);
+        void set_host_addr(Addr64 host_virtual_addr);
 
         ~EmuEnvironment();
     };
 
+    template<typename HWord>
+    class EmuEnvGuest : private EmuEnvironment {
+        vex_info& m_info;
+        IR_Manager          m_ir_temp;
+    public:
+        //init vex
+        EmuEnvGuest(vex_info const& info, MEM_BASE& mem_obj, VexArch host);
+        
 
+        //new ir temp
+        virtual void malloc_ir_buff(Z3_context ctx) override;
+        //free ir temp
+        virtual void free_ir_buff() override;
+        // guest translate
+        IRSB* translate_front( HWord /*guest_addr*/) override;
+        virtual tval& operator[](UInt idx) override;
+    };
+
+
+    // dirty
+    class EmuEnvHost : private EmuEnvironment {
+        static constexpr VexArch host = VexArchAMD64;
+        static constexpr ULong traceflags = 0;
+        static thread_local IR_Manager static_dirty_ir_temp;
+        IR_Manager &m_ir_temp;
+    public:
+        EmuEnvHost(z3::vcontext &ctx) : EmuEnvironment(host, traceflags), m_ir_temp(static_dirty_ir_temp) { }
+        
+
+        //new ir temp
+        virtual void malloc_ir_buff(Z3_context ctx) override;
+        //free ir temp
+        virtual void free_ir_buff() override;
+        // host dirty fuc translate
+        IRSB* translate_front(HWord /*dirty/guest_addr*/) override;
+        virtual tval& operator[](UInt idx) override;
+    };
 };
 
 

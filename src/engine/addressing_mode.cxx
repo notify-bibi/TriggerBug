@@ -8,8 +8,8 @@ extern "C" void vex_assert_fail(const HChar * expr, const HChar * file, Int line
 extern "C" unsigned int vex_printf(const HChar * format, ...);
 extern "C" void vpanic(const HChar * str);
 
-template<typename THword>
-TR::addressingMode<THword>::addressingMode(const expr& e)
+template<typename HWord>
+TR::addressingMode<HWord>::addressingMode(const expr& e)
     :
     m_ctx(e.ctx()),
     m_symbolic(e),
@@ -30,12 +30,12 @@ TR::addressingMode<THword>::addressingMode(const expr& e)
         m_analysis_kind = addressingMode::cant_analysis;
     }
 }
-template<typename THword>
-TR::addressingMode<THword>::iterator::iterator(TR::addressingMode<THword>& am) :
+template<typename HWord>
+TR::addressingMode<HWord>::iterator::iterator(TR::addressingMode<HWord>& am) :
     m_sym_mask(am.m_sym_mask),
     m_or_mask(am.m_or_mask),
-    tmp_bit_blast((THword)0),
-    tmp_target_bit_blast((THword)0),
+    tmp_bit_blast((HWord)0),
+    tmp_target_bit_blast((HWord)0),
     m_sym_ml_n(0),
     m_sign_ml_n(0)
 {
@@ -43,22 +43,22 @@ TR::addressingMode<THword>::iterator::iterator(TR::addressingMode<THword>& am) :
     UInt _pcur;
     UInt nb = 0;
     if (ctzll(N, m_sym_mask)) {
-        m_sym_ml[0] = shift_mask{ (UChar)N,((THword)1) << N };
+        m_sym_ml[0] = shift_mask{ (UChar)N,((HWord)1) << N };
         m_sym_ml_n = 1;
         _pcur = N;
-        tmp_target_bit_blast = ((THword)1);
+        tmp_target_bit_blast = ((HWord)1);
         nb = 1;
 
         for (; ; ) {
             if (ctzll(N, m_sym_mask & fastMaskI1Reverse(_pcur))) {
                 if (N == _pcur + 1) {
-                    m_sym_ml[m_sym_ml_n - 1].mask |= ((THword)1) << N;
+                    m_sym_ml[m_sym_ml_n - 1].mask |= ((HWord)1) << N;
                 }
                 else {
-                    m_sym_ml[m_sym_ml_n - 1] = shift_mask{ (UChar)N,((THword)1) << N };
+                    m_sym_ml[m_sym_ml_n - 1] = shift_mask{ (UChar)N,((HWord)1) << N };
                     m_sym_ml_n++;
                 }
-                tmp_target_bit_blast |= ((THword)1) << (nb++);
+                tmp_target_bit_blast |= ((HWord)1) << (nb++);
                 _pcur = N;
             }
             else {
@@ -70,7 +70,7 @@ TR::addressingMode<THword>::iterator::iterator(TR::addressingMode<THword>& am) :
 parse_sign:
     for (auto s : am.m_sign_mask) {
         m_sign_ml[m_sign_ml_n++] = shift_mask{ (UChar)nb, s };
-        tmp_target_bit_blast |= ((THword)1) << (nb++);
+        tmp_target_bit_blast |= ((HWord)1) << (nb++);
     }
     tmp_target_bit_blast += 1;
 }
@@ -94,8 +94,8 @@ parse_sign:
 
 
 //a=b+c+d+e...+z -> b c d e
-template<typename THword>
-void TR::addressingMode<THword>::_offset2opAdd(std::deque<expr>& ret, expr const& _e)
+template<typename HWord>
+void TR::addressingMode<HWord>::_offset2opAdd(std::deque<expr>& ret, expr const& _e)
 {
     expr e = _e;
     context& c = e.ctx();
@@ -128,8 +128,8 @@ void TR::addressingMode<THword>::_offset2opAdd(std::deque<expr>& ret, expr const
     }
 }
 
-template<typename THword>
-bool TR::addressingMode<THword>::_check_add_no_overflow(expr const& e1, expr const& e2) {
+template<typename HWord>
+bool TR::addressingMode<HWord>::_check_add_no_overflow(expr const& e1, expr const& e2) {
     UInt bs = e1.get_sort().bv_size();
     bool bit_jw = false;
     /*  std::cout << e1 << std::endl;
@@ -154,8 +154,8 @@ bool TR::addressingMode<THword>::_check_add_no_overflow(expr const& e1, expr con
 }
 
 
-template<typename THword>
-bool TR::addressingMode<THword>::ast2baseAoffset()
+template<typename HWord>
+bool TR::addressingMode<HWord>::ast2baseAoffset()
 {
     //std::cout << saddr.simplify() << std::endl << std::endl;
     z3::expr base = z3::expr(m_ctx);
@@ -205,8 +205,8 @@ faild:
     vpanic("sorry .engine error.  report me and i will fix it\n");
 }
 
-template<typename THword>
-bool TR::addressingMode<THword>::offset_bit_blast()
+template<typename HWord>
+bool TR::addressingMode<HWord>::offset_bit_blast()
 {
     z3::sort so = m_offset.get_sort();
     UInt size = so.bv_size();
@@ -221,7 +221,7 @@ bool TR::addressingMode<THword>::offset_bit_blast()
             bool exist = false;
             while (m != end) {
                 if (s.sym_ast == m->sbit.sym_ast && s.idx == m->sbit.idx) {
-                    m->sign_mask |= ((THword)1) << idx;
+                    m->sign_mask |= ((HWord)1) << idx;
                     m->nbit++;
                     exist = true;
                     break;
@@ -229,11 +229,11 @@ bool TR::addressingMode<THword>::offset_bit_blast()
                 m++;
             };
             if (!exist) {
-                vec.emplace_back(sbit_struct_r{ s  , ((THword)1) << idx, 1 });
+                vec.emplace_back(sbit_struct_r{ s  , ((HWord)1) << idx, 1 });
             };
         }
         else {
-            m_or_mask = m_or_mask | ((THword)s.rbit << idx);
+            m_or_mask = m_or_mask | ((HWord)s.rbit << idx);
         }
     }
 
@@ -253,8 +253,8 @@ bool TR::addressingMode<THword>::offset_bit_blast()
     return ((m_sym_mask_n + m_sign_mask.size()) >= BIT_BLAST_MAX_BIT) ? false : true;
 }
 
-template<typename THword>
-void TR::addressingMode<THword>::print()
+template<typename HWord>
+void TR::addressingMode<HWord>::print()
 {
     printf("\tor_mask: %016x\t\t", m_or_mask);
     printf("sym_mask: n:%d %016x\n", m_sym_mask_n, m_sym_mask);
@@ -268,8 +268,8 @@ void TR::addressingMode<THword>::print()
 }
 
 // ast(symbolic address) = numreal(base) + symbolic(offset) 
-template<typename THword>
-expr TR::addressingMode<THword>::_ast2base(expr& base,
+template<typename HWord>
+expr TR::addressingMode<HWord>::_ast2base(expr& base,
     expr const& e,
     UInt deep, UInt max_deep
 ) {
@@ -488,8 +488,8 @@ goFaild:
 }
 
 
-template<typename THword>
-typename TR::addressingMode<THword>::sbit_struct TR::addressingMode<THword>::_check_is_extract(expr const& _e, UInt _idx) {
+template<typename HWord>
+typename TR::addressingMode<HWord>::sbit_struct TR::addressingMode<HWord>::_check_is_extract(expr const& _e, UInt _idx) {
     context& c = _e.ctx();
     UInt idx = _idx;
     expr e = _e;

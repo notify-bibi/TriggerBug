@@ -37,7 +37,7 @@ static subval<nb> ctz(const subval<nb>& s) {
 
 #define Iop_to(T1, T2) { return tval(a, (T2) (T1)ato(T1)); }
 
-tval Kernel::tUnop(IROp op, tval const& a) {
+tval TR::StateBase::tUnop(IROp op, tval const& a) {
     //a.tostr();
     if (a.symb()) {
         switch (op) {

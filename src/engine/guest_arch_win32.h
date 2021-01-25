@@ -16,7 +16,7 @@ namespace TR {
         State_Tag Sys_syscall() ;
         State_Tag Ijk_call(IRJumpKind kd) override;
         void cpu_exception(Expt::ExceptionBase const& e) override;
-        Kernel* ForkState(Addr32 ges) override { return new win32(this, ges); };
+        StateBase* ForkState(HWord ges) override { return new win32(this, ges); };
 
 
     };

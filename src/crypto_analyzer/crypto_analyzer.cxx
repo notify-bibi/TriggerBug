@@ -17,12 +17,12 @@ const finder ana[] = {
 template<typename ADDR>
 class ana_finder {
     std::deque<finder> m_ana;
-    const TR::State<ADDR>& m_state;
+    const TR::State& m_state;
     ADDR m_base;
     expr m_idx;
     ana_decl m_ana_decl;
 public:
-    ana_finder(const TR::State<ADDR>& s, ADDR base, Z3_ast index):
+    ana_finder(const TR::State& s, ADDR base, Z3_ast index):
         m_state(s), m_base(base), m_idx(expr(s, index)), m_ana_decl(nullptr)
     {}
 
@@ -41,7 +41,7 @@ public:
         }
 
         UInt idx = 0;
-        TR::MEM<ADDR>& mem = (const_cast<TR::State<ADDR>&>(m_state)).mem;
+        TR::MEM& mem = (const_cast<TR::State&>(m_state)).mem;
         while (fs.size()) {
             std::list<finder>::iterator itor = fs.begin();
             for (; itor != fs.end(); itor++) {

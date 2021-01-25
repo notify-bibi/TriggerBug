@@ -6,7 +6,7 @@ typedef struct _DirtyCtx* DirtyCtx;
 
 #include "engine/state_class.h"
 #include <initializer_list>
-template<typename ADDR> DirtyCtx dirty_context(TR::State<ADDR>* s);
+template<typename ADDR> DirtyCtx dirty_context(TR::State* s);
 template<typename ADDR> Addr64 dirty_get_gsptr(DirtyCtx dctx);
 template<typename ADDR> void dirty_context_del(DirtyCtx);
 template<typename ADDR> void dirty_run(DirtyCtx dctx, IRDirty* dirty);

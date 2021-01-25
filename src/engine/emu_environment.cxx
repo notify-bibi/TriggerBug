@@ -1,7 +1,7 @@
 #include "engine/emu_environment.h"
 #include "engine/register.h"
 #include "engine/memory.h"
-#include "engine/kernel.h"
+#include "engine/state_base.h"
 #include "engine/compress.h"
 #include "gen_global_var_call.hpp"
 
@@ -62,12 +62,11 @@ namespace TR {
         IRSBCache() {
 
         }
-        void push(IRSB* irsb, std::deque<void*> && irsb_mem_alloc) {
-            
+        void push(IRSB* irsb, std::deque<void*>&& irsb_mem_alloc) {
+
         }
 
-        template<typename THword>
-        IRSB* find(MEM<THword>& mem, Addr guest_addr) {
+        IRSB* find(HWord guest_addr) {
             CacheType::iterator k = m_cache.find(guest_addr);
             //mem.mem_real_hash(guest_addr, 0x20);
             // make hash 
@@ -85,7 +84,7 @@ namespace TR {
         }
 
         bool refresh() {
-        
+
         }
 
         ~IRSBCache() {
@@ -93,56 +92,85 @@ namespace TR {
         }
     };
 
+    static IRSBCache irsbCache;
 
+    // ------------------------EmuEnvGuest--------------------------
 
-    IRSBCache irsbCache;
-
-
-
-
-    template<typename THword>
-    EmuEnvironment::EmuEnvironment(vex_info const& info, MEM<THword>& mem_obj, VexArch host)
-        : m_info(const_cast<vex_info&>(info)), m_ir_temp(mem_obj.ctx()) {
+    template<typename HWord>
+    EmuEnvGuest<HWord>::EmuEnvGuest(vex_info const& info, MEM_BASE& mem_obj, VexArch host)
+        : EmuEnvironment(host, info.gtraceflags()),
+          m_info(const_cast<vex_info&>(info)), 
+          m_ir_temp(mem_obj.ctx()) 
+    {
         vassert((((size_t)this) & 0xf) == 0);
-        vex_info::init_vta_chunk(m_vta_chunk, m_vge_chunk, host, info.gtraceflags());
         //set guest code bytes unlinear addr
-        bb_insn_control_obj_set((void*)&mem_obj, guest_insn_control_method_imp<THword>);
+        bb_insn_control_obj_set((void*)&mem_obj, guest_insn_control_method_imp<HWord>);
     }
 
-
-    void EmuEnvironment::malloc_ir_buff(Z3_context ctx)
+    template<typename HWord>
+    void EmuEnvGuest<HWord>::malloc_ir_buff(Z3_context ctx)
     {
-        
     }
 
-    void EmuEnvironment::free_ir_buff()
+    template<typename HWord>
+    void EmuEnvGuest<HWord>::free_ir_buff()
     {
-        m_ir_temp.clear();
     }
 
-    template<typename THword>
-    IRSB* EmuEnvironment::translate_front(MEM<THword>& mem, Addr guest_addr)
+    template<typename HWord>
+    IRSB* EmuEnvGuest<HWord>::translate_front(HWord ea)
     {
+
         VexRegisterUpdates pxControl;
         VexTranslateResult res;
-        IRSB* cache_irsb = irsbCache.find(mem, guest_addr);
+        IRSB* cache_irsb = irsbCache.find(ea);
         if (LIKELY(cache_irsb != nullptr)) {
             return cache_irsb;
         }
 
         VexTranslateArgs* vta = get_ir_vex_translate_args();
-        const UChar* bytes_insn = mem.get_vex_insn_linear(guest_addr);
-        set_guest_bytes_addr(bytes_insn, guest_addr);
+        //set_guest_bytes_addr(, ea);
         IRSB* irsb = LibVEX_FrontEnd(vta, &res, &pxControl);
-        //irsb = dirty_code_deal_BB(irsb);
-
-        //irsbCache.push(irsb, LibVEX_IRSB_transfer());
+        // irsb = dirty_code_deal_BB(irsb);
+        // irsbCache.push(irsb, LibVEX_IRSB_transfer());
         return irsb;
+
+        static ctx64 v(VexArchAMD64, "");
+        IRSB* bb = emu_ev.translate_front(mem, (Addr)func);
+        static TR::EmuEnvironment emu_ev(v, mem, VexArchAMD64);
     }
 
-    void EmuEnvironment::set_start(Addr64 s)
+    template<typename HWord>
+    tval& EmuEnvGuest<HWord>::operator[](UInt idx)
     {
-        m_guest_start_of_block = s; m_is_dynamic_block = false;
+        // TODO: 在此处插入 return 语句
+    }
+
+
+    // ------------------------EmuEnvHost--------------------------
+
+    IRSB* EmuEnvHost::translate_front(HWord ea)
+    {
+        VexRegisterUpdates pxControl;
+        VexTranslateResult res;
+        IRSB* cache_irsb = irsbCache.find(ea);
+        if (LIKELY(cache_irsb != nullptr)) {
+            return cache_irsb;
+        }
+
+        VexTranslateArgs* vta = get_ir_vex_translate_args();
+        set_guest_bytes_addr((const UChar*)ea, ea);
+        IRSB* irsb = LibVEX_FrontEnd(vta, &res, &pxControl);
+        // irsb = dirty_code_deal_BB(irsb);
+        // irsbCache.push(irsb, LibVEX_IRSB_transfer());
+        return irsb;
+
+    }
+
+    void EmuEnvironment::set_start(HWord s)
+    {
+        m_guest_start_of_block = s;
+        m_is_dynamic_block = false;
     }
 
     void EmuEnvironment::set_guest_bytes_addr(const UChar* bytes, Addr64 virtual_addr)
@@ -151,21 +179,19 @@ namespace TR {
         m_vta_chunk.guest_bytes_addr = virtual_addr;
         set_start(virtual_addr);
     }
+
+    void EmuEnvironment::set_host_addr(Addr64 host_virtual_addr)
+    {
+        m_vta_chunk.guest_bytes = (UChar*)(host_virtual_addr);
+        m_vta_chunk.guest_bytes_addr = host_virtual_addr;
+    }
     
 
-//    template<typename THword>
-//    void EmuEnvironment::set_guest_code_temp(MEM<THword>& mem_obj, Addr64 virtual_addr, Hook_struct const& hs)
-//    {
-//        //*(__m128i*)(m_pap.swap) = mem_obj.load<Ity_V256>(virtual_addr).tor();
-//        //memcpy(m_pap.swap, &hs.original.m64_u8, hs.nbytes);
-//#warning "need check"
-//        //m_pap.start_swap = 2;
-//        //m_pap.guest_max_insns = 1;
-//        //m_vta_chunk.guest_bytes = (UChar*)(m_pap.swap);
-//        m_vta_chunk.guest_bytes_addr = virtual_addr;
-//    }
 
-
+    tval& EmuEnvironment::operator[](UInt idx)
+    {
+        // TODO: 在此处插入 return 语句
+    }
 
     void EmuEnvironment::block_integrity(bool is_code_page, Addr address, UInt insn_block_delta) {
         if (!is_code_page) return;
@@ -187,16 +213,11 @@ namespace TR {
     {
     };
     
-    template <typename THword>
+    template <typename HWord>
     static const UChar* guest_insn_control_method_imp(void* instance, Addr guest_IP_sbstart, Long delta, const UChar* /*in guest_code*/ guest_code) {
-        MEM<THword>* mem = (MEM<THword>*)instance;
+        MEM* mem = (MEM*)instance;
         return mem->libvex_guest_insn_control(guest_IP_sbstart, delta, guest_code);
     };
-
-    template EmuEnvironment::EmuEnvironment(vex_info const& info, MEM<Addr32>& mem_obj, VexArch host);
-    template EmuEnvironment::EmuEnvironment(vex_info const& info, MEM<Addr64>& mem_obj, VexArch host);
-    template IRSB* EmuEnvironment::translate_front(MEM<Addr32>& mem, Addr guest_addr);
-    template IRSB* EmuEnvironment::translate_front(MEM<Addr64>& mem, Addr guest_addr);
 };
 
 

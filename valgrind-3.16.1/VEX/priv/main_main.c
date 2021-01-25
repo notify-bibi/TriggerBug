@@ -614,9 +614,9 @@ IRSB* LibVEX_FrontEnd ( /*MOD*/ VexTranslateArgs* vta,
 
    vassert(vta->guest_extents->n_used >= 1 && vta->guest_extents->n_used <= 3);
    vassert(vta->guest_extents->base[0] == vta->guest_bytes_addr);
-   for (i = 0; i < vta->guest_extents->n_used; i++) {
-      vassert(vta->guest_extents->len[i] < 10000); /* sanity */
-   }
+   //for (i = 0; i < vta->guest_extents->n_used; i++) {
+   //   vassert(vta->guest_extents->len[i] < 10000); /* sanity */
+   //}
 
    /* bb_to_IR() could have caused pxControl to change. */
    vassert(*pxControl >= VexRegUpdSpAtMemAccess

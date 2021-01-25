@@ -40,7 +40,7 @@ namespace TR {
         StateX86(vex_context<Addr32>& vex_info, Addr32 gse, Bool _need_record) :State(vex_info, gse, _need_record) 
         {  };
 
-        virtual Kernel* ForkState(Addr32 ges) override { return new StateX86(this, ges); };
+        virtual StateBase* ForkState(HWord ges) override { return new StateX86(this, ges); };
         virtual bool  StateCompression(State<Addr32> const& next) override { return true; }
         virtual void  StateCompressMkSymbol(State<Addr32> const& newState) override {  };
         //Thread Environment Block
@@ -65,7 +65,7 @@ namespace TR {
         {};
 
 
-        virtual Kernel* ForkState(Addr64 ges) override { return new StateAMD64(this, ges); };
+        virtual StateBase* ForkState(Addr64 ges) override { return new StateAMD64(this, ges); };
         virtual bool  StateCompression(State<Addr64> const& next) override { return true; }
         virtual void  StateCompressMkSymbol(State<Addr64> const& newState) override {  };
         //Thread Environment Block
@@ -94,14 +94,14 @@ namespace SP {
         inline ULong& getFlagRef() { return m_trtraceflags; }
 
         void pp_call_space(){
-            UInt size = TC::m_InvokStack.size();
+            UInt size = TC::get_InvokStack().size();
             printf("[%-2d:%2d]", size, TC::mem.get_user());
             for (UInt i = 0; i < size; i++) {
                 vex_printf("  ");
             }
         }
         void pp_call_space(ADDR addr) {
-            UInt size = TC::m_InvokStack.size();
+            UInt size = TC::get_InvokStack().size();
             printf("[%-2d:%2d] 0x%-16x", size, TC::mem.get_user(), addr);
             for (UInt i = 0; i < size; i++) {
                 vex_printf("  ");
@@ -163,10 +163,10 @@ namespace SP {
             }
         }
 
-        virtual Kernel* ForkState(ADDR ges) override { return new StatePrinter<ADDR, TC>(this, ges); };
+        virtual TR::StateBase* ForkState(HWord ges) override { return new StatePrinter<ADDR, TC>(this, ges); };
         virtual TR::State_Tag call_back_hook(TR::Hook_struct const& hs) override { setFlag(hs.cflag); return (hs.cb) ? (hs.cb)(this) : Running; }
-        virtual bool  StateCompression(TR::State<ADDR> const& next) override { return true; }
-        virtual void  StateCompressMkSymbol(TR::State<ADDR> const& newState) override {  };
+        virtual bool  StateCompression(TR::State const& next) override { return true; }
+        virtual void  StateCompressMkSymbol(TR::State const& newState) override {  };
     };
 
 };

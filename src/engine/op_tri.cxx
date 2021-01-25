@@ -10,7 +10,7 @@
  */
 
 
-tval Kernel::tTriop(IROp op, tval const&a, tval const&b, tval const&c) {
+tval TR::StateBase::tTriop(IROp op, tval const&a, tval const&b, tval const&c) {
     if (a.symb() || b.symb() || c.symb()) {
         switch (op) {
         case Iop_DivF64: {

@@ -9,17 +9,15 @@
 namespace TR {
 
 
-    template<typename ADDR>
     class MEM;
+    class MEM_BASE;
     class EmuEnvironment;
-    template<typename ADDR>
     class StateMEM;
-    template<typename ADDR>
     class State;
     class TRsolver;
 
-    template<typename ADDR> rsval<ADDR> vex_read(State<ADDR>& s, const rsval<ADDR>& addr, const rsval<ADDR>& len);
-    template<typename ADDR> void vex_write(State<ADDR>& s, const rsval<ADDR>& addr, const rsval<ADDR>& len);
+    template<typename ADDR> rsval<ADDR> vex_read(State& s, const rsval<ADDR>& addr, const rsval<ADDR>& len);
+    template<typename ADDR> void vex_write(State& s, const rsval<ADDR>& addr, const rsval<ADDR>& len);
 
     typedef enum :unsigned int {
         NewState = 0,
@@ -54,6 +52,7 @@ namespace TR {
 
     class vex_info;
     class vctx_base;
+    class StateBase;
     template<typename _> class vex_context;
 
     typedef State_Tag(*Hook_CB)(void*/*obj*/);
@@ -77,6 +76,7 @@ namespace TR {
 
 
 
+    // vex_context: vctx_base: vex_info
     class vex_info{
         friend class vctx_base;
         sys_params m_params;
@@ -112,7 +112,7 @@ namespace TR {
         VexRegisterUpdates gRegisterUpdates() const { return m_iropt_register_updates_default; };
         inline VexArch gguest()const { return m_guest; }
         inline Int giropt_level() const { return m_iropt_level; }
-        inline UInt gmax_insns() const { return m_guest_max_insns; }
+        inline UInt gmax_insns() const { vassert(m_guest_max_insns <= 0xffff); return m_guest_max_insns; }
         inline GuestSystem gguest_system() const { return m_guest_system; }
         inline UInt gmax_threads_num() const { return m_maxThreadsNum; }
         inline ULong gtraceflags() const { return m_traceflags; }
@@ -131,17 +131,21 @@ namespace TR {
     };
 
 
-
+    // vex_context: vctx_base: vex_info
     class vctx_base : public vex_info {
         friend class vex_info;
-        template<typename _> friend class State;
-        template<typename _> friend class MEM;
+        class State;
+        class MEM;
+        friend class StateBase;
+        friend class MEM_BASE;
         template<typename _> friend class vex_context;
         ThreadPool m_pool;
         std::atomic_uint32_t m_user_counter;
+        StateBase* m_top_state;
+        void set_top_state(StateBase* s) { vassert(!m_top_state); m_top_state = s; }
         UInt mk_user_id() { vassert(m_user_counter < -1u);  return m_user_counter++; }
-        vctx_base(VexArch guest, const char* filename) :vex_info(guest, filename), m_pool(gmax_threads_num()), m_user_counter(1){}
-        vctx_base(VexArch guest, int max_threads, const char* filename) :vex_info(guest, filename), m_pool(max_threads), m_user_counter(1){ m_maxThreadsNum = max_threads; }
+        vctx_base(VexArch guest, const char* filename) :vex_info(guest, filename), m_pool(gmax_threads_num()), m_user_counter(1), m_top_state(nullptr) {}
+        vctx_base(VexArch guest, int max_threads, const char* filename) :vex_info(guest, filename), m_pool(max_threads), m_user_counter(1), m_top_state(nullptr) { m_maxThreadsNum = max_threads; }
         ThreadPool& pool() { return m_pool; }
 
         inline operator vex_context<Addr32>& () { return *reinterpret_cast <vex_context<Addr32>*>(this); };
@@ -149,24 +153,24 @@ namespace TR {
         inline operator vex_context<Addr32>* () { return reinterpret_cast <vex_context<Addr32>*>(this); };
         inline operator vex_context<Addr64>* () { return reinterpret_cast <vex_context<Addr64>*>(this); };
     private:
+    protected:
     };
 
-
+    // vex_context: vctx_base: vex_info
     template<typename ADDR>
     class vex_context :public vctx_base
     {
     public:
         //读
-        using Hook_Read = rsval<ADDR> (*)(State<ADDR> & , const rsval<ADDR>&, const rsval<ADDR>&);
+        using Hook_Read = rsval<ADDR> (*)(State & , const rsval<ADDR>&, const rsval<ADDR>&);
         //写
-        using Hook_Write = void(*)(State<ADDR> & , const rsval<ADDR>&, const rsval<ADDR>&);
+        using Hook_Write = void(*)(State & , const rsval<ADDR>&, const rsval<ADDR>&);
         //idx2v
-        using Hook_idx2Value = z3::expr(*) (State<ADDR>&, ADDR /*base*/, Z3_ast /*idx*/);
+        using Hook_idx2Value = z3::expr(*) (State&, ADDR /*base*/, Z3_ast /*idx*/);
 
     private:
         friend class vex_info;
-        friend class State<ADDR>;
-        State<ADDR>*    m_top_state;
+        friend class State;
         //模拟软件断点 software backpoint callback
         HASH_MAP<Addr64, Hook_struct> m_callBackDict;
         HASH_MAP<Addr64/*static table base*/, Hook_idx2Value> m_tableIdxDict;
@@ -175,18 +179,17 @@ namespace TR {
 
         vex_context(vex_context const&) = delete;
         void operator = (vex_context const&) = delete;
-        void set_top_state(State<ADDR>* s) { vassert(!m_top_state); m_top_state = s; }
         //backpoint add
-        void hook_add(State<ADDR>&state, ADDR addr, State_Tag(*_func)(State<ADDR>&), TRControlFlags cflag);
+        void hook_add(State&state, ADDR addr, State_Tag(*_func)(State&), TRControlFlags cflag);
         bool get_hook(Hook_struct& hs, ADDR addr);
     public:
 
-        vex_context(VexArch guest, int max_threads, const char* filename) :vctx_base(guest, max_threads, filename), m_top_state(nullptr) {
+        vex_context(VexArch guest, int max_threads, const char* filename) :vctx_base(guest, max_threads, filename) {
             hook_read(vex_read<ADDR>);
             hook_write(vex_write<ADDR>);
         };
 
-        vex_context(VexArch guest, const char* filename) :vctx_base(guest, filename), m_top_state(nullptr) {
+        vex_context(VexArch guest, const char* filename) :vctx_base(guest, filename) {
             hook_read(vex_read<ADDR>);
             hook_write(vex_write<ADDR>);
         };
@@ -225,7 +228,7 @@ namespace TR {
         void idx2Value_Decl_add(ADDR addr, Hook_idx2Value _func) { m_tableIdxDict[addr] = _func; };
         void idx2Value_Decl_del(ADDR addr) { m_tableIdxDict.erase(m_tableIdxDict.find(addr)); };
         bool idx2Value_base_exist(ADDR base) { return m_tableIdxDict.find(base) != m_tableIdxDict.end(); }
-        z3::expr idx2value(TR::State<ADDR>& state, ADDR base, Z3_ast index);
+        z3::expr idx2value(TR::State& state, ADDR base, Z3_ast index);
 
         UInt bit_wide() override { return (UInt)((sizeof(ADDR))<<3); }
     };

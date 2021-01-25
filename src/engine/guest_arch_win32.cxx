@@ -48,7 +48,7 @@ void TR::win32::avoid_anti_debugging()
 State_Tag TR::win32::Sys_syscall() 
 {
     goto_ptr(vex_pop().tor());
-    m_InvokStack.pop();
+    get_InvokStack().pop();
     auto eax = regs.get<Ity_I32>(X86_IR_OFFSET::EAX);
     auto arg0 = vex_stack_get(1);
     auto arg1 = vex_stack_get(2);
@@ -100,7 +100,7 @@ State_Tag TR::win32::Sys_syscall()
             PWOW64_CONTEXT wow64_ctx = (PWOW64_CONTEXT)(size_t)(DWORD)arg0.tor();
             Addr32 next = dirty_call("getExecptionCtx32", Kc32::getExecptionCtx, { rsval<Addr64>(ctx(), (size_t)wow64_ctx), rsval<Addr64>(ctx(), getGSPTR()) }, Ity_I32);
             goto_ptr(next);
-            m_InvokStack.clear();
+            get_InvokStack().clear();
             regs.set(X86_IR_OFFSET::EAX, 0);
             return Running;
         }
@@ -155,7 +155,7 @@ State_Tag TR::win32::Sys_syscall()
 
     }
     std::cerr << std::hex << get_cpu_ip() << ": Sys_syscall_windows(id:" << eax << ", arg0:" << arg0 << ", arg1:" << arg1 << ", arg2:" << arg2 << ", arg3:" << arg3 << ", arg4:" << arg4 << ", arg5:" << arg5 << ") not define" << std::endl;
-    std::cerr << "Invok Stack :\n" << m_InvokStack << std::endl;
+    std::cerr << "Invok Stack :\n" << get_InvokStack() << std::endl;
     return Death;
 }
 

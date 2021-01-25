@@ -21,11 +21,12 @@ Revision History:
 
 using namespace TR;
 
-template<typename THword>
+
+
 class StateAnalyzer {
-    State<THword>& m_state;
+    StateBase& m_state;
 public:
-    StateAnalyzer(State<THword>& state) :
+    StateAnalyzer(StateBase& state) :
         m_state(state)
     {
     }
@@ -35,8 +36,8 @@ public:
 
 };
 
-template<typename THword>
-bool check_has_loop(State<THword>*s, THword oep) {
+
+bool check_has_loop(StateBase*s, HWord oep) {
     while (s) {
         if (s->get_state_ep() == oep) {
             return true;
@@ -46,13 +47,12 @@ bool check_has_loop(State<THword>*s, THword oep) {
     return false;
 }
 
-template<typename THword>
-void find_explore_state(State<THword> &state, std::vector<State<THword>*>& explore, HASH_MAP<THword, UInt> &Fork_addr) {
+void find_explore_state(StateBase &state, std::vector<StateBase*>& explore, HASH_MAP<HWord, UInt> &Fork_addr) {
    if (state.branch.empty()) {
         if (state.status() == Fork) {
             auto _where = Fork_addr.find(state.get_cpu_ip());
             if (_where == Fork_addr.end()) {
-                for (State<THword>* nstate : state.branch) {
+                for (StateBase* nstate : state.branch) {
                     explore.emplace_back(nstate);
                 }
             }
@@ -65,35 +65,34 @@ void find_explore_state(State<THword> &state, std::vector<State<THword>*>& explo
         return;
    }
    else {
-       for (State<THword>* cs : state.branch) {
+       for (StateBase* cs : state.branch) {
            find_explore_state(*cs, explore, Fork_addr);
        }
    }
 }
 
 
-template<typename THword>
-void find_fork_state(State<THword>& state, HASH_MAP<THword, UInt>& Fork_addr) {
+void find_fork_state(StateBase& state, HASH_MAP<HWord, UInt>& Fork_addr) {
     if (!state.branch.empty()) {
         Fork_addr[state.get_cpu_ip()] = 0;
-        for (State<THword>* cs : state.branch) {
+        for (StateBase* cs : state.branch) {
             find_fork_state(*cs, Fork_addr);
         }
     }
 }
 
-template<typename THword>
-bool task_explorer(State<THword>* top) {
-    vex_context<THword>& vctx = top->vctx();
+
+bool task_explorer(StateBase* top) {
+    vex_context& vctx = top->vctx();
     while (true) {
-        HASH_MAP<THword, UInt> Fork_addr;
-        std::vector<State<THword>*> explore;
+        HASH_MAP<HWord, UInt> Fork_addr;
+        std::vector<StateBase*> explore;
         find_fork_state(*top, Fork_addr);
         find_explore_state(*top, explore, Fork_addr);
 
         if (!explore.empty()) {
             std::cout << *top << std::endl;
-            for (State<THword>* nstate : explore) {
+            for (StateBase* nstate : explore) {
                 vctx.pool().enqueue([nstate] {
                     nstate->start();
                     });
@@ -119,10 +118,10 @@ bool task_explorer(State<THword>* top) {
 
     return false;
 
-    //std::vector<State<THword>*> ForkTree;
+    //std::vector<StateBase*> ForkTree;
     //ForkTree.emplace_back(top);
-    //HASH_MAP<THword, UInt> Fork_addr;
-    //HASH_MAP<THword, UInt> CompStates;
+    //HASH_MAP<HWord, UInt> Fork_addr;
+    //HASH_MAP<HWord, UInt> CompStates;
     //while (true)
     //{
     //    printf("++++2++++ {\n");
@@ -138,10 +137,10 @@ bool task_explorer(State<THword>* top) {
     //        }
     //    }
 
-    //    for (State<THword>* s : ForkTree) {
+    //    for (StateBase* s : ForkTree) {
     //        s->branchGo();
     //    }
-    //    State<THword>::pool->wait();
+    //    StateBase::pool->wait();
     //    std::cout << *top << std::endl;
     //    printf("}----2-----\n");
 
@@ -150,7 +149,7 @@ bool task_explorer(State<THword>* top) {
     //    for (State* bs : ForkTree) {
     //        if (!bs->branch.size()) {
     //            if (bs->status != Fork) continue;
-    //            THword end_addr = bs->get_cpu_ip();
+    //            HWord end_addr = bs->get_cpu_ip();
     //            CompStates[end_addr] = 1;
     //        }
     //        for (State* s : bs->branch) {
@@ -177,8 +176,8 @@ bool task_explorer(State<THword>* top) {
     //return false;
 }
 
-template<typename THword>
-void StateAnalyzer<THword>::Run() {
+
+void StateAnalyzer::Run() {
 
     while (task_explorer(&m_state)) {
         std::cout << m_state << std::endl;
@@ -186,38 +185,38 @@ void StateAnalyzer<THword>::Run() {
 }
 
 
-template<typename THword, class _jmps = std::forward_list<THword>>
+template<typename HWord, class _jmps = std::forward_list<HWord>>
 class GraphView {
     template<typename Ta> friend class PathExplorer;
     vex_info& m_info;
-    MEM<THword>& m_mem;
+    MEM& m_mem;
     spin_mutex translate_mutex;
     typedef struct blockEnd {
         IRJumpKind kd;
-        THword addr;
+        HWord addr;
     };
     typedef enum { Loop_INVALID, Loop_True, Loop_False } loop_kind;
     typedef struct jmp_info {
-        THword addr;
+        HWord addr;
         loop_kind loop;
     };
 public:
     using jmps = _jmps;
     using jmp_kind = std::forward_list<jmp_info>;
 private:
-    std::map<THword, jmp_kind> m_jmp;
-    std::map<THword, _jmps> m_in;
-    std::map<THword, THword> m_block_begin;
-    std::map<THword, blockEnd> m_block_end;
+    std::map<HWord, jmp_kind> m_jmp;
+    std::map<HWord, _jmps> m_in;
+    std::map<HWord, HWord> m_block_begin;
+    std::map<HWord, blockEnd> m_block_end;
     ThreadPool m_pool;
     
-    inline THword tIRExpr(IRExpr* e, EmuEnvironment& ir_temp)
+    inline HWord tIRExpr(IRExpr* e, EmuEnvironment& ir_temp)
     {
         switch (e->tag) {
         case Iex_RdTmp: { return ir_temp[e->Iex.RdTmp.tmp]; }
-        case Iex_Const: { return (THword)e->Iex.Const.con->Ico.U64; }
+        case Iex_Const: { return (HWord)e->Iex.Const.con->Ico.U64; }
         case Iex_Load: {
-            THword addr = tIRExpr(e->Iex.Load.addr, ir_temp);
+            HWord addr = tIRExpr(e->Iex.Load.addr, ir_temp);
             if (!addr) return 0;
             try {
                 tval v = m_mem.Iex_Load(addr, e->Iex.Get.ty);
@@ -232,11 +231,11 @@ private:
         };
         return 0;
     }
-
-    void _add_block(THword block_start) {
+    void _add_block(HWord block_start) {}
+    /*void _add_block(HWord block_start) {
         EmuEnvironment emu(info(), m_mem, info().gguest());
-        THword     block_task = 0;
-        THword guest_start = block_start;
+        HWord     block_task = 0;
+        HWord guest_start = block_start;
         bool fresh = false; 
         for (;;) {
             if (getEnd(guest_start)) {
@@ -269,7 +268,7 @@ private:
                         break;
                     }
                     case Ist_AbiHint: {
-                        THword call_start = tIRExpr(s->Ist.AbiHint.nia, emu);
+                        HWord call_start = tIRExpr(s->Ist.AbiHint.nia, emu);
                         if (call_start) {
                             explore_block(block_task, call_start);
                             _jmp_to(guest_start, call_start);
@@ -295,7 +294,7 @@ private:
                 }
 
 
-                THword next = tIRExpr(irsb->next, emu);
+                HWord next = tIRExpr(irsb->next, emu);
                 if (fresh) {
                     fresh = false;
                 }
@@ -345,14 +344,14 @@ private:
 
 
 
-    }
+    }*/
 
-    THword prev_code_addr(THword addr, THword this_code, VexTranslateArgs* vta) {
+    HWord prev_code_addr(HWord addr, HWord this_code, VexTranslateArgs* vta) {
         //vexSetAllocModeTEMP_and_save_curr();
         /*
         m_mem.set_double_page(addr, pap);
         pap.mem_obj = (void*)&m_mem;
-        pap.n_page_mem = EmuEnvironment::mem_next_page<THword>;
+        pap.n_page_mem = EmuEnvironment::mem_next_page;
         pap.start_swap = 0;
         pap.guest_max_insns = m_info.gmax_insns();*/
         //vta->guest_bytes = pap.t_page_addr;
@@ -371,16 +370,16 @@ private:
         return 0;
     }
 
-    void add_block(THword block_start, THword block_end, IRJumpKind kd, VexTranslateArgs* vta) {
+    void add_block(HWord block_start, HWord block_end, IRJumpKind kd, VexTranslateArgs* vta) {
         if (kd == Ijk_SigSEGV) return;
         spin_unique_lock lock(translate_mutex);
-        std::map<THword, blockEnd>::iterator it = m_block_end.find(block_end);
+        std::map<HWord, blockEnd>::iterator it = m_block_end.find(block_end);
         /*if (0x00007ffff7a8d33d == block_start||0x00007ffff7a8d34a == block_start) {
             printf("");
         }*/
         if (it != m_block_end.end()) { 
             if (block_start > it->second.addr) {
-                THword nEnd = prev_code_addr(it->second.addr, block_start, vta);
+                HWord nEnd = prev_code_addr(it->second.addr, block_start, vta);
                 m_block_begin[it->second.addr] = nEnd;
                 //m_block_begin.insert(std::make_pair(it->second.addr, nEnd));
                 _jmp_to_no_mutex(nEnd, block_start);
@@ -414,7 +413,7 @@ private:
 
     }
 
-    void explore_block(THword& block_task, THword block_start) {
+    void explore_block(HWord& block_task, HWord block_start) {
         if (block_task) {
             enqueue(block_start);
         }
@@ -423,7 +422,7 @@ private:
         }
     }
 
-    void enqueue(THword block_start) {
+    void enqueue(HWord block_start) {
         if(!getEnd(block_start))
             m_pool.enqueue(
                 [this, block_start] {
@@ -432,19 +431,19 @@ private:
             );
     }
 
-    void _jmp_to(THword from, THword to) {
+    void _jmp_to(HWord from, HWord to) {
         spin_unique_lock lock(translate_mutex);
         _jmp_to_no_mutex(from, to);
     }
 
-    inline  void _jmp_to_no_mutex(THword from, THword to) {
+    inline  void _jmp_to_no_mutex(HWord from, HWord to) {
         if (from == 0) {
             vassert(0);
         }
 #ifdef OUTPUT
         printf("_jmp_to %p   %p \n", from, to);
 #endif
-        std::map<THword, jmp_kind>::iterator it = m_jmp.find(from);
+        std::map<HWord, jmp_kind>::iterator it = m_jmp.find(from);
         if (it == m_jmp.end()) {
             m_jmp[from] = jmp_kind{ jmp_info{to, Loop_INVALID } };
         }
@@ -452,7 +451,7 @@ private:
             it->second.push_front(jmp_info{ to, Loop_INVALID });
         }
 
-        std::map<THword, _jmps>::iterator it_in = m_in.find(to);
+        std::map<HWord, _jmps>::iterator it_in = m_in.find(to);
         if (it_in == m_in.end()) {
             m_in[to] = _jmps{ from };
         }
@@ -461,41 +460,41 @@ private:
         }
     }
 
-    THword getBegin(THword block_end) {
-        std::map<THword, blockEnd>::iterator it = m_block_end.find(block_end);
+    HWord getBegin(HWord block_end) {
+        std::map<HWord, blockEnd>::iterator it = m_block_end.find(block_end);
         if (it == m_block_end.end()) { return 0; }
         return it->second.addr;
     }
 
-    THword getEnd(THword block_begin) {
-        std::map<THword, THword>::iterator it = m_block_begin.find(block_begin);
+    HWord getEnd(HWord block_begin) {
+        std::map<HWord, HWord>::iterator it = m_block_begin.find(block_begin);
         if (it == m_block_begin.end()) { return 0; }
         return it->second;
     }
 
 
 public:
-    GraphView(vex_info const& info, MEM<THword>& mem, THword oep) :m_pool(8), m_info(const_cast<vex_info&>(info)), m_mem(mem) {
+    GraphView(vex_info const& info, MEM& mem, HWord oep) :m_pool(8), m_info(const_cast<vex_info&>(info)), m_mem(mem) {
         enqueue(oep);
     }
     inline const vex_info& info() const { return m_info; }
     void wait() { m_pool.wait(); }
 
-    void explore_block(THword block_start) {
-        std::map<THword, THword>::iterator it = m_block_begin.find(block_start);
+    void explore_block(HWord block_start) {
+        std::map<HWord, HWord>::iterator it = m_block_begin.find(block_start);
         if (it != m_block_begin.end()) return;
         enqueue(block_start);
     }
 
-    void add_jmp(THword from, THword to) {
+    void add_jmp(HWord from, HWord to) {
         _jmp_to(from, to);
         explore_block(to);
     }
 
 
 
-    THword begin2End(THword block_begin) {
-        typename std::map<THword, THword>::iterator ait = m_block_begin.find(block_begin);
+    HWord begin2End(HWord block_begin) {
+        typename std::map<HWord, HWord>::iterator ait = m_block_begin.find(block_begin);
         if (ait == m_block_begin.end()) {
             if (0x00007ffff7a8d34a == block_begin) {
                 printf("");
@@ -507,7 +506,7 @@ public:
             );
             wait();
         }
-        typename std::map<THword, THword>::iterator it = m_block_begin.find(block_begin);
+        typename std::map<HWord, HWord>::iterator it = m_block_begin.find(block_begin);
         if (it == m_block_begin.end()) {
             return 0;
         }
@@ -516,8 +515,8 @@ public:
 
 };
 
-template<typename THword>
-class PathExplorer : public GraphView<THword> {
+
+class PathExplorer : public GraphView {
 
     template <class _Ty, class _Container = std::deque<_Ty>, class _jmps = std::forward_list<_Ty>>
     class Stack :protected _Container {
@@ -570,19 +569,19 @@ class PathExplorer : public GraphView<THword> {
     };
 
 public:
-    PathExplorer(vex_info const& info, MEM<THword>& mem, THword oep) :GraphView<THword>(info, mem, oep) {
+    PathExplorer(vex_info const& info, MEM& mem, HWord oep) :GraphView(info, mem, oep) {
         
     }
 
-    void set_visited(Int _itor, Stack<THword>& stack, HASH_MAP<THword, bool>& target) {
-        typename Stack<THword>::iterator itor = stack.begin() + _itor;
+    void set_visited(Int _itor, Stack& stack, HASH_MAP<HWord, bool>& target) {
+        typename Stack::iterator itor = stack.begin() + _itor;
 #ifdef OUTPUT_PATH
         std::cout << *itor << " -> ";
 #endif
         vassert(_itor + 1 < stack.size());
         target[*itor] = true;
         for (;;) {
-            THword end = GraphView<THword>::getEnd(*itor++);
+            HWord end = GraphView::getEnd(*itor++);
             if (itor == stack.end()) {
                 break;
             }
@@ -590,11 +589,11 @@ public:
             if (m_block_end[end].kd == Ijk_Call) {
                 dealt = 5;
             }
-            std::map<THword, GraphView<THword>::jmp_kind>::iterator to = m_jmp.find(end);
-            typename GraphView<THword>::jmp_kind& vertexs = to->second;
-            typename GraphView<THword>::jmp_kind::iterator  next = vertexs.begin();
+            std::map<HWord, GraphView::jmp_kind>::iterator to = m_jmp.find(end);
+            typename GraphView::jmp_kind& vertexs = to->second;
+            typename GraphView::jmp_kind::iterator  next = vertexs.begin();
             while (next != vertexs.end()) {
-                THword addr = dealt ? (end + dealt) : next->addr;
+                HWord addr = dealt ? (end + dealt) : next->addr;
                 if (addr == *itor) {
 #ifdef OUTPUT_PATH
                     std::cout << addr << " -> ";
@@ -611,9 +610,9 @@ public:
 #endif
     }
 
-    THword getUnvisitedVertex(Stack<THword>& stack, THword vertex, HASH_MAP<THword, bool>& avoid) {
-        THword block_end = begin2End(vertex);
-        std::map<THword, GraphView<THword>::jmp_kind>::iterator to = m_jmp.find(block_end);
+    HWord getUnvisitedVertex(Stack& stack, HWord vertex, HASH_MAP<HWord, bool>& avoid) {
+        HWord block_end = begin2End(vertex);
+        std::map<HWord, GraphView::jmp_kind>::iterator to = m_jmp.find(block_end);
         if (to == m_jmp.end()) {
             return 0;
         }
@@ -621,11 +620,11 @@ public:
         if (m_block_end[block_end].kd == Ijk_Call) {
             dealt = 5;
         }
-       typename GraphView<THword>::jmp_kind& vertexs = to->second;
-       typename GraphView<THword>::jmp_kind::iterator  next = vertexs.begin();
+       typename GraphView::jmp_kind& vertexs = to->second;
+       typename GraphView::jmp_kind::iterator  next = vertexs.begin();
         while (next != vertexs.end()) {
-            THword addr = dealt ? (block_end + dealt) : next->addr;
-            typename Stack<THword>::jmps& vl = stack.getVertex();
+            HWord addr = dealt ? (block_end + dealt) : next->addr;
+            typename Stack::jmps& vl = stack.getVertex();
 
             if (avoid.find(addr) == avoid.end()) {
                 if (!stack.contains(addr)) {
@@ -642,18 +641,18 @@ public:
     }
 
 
-    void get_path(THword start, THword end = 0) {
-        Stack<THword> stack;
-        HASH_MAP<THword, bool> block_target;
-        HASH_MAP<THword, bool> avoid;
+    void get_path(HWord start, HWord end = 0) {
+        Stack stack;
+        HASH_MAP<HWord, bool> block_target;
+        HASH_MAP<HWord, bool> avoid;
         stack.push(start);
         UInt prev_itor = 0;
         while (!stack.empty()) {
-            THword TOP = stack.top();
+            HWord TOP = stack.top();
             if (0x0007FFFF7A8D33D == TOP) {
                 printf("");
             }
-            THword next = getUnvisitedVertex(stack, TOP, avoid);
+            HWord next = getUnvisitedVertex(stack, TOP, avoid);
             if (next) {
                 if (block_target.find(next) == block_target.end()) {
                     stack.push(next);
@@ -691,7 +690,7 @@ public:
 
 
 void test(State<Addr64>& m_state) {
-    StateAnalyzer<Addr64> gv(m_state);
+  /*  StateAnalyzer<Addr64> gv(m_state);
     gv.Run();
 
     TESTCODE(
@@ -700,10 +699,10 @@ void test(State<Addr64>& m_state) {
     SS.get_path(0x07FFFF7A8CD50, 0x07FFFF7A8CEA3);
     );
 
-    
+    */
 }
 
 
-
-template void StateAnalyzer<Addr32>::Run();
-template void StateAnalyzer<Addr64>::Run();
+//
+//template void StateAnalyzer<Addr32>::Run();
+//template void StateAnalyzer<Addr64>::Run();
