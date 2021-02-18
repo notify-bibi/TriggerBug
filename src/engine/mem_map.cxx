@@ -8,6 +8,7 @@
  * ---------------------------------------------------------------------------------------
  */
 
+#define UNDEFMEM
 #include "engine/mem_map.h"
 #include "engine/memory.h"
 using namespace TR;

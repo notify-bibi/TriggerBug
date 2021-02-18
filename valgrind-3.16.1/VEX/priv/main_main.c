@@ -216,7 +216,7 @@ void LibVEX_Init (
    vex_log_bytes    = log_bytes;
 
    /* Now it's safe to check parameters for sanity. */
-   vassert(!vex_initdone);
+   //vassert(!vex_initdone);
    vassert(failure_exit);
    vassert(log_bytes);
    vassert(debuglevel >= 0);

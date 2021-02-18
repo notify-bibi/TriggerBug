@@ -10,7 +10,7 @@
  */
 
 
-tval TR::StateBase::tTriop(IROp op, tval const&a, tval const&b, tval const&c) {
+sv::tval tTriop(IROp op, sv::tval const&a, sv::tval const&b, sv::tval const&c) {
     if (a.symb() || b.symb() || c.symb()) {
         switch (op) {
         case Iop_DivF64: {
@@ -52,6 +52,7 @@ tval TR::StateBase::tTriop(IROp op, tval const&a, tval const&b, tval const&c) {
         }
         default: break;
         }
+        goto FAILD;
     }
 FAILD:
     vex_printf("unsupport Triop: ");

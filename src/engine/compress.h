@@ -146,7 +146,7 @@ namespace cmpr {
 
 
 
-    template<class STATEinterface /*= StateCmprsInterface<Addr64>*/>
+    template<class STATEinterface /*= StateCmprsInterface*/>
     class CmprsFork :public STATEinterface {
         template<class _STATEinterface, class CompressClass, typename StateStatus> friend class Compress;
         StateType m_compr_ty;

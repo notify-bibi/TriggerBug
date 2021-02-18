@@ -12,27 +12,44 @@ Author:
 Revision History:
 --*/
 
-#define UNDEFMEM
 #include "engine/memory.h"
 using namespace TR;
 
-PAGE* TR::MEM_BASE::get_write_page(HWord address)
+PAGE_DATA* PAGE_DATA::get_write_page(int user, PAGE* pt[1], z3::vcontext& ctx)
 {
-    PAGE** pt = get_pointer_of_mem_page(address);
+    if (user == m_user) 
+        return this;
+    vassert(pt[0] == this);
+    pt[0]->dec_used_ref();
+    PAGE_DATA* page = new PAGE_DATA(user, *this, ctx);
+    pt[0] = page;
+    return page;
+}
+
+PAGE_DATA* PAGE_PADDING::get_write_page(int user, PAGE* pt[1], z3::vcontext& ctx)
+{
+    vassert(pt[0] == this);
+    PAGE_DATA* res = new PAGE_DATA(user, ctx, get_padding_value());
+    if (user == m_user) {
+        dec_used_ref();
+        delete pto_padding(pt[0]);
+    }
+    else {
+        dec_used_ref();
+    }
+    pt[0] = res;
+    return res;
+}
+
+
+PAGE* TR::MBase::get_write_page(HWord address)
+{
+    PAGE** pt = this->get_pointer_of_mem_page(address);
     PAGE* page = (pt) ? pt[0] : nullptr;
     MEM_ACCESS_ASSERT_W(page, address);
-
-    //检查是否将ir translate的block区代码修改了，避免某些vmp或者ctf的恶作剧
-    if UNLIKELY(m_ee) {
-        m_ee->block_integrity(page->is_code(), address, this->m_insn_linear.insn_block_delta);
-    }
-
-    if UNLIKELY(checkup_page_ref(page, pt)) {
-        mem_change_map[ALIGN(address, 0x1000)] = &pto_data(page)->get_unit();
-    }
-    vassert(page->get_user() == user);
-    page->check_ref_cound(1);
-    return page;
+    PAGE* res = page->get_write_page(m_user, pt, m_ctx);
+    res->check_ref_cound(1);
+    return res;
 }
 
 
@@ -44,11 +61,11 @@ static const UChar* guest_insn_control_method_imp(void* instance, Addr guest_IP_
 
 
 
-PAGE* TR::MEM_BASE::map_interface(ULong address) {
+PAGE* TR::MBase::map_interface(ULong address) {
     return new PAGE_PADDING(get_user(), 0xCC);;
 }
 
-void TR::MEM_BASE::copy_interface(PAGE* pt_dst[1], PAGE* pt_src[1]) {
+void TR::MBase::copy_interface(PAGE* pt_dst[1], PAGE* pt_src[1]) {
 #ifndef CLOSECNW
 #ifdef USECNWNOAST
     PAGE* fpage = pt_src[0];
@@ -91,10 +108,10 @@ dont_use_father_page:
 
 }
 
-void TR::MEM_BASE::unmap_interface(PAGE* pt[1]) {
+void TR::MBase::unmap_interface(PAGE* pt[1]) {
     PAGE* page = pt[0];
     page->dec_used_ref();
-    if (page->get_user() == user) {
+    if (page->get_user() == m_user) {
         page->check_ref_cound(0);
         if (page->is_padding()) {
             delete pto_padding(page);
@@ -109,19 +126,13 @@ void TR::MEM_BASE::unmap_interface(PAGE* pt[1]) {
     }
 }
 
-PAGE_DATA* PAGE_PADDING::convert_to_data(PAGE* pt[1], z3::vcontext& ctx, bool nr)
+PAGE_DATA* PAGE_PADDING::convert_to_data(PAGE* pt[1], z3::vcontext& ctx)
 {
-
-    PAGE_PADDING* p_bak = (PAGE_PADDING*)pt[0];
     vassert(pt[0]->is_padding());
-    PAGE_DATA* res = new PAGE_DATA(p_bak->get_user(), ctx, nr, p_bak->get_padding_value());
+    PAGE_PADDING* p_bak = (PAGE_PADDING*)pt[0];
+    PAGE_DATA* res = new PAGE_DATA(p_bak->get_user(), ctx, p_bak->get_padding_value());
     if UNLIKELY(p_bak->dec_used_ref()==0) {
-        if (((PAGE*)p_bak)->is_padding()) {
-            delete pto_padding(p_bak);
-        }
-        else {
-            delete pto_data(p_bak);
-        }
+        delete pto_padding(p_bak);
     }
     pt[0] = res;
     return res;
@@ -129,15 +140,8 @@ PAGE_DATA* PAGE_PADDING::convert_to_data(PAGE* pt[1], z3::vcontext& ctx, bool nr
 
 
 
-void TR::MEM_BASE::clearRecord()
-{
-    for (auto p : mem_change_map) {
-        p.second->clearRecord();
-    }
-    mem_change_map.clear();
-}
 
-ULong TR::MEM_BASE::find_block_forward(ULong start, HWord size) {
+ULong TR::MBase::find_block_forward(ULong start, HWord size) {
     start &= ~0xfffull;
     HWord get_mem = 0;
     for (; get_mem < size; start += 0x1000) {
@@ -154,7 +158,7 @@ ULong TR::MEM_BASE::find_block_forward(ULong start, HWord size) {
 
 }
 
-ULong TR::MEM_BASE::find_block_reverse(ULong start, HWord size)
+ULong TR::MBase::find_block_reverse(ULong start, HWord size)
 {
     start &= ~0xfffull;
     HWord get_mem = 0;
@@ -170,7 +174,7 @@ ULong TR::MEM_BASE::find_block_reverse(ULong start, HWord size)
     return start += 0x1000;
 }
 
-const UChar* TR::MEM_BASE::get_vex_insn_linear(Addr guest_IP_sbstart)
+const UChar* TR::MBase::get_vex_insn_linear(Addr guest_IP_sbstart)
 {
     PAGE* p = get_mem_page(guest_IP_sbstart);
     MEM_ACCESS_ASSERT_R(p, guest_IP_sbstart);
@@ -188,15 +192,18 @@ const UChar* TR::MEM_BASE::get_vex_insn_linear(Addr guest_IP_sbstart)
     return res;
 }
 
-const UChar* TR::MEM_BASE::libvex_guest_insn_control(Addr guest_IP_sbstart, Long delta, const UChar* guest_code)
+const UChar* TR::MBase::libvex_guest_insn_control(Addr guest_IP_sbstart, Long delta, const UChar* guest_code)
 {
     guest_IP_sbstart += delta;
-    Addr the_rest_n = 0x1000 - (guest_IP_sbstart & 0xfff);
+    if (0x756EEFC5 == guest_IP_sbstart) {
+        printf("bkp");
+    }
+    UInt the_rest_n = 0x1000 - (guest_IP_sbstart & 0xfff);
     Insn_linear& insn_linear = this->m_insn_linear;
     vassert(insn_linear.insn_block_delta <= delta);
     insn_linear.insn_block_delta = delta;
-    constexpr int size_swap = sizeof(Insn_linear::swap);
-    constexpr int Threshold = size_swap/2;
+    static constexpr UInt size_swap = sizeof(Insn_linear::swap);
+    static constexpr UInt Threshold = size_swap/2;
     if LIKELY(insn_linear.flag == enough) {
         if UNLIKELY(the_rest_n <= Threshold) {
 
@@ -219,9 +226,8 @@ const UChar* TR::MEM_BASE::libvex_guest_insn_control(Addr guest_IP_sbstart, Long
     }
     else if UNLIKELY(insn_linear.flag == swap_state) {
         ULong offset = ((delta + guest_code) - insn_linear.swap);
-        if UNLIKELY(offset >= Threshold) {
+        if UNLIKELY(offset<= size_swap && offset >= Threshold) {
             insn_linear.flag = enough;
-            vassert((offset <= size_swap));
             PAGE* p = get_mem_page(guest_IP_sbstart);
             MEM_ACCESS_ASSERT_R(p, guest_IP_sbstart);
             p->set_code_flag();
@@ -236,15 +242,44 @@ const UChar* TR::MEM_BASE::libvex_guest_insn_control(Addr guest_IP_sbstart, Long
 }
 
 
-bool TR::MEM_BASE::checkup_page_ref(PAGE*& P, PAGE** PT)
+TR::MBase::MBase(z3::solver& s, z3::vcontext& ctx, PML4T** cr3, Int _user, Bool _need_record)
+    :
+    m_user(_user),
+    m_ctx(ctx),
+    m_solver(s),
+    m_need_record(_need_record)
+{
+    CR3[0] = cr3[0];
+}
+TR::MBase::MBase(z3::solver& so, z3::vcontext& ctx, Bool _need_record)
+    :
+    m_user(0),
+    m_ctx(ctx),
+    m_solver(so),
+    m_need_record(_need_record)
+{
+}
+
+TR::MBase::MBase(z3::solver& so, z3::vcontext& ctx, MBase& father_mem, Bool _need_record)
+    :
+    m_user(((Int)father_mem.m_user) + 1),
+    m_ctx(ctx),
+    m_solver(so),
+    m_need_record(_need_record)
+{
+    vassert(this->m_user != father_mem.m_user);
+    this->copy(father_mem.CR3[0]);
+}
+
+bool TR::MBase::checkup_page_ref(PAGE*& P, PAGE** PT)
 {
 #ifndef CLOSECNW
-    if LIKELY(user == P->get_user()) {
+    if LIKELY(m_user == P->get_user()) {
 #ifdef USECNWNOAST
         mem_change_map[ALIGN(address, 0x1000)] = (*P);
 #endif
         if UNLIKELY(P->is_padding()) {
-            P = pto_padding(P)->convert_to_data(PT, m_ctx, this->is_need_record());
+            P = pto_padding(P)->convert_to_data(PT, m_ctx);
         }
         return false;
     }
@@ -252,10 +287,10 @@ bool TR::MEM_BASE::checkup_page_ref(PAGE*& P, PAGE** PT)
         P->dec_used_ref();
         PAGE* np;
         if UNLIKELY(P->is_padding()) {
-            np = new PAGE_DATA(get_user(), m_ctx, this->is_need_record(), pto_padding(P)->get_padding_value());
+            np = new PAGE_DATA(get_user(), m_ctx, pto_padding(P)->get_padding_value());
         }
         else {
-            np = new PAGE_DATA(get_user(), *pto_data(P), m_ctx, this->is_need_record());
+            np = new PAGE_DATA(get_user(), *pto_data(P), m_ctx);
         }
         PT[0] = np;
         P = np;
@@ -277,7 +312,7 @@ static bool sse_cmp(__m256i& pad, void* data, unsigned long size) {
     return false;
 }
 
-static void _init_page(MEM_BASE* m, PAGE*& P, HWord address)
+static void _init_page(TR::MBase* m, PAGE*& P, HWord address)
 {
 
     PAGE** pt = m->get_pointer_of_mem_page(address);
@@ -295,7 +330,7 @@ static void _init_page(MEM_BASE* m, PAGE*& P, HWord address)
 
 #define init_page(ref, addr) _init_page(this, ref, addr)
 //very fast this api have no record
-UInt TR::MEM_BASE::write_bytes(ULong address, ULong length, UChar* data) {
+UInt TR::MBase::write_bytes(ULong address, ULong length, UChar* data) {
     UInt write_count = 0;
     if LIKELY(length < 32) {
         {
@@ -372,7 +407,7 @@ UInt TR::MEM_BASE::write_bytes(ULong address, ULong length, UChar* data) {
                     }
                 }
                 if LIKELY(need_mem) {
-                    p_page = ((PAGE_PADDING*)p_page)->convert_to_data(p_pt, m_ctx, need_record);
+                    p_page = ((PAGE_PADDING*)p_page)->convert_to_data(p_pt, m_ctx);
                 }
                 else {
                     pto_padding(p_page)->set_padding_value(M256i(pad).m256i_u8[0]);
@@ -394,7 +429,9 @@ UInt TR::MEM_BASE::write_bytes(ULong address, ULong length, UChar* data) {
             pad = _mm256_set1_epi8(data[count]);
         }
         if ((!sse_cmp(pad, data + count, align_r)) || need_mem || !p_page->is_padding()) {
-            p_page = ((PAGE_PADDING*)p_page)->convert_to_data(p_pt, m_ctx, need_record);
+            if (p_page->is_padding()) {
+                p_page = ((PAGE_PADDING*)p_page)->convert_to_data(p_pt, m_ctx);
+            }
             pto_data(p_page)->get_unit().Ist_Put((address + count) & 0xfff, &data[count], align_r);
             write_count += align_r;
         }
@@ -406,21 +443,22 @@ UInt TR::MEM_BASE::write_bytes(ULong address, ULong length, UChar* data) {
     return write_count;
 }
 
-template<typename HWord>
-tval TR::MEM::_Iex_Load(PAGE* P, HWord address, UShort size)
+
+
+sv::tval Mem::_Iex_Load(PAGE* P, HWord address, UShort size)
 {
     PAGE* nP = get_mem_page(address + 0x1000);
     MEM_ACCESS_ASSERT_R(nP, address + 0x1000);
     UInt plength = 0x1000 - ((UShort)address & 0xfff);
 
-    tval L = pto_data(nP)->get_unit().Iex_Get(user, 0, size - plength, m_ctx);
-    tval R = pto_data(P)->get_unit().Iex_Get(user, ((UShort)address & 0xfff), plength, m_ctx);
+    sv::tval L = pto_data(nP)->get_unit().Iex_Get(m_user, 0, size - plength, m_ctx);
+    sv::tval R = pto_data(P)->get_unit().Iex_Get(m_user, ((UShort)address & 0xfff), plength, m_ctx);
     return L.concat(R);
 }
 ;
 
-template<typename HWord>
-tval MEM::Iex_Load(HWord address, IRType ty)
+
+sv::tval Mem::Iex_Load(HWord address, IRType ty)
 {
     switch (ty) {
     case Ity_I8: return load<Ity_I8>(address);
@@ -437,20 +475,48 @@ tval MEM::Iex_Load(HWord address, IRType ty)
     }
 }
 
-template<typename HWord>
-inline tval TR::MEM::Iex_Load(const tval& address, IRType ty)
+
+
+template<int ea_nbits>
+sv::tval Mem::Iex_Load(const subval<ea_nbits>& address, IRType ty) {
+    switch (ty) {
+    case Ity_I8: return load<Ity_I8>(address);
+    case Ity_I16: return load<Ity_I16>(address);
+    case Ity_F32: return load<Ity_F32>(address);
+    case Ity_I32: return load<Ity_I32>(address);
+    case Ity_F64: return load<Ity_F64>(address);
+    case Ity_I64: return load<Ity_I64>(address);
+    case Ity_F128: return load<Ity_F128>(address);
+    case Ity_I128: return load<Ity_I128>(address);
+    case Ity_V128: return load<Ity_V128>(address);
+    case Ity_V256: return load<Ity_V256>(address);
+    default:VPANIC("error");
+    }
+
+}
+
+
+sv::tval Mem::Iex_Load(const sv::tval& address, IRType ty)
 {
-    using vc = sv::sv_cty<HWord>;
-    if (address.real()) {
-        return Iex_Load((HWord)address.tor<false, wide>(), ty);
+    if (address.nbits() == 32) {
+        if (address.real()) {
+            return Iex_Load((HWord)address.tor<false, 32>(), ty);
+        }
+        else {
+            return Iex_Load(address.tos<false, 32>(), ty);
+        }
     }
     else {
-        return Iex_Load((Z3_ast)address.tos<false, wide>(), ty);
+        if (address.real()) {
+            return Iex_Load((HWord)address.tor<false, 64>(), ty);
+        }
+        else {
+            return Iex_Load(address.tos<false, 64>(), ty);
+        }
     }
 }
 
-template<typename HWord>
-tval TR::MEM::Iex_Load(const tval& address, int nbits)
+sv::tval Mem::Iex_Load(const sv::tval& address, int nbits)
 {
     switch (nbits) {
     case 8: return load<Ity_I8>(address);
@@ -464,101 +530,83 @@ tval TR::MEM::Iex_Load(const tval& address, int nbits)
     }
 }
 
-template<typename HWord>
-tval TR::MEM::Iex_Load(const sv::rsval<false, wide>& address, IRType ty)
-{
-    if (address.real()) {
-        return Iex_Load((HWord)address.tor(), ty);
-    }
-    else {
-        return Iex_Load((Z3_ast)address.tos(), ty);
-    }
-}
 
-template<typename HWord>
-tval MEM::Iex_Load(Z3_ast address, IRType ty) {
-    switch (ty) {
-    case Ity_I8: return load<Ity_I8>(address);
-    case Ity_I16: return load<Ity_I16>(address);
-    case Ity_F32: return load<Ity_F32>(address);
-    case Ity_I32: return load<Ity_I32>(address);
-    case Ity_F64: return load<Ity_F64>(address);
-    case Ity_I64: return load<Ity_I64>(address);
-    case Ity_F128: return load<Ity_F128>(address);
-    case Ity_I128: return load<Ity_I128>(address);
-    case Ity_V128: return load<Ity_V128>(address);
-    case Ity_V256: return load<Ity_V256>(address);
-    default:VPANIC("error");
-    }
-}
-
-template<typename HWord>
-void TR::MEM::Ist_Store(HWord address, tval const& data)
+void TR::Mem::Ist_Store(HWord address, sv::tval const& data)
 {
     if (data.real()) {
         switch (data.nbits()) {
-        case 8: store(address, (uint8_t)data); return;
-        case 16: store(address, (uint16_t)data); return;
-        case 32: store(address, (uint32_t)data); return;
-        case 64: store(address, (uint64_t)data); return;
-        case 128:store(address, (__m128i)data); return;
-        case 256:store(address, (__m256i)data); return;
+        case 8:  { store(address, (uint8_t)data); return; }
+        case 16: { store(address, (uint16_t)data); return; }
+        case 32: { store(address, (uint32_t)data); return; }
+        case 64: { store(address, (uint64_t)data); return; }
+        case 128:{ store(address, (__m128i)data); return; }
+        case 256:{ store(address, (__m256i)data); return; }
         default:
             VPANIC("not support");
         };
     }
     else {
         switch (data.nbits()) {
-        case 8: store<8>(address, (Z3_ast)data); return;
-        case 16: store<16>(address, (Z3_ast)data); return;
-        case 32: store<32>(address, (Z3_ast)data); return;
-        case 64: store<64>(address, (Z3_ast)data); return;
-        case 128:store<128>(address, (Z3_ast)data); return;
-        case 256:store<256>(address, (Z3_ast)data); return;
+        case 8:  { store(address, data.tos<false, 8>()); return; }
+        case 16: { store(address, data.tos<false, 16>()); return; }
+        case 32: { store(address, data.tos<false, 32>()); return; }
+        case 64: { store(address, data.tos<false, 64>()); return; }
+        case 128:{ store(address, data.tos<false, 128>()); return; }
+        case 256:{ store(address, data.tos<false, 256>()); return; }
         default:
             VPANIC("not support");
         };
     }
-
-
 }
 
-template<typename HWord>
-void TR::MEM::Ist_Store(Z3_ast address, tval const& data)
+void TR::Mem::Ist_Store(sv::tval const& address, sv::tval const& data)
+{
+    if LIKELY(address.real()) {
+        if (address.nbits() == 32) {
+            Ist_Store((HWord)address.tor<false, 32>(), data);
+        }
+        else {
+            Ist_Store((HWord)address.tor<false, 64>(), data);
+        }
+    }
+    else {
+        if (address.nbits() == 32) {
+            Ist_Store(address.tos<false, 32>(), data);
+        }
+        else {
+            Ist_Store(address.tos<false, 64>(), data);
+        }
+    }
+}
+
+
+template<int ea_nbits>
+void TR::Mem::Ist_Store(const subval<ea_nbits>& address, sv::tval const& data)
 {
     if (data.real()) {
         switch (data.nbits()) {
-        case 1: store(address, (uint8_t)data); return;
-        case 2: store(address, (uint16_t)data); return;
-        case 4: store(address, (uint32_t)data); return;
-        case 8: store(address, (uint64_t)data); return;
-        case 16:store(address, (__m128i)data); return;
-        case 32:store(address, (__m256i)data); return;
+        case 8: { store(address, (uint8_t)data); return; }
+        case 16: { store(address, (uint16_t)data); return; }
+        case 32: { store(address, (uint32_t)data); return; }
+        case 64: { store(address, (uint64_t)data); return; }
+        case 128: { store(address, (__m128i)data); return; }
+        case 256: { store(address, (__m256i)data); return; }
         default:
             VPANIC("not support");
         };
     }
     else {
         switch (data.nbits()) {
-        case 1: store<8>(address, (Z3_ast)data); return;
-        case 2: store<16>(address, (Z3_ast)data); return;
-        case 4: store<32>(address, (Z3_ast)data); return;
-        case 8: store<64>(address, (Z3_ast)data); return;
-        case 16:store<128>(address, (Z3_ast)data); return;
-        case 32:store<256>(address, (Z3_ast)data); return;
+        case 8: { store(address, data.tos<false, 8, Z3_BV_SORT>()); return; }
+        case 16: { store(address, data.tos<false, 16, Z3_BV_SORT>()); return; }
+        case 32: { store(address, data.tos<false, 32, Z3_BV_SORT>()); return; }
+        case 64: { store(address, data.tos<false, 64, Z3_BV_SORT>()); return; }
+        case 128: { store(address, data.tos<false, 128, Z3_BV_SORT>()); return; }
+        case 256: { store(address, data.tos<false, 256, Z3_BV_SORT>()); return; }
         default:
             VPANIC("not support");
         };
     }
-
 }
-
-
-
-
-
-
-
-template class TR::MEM<Addr32>;
-template class TR::MEM<Addr64>;
-
+template void TR::Mem::Ist_Store(const subval<32>& address, sv::tval const& data);
+template void TR::Mem::Ist_Store(const subval<64>& address, sv::tval const& data);

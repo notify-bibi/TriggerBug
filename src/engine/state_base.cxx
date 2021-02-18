@@ -1,32 +1,12 @@
+
 #include "state_base.h"
-#include "state_class.h"
+#include "engine/z3_target_call/z3_target_call.h"
 
 using namespace TR;
 
-clock_t tr_begin_run = clock();
 
 
-__attribute__((noreturn))
-static void failure_exit() {
-    throw Expt::IRfailureExit("valgrind error exit");
-}
-
-static void _vex_log_bytes(const HChar* bytes, SizeT nbytes) {
-    std::cout << bytes;
-}
-
-static void IR_init(VexControl& vc) {
-    static Bool TR_initdone = False;
-    tr_begin_run = clock();
-    if (!TR_initdone) {
-        Func_Map_Init();
-        LibVEX_Init(&failure_exit, &_vex_log_bytes, 0/*debuglevel*/, &vc);
-        TR_initdone = True;
-    }
-}
-
-tval StateBase::mk_int_const(UShort nbit) {
-    std::unique_lock<std::mutex> lock(m_state_lock);
+sv::tval StateBase::mk_int_const(UShort nbit) {
     auto res = m_z3_bv_const_n++;
     char buff[20];
 #ifdef _MSC_VER
@@ -34,18 +14,39 @@ tval StateBase::mk_int_const(UShort nbit) {
 #else
     snprintf(buff, sizeof(buff), "p_%d", res);
 #endif
-    return tval(m_ctx, m_ctx.bv_const(buff, nbit), Z3_BV_SORT, nbit);
+    return sv::tval(m_ctx, m_ctx.bv_const(buff, nbit), Z3_BV_SORT, nbit);
 }
 
-tval StateBase::mk_int_const(UShort n, UShort nbit) {
+sv::tval StateBase::mk_int_const(UShort n, UShort nbit) {
     char buff[20];
 #ifdef _MSC_VER
     sprintf_s(buff, sizeof(buff), "p_%d", n);
 #else
     snprintf(buff, sizeof(buff), "p_%d", n);
 #endif
-    return  tval(m_ctx, m_ctx.bv_const(buff, nbit), Z3_BV_SORT, nbit);
+    return  sv::tval(m_ctx, m_ctx.bv_const(buff, nbit), Z3_BV_SORT, nbit);
 }
+
+std::string replace(const char* pszSrc, const char* pszOld, const char* pszNew)
+{
+    std::string strContent, strTemp;
+    strContent.assign(pszSrc);
+    std::string::size_type nPos = 0;
+    while (true)
+    {
+        nPos = strContent.find(pszOld, nPos);
+        strTemp = strContent.substr(nPos + strlen(pszOld), strContent.length());
+        if (nPos == std::string::npos)
+        {
+            break;
+        }
+        strContent.replace(nPos, strContent.length(), pszNew);
+        strContent.append(strTemp);
+        nPos += strlen(pszNew) - strlen(pszOld) + 1;
+    }
+    return strContent;
+}
+
 
 StateBase::operator std::string() const {
     std::string str;
@@ -152,10 +153,10 @@ void StateBase::read_mem_dump(const char* filename)
         }
         else {
             printf("| %-28s |  %16llx  |  %16llx  | %10llx |\n", name, buf.address, buf.dataoffset, buf.length);
-            if (err = mem().membase(buf.address, buf.length))
+            if (err = mem.map(buf.address, buf.length))
                 printf("warning %s had maped before length: %llx\n", name, err);
             need_write_size += buf.length;
-            write_count += membase().write_bytes(buf.address, buf.length, (unsigned char*)data);
+            write_count += mem.write_bytes(buf.address, buf.length, (unsigned char*)data);
         }
         infile.seekg(fp);
         free(data);
@@ -171,68 +172,87 @@ void StateBase::read_mem_dump(const char* filename)
     infile.close();
 }
 
-TR::StateBase::StateBase(TR::vctx_base& vctx_base, HWord gse, Bool _need_record)
-    :m_ctx(), m_vex_info(vctx_base),
+TR::StateBase::~StateBase()
+{
+}
+
+TR::StateBase::StateBase(vex_context& vctx, VexArch guest_arch)
+    :m_ctx(),
+    m_vinfo(guest_arch),
+    m_vctx(vctx),
     guest_start_ep(/*oep*/0),
     guest_start(/*oep*/0),
-    m_need_record(_need_record),
-    m_z3_bv_const_n(0),
     m_delta(0),
+    m_need_record(true),
+    m_z3_bv_const_n(0),
     m_status(NewState),
     m_jump_kd(Ijk_Boring),
-    m_InvokStack(),
     solv(m_ctx),
-    regs(m_ctx, _need_record),
+    regs(m_ctx),
+    mem(solv, m_ctx, true),
     branch(*this)
 {
-
-    vctx_base.set_top_state(this);
-    VexControl vc;
-    LibVEX_default_VexControl(&vc);
-    vc.iropt_verbosity = 0;
-    vc.iropt_level = info().giropt_level();
-    #warning "whate is iropt_unroll_thresh"
-        vc.iropt_unroll_thresh = 0;
-    vc.guest_max_insns = info().gmax_insns();
-    //vc.guest_chase_thresh = 0;   
-    vc.guest_chase = True; //²»Ðí×·¸Ï
-    vc.iropt_register_updates_default = info().gRegisterUpdates();
-    IR_init(vc);
-
-    read_mem_dump(info().gbin());
-    if (gse)
-        guest_start_ep = gse;
-    else {
-        guest_start_ep = regs.get<HWord>(info().gRegsIpOffset()).tor();
-    }
-    guest_start = guest_start_ep;
+    m_vctx.set_top_state(this);
+    m_vinfo.ir_init();
+}
 
 
-    /*auto _TraceIrAddrress = info().doc_debug->FirstChildElement("TraceIrAddrress");
-    if (_TraceIrAddrress) {
-        for (auto ta = _TraceIrAddrress->FirstChildElement(); ta; ta = ta->NextSiblingElement()) {
-            ULong addr; TRControlFlags flag;
-            sscanf(ta->Attribute("addr"), "%llx", &addr);
-            sscanf(ta->Attribute("cflag"), "%llx", &flag);
-            vctx.hook_add(addr, nullptr, flag);
-        }
-    }*/
+
+TR::StateBase::StateBase(StateBase& father, HWord gse)
+    : m_ctx(),
+    m_vinfo(father.m_vinfo),
+    m_vctx(father.m_vctx),
+    guest_start_ep(gse),
+    guest_start(guest_start_ep),
+    m_delta(0),
+    m_need_record(father.m_need_record),
+    m_z3_bv_const_n((UInt)father.m_z3_bv_const_n),
+    m_status(NewState),
+    m_jump_kd(Ijk_Boring),
+    solv(m_ctx, father.solv, z3::solver::translate{}),
+    regs(father.regs, m_ctx),
+    mem(solv, m_ctx, father.mem, father.m_need_record),
+    branch(*this, father.branch)
+{
 
 }
 
-TR::StateBase::StateBase(StateBase& father, HWord gse)
-    : m_ctx(), m_vex_info(father.m_vex_info),
-    guest_start_ep(gse),
-    guest_start(guest_start_ep),
-    m_need_record(father.m_need_record),
-    m_z3_bv_const_n(father.m_z3_bv_const_n),
-    m_delta(0),
-    m_status(NewState),
-    m_jump_kd(Ijk_Boring),
-    m_InvokStack(father.m_InvokStack),
-    solv(m_ctx, father.solv, z3::solver::translate{}),
-    regs(father.regs, m_ctx, father.m_need_record),
-    branch(*this, father.branch)
-{};
+void TR::StateBase::read_bin_dump(const char* binDump)
+{
+    read_mem_dump(binDump);
+    guest_start_ep = regs.get<HWord>(vinfo().gRegsIpOffset()).tor();
+    guest_start = guest_start_ep;
+};
 
 
+UInt TR::StateBase::getStr(std::stringstream& st, HWord addr)
+{
+    UInt p = 0;
+    while (True) {
+        auto b = mem.template load<Ity_I8>(addr++);
+        if (b.real()) {
+            p++;
+            st << (UChar)b.tor();
+            if (!(UChar)b.tor()) return -1;
+        }
+        else {
+            return p;
+        }
+    }
+    return -1u;
+}
+
+bool TR::operator==(InvocationStack<HWord> const& a, InvocationStack<HWord> const& b)
+{
+    return (a.get_guest_call_stack() == b.get_guest_call_stack()) && (a.get_guest_stack() == b.get_guest_stack());
+}
+
+std::ostream& TR::operator<<(std::ostream& out, const TR::StateBase& n)
+{
+    return out << (std::string)n;
+}
+
+std::ostream& TR::operator<<(std::ostream& out, const TR::InvocationStack<HWord>& e)
+{
+    return out << (std::string)e;
+}

@@ -381,7 +381,7 @@ namespace sv {
 bool Z3_API Z3_get_numeral_bytes(Z3_context c, Z3_ast a, int64_t* num, UInt* den) {
     size_t* expr, *decl, * m_info, * m_parameters, * m_rational,  *m_ptr, * m_digits;
     expr = (size_t*)a;
-#if 1
+#if 0
     decl = (size_t*)expr[4];
     m_info = (size_t*)decl[5];
 #else
@@ -436,16 +436,16 @@ void HexToStr(unsigned char* pbDest, unsigned char* pbSrc, int nLen)
         ((short*)pbDest)[(nLen - i)] = ((short)ddl << 8) | ddh;
     }
 }
-tval sv::ite(const sbool& cond, const tval& iftrue, const tval& iffalse)
+sv::tval sv::ite(const sbool& cond, const tval& iftrue, const tval& iffalse)
 {
     Z3_context ctx = cond;
     vassert(iftrue.nbits() == iffalse.nbits());
     vassert(iftrue.sort_kind() == iffalse.sort_kind());
     if (iftrue.sort_kind() == Z3_BOOL_SORT) {
-        return tval(ctx, Z3_mk_ite(ctx, cond, iftrue.mk_bool_ast(), iffalse.mk_bool_ast()), Z3_BOOL_SORT, 1);
+        return sv::tval(ctx, Z3_mk_ite(ctx, cond, iftrue.mk_bool_ast(), iffalse.mk_bool_ast()), Z3_BOOL_SORT, 1);
     }
     if (iftrue.sort_kind() == Z3_BV_SORT) {
-        return tval(ctx, Z3_mk_ite(ctx, cond, iftrue.mk_bv_ast(), iffalse.mk_bv_ast()), Z3_BV_SORT, iftrue.nbits());
+        return sv::tval(ctx, Z3_mk_ite(ctx, cond, iftrue.mk_bv_ast(), iffalse.mk_bv_ast()), Z3_BV_SORT, iftrue.nbits());
     }
     if (iftrue.sort_kind() == Z3_FLOATING_POINT_SORT) {
         unsigned eb, sb;
@@ -457,10 +457,32 @@ tval sv::ite(const sbool& cond, const tval& iftrue, const tval& iffalse)
         default:
             VPANIC("fp err");
         }
-        return tval(ctx, Z3_mk_ite(ctx, cond, iftrue.mk_fpa_ast(eb, sb), iffalse.mk_fpa_ast(eb, sb)), Z3_FLOATING_POINT_SORT, iftrue.nbits());
+        return sv::tval(ctx, Z3_mk_ite(ctx, cond, iftrue.mk_fpa_ast(eb, sb), iffalse.mk_fpa_ast(eb, sb)), Z3_FLOATING_POINT_SORT, iftrue.nbits());
     }
     VPANIC("GG");
 }
 ;
 
-static_assert(sizeof(tval) == 48, "error align");
+sv::tval sv::expr2tval(const z3::expr& e) {
+    z3::sort s = e.get_sort();
+    Z3_sort_kind sk = s.sort_kind();
+    int nbits = -1;
+    switch (sk)
+    {
+    case Z3_BOOL_SORT:
+        nbits = 1;
+        break;
+    case Z3_BV_SORT:
+        nbits = s.bv_size();
+        break;
+    case Z3_FLOATING_POINT_SORT:
+        nbits = s.fpa_ebits() + s.fpa_sbits();
+        break;
+    default:
+        VPANIC("un know");
+    }
+    return tval(e.ctx(), (Z3_ast)e, sk, nbits);
+}
+
+
+static_assert(sizeof(sv::tval) == 48, "error align");

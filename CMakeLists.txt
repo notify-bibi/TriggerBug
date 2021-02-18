@@ -15,7 +15,7 @@ project (TriggerBug
         )
 
 		
-SET(Z3_PROJ_DIR "z3-z3-4.8.9")
+SET(Z3_PROJ_DIR "z3-z3-4.8.10")
 set(VALGRIND_PROJ_DIR "valgrind-3.16.1")
 
 

@@ -167,7 +167,18 @@ typedef
          been interrupted by a signal. */
       ULong guest_IP_AT_SYSCALL;
 
+      ULong  guest_LDT; /* host addr, a VexGuestX86SegDescr* */
+      ULong  guest_GDT; /* host addr, a VexGuestX86SegDescr* */
+      /* Segment registers. */
+      UShort guest_CS;
+      UShort guest_DS;
+      UShort guest_ES;
+      UShort guest_FS;
+      UShort guest_GS;
+      UShort guest_SS;
+
       /* Padding to make it have an 16-aligned size */
+      UInt   padding;
       ULong pad3;
    }
    VexGuestAMD64State;

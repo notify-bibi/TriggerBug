@@ -2034,6 +2034,7 @@ void ppIRJumpKind ( IRJumpKind kind )
       case Ijk_Sys_int145:    vex_printf("Sys_int145"); break;
       case Ijk_Sys_int210:    vex_printf("Sys_int210"); break;
       case Ijk_Sys_sysenter:  vex_printf("Sys_sysenter"); break;
+      case Ijk_translate_changed:  vex_printf("Ijk_translate_changed"); break;
       default:                vpanic("ppIRJumpKind");
    }
 }
@@ -2061,7 +2062,7 @@ void ppIRStmt ( const IRStmt* s )
          vex_printf("IR-NoOp");
          break;
       case Ist_IMark:
-         vex_printf( "------ IMark(0x%lx, %u, %u) ------", 
+         vex_printf( "------ IMark(0x%llx, %u, %u) ------", 
                      s->Ist.IMark.addr, s->Ist.IMark.len,
                      (UInt)s->Ist.IMark.delta);
          break;

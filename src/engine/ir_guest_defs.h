@@ -138,7 +138,16 @@ _macro(CMLEN),\
 _macro(NRADDR),\
 _macro(SC_CLASS),\
 _macro(GS_CONST),\
-_macro(IP_AT_SYSCALL)
+_macro(IP_AT_SYSCALL),\
+_macro(LDT),\
+_macro(GDT),\
+_macro(CS),\
+_macro(DS),\
+_macro(ES),\
+_macro(FS),\
+_macro(GS),\
+_macro(SS)
+
 
 
 #define ARM_REGS_offset_DEF(REGNAME) REGNAME = offsetof(VexGuestARMState, guest_##REGNAME)
@@ -937,6 +946,13 @@ GUEST_RGS_DEF(MIPS32)
 GUEST_RGS_DEF(MIPS64)
 GUEST_RGS_DEF(PPC32)
 GUEST_RGS_DEF(PPC64)
+
+
+static_assert((unsigned int)AMD64_IR_OFFSET::IDFLAG == (unsigned int)X86_IR_OFFSET::IDFLAG, "need support x96");
+static_assert((unsigned int)AMD64_IR_OFFSET::YMM7 == (unsigned int)X86_IR_OFFSET::XMM7, "need support x96");
+static_assert((unsigned int)AMD64_IR_OFFSET::IP_AT_SYSCALL == (unsigned int)X86_IR_OFFSET::IP_AT_SYSCALL, "need support x96");
+
+
 
 
 

@@ -17,35 +17,35 @@
 //    template<typename ADDR, typename Type>
 //    class GM {
 //        Vns m_base;
-//        TR::MEM<ADDR>& m_obj;
+//        TR::MEM& m_obj;
 //        template <typename ADDR, typename T> friend class GMP;
 //        template <typename ADDR, typename T, UInt shift, UInt bits> friend class GMW;
 //        friend class TRGL::VexGuestAMD64State;
 //        friend class TRGL::VexGuestX86SegDescr;
 //        friend class TRGL::VexGuestX86State;
 //
-//        GM(TR::MEM<ADDR>& obj, Vns const& base) :
+//        GM(TR::MEM& obj, Vns const& base) :
 //            m_obj(obj),
 //            m_base(base)
 //        {}
 //
-//        GM(TR::MEM<ADDR>& obj) :
+//        GM(TR::MEM& obj) :
 //            m_obj(obj),
 //            m_base(obj, (ADDR)0)
 //        {}
 //
-//        GM(TR::MEM<ADDR>& obj, ADDR base) :
+//        GM(TR::MEM& obj, ADDR base) :
 //            m_obj(obj),
 //            m_base(obj, base)
 //        {}
 //
 //        template<typename T>
-//        GM(TR::MEM<ADDR>& obj, T base) :
+//        GM(TR::MEM& obj, T base) :
 //            m_obj(obj),
 //            m_base(obj, (ADDR)base)
 //        {}
 //
-//        TR::MEM<ADDR>& obj() const {
+//        TR::MEM& obj() const {
 //            return static_cast<MEM&>(m_obj);
 //        }
 //
@@ -136,17 +136,17 @@
 //    template<typename ADDR, typename Type>
 //    class GMP:private GM<ADDR, Type> {
 //    public:
-//        GMP(TR::MEM<ADDR>& obj, Vns const& base): GM<ADDR, Type>(obj, base)
+//        GMP(TR::MEM& obj, Vns const& base): GM<ADDR, Type>(obj, base)
 //        {}
 //
-//        GMP(TR::MEM<ADDR>& obj) :GM<ADDR, Type>(obj)
+//        GMP(TR::MEM& obj) :GM<ADDR, Type>(obj)
 //        {}
 //
-//        GMP(TR::MEM<ADDR>& obj, ADDR base) : GM<ADDR, Type>(obj, base)
+//        GMP(TR::MEM& obj, ADDR base) : GM<ADDR, Type>(obj, base)
 //        {}
 //
 //        template<typename T>
-//        GMP(TR::MEM<ADDR>& obj, T base) :GM<ADDR, Type>(obj, base)
+//        GMP(TR::MEM& obj, T base) :GM<ADDR, Type>(obj, base)
 //        {}
 //
 //        template<typename T>
@@ -157,8 +157,8 @@
 //        GMP(GM<T> const& C) : GM<Type>(C)
 //        {}*/
 //
-//        TR::MEM<ADDR>& obj() const {
-//            return static_cast<TR::MEM<ADDR>&>(m_obj);
+//        TR::MEM& obj() const {
+//            return static_cast<TR::MEM&>(m_obj);
 //        }
 //
 //        /*template<typename T>
@@ -408,17 +408,17 @@
 //    template<typename ADDR, typename Type, UInt shift = 0, UInt bits = (sizeof(Type) << 3)>
 //    class GMW :private GM<ADDR, Type> {
 //    public:
-//        GMW(TR::MEM<ADDR>& obj, Vns const& base) :GM(obj, base)
+//        GMW(TR::MEM& obj, Vns const& base) :GM(obj, base)
 //        {}
 //
-//        GMW(TR::MEM<ADDR>& obj) :GM(obj)
+//        GMW(TR::MEM& obj) :GM(obj)
 //        {}
 //
-//        GMW(TR::MEM<ADDR>& obj, ADDR base) :GM(obj, base)
+//        GMW(TR::MEM& obj, ADDR base) :GM(obj, base)
 //        {}
 //
 //        template<typename T>
-//        GMW(TR::MEM<ADDR>& obj, T base) : GM(obj, base)
+//        GMW(TR::MEM& obj, T base) : GM(obj, base)
 //        {}
 //
 //        operator Vns() const {

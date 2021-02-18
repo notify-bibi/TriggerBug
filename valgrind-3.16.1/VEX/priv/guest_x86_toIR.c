@@ -13468,7 +13468,18 @@ DisResult disInstr_X86_WRK (
       vassert(dres.whatNext == Dis_StopHere);
       DIP("jmp 0x%x\n", d32);
       break;
-
+   case 0xEA: /* ea096073773300  jmp 0033:77736009*/
+       vassert(sz == 4);
+       d32 = (((Addr32)guest_EIP_bbstart));
+       UInt d32 = getSDisp(sz, delta);
+       delta += sz;
+       UShort d16 = getSDisp(2, delta);
+       delta += 2;
+       putSReg(R_CS, mkU16(d16));
+       jmp_lit(&dres, Ijk_translate_changed, d32);
+       vassert(dres.whatNext == Dis_StopHere);
+       DIP("jmp %x:0x%x\n", d16, d32);
+       break;
    case 0x70:
    case 0x71:
    case 0x72: /* JBb/JNAEb (jump below) */

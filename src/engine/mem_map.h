@@ -228,6 +228,40 @@ namespace TR {
 };
 
 
+#ifndef UNDEFMEM
+#undef pto_data
+#undef pto_padding
+#undef GETPT
+#undef GETPAGE
+#undef COPY_SYM
+#undef LCODEDEF1
+#undef LCODEDEF2
+#undef LCODEDEF3
+#undef LCODEDEF4
+#undef LCODEDEF5
+#undef LMAX1
+#undef LMAX2
+#undef LMAX3
+#undef LMAX4
+#undef LMAX5
+#undef LIND1
+#undef LIND2
+#undef LIND3
+#undef LIND4
+#undef LTAB1
+#undef LTAB2
+#undef LTAB3
+#undef LTAB4
+#undef LTAB5
+#undef LSTRUCT1
+#undef LSTRUCT2
+#undef LSTRUCT3
+#undef LSTRUCT4
+#undef LSTRUCT5
+#undef LINETOSTR
+#undef CONCATSTR
+#undef MEMACCESSERR
+#endif
 
 
 

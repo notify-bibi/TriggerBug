@@ -10,7 +10,7 @@
  */
 
 
-tval TR::StateBase::tQop(IROp op, tval const& a, tval const& b, tval const& c, tval const& d){
+sv::tval tQop(IROp op, sv::tval const& a, sv::tval const& b, sv::tval const& c, sv::tval const& d){
     if (a.symb() || b.symb() || c.symb() || d.symb()) {
         switch (op) {
         case Iop_64x4toV256: { return dtos(64).concat(ctos(64).concat(btos(64).concat(atos(64)))); }
@@ -26,7 +26,7 @@ tval TR::StateBase::tQop(IROp op, tval const& a, tval const& b, tval const& c, t
     }
     else {
         switch (op) {
-        case Iop_64x4toV256: { return tval(a, _mm256_setr_epi64x(ato(int64_t), bto(int64_t), cto(int64_t), dto(int64_t))); }
+        case Iop_64x4toV256: { return sv::tval(a, _mm256_setr_epi64x(ato(int64_t), bto(int64_t), cto(int64_t), dto(int64_t))); }
         case Iop_MAddF64:
         case Iop_MAddF64r32:
         case Iop_MSubF64:
@@ -36,6 +36,7 @@ tval TR::StateBase::tQop(IROp op, tval const& a, tval const& b, tval const& c, t
         default:
             break;
         }
+        goto FAILD;
     }
 FAILD:
     vex_printf("unsupport Qop: ");

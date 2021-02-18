@@ -1,5 +1,5 @@
 
-#include "engine/tr_main.h"
+#include "engine/tr_kernel.h"
 #include "crypto_analyzer/crypto_analyzer.h"
 #include "crypto_analyzer/analyzer.h"
 #include "crypto_analyzer/ana_des.h"
@@ -14,15 +14,14 @@ const finder ana[] = {
     des_check_ro3
 };
 
-template<typename ADDR>
 class ana_finder {
     std::deque<finder> m_ana;
-    const TR::State& m_state;
-    ADDR m_base;
+    TR::StateBase& m_state;
+    HWord m_base;
     expr m_idx;
     ana_decl m_ana_decl;
 public:
-    ana_finder(const TR::State& s, ADDR base, Z3_ast index):
+    ana_finder(TR::StateBase& s, HWord base, Z3_ast index):
         m_state(s), m_base(base), m_idx(expr(s, index)), m_ana_decl(nullptr)
     {}
 
@@ -33,15 +32,15 @@ public:
             fs[n] = ana[n];
         }*/
 
-        static HASH_MAP<ADDR, ana_decl> m_ana_decl_all;
-        HASH_MAP<ADDR, ana_decl>::iterator fa = m_ana_decl_all.find(m_base);
+        static HASH_MAP<HWord, ana_decl> m_ana_decl_all;
+        HASH_MAP<HWord, ana_decl>::iterator fa = m_ana_decl_all.find(m_base);
         if (fa != m_ana_decl_all.end()) {
             m_ana_decl = fa->second;
             return true;
         }
 
         UInt idx = 0;
-        TR::MEM& mem = (const_cast<TR::State&>(m_state)).mem;
+        TR::Mem& mem = m_state.mem;
         while (fs.size()) {
             std::list<finder>::iterator itor = fs.begin();
             for (; itor != fs.end(); itor++) {
@@ -71,21 +70,9 @@ public:
 
 
 
-
-
-expr crypto_finder32( TR::State<Addr32>& s, Addr32 base, Z3_ast index)
+expr crypto_finder(TR::StateBase& s, HWord base, Z3_ast index)
 {
-    ana_finder<Addr32> f(s, base, index);
-    if (f.check()) {
-        return f.get();
-    }
-    return expr(s);
-}
-
-
-expr crypto_finder64(TR::State<Addr64>& s, Addr64 base, Z3_ast index)
-{
-    ana_finder<Addr64> f(s, base, index);
+    ana_finder f(s, base, index);
     if (f.check()) {
         return f.get();
     }

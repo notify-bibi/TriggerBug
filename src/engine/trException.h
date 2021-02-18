@@ -4,7 +4,7 @@
 
 #include "engine/engine.h"
 
-unsigned int TRCurrentThreadId();
+unsigned int currentThreadId();
 const char* constStrIRJumpKind(IRJumpKind kind);
 
 //Exception
@@ -44,7 +44,7 @@ namespace Expt {
         ExceptionBase(ExceptionTag t);
     public:
         ExceptionTag errTag() const { return m_errorId; };
-        virtual std::string msg() const { printf("GG"); exit(1); };
+        virtual std::string msg() const { return "???";  };
         virtual Addr64 addr() const { return 0; }
         virtual IRJumpKind jkd() const { return Ijk_INVALID; }
     };
@@ -111,8 +111,6 @@ namespace Expt {
     };
 };
 
-
-inline std::ostream& operator << (std::ostream& out, const Expt::ExceptionBase& e) { return out << e.msg(); }
 
 
 #define VPANIC(...) { throw Expt::IRfailureExit(__FILE__ ,__LINE__, __VA_ARGS__); }

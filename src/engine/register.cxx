@@ -1,5 +1,3 @@
-#pragma once
-
 /* ---------------------------------------------------------------------------------------
  *      Notify-bibi Symbolic-Emulation-Engine project
  *      Copyright (c) 2019 Microsoft Corporation by notify-bibi@github, 2496424084@qq.com
@@ -103,7 +101,7 @@ namespace TR {
 
     //取值函数。将多个ast和真值组合为一个ast
 #ifdef USE_HASH_AST_MANAGER
-    Z3_ast TR::freg2Ast(int nbytes, UChar* m_bytes, UChar* m_fastindex, TR::AstManager::AstManagerX& m_ast, z3::vcontext& ctx) {
+    Z3_ast freg2Ast(int nbytes, UChar* m_bytes, UChar* m_fastindex, TR::AstManager::AstManagerX& m_ast, z3::vcontext& ctx) {
 #else
     Z3_ast TR::freg2Ast(int nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_ast, z3::vcontext & ctx) {
 #endif
@@ -302,7 +300,7 @@ namespace TR {
     };
 
 #ifdef USE_HASH_AST_MANAGER
-    Z3_ast TR::freg2Ast_cov(int nbytes, UChar * m_bytes, UChar * m_fastindex, AstManager::AstManagerX & m_ast, z3::vcontext & ctx, z3::vcontext & toctx) {
+    Z3_ast TR::freg2Ast_cov(int nbytes, UChar * m_bytes, UChar * m_fastindex, TR::AstManager::AstManagerX & m_ast, z3::vcontext & ctx, z3::vcontext & toctx) {
 #else
     Z3_ast TR::freg2Ast_cov(int nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_ast, z3::vcontext & ctx, z3::vcontext & toctx) {
 #endif

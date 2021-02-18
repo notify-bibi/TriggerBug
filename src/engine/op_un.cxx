@@ -35,9 +35,9 @@ static subval<nb> ctz(const subval<nb>& s) {
 #define Z3Iop_1_ZEXT(T2) { return (subval<T2>((sbool&)a)); }
 #define Z3Iop_1_SEXT(T2) { return (ssbval<T2>((sbool&)a)); }
 
-#define Iop_to(T1, T2) { return tval(a, (T2) (T1)ato(T1)); }
+#define Iop_to(T1, T2) { return sv::tval(a, (T2) (T1)ato(T1)); }
 
-tval TR::StateBase::tUnop(IROp op, tval const& a) {
+sv::tval tUnop(IROp op, sv::tval const& a) {
     //a.tostr();
     if (a.symb()) {
         switch (op) {
@@ -92,7 +92,7 @@ tval TR::StateBase::tUnop(IROp op, tval const& a) {
         case Iop_Ctz64: { return ctz(atou(64)); }//ok
 
         case Iop_GetMSBs8x16: {
-            tval r = atou(8 * 16).extract<1>(7);
+            sv::tval r = atou(8 * 16).extract<1>(7);
             for (UInt i = 1; i < 16; i++)  r = concat(atou(8 * 16).extract<1>(i * 8 + 7), r);
             return r;
         }
@@ -144,26 +144,29 @@ tval TR::StateBase::tUnop(IROp op, tval const& a) {
         case Iop_32to8:  Iop_to(UInt, UChar);
 
 
-        case Iop_V128to32: { return tval(a, ((uint32_t*)a.cptr())[0]); }//OK
-        case Iop_V128to64: { return tval(a, ((uint64_t*)a.cptr())[0]); }//OK
-        case Iop_128to64:  { return tval(a, ((uint64_t*)a.cptr())[0]); }//OK
+        case Iop_V128to32: { return sv::tval(a, ((uint32_t*)a.cptr())[0]); }//OK
+        case Iop_V128to64: { return sv::tval(a, ((uint64_t*)a.cptr())[0]); }//OK
+        case Iop_128to64:  { return sv::tval(a, ((uint64_t*)a.cptr())[0]); }//OK
         case Iop_V256toV128_0: { return ato(__m128i); }
-        case Iop_V256toV128_1: { return tval(a, ((__m128i*)a.cptr())[1]); };
+        case Iop_V256toV128_1: { return sv::tval(a, ((__m128i*)a.cptr())[1]); };
 
-        case Iop_V128HIto64: { return tval(a, ((uint64_t*)a.cptr())[1]); }//OK
-        case Iop_128HIto64: { return tval(a, ((uint64_t*)a.cptr())[1]); }//OK
-        case Iop_32HIto16: { return tval(a, (uint16_t)((uint32_t)ato(uint32_t) >> 16)); }
-        case Iop_64HIto32: { return tval(a, (uint32_t)((uint64_t)ato(uint64_t) >> 32)); }
-        case Iop_16HIto8: { return tval(a, (uint8_t)((uint16_t)ato(uint16_t) >> 8)); }
+        case Iop_V128HIto64: { return sv::tval(a, ((uint64_t*)a.cptr())[1]); }//OK
+        case Iop_128HIto64: { return sv::tval(a, ((uint64_t*)a.cptr())[1]); }//OK
+        case Iop_32HIto16: { return sv::tval(a, (uint16_t)((uint32_t)ato(uint32_t) >> 16)); }
+        case Iop_64HIto32: { return sv::tval(a, (uint32_t)((uint64_t)ato(uint64_t) >> 32)); }
+        case Iop_16HIto8: { return sv::tval(a, (uint8_t)((uint16_t)ato(uint16_t) >> 8)); }
 
-        case Iop_32UtoV128: { return tval(a, _mm_set_epi32(0, 0, 0, ato(int32_t))); }
-        case Iop_64UtoV128: { return tval(a, _mm_set_epi64x(0, ato(int64_t))); }
+        case Iop_32UtoV128: { return sv::tval(a, _mm_set_epi32(0, 0, 0, ato(int32_t))); }
+        case Iop_64UtoV128: { return sv::tval(a, _mm_set_epi64x(0, ato(int64_t))); }
 
-        case Iop_Clz32: { return tval(a, (uint32_t)__builtin_clz(ato(uint32_t))); }
-        case Iop_Clz64: { return tval(a, (uint64_t)__builtin_clzll(ato(uint64_t)));}
-        case Iop_Ctz32: { return tval(a, (uint32_t)__builtin_ctz((uint32_t)ato(uint32_t))); };//ok
-        case Iop_Ctz64: { return tval(a, (uint64_t)__builtin_ctzll(ato(uint64_t))); };//ok bsf
-        case Iop_GetMSBs8x16: { return tval(a, (UShort)_mm_movemask_epi8(ato(__m128i))); }//OK pmovmskb
+        case Iop_Clz32: { return sv::tval(a, (uint32_t)__builtin_clz(ato(uint32_t))); }
+        case Iop_Clz64: { return sv::tval(a, (uint64_t)__builtin_clzll(ato(uint64_t)));}
+        case Iop_Ctz32: { return sv::tval(a, (uint32_t)__builtin_ctz((uint32_t)ato(uint32_t))); };//ok
+        case Iop_Ctz64: { return sv::tval(a, (uint64_t)__builtin_ctzll(ato(uint64_t))); };//ok bsf
+        case Iop_GetMSBs8x16: { return sv::tval(a, (UShort)_mm_movemask_epi8(ato(__m128i))); }//OK pmovmskb
+
+        case Iop_F32toF64: { return rcval<double>(ato(float)); }
+        case Iop_F64toF32: { return rcval<float>(ato(double)); }
 
         case Iop_Abs64Fx2:
         case Iop_Neg64Fx2:

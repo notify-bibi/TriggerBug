@@ -40,6 +40,7 @@ bool z3_get_all_256(Z3_context ctx, Z3_ast rnum, int64_t* num);
 
 
 namespace sv {
+
     using z3sk = Z3_sort_kind;
 
     template <class _Ty>
@@ -75,18 +76,19 @@ namespace sv {
 
 
 
-    template <bool, class, class>
-    constexpr auto _ite_type = false;//error
+    //template <bool, class, class>
+    //constexpr auto _ite_type = false;//error
 
-    template <class _Ty1, class _Ty2>
-    constexpr auto _ite_type<true, _Ty1, _Ty2> = (_Ty1)1;
+    //template <class _Ty1, class _Ty2>
+    //constexpr auto _ite_type<true, _Ty1, _Ty2> = (_Ty1)1;
 
-    template <class _Ty1, class _Ty2>
-    constexpr auto _ite_type<false, _Ty1, _Ty2> = (_Ty2)1;
+    //template <class _Ty1, class _Ty2>
+    //constexpr auto _ite_type<false, _Ty1, _Ty2> = (_Ty2)1;
 
-    template <bool _Tbool, class _Ty1, class _Ty2>
-    struct ite_type : type_constant<decltype(_ite_type<_Tbool, _Ty1, _Ty2>)> {};
-
+    //template <bool _Tbool, class _Ty1, class _Ty2>
+    //struct ite_type : type_constant<decltype(_ite_type<_Tbool, _Ty1, _Ty2>)> {};
+    
+    #define ite_type std::conditional
 
 
 
@@ -158,7 +160,9 @@ namespace sv {
     //disjunction_v  bool or
 
     template <class _Ty>
-    constexpr bool is_sse_v = IS_ANY_OF_V < std::remove_cv_t<std::remove_reference_t<_Ty>>, __m128d, __m128i, __m128, __m256d, __m256, __m256i, __m64>;
+    constexpr bool is_sse_v = IS_ANY_OF_V < std::remove_cv_t<std::remove_reference_t<_Ty>>, __m128d, __m128i, __m128, __m256d, __m256, __m256i, __m64,
+        __m128d_u, __m128i_u, __m128_u, __m256d_u, __m256_u, __m256i_u
+    >;
 
     template <class _Ty>
     struct is_sse : std::bool_constant<is_sse_v<_Ty>> {};
@@ -264,6 +268,7 @@ namespace sv {
     class tval;
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
+    tval expr2tval(const z3::expr& e);
 };
 
 using cfloat = sv::ctype_val<true, 32, Z3_FLOATING_POINT_SORT>;
@@ -429,13 +434,13 @@ namespace sv {
 
         
     public:
-        using c_type = typename ite_type<_Tk == Z3_BOOL_SORT, bool,
-            typename ite_type<(_Tk == Z3_FLOATING_POINT_SORT && _Tn == 32), float,
-            typename ite_type<(_Tk == Z3_FLOATING_POINT_SORT && _Tn == 64), double,
+        using c_type = typename std::conditional <_Tk == Z3_BOOL_SORT, bool,
+            typename std::conditional<(_Tk == Z3_FLOATING_POINT_SORT && _Tn == 32), float,
+            typename std::conditional<(_Tk == Z3_FLOATING_POINT_SORT && _Tn == 64), double,
             typename integral_type<_Tsigned, _Tn>::value_type
-            >::value_type
-            >::value_type
-        >::value_type;
+            >::type
+            >::type
+        >::type;
 
         static constexpr const bool is_avoid_fp = _Tk == Z3_FLOATING_POINT_SORT && (_Tn != 32 && _Tn != 64);
         static constexpr const int n_bytes = 1 + ((_Tn - 1) >> 3);
@@ -555,12 +560,12 @@ namespace sv {
         }
 
         template<int __Tn = _Tn, TASSERT(__Tn == 128)>
-        inline const __m128i value() const {
+        inline const __m128i& value() const {
             return *(__m128i*)mr.m_data;
         }
 
         template<int __Tn = _Tn, TASSERT(__Tn == 256)>
-        inline const __m256i value() const {
+        inline const __m256i& value() const {
             return *(__m256i*)mr.m_data;
         }
 
@@ -1085,7 +1090,7 @@ namespace sv{
         //------------------------------numreal-----------------------------------
         //bv(integral)
         template<typename _Ty, z3sk __Tk = _Tk, TASSERT(sizeof(_Ty) <= 8), TASSERT(std::is_integral<_Ty>::value), TASSERT(__Tk == Z3_BV_SORT) >
-        inline symbolic(Z3_context ctx, _Ty v) : symbol(ctx, (typename ite_type<is_my_signed<_Ty>::value, int64_t, uint64_t>::value_type) (v), _Tn) { };
+        inline symbolic(Z3_context ctx, _Ty v) : symbol(ctx, (typename std::conditional<is_my_signed<_Ty>::value, int64_t, uint64_t>::type) (v), _Tn) { };
 
         //bv(sse)
         template<typename _Ty, z3sk __Tk = _Tk, TASSERT((sizeof(_Ty) > 8)), TASSERT((sizeof(_Ty) << 3) == _Tn), TASSERT(__Tk == Z3_BV_SORT)>
@@ -1833,7 +1838,7 @@ namespace sv {
         template<bool ts, int tn, z3sk tk>
         inline rsval(const rsval<ts, tn, tk>& s) {
             if (s.m_data_inuse) {
-                new(this) ctype_val(s.tor());
+                new(this) rclass(s.tor());
                 //this->rsval::ctype_val::ctype_val(s.tor());
                 rsval::m_data_inuse = true;
             }
@@ -1847,7 +1852,7 @@ namespace sv {
         inline rsval(const rsval& s) {
             if LIKELY(s.m_data_inuse) {
                 //this->rsval::ctype_val::ctype_val(s.tor());
-                new(this) ctype_val(s.tor());
+                new(this) rclass(s.tor());
                 rsval::m_data_inuse = true;
             }
             else {
@@ -2442,11 +2447,11 @@ template<bool _ts, int _tn, sv::z3sk _tk>
 static inline std::ostream& operator<<(std::ostream& out, sv::symbolic<_ts, _tn, _tk> const& n) { return out << n.str(); }
 template<bool _ts, int _tn, sv::z3sk _tk>
 static inline std::ostream& operator<<(std::ostream& out, const sv::ctype_val<_ts, _tn, _tk>& n) { return out << n.str(); }
-static inline std::ostream& operator<<(std::ostream& out, sv::tval const& n) { return out << n.str(); }
+static inline std::ostream& operator<<(std::ostream& out, const sv::tval & n) { return out << n.str(); }
 
 
-static inline tval concat(const tval& a, const tval& b) { return a.concat(b); }
+static inline sv::tval concat(const sv::tval& a, const sv::tval& b) { return a.concat(b); }
 
-static constexpr int tval_align_size = ALIGN(sizeof(tval), 16) + 16;
+static constexpr int tval_align_size = ALIGN(sizeof(sv::tval), 16) + 16;
 
 #endif

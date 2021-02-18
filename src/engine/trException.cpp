@@ -28,7 +28,7 @@ std::string Expt::RuntimeIrSig::msg() const {
 }
 
 Expt::IRfailureExit::IRfailureExit(const char* msg) :ExceptionBase(IR_failure_exit),
-    m_thread_id(TRCurrentThreadId()),
+    m_thread_id(currentThreadId()),
     m_error_message(msg),
     m_file(nullptr),
     m_line(0),
@@ -38,12 +38,12 @@ Expt::IRfailureExit::IRfailureExit(const char* msg) :ExceptionBase(IR_failure_ex
 }
 
 Expt::IRfailureExit::IRfailureExit(const HChar* expr, const HChar* file, Int line, const HChar* fn) :ExceptionBase(IR_failure_exit),
-m_thread_id(TRCurrentThreadId()), m_file(file), m_line(line), m_expr(expr), m_fn(fn)
+m_thread_id(currentThreadId()), m_file(file), m_line(line), m_expr(expr), m_fn(fn)
 {
 }
 
 Expt::IRfailureExit::IRfailureExit(const HChar* file, Int line, const HChar* expr) : ExceptionBase(IR_failure_exit),
-m_thread_id(TRCurrentThreadId()), m_file(file), m_line(line), m_expr(expr), m_fn(nullptr)
+m_thread_id(currentThreadId()), m_file(file), m_line(line), m_expr(expr), m_fn(nullptr)
 {
 }
 

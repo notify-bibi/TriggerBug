@@ -4,14 +4,14 @@ typedef struct _DirtyCtx* DirtyCtx;
 
 #define MAX_GUEST_DIRTY_CALL_PARARM_NUM 15
 
-#include "engine/state_class.h"
+#include "engine/state_explorer.h"
 #include <initializer_list>
-template<typename ADDR> DirtyCtx dirty_context(TR::State* s);
-template<typename ADDR> Addr64 dirty_get_gsptr(DirtyCtx dctx);
-template<typename ADDR> void dirty_context_del(DirtyCtx);
-template<typename ADDR> void dirty_run(DirtyCtx dctx, IRDirty* dirty);
-template<typename ADDR> void dirty_ccall(DirtyCtx dctx, IRCallee* cee, IRExpr** args);
-template<typename ADDR> void dirty_call_np(DirtyCtx dctx, const HChar* name, void* func, const std::initializer_list<rsval<Addr64>>& parms);
-template<typename ADDR> tval dirty_result(DirtyCtx dctx, IRType rty);
+DirtyCtx dirty_context(TR::State* s);
+Addr64 dirty_get_gsptr(DirtyCtx dctx);
+void dirty_context_del(DirtyCtx);
+void dirty_run(DirtyCtx dctx, const IRDirty* dirty);
+void dirty_ccall(DirtyCtx dctx, const IRCallee* cee, IRExpr** const args);
+void dirty_call_np(DirtyCtx dctx, const HChar* name, void* func, const std::initializer_list<rsval<Addr64>>& parms); // parms 是模拟host函数的参数，所以是64bits
+sv::tval dirty_result(DirtyCtx dctx, IRType rty);
 
 #endif //_IRDirty_H_

@@ -1,12 +1,68 @@
 #include "engine/vex_context.h"
 #include "engine/memory.h"
-#include "engine/state_class.h"
+#include "engine/state_base.h"
+#include "engine/z3_target_call/z3_target_call.h"
 
 using namespace TR;
 
 #ifdef _MSC_VER
 #include<WIndows.h>
 #include <sysinfoapi.h>
+
+
+
+template<typename EaType, typename CountTy>
+static rsval<CountTy> vex_read(StateBase& s, const rsval<EaType>& addr, const rsval<CountTy>& len) {
+    vassert(len.real());
+    UInt size = len.tor();
+    std::string st;
+    char buff[2];
+    buff[1] = 0;
+    UInt n;
+    std::cout << "vex_read :[";
+    for (n = 0; n < size && buff[0] != '\n'; n += 1) {
+        buff[0] = getchar();
+        s.mem.store(addr + n, buff[0]);
+        st.append(buff);
+    }
+    std::cout << "]" << std::endl;
+    return rsval<EaType>(s.ctx(), n);
+}
+
+template<typename EaType, typename CountTy>
+static void vex_write(StateBase& s, const rsval<EaType>& addr, const rsval<CountTy>& len) {
+    vassert(len.real());
+    UInt size = len.tor();
+    std::string st;
+    char buff[2];
+    buff[1] = 0;
+    for (UInt n = 0; n < size; n += 1) {
+        auto chr = s.mem.template load<Ity_I8>(addr + n);
+        if (chr.real()) {
+            buff[0] = chr.tor();
+            st.append(buff);
+        }
+        else {
+            st.append(chr.str());
+        }
+    }
+    std::cout << "vex_write :[" << st << "]" << std::endl;
+}
+
+
+
+rsval<Long> io_vex_read(StateBase& s, const rsval<ULong>& addr, const rsval<Long>& len)
+{
+    return vex_read<ULong, Long>(s, addr, len);
+}
+
+void io_vex_write(StateBase& s, const rsval<ULong>& addr, const rsval<Long>& len) {
+
+    vex_write<ULong, Long>(s, addr, len);
+}
+
+
+
 UInt vex_info::gMaxThreadsNum() {
     SYSTEM_INFO SysInfo;
     GetSystemInfo(&SysInfo);
@@ -23,6 +79,37 @@ UInt vex_info::gMaxThreadsNum() {
 }
 #warning  gMaxThreadsNum ret 8
 #endif
+
+__attribute__((noreturn))
+static void failure_exit() {
+    throw Expt::IRfailureExit("valgrind error exit");
+}
+
+static void _vex_log_bytes(const HChar* bytes, SizeT nbytes) {
+    std::cout << bytes;
+}
+
+clock_t tr_begin_run = clock();
+
+void vex_info::ir_init() {
+    VexControl vc;
+    LibVEX_default_VexControl(&vc);
+    vc.iropt_verbosity = 0;
+    vc.iropt_level = giropt_level();
+    #warning "whate is iropt_unroll_thresh"
+        vc.iropt_unroll_thresh = 0;
+    vc.guest_max_insns = gmax_insns();
+    //vc.guest_chase_thresh = 0;   
+    vc.guest_chase = False; //²»Ðí×·¸Ï
+    vc.iropt_register_updates_default = gRegisterUpdates();
+
+
+    tr_begin_run = clock();
+    Func_Map_Init();
+    LibVEX_Init(&failure_exit, &_vex_log_bytes, 0/*debuglevel*/, &vc);
+}
+
+
 
  IRConst vex_info::gsoftwareBpt(VexArch guest)
 {
@@ -43,7 +130,25 @@ UInt vex_info::gMaxThreadsNum() {
     return c;
 }
 
- Int vex_info::gRegsIpOffset(VexArch guest) {
+Bool vex_info::gis_mode_32(VexArch guest)
+{
+    IRConst c;
+    switch (guest) {
+    case VexArchX86: 
+    case VexArchARM:
+    case VexArchS390X:
+    case VexArchMIPS32:
+    case VexArchPPC32: return True;
+    case VexArchPPC64:
+    case VexArchAMD64:
+    case VexArchMIPS64:
+    case VexArchARM64: return False;
+    default:
+        vassert(0);
+    }
+}
+
+Int vex_info::gRegsIpOffset(VexArch guest) {
     switch (guest) {
     case VexArchX86:return X86_IR_OFFSET::EIP;
     case VexArchAMD64:return AMD64_IR_OFFSET::RIP;
@@ -178,6 +283,7 @@ UInt vex_info::gMaxThreadsNum() {
 
  static UInt needs_self_check(void* callback_opaque, VexRegisterUpdates* pxControl, const VexGuestExtents* guest_extents) {
      //std::cout << "needs_self_check\n" << std::endl;
+     //return fastMask(guest_extents->n_used);
      return 0;
  }
 
@@ -186,22 +292,150 @@ UInt vex_info::gMaxThreadsNum() {
      return NULL;
  }
 
+ static IRSB* finaltidy (IRSB* bb) {
+ 
+ 
+ }
+
+ static IRSB* instrument1( /*callback_opaque*/void*,
+     IRSB*,
+     const VexGuestLayout*,
+     const VexGuestExtents*,
+     const VexArchInfo*,
+     IRType gWordTy, IRType hWordTy) {
+ 
+ }
+
+
+ static IRSB* instrument2( /*callback_opaque*/void*,
+     IRSB*,
+     const VexGuestLayout*,
+     const VexGuestExtents*,
+     const VexArchInfo*,
+     IRType gWordTy, IRType hWordTy) {
+
+ }
+
  Bool chase_into_ok(void* value, Addr addr) {
-     std::cout << value << addr << std::endl;
+     //std::cout << value << addr << std::endl;
      return True;
  }
 
-namespace TR {
-    template<typename ADDR>
-    inline void vex_context<ADDR>::hook_add( State<ADDR>& state, ADDR addr, State_Tag(*_func)(State<ADDR>&), TRControlFlags cflag)
+ namespace TR {
+
+
+     vex_info::vex_info(VexArch guest, Int iropt_level, UInt guest_max_insns, VexRegisterUpdates iropt_register_updates_default, ULong traceflags, UInt maxThreadsNum) :
+         m_guest(guest),
+         m_iropt_level(iropt_level),
+         m_guest_max_insns(guest_max_insns), //not limit size
+         m_iropt_register_updates_default(iropt_register_updates_default),
+         m_traceflags(traceflags),
+         m_maxThreadsNum(maxThreadsNum),
+         m_bpt_code(gsoftwareBpt(guest)),
+         m_IRoffset_IP(vex_info::gRegsIpOffset(guest)), m_IRoffset_SP(vex_info::gRegsSPOffset(guest)), m_IRoffset_BP(vex_info::gRegsBPOffset(guest)),
+         m_mode_32(gis_mode_32(guest))
+     {
+     }
+     vex_info::vex_info(VexArch guest) 
+         :vex_info(guest, 2, 0xffff, VexRegUpdSpAtMemAccess, 0, gMaxThreadsNum())
+     {}
+
+     vex_info::vex_info(const vex_info& v) :
+         m_guest(v.m_guest),
+         m_iropt_level(v.m_iropt_level),
+         m_guest_max_insns(v.m_guest_max_insns), //not limit size
+         m_iropt_register_updates_default(v.m_iropt_register_updates_default),
+         m_traceflags(v.m_traceflags),
+         m_maxThreadsNum(v.m_maxThreadsNum),
+         m_bpt_code(v.m_bpt_code),
+         m_IRoffset_IP(v.m_IRoffset_IP), m_IRoffset_SP(v.m_IRoffset_SP), m_IRoffset_BP(v.m_IRoffset_BP),
+         m_mode_32(v.m_mode_32)
+     {
+
+     }
+
+     void vex_info::operator=(const vex_info& guest)
+     {
+         this->~vex_info();
+         new(this) vex_info(guest);
+     }
+
+     vex_info::~vex_info()
+     {
+     }
+
+     VexArch vex_info::enable_long_mode()
+     {
+         vassert(m_mode_32);
+         m_mode_32 = false;
+         VexArch guest = VexArch_INVALID;
+         switch (m_guest) {
+         case VexArchX86: guest = VexArchAMD64; break;
+         case VexArchARM: guest = VexArchARM64; break;
+         case VexArchMIPS32: guest = VexArchMIPS64; break;
+         case VexArchPPC32:  guest = VexArchPPC64; break;
+         default:
+             VPANIC("don't support");
+         }
+         // add diff
+         this->~vex_info();
+         new(this) vex_info(guest, m_iropt_level, m_guest_max_insns, m_iropt_register_updates_default, m_traceflags, m_maxThreadsNum);
+         
+         return guest;
+     }
+
+     VexArch vex_info::disable_long_mode()
+     {
+         vassert(!m_mode_32);
+         m_mode_32 = true;
+         VexArch guest = VexArch_INVALID;
+         switch (m_guest) {
+         case VexArchAMD64: guest = VexArchX86; break;
+         case VexArchARM64: guest = VexArchARM; break;
+         case VexArchMIPS64: guest = VexArchMIPS32; break;
+         case VexArchPPC64:  guest = VexArchPPC32; break;
+         default:
+             VPANIC("don't support");
+         }
+         // add diff
+         this->~vex_info();
+         new(this) vex_info(guest, m_iropt_level, m_guest_max_insns, m_iropt_register_updates_default, m_traceflags, m_maxThreadsNum);
+
+         return guest;
+     }
+
+
+
+
+
+     vctx_base::vctx_base(Int max_threads) 
+         : m_top_state(nullptr),
+         m_pool(gMaxThreadsNum(max_threads)), 
+         m_user_counter(1)
+     {
+     }
+
+     UInt vctx_base::gMaxThreadsNum(Int max_threads)
+     {
+         Int max = vex_info::gMaxThreadsNum();
+         if (max_threads > 0) {
+             if (max_threads < max * 2) {
+                 return max_threads;
+             }
+         }
+         return (UInt)max;
+     }
+
+ };
+
+
+
+
+ namespace TR{
+    void vex_context::hook_add(HWord addr, Hook_CallBack func, TRControlFlags cflag)
     {
-        Hook_CB func = (Hook_CB) _func;
         if (m_callBackDict.find(addr) == m_callBackDict.end()) {
-            auto o = state.mem.template load<Ity_I64>(addr);
-            vassert(o.real());
-            m_callBackDict[addr] = Hook_struct{ func , IRConstTag2nb(state.info().softwareBptConst()->tag) , o.tor() , cflag };
-            // i dont want break irsb
-            // state.mem.Ist_Store(addr, tval(state.ctx(), state.info().softwareBptConst()));
+            m_callBackDict[addr] = Hook_struct{ func , cflag };
         }
         else {
             if (func) {
@@ -213,10 +447,10 @@ namespace TR {
         }
     }
 
-    template<typename ADDR>
-    bool vex_context<ADDR>::get_hook(Hook_struct& hs, ADDR addr)
+    
+    bool vex_context::get_hook(Hook_struct& hs, HWord ea)
     {
-        auto _where = m_callBackDict.find(addr);
+        auto _where = m_callBackDict.find(ea);
         if (_where == m_callBackDict.end()) {
             return false;
         }
@@ -224,8 +458,14 @@ namespace TR {
         return true;
     }
 
-    template<typename ADDR>
-    void vex_context<ADDR>::hook_del(ADDR addr)
+    
+    void vex_context::constructer()
+    {
+            hook_read(io_vex_read);
+            hook_write(io_vex_write);
+    }
+
+    void vex_context::hook_del(HWord addr)
     {
         if (m_callBackDict.find(addr) != m_callBackDict.end()) {
             //pool->wait();
@@ -236,27 +476,12 @@ namespace TR {
         }
     }
 
-    template<typename ADDR>
-    z3::expr vex_context<ADDR>::idx2value(TR::State<ADDR>& state, ADDR base, Z3_ast index)
+    z3::expr vex_context::idx2value(TR::StateBase& state, HWord base, Z3_ast index)
     {
         HASH_MAP<Addr64, Hook_idx2Value>::iterator _where = m_tableIdxDict.find(base);
         return (_where != m_tableIdxDict.end()) ? _where->second(state, base, index) : z3::expr(state);
     }
 
-
-    vex_info::vex_info(VexArch guest, const char* filename) :
-        m_bin(filename),
-        m_guest(guest),
-        m_iropt_level(2),
-        m_guest_max_insns(0xffff), //not limit size
-        m_iropt_register_updates_default(VexRegUpdSpAtMemAccess),
-        m_guest_system(TR::unknowSystem),
-        m_traceflags(0),
-        m_maxThreadsNum(gMaxThreadsNum()),
-        m_bpt_code(gsoftwareBpt(guest)),
-        m_IRoffset_IP(vex_info::gRegsIpOffset(guest)), m_IRoffset_SP(vex_info::gRegsSPOffset(guest)), m_IRoffset_BP(vex_info::gRegsBPOffset(guest))
-    {
-    }
 
     static VexEndness running_endness(void)
     {
@@ -377,6 +602,3 @@ namespace TR {
 
 
 };
-
-template class TR::vex_context<Addr32>;
-template class TR::vex_context<Addr64>;

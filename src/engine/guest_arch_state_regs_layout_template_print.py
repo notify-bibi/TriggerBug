@@ -1289,8 +1289,10 @@ typedef struct {
 
 
 AMD64 = """
+
+
 typedef
-   struct {
+   struct __attribute__((__aligned__(LibVEX_GUEST_STATE_ALIGN))) {
       /* Event check fail addr, counter, and padding to make RAX 16
          aligned. */
       /*   0 */ ULong  host_EvC_FAILADDR;
@@ -1408,10 +1410,23 @@ typedef
          been interrupted by a signal. */
       ULong guest_IP_AT_SYSCALL;
 
+      ULong  guest_LDT; /* host addr, a VexGuestX86SegDescr* */
+      ULong  guest_GDT; /* host addr, a VexGuestX86SegDescr* */
+      /* Segment registers. */
+      UShort guest_CS;
+      UShort guest_DS;
+      UShort guest_ES;
+      UShort guest_FS;
+      UShort guest_GS;
+      UShort guest_SS;
+
       /* Padding to make it have an 16-aligned size */
+      UInt   padding;
       ULong pad3;
    }
    VexGuestAMD64State;
+
+
 """
 
 
@@ -1425,19 +1440,29 @@ stmp = """#define ARM_REGS_offset_DEF(REGNAME) REGNAME = offsetof(VexGuestARMSta
 import re
 import os
 
-archs = ["X86", "AMD64", "ARM", "ARM64", "PPC32", "PPC64", "S390X", "MIPS32", "MIPS64"]
+# archs = ["X86", "AMD64", "ARM", "ARM64", "PPC32", "PPC64", "S390X", "MIPS32", "MIPS64"]
+archs = ["AMD64"]
 for arch in archs:
     state_layout = globals()[arch]
     # print(state_layout)
     tmp = ""
+    regnames = []
     for li in state_layout.split("\n"):
-        regex = re.match(r'[^|]*guest_(?P<reg>[A-Za-z0-9_]+)[^;]*;', li)
+        regex = re.match(r'[^|]+guest_(?P<reg>[A-Za-z0-9_]+)[^;]*;', li)
         if regex:
             reg = regex.groupdict()["reg"]
             tmp += "_macro(%s),\\\n"%reg
+            regnames.append(reg)
     res = stmp.replace("ARM", arch).format(tmp)[:-3]+"\n\n"
     print(res)
-
+    fmt = ""
+    param = ""
+    for r in regnames:
+        pf_off = "{}_IR_OFFSET::{}".format(arch, r)
+        pf_sz = "{}_IR_SIZE::{}".format(arch, r)
+        fmt += "\"{}\": (%d, %d), ".format(r)
+        param += pf_off +", " + pf_sz + ", "
+    print('printf("{}\\n", {});'.format(fmt[:-2].replace("\"", r'\"').lower(), param[:-2]))
 
 
 

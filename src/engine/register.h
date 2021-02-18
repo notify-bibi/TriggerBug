@@ -124,6 +124,7 @@ namespace TR {
 
 
         inline Symbolic(z3::vcontext& ctx) : m_ctx(ctx) {
+            static_assert(offsetof(Symbolic<maxlength>, m_fastindex) + maxlength + 32 == sizeof(Symbolic<maxlength>), "err");
             memset(m_fastindex, 0, sizeof(m_fastindex));
 #ifndef USE_HASH_AST_MANAGER
             m_ast = new Z3_ast[maxlength];
@@ -275,43 +276,34 @@ namespace TR {
                 GET1(23333)//imPOSSIBLE
 
 
+
     template<int maxlength>
     class Register {
         z3::vcontext& m_ctx;
         Symbolic<maxlength>* symbolic;
-        Record<maxlength>* record;
         __declspec(align(32))
         UChar m_bytes[maxlength];
-
-        friend class MEM;
-        friend class MEM_BASE;
-        friend class State;
         friend class mem_unit;
     public:
 
-        inline Register(z3::vcontext& ctx, Bool _need_record) :
+        inline Register(z3::vcontext& ctx) :
             m_ctx(ctx),
-            symbolic(NULL),
-            record(_need_record ? new Record<maxlength>() : NULL)
-        { }
+            symbolic(NULL)
+        {
+            static_assert(offsetof(Register<maxlength>, m_bytes) + maxlength == sizeof(Register<maxlength>), "err");
+        }
 
         //翻译转换父register
-        inline Register(Register<maxlength>& father_regs, z3::vcontext& ctx, Bool _need_record) :
+        inline Register(Register<maxlength>& father_regs, z3::vcontext& ctx) :
             m_ctx(ctx),
-            symbolic(father_regs.symbolic ? new Symbolic<maxlength>(m_ctx, father_regs.symbolic) : NULL),
-            record(_need_record ? new Record<maxlength>() : NULL)
+            symbolic(father_regs.symbolic ? new Symbolic<maxlength>(m_ctx, father_regs.symbolic) : NULL)
         {
             memcpy(m_bytes, father_regs.m_bytes, maxlength);
         }
 
         ~Register<maxlength>() {
             if (symbolic) delete symbolic;
-            if (record) delete record;
         };
-
-        void clearRecord() { if (record) record->clearRecord(); };
-        inline Record<maxlength>* getRecord() { return record; }
-
 
         template<int n>
         inline bool fast_check(UInt offset);
@@ -439,7 +431,6 @@ namespace TR {
                 fast_set_zero<(sizeof(DataTy) << 3)>(offset);
             }
             *(DataTy*)(m_bytes + offset) = data;
-            if (record)  record->template write<sizeof(DataTy)>(offset);
         }
 
 
@@ -451,7 +442,6 @@ namespace TR {
                 fast_set_zero<128>(offset);
             }
             _mm_storeu_si128((__m128i*)(m_bytes + offset), _mm_loadu_si128((__m128i*) & data));
-            if (record)  record->template write<16>(offset);
         }
 
         //simd 256
@@ -462,7 +452,6 @@ namespace TR {
                 fast_set_zero<256>(offset);
             }
             _mm256_storeu_si256((__m256i*)(m_bytes + offset), _mm256_loadu_si256((__m256i*) & data));
-            if (record)  record->template write<32>(offset);
         }
 
         template<bool sign, int nbits, TASSERT(nbits <= 64)>
@@ -484,8 +473,6 @@ namespace TR {
             fast_set<nbits>(offset);
             symbolic->m_ast[offset] = _ast;
             Z3_inc_ref(m_ctx, _ast);
-            if (record)
-                record->template write<(nbits >> 3)>(offset);
         }
         
         template<bool sign, int nbits>
@@ -509,7 +496,7 @@ namespace TR {
 
 
         // IRType or nbit
-        tval Iex_Get(UInt offset, IRType ty) {
+        sv::tval Iex_Get(UInt offset, IRType ty) {
             switch (ty) {
 #define lazydef(vectype,nbit)                                \
     case Ity_##vectype##nbit:                                \
@@ -527,14 +514,14 @@ namespace TR {
             default: 
                 vex_printf("ty = 0x%x\n", (UInt)ty); vpanic("tIRType");
             }
-            return tval();
+            return sv::tval();
         }
 
 
         //---------------------------------------------- Iex_Get TRANSLATE ---------------------------------------------------
 
         //ty = (IRType)nbits or IRType
-        inline tval Iex_Get(UInt offset, IRType ty, z3::vcontext& ctx) {
+        inline sv::tval Iex_Get(UInt offset, IRType ty, z3::vcontext& ctx) {
             switch (ty) {
 #define lazydef(vectype,nbit)                                   \
     case Ity_##vectype##nbit:                                   \
@@ -556,7 +543,7 @@ namespace TR {
 
         //---------------------------------------------- Ist_Put ---------------------------------------------------
 
-        inline void Ist_Put(UInt offset, tval const& ir) {
+        inline void Ist_Put(UInt offset, sv::tval const& ir) {
             if (ir.symb()) {
                 switch (ir.nbits()) {
                 case 8: set(offset, ir.tos<true, 8, Z3_BV_SORT>()); break;
@@ -594,15 +581,6 @@ namespace TR {
                 memset(m_fastindex + offset, 0, nbytes); 
             };
             memcpy(m_bytes + offset, data, nbytes);
-            if (record) {
-                auto _nbytes = nbytes;
-                while (_nbytes) {
-                    if (_nbytes >= 8) { _nbytes -= 8; record->template write<8>(offset + _nbytes); }
-                    else if (_nbytes >= 4) { _nbytes -= 4; record->template write<4>(offset + _nbytes); }
-                    else if (_nbytes >= 2) { _nbytes -= 2; record->template write<2>(offset + _nbytes); }
-                    else { _nbytes--; record->template write<1>(offset + _nbytes); }
-                }
-            }
         }
 
         // slowly
@@ -614,21 +592,12 @@ namespace TR {
             for (unsigned i = 0; i < nbytes; i++) { fastindex[i] = i + 1; };
             m_ast[offset] = _ast;
             Z3_inc_ref(m_ctx, _ast);
-            if (record) {
-                auto _nbytes = nbytes;
-                while (_nbytes) {
-                    if (_nbytes >= 8) { _nbytes -= 8; record->template write<8>(offset + _nbytes); }
-                    else if (_nbytes >= 4) { _nbytes -= 4; record->template write<4>(offset + _nbytes); }
-                    else if (_nbytes >= 2) { _nbytes -= 2; record->template write<2>(offset + _nbytes); }
-                    else { _nbytes--; record->template write<1>(offset + _nbytes); }
-                }
-            }
         }
 
 
 
         //is slowly 
-        tval Iex_Get(UInt offset, UInt nbytes) {
+        sv::tval Iex_Get(UInt offset, UInt nbytes) {
             vassert(nbytes <= 32);
             if (this->symbolic) {
                 auto fastindex = m_fastindex + offset;
@@ -641,14 +610,14 @@ namespace TR {
                 };
 
             }
-            return tval(m_ctx, GET32(m_bytes + offset), nbytes << 3);
+            return sv::tval(m_ctx, GET32(m_bytes + offset), nbytes << 3);
         has_sym:
             auto past = m_ast + offset;
-            return tval(m_ctx, TR::freg2AstSSE(nbytes, m_bytes + offset, m_fastindex + offset, past, m_ctx), Z3_BV_SORT, nbytes << 3, no_inc{});
+            return sv::tval(m_ctx, TR::freg2AstSSE(nbytes, m_bytes + offset, m_fastindex + offset, past, m_ctx), Z3_BV_SORT, nbytes << 3, no_inc{});
         }
 
         //is slowly 变长取值
-        tval Iex_Get(UInt offset, UInt nbytes, z3::vcontext& ctx) {
+        sv::tval Iex_Get(UInt offset, UInt nbytes, z3::vcontext& ctx) {
             vassert(nbytes <= 32);
             auto fastindex = m_fastindex + offset;
             auto _nbytes = nbytes;
@@ -658,10 +627,10 @@ namespace TR {
                 else if (_nbytes >= 2) { _nbytes -= 2; if (GET2(fastindex + _nbytes)) { goto has_sym; }; }
                 else { _nbytes--; if (GET1(fastindex + _nbytes)) { goto has_sym; }; };
             }
-            return tval(ctx, GET32(m_bytes + offset), nbytes << 3);
+            return sv::tval(ctx, GET32(m_bytes + offset), nbytes << 3);
         has_sym:
             auto past = m_ast + offset;
-            return tval(ctx, TR::freg2AstSSE_cov(nbytes, m_bytes + offset, m_fastindex + offset, past, m_ctx, ctx), Z3_BV_SORT, nbytes << 3, no_inc{});
+            return sv::tval(ctx, TR::freg2AstSSE_cov(nbytes, m_bytes + offset, m_fastindex + offset, past, m_ctx, ctx), Z3_BV_SORT, nbytes << 3, no_inc{});
         }
 
 

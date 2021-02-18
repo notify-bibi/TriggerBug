@@ -2,8 +2,7 @@
 
 // https://software.intel.com/sites/landingpage/IntrinsicsGuide/#expand=0,27,1022,79,115,5771,2476,73,72,6141,1148,1015,1148,915,891,891,4993&techs=MMX,SSE,SSE2,SSE3,SSSE3,SSE4_1,SSE4_2,AVX,AVX2,FMA,AVX_512,KNC,SVML&text=_mm256_setr_epi64x
 
-
-#include "engine/state_base.h"
+#include "engine/basic_var.hpp"
 #include <mmintrin.h>  //MMX
 #include <xmmintrin.h> //SSE(include mmintrin.h)
 #include <emmintrin.h> //SSE2(include xmmintrin.h)

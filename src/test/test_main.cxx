@@ -1,6 +1,6 @@
 
 #include "test.h"
-#include "engine/basic_var.hpp"
+#include "engine/state_base.h"
 #include <Windows.h>
 
 
@@ -144,11 +144,11 @@ bool test_basic_var_sym() {
 
     sv::symbolic<false, 16, Z3_FLOATING_POINT_SORT > F16(c, (UShort)0x3f89, sv::fpa_sort(c, 5, 11));
 
-    tval tv4 = F16;
+    sv::tval tv4 = F16;
 
     //sfpval<16>& fa = (sfpval<16>&) tv4;
 
-    //std::cout << fa << std::endl;
+   // std::cout << tv4 << std::endl;
 
     sbool sb(c, false);
     sbool sb2(c, false);
@@ -240,18 +240,18 @@ bool test_basic_var_sym() {
 
     
 
-    auto v_Iop_Clz32 = StateBase::tUnop(Iop_Clz32, sv::rsval<true, 32, Z3_BV_SORT>(c, 0b1111100)).tors<true, 32, Z3_BV_SORT>();
-    auto v_Iop_Ctz32 = StateBase::tUnop(Iop_Ctz32, sv::rsval<true, 32, Z3_BV_SORT>(c, 0b1111100)).tors<true, 32, Z3_BV_SORT>();
-    auto v_Iop_Clz64 = StateBase::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100)).tors<true, 64, Z3_BV_SORT>();
-    auto v_Iop_Ctz64 = StateBase::tUnop(Iop_Ctz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100)).tors<true, 64, Z3_BV_SORT>();
+    auto v_Iop_Clz32 = tUnop(Iop_Clz32, sv::rsval<true, 32, Z3_BV_SORT>(c, 0b1111100)).tors<true, 32, Z3_BV_SORT>();
+    auto v_Iop_Ctz32 = tUnop(Iop_Ctz32, sv::rsval<true, 32, Z3_BV_SORT>(c, 0b1111100)).tors<true, 32, Z3_BV_SORT>();
+    auto v_Iop_Clz64 = tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100)).tors<true, 64, Z3_BV_SORT>();
+    auto v_Iop_Ctz64 = tUnop(Iop_Ctz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100)).tors<true, 64, Z3_BV_SORT>();
 
-    auto s_Iop_Clz32 = StateBase::tUnop(Iop_Clz32, sv::rsval<true, 32, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 32, Z3_BV_SORT>().simplify();
-    auto s_Iop_Ctz32 = StateBase::tUnop(Iop_Ctz32, sv::rsval<true, 32, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 32, Z3_BV_SORT>().simplify();
-    auto s_Iop_Clz64 = StateBase::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 64, Z3_BV_SORT>().simplify();
-    auto s_Iop_Ctz64 = StateBase::tUnop(Iop_Ctz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 64, Z3_BV_SORT>().simplify();
+    auto s_Iop_Clz32 = tUnop(Iop_Clz32, sv::rsval<true, 32, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 32, Z3_BV_SORT>().simplify();
+    auto s_Iop_Ctz32 = tUnop(Iop_Ctz32, sv::rsval<true, 32, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 32, Z3_BV_SORT>().simplify();
+    auto s_Iop_Clz64 = tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 64, Z3_BV_SORT>().simplify();
+    auto s_Iop_Ctz64 = tUnop(Iop_Ctz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 0b1111100).tos()).tos<true, 64, Z3_BV_SORT>().simplify();
                       
-    auto s_Iop_Clz64_O = StateBase::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 1)).tors<true, 64, Z3_BV_SORT>();;
-    auto s_Iop_Clz64_0 = StateBase::tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 1).tos()).tos<true, 64, Z3_BV_SORT>().simplify();
+    auto s_Iop_Clz64_O = tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 1)).tors<true, 64, Z3_BV_SORT>();;
+    auto s_Iop_Clz64_0 = tUnop(Iop_Clz64, sv::rsval<true, 64, Z3_BV_SORT>(c, 1).tos()).tos<true, 64, Z3_BV_SORT>().simplify();
 
 
     cbool_assert((v_Iop_Clz32 == s_Iop_Clz32).tor());
@@ -359,7 +359,6 @@ bool test_basic_var_sym() {
 
 
 
-#include "engine/guest_layout_helper.h"
 //
 //Vns flag_limit(Vns& flag) {
 //    char flags_char[] = "@_-{}1:() ^";
@@ -374,103 +373,9 @@ bool test_basic_var_sym() {
 //}
 //
 
-State_Tag test_ir_dirty_hook(State<Addr32>& state) {
-    UInt esp = 0x8000 - 532;
-    PWOW64_CONTEXT ContextRecord = (PWOW64_CONTEXT)(esp - sizeof(WOW64_CONTEXT));
-    PEXCEPTION_RECORD32 ExceptionRecord = (PEXCEPTION_RECORD32)(esp - sizeof(WOW64_CONTEXT) - sizeof(EXCEPTION_RECORD32));
-    
-    if ((Addr32) state.vex_stack_get(1).tor() != (Addr32)(ULong)ContextRecord) return Death;
-    if ((UInt)state.vex_stack_get(2).tor() != EXCEPTION_BREAKPOINT) return Death;
-    if ((UInt)state.vex_stack_get(22 + offsetof(WOW64_CONTEXT, Esp) / 4).tor() != 0x8000) return Death;
-    return Exit;
-}
-
-bool test_ir_dirty() {
-    ctx32 v(VexArchX86, "");
-    v.set_system(windows);
-    v.param().set("ntdll_KiUserExceptionDispatcher", 0x2000);
-
-    SP::win32 state(v, 0, True);
-    state.setFlag(CF_traceJmp);
-    state.setFlag(CF_ppStmts);
-    state.mem.map(0x1000, 0x2000);
-    state.mem.map(0x5000, 0x5000);
-    state.hook_add(0x2000, test_ir_dirty_hook);
-    state.mem.store(0x1000, 0xcc);
-
-    state.regs.set(X86_IR_OFFSET::ESP, 0x8000);
-    state.regs.set(X86_IR_OFFSET::EIP, 0x1000);
-    state.regs.set(X86_IR_OFFSET::CC_OP, 0x0);
-
-
-    state.start(0x1000);
-
-    return state.status() == Exit;
-}
 
 
 
-
-bool creakme();
-bool asong();
-
-
-bool test_cmpress() {
-    ctx64 v(VexArchAMD64, "");
-    SP::linux64 state(v, 0, True);
-
-    state.mem.map(0x602000, 0x2000);
-    state.mem.map(0x5000, 0x5000);
-
-    for (int i = 0; i < 4; i++) {
-        SP::linux64* s = (SP::linux64*)(state.ForkState(20));
-        z3::expr f1 = s->ctx().bv_const("a1", 8);
-        z3::expr f2 = s->ctx().bv_const("a2", 8);
-        s->solv.add_assert(f1 > i);
-        s->solv.add_assert(f2 < i);
-        s->mem.store(0x602080, 1000 + i);
-        s->mem.store(0x602088, 1000 + i);
-        if (i == 3)
-            s->set_status(Death);
-    }
-    std::cout << state << std::endl;
-    for (int i = 4; i < 5; i++) {
-        SP::linux64* s = (SP::linux64*)(state.ForkState(32));
-        z3::expr f1 = s->ctx().bv_const("aj", 8);
-        z3::expr f2 = s->ctx().bv_const("ak", 8);
-        s->solv.add_assert(f1 > i);
-        s->solv.add_assert(f2 < i);
-        s->set_status((State_Tag)88);
-    }
-
-    std::cout << state << std::endl;
-    Int i = 0;
-    for (auto s : state.branch) {
-        i += 1;
-        if (i <= 3) { continue; }
-        SP::linux64* s2 = (SP::linux64*)(s->ForkState(20));
-        s->set_status(Fork);
-        z3::expr f = s2->ctx().bv_const("b", 8);
-        s2->solv.add_assert(f > i);
-        s2->mem.store(0x602080, 100 + i);
-        s2->mem.store(0x602081, 100ull + i + (1ull << 63));
-        if (i <= 4)
-            continue;
-        s2->get_InvokStack().push(787, 87);
-    }
-
-
-    std::cout << state << std::endl;
-
-
-    cmpr::Context64 c = state.cmprContext(20, NewState);
-    c.add_avoid(Death);
-    c.add_avoid((State_Tag)88);
-
-    state.compress(c);
-    std::cout << state << std::endl;
-    return true;
-}
 
 //
 //bool test_dirty_cmpress() {
@@ -563,12 +468,14 @@ bool test_ir_dirty_rflags() {
     return true;
 }
 bool test_mem_at(int base) {
+    constexpr int fs1 = offsetof(VexGuestAMD64State, guest_FS);
+    constexpr int fs2 = offsetof(VexGuestX86State, guest_FS);
 
     //static_assert(sizeof(VexGuestX86State) % 16 == 0, "error align"); 
 
+    vex_context v(8);
+    TR::State state(v, VexArchAMD64);
 
-    ctx32 v(VexArchX86, "");
-    SP::win32 state(v, 0, True);
     state.mem.map(base - 0x1000,  0x2000);
     state.mem.map(0x0000026db91e2770,  0x2000);
 
@@ -588,7 +495,7 @@ bool test_mem_at(int base) {
         return false;
     }
 
-    SP::win32 fork(&state, 0x1000);
+    TR::State fork(state, 0x1000);
     auto tv64 = v64.translate(fork.ctx());
     auto tv32 = v32.translate(fork.ctx());
 
@@ -609,7 +516,7 @@ bool test_mem_at(int base) {
 
     for (int i = 0; i <= 20; i++) {
 
-        SP::win32 fork(&state, 0x1000);
+        TR::State fork(state, 0x1000);
 
     }
     return true;
@@ -622,35 +529,14 @@ bool test_mem() {
     return a&&b;
 }
 
-bool test_mem_GPMana() {
-    z3::context ctx;
-    cmpr::GPMana v1(ctx, 18);
-    subval<64> v64 = ctx.bv_const("v64", 64);
-    ssbval<32> v32 = ctx.bv_const("v32", 32);
-    for (int i = 0; i < 5; i++) {
-        v1.add(v32 > i, v64 + i);
-        v1.debug_display();
-    }
-    for (int i = 5; i < 10; i++) {
-        v1.add(v32 < i, v64 + (i - 5));
-        v1.debug_display();
-    }
-
-    v1.add(v32 < 9, v64 + 3);
-    v1.add(v32 < 9, v64 + 9);
-    v1.debug_display();
-
-    std::cout << v1.get() << std::endl;
-    return true;
-}
-
 bool test_code_no_linear() {
-    ctx64 v(VexArchAMD64, "");
-    SP::linux64 state(v, 0, True);
-    //state.setFlag(CF_traceJmp);
-    //state.setFlag(CF_ppStmts);
-
+    TR::vex_context vctx(-1);
+    vctx.param().set("Kernel", gen_kernel(Ke::OS_Kernel_Kd::OSK_Unknow));
+    TR::State state(vctx, VexArchAMD64);
+    
+    
     state.mem.map(0x1000, 0x6000);
+
     /* xor rax,rax  48 31 C0
     *  add rax, 0x7f237234   48 05 34 72 23 7F
     * 
@@ -665,6 +551,9 @@ bool test_code_no_linear() {
     state.mem.store(0x1900 + i * 6, 0xf4);
 
     state.regs.set(AMD64_IR_OFFSET::RAX, 0x8000ll);
+
+    state.setFlag(CF_traceJmp);
+    //state.setFlag(CF_ppStmts);
     state.start(0x1900);
 
     auto rax = state.regs.get<false, 64, Z3_BV_SORT>(AMD64_IR_OFFSET::RAX);
@@ -729,11 +618,13 @@ void recfun_example_2() {
 
 
 
-
+bool test_creakme();
 
 
 
 int main() {
+
+
 #ifdef TESTZ3
     recfun_example_2();
     testz3();
@@ -742,15 +633,10 @@ int main() {
     IR_TEST(test_basic_var_sym);
 
     //testz3();
-    IR_TEST(test_mem_GPMana);
     IR_TEST(test_mem);
-    IR_TEST(test_code_no_linear);
+    //IR_TEST(test_code_no_linear);
     IR_TEST(test_ir_dirty_rflags);
-    IR_TEST(test_ir_dirty);
-    IR_TEST(creakme);
-    IR_TEST(asong);
-    IR_TEST(test_cmpress);
-
+    IR_TEST(test_creakme);
 }
 
 //int main() {

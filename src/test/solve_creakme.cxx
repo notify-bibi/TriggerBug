@@ -2,7 +2,7 @@
 
 using namespace TR;
 
-State_Tag hoo(State<Addr32> &s) {
+static State_Tag hoo(StateBase&s) {
 
     auto eax = s.regs.get<Ity_I32>(X86_IR_OFFSET::EAX);
     auto esi = s.regs.get<Ity_I32>(X86_IR_OFFSET::ESI);
@@ -10,9 +10,11 @@ State_Tag hoo(State<Addr32> &s) {
     return Exit;
 }
 
-State_Tag hook2(State<Addr32>& s) {
-    SP::win32& sp = (SP::win32&)s;
-    //sp.setFlag(CF_traceJmp);
+static State_Tag hook2(State& s) {
+   /* s.setFlag(CF_traceJmp);
+    s.setFlag(CF_ppStmts);*/
+    auto m64 = s.mem.load<Ity_I64>(0x756EF004);
+    
     return Running;
 }
 
@@ -32,32 +34,33 @@ State_Tag hook2(State<Addr32>& s) {
 //    return Vns(ctx, 28);
 //}
 
-bool creakme() {
+bool test_creakme() {
 
-    ctx32 v(VexArchX86, PROJECT_DIR"PythonFrontEnd\examples\SCTF-creakMe\creakme.exe.idb.dump");
-    v.set_system(windows);
-    //v.setFlag(CF_traceJmp);
-    v.param().set("ntdll_KiUserExceptionDispatcher", 0x774F4200);
+    vex_context v(-1);
+    v.param().set("ntdll_KiUserExceptionDispatcher", (void*)0x777B3BC0);
+    v.param().set("Kernel", gen_kernel(Ke::OS_Kernel_Kd::OSK_Windows));
+    TR::State state(v, VexArchX86);
+    state.read_bin_dump("C:\\Users\\Notify\\Desktop\\CrakeMe.exe.dump");
+    //state.setFlag(CF_traceJmp);
     //v.hook_read(read);
-
-
-    SP::win32 state(v, 0, True);
-    state.avoid_anti_debugging();
-
     //state.setFlag(CF_ppStmts);
+    state.avoid_anti_debugging();
 
     auto sd = state.mem.load<Ity_I64>(0x004023ec);
 
-    state.hook_add(0x04023EF, hoo);
-    state.hook_add(0x0401264, hook2);
-    state.start();
+    v.hook_add(0x756EEFC5, hook2);
+    //state.hook_add(0x756EEFC5, hoo);
 
+    //state.regs.set()
+
+    auto m64 = state.mem.load<Ity_I64>(0x756EF004);
+    state.start();
     if (state.status() != Exit) {
         std::cerr << "guest create exception error" << std::endl;
     }
 
-    state.set_status(NewState);
-    state.start();
+    /*state.set_status(NewState);
+    state.start();*/
 
     if (state.status() != Exit) {
         std::cerr << "guest create exception error" << std::endl;

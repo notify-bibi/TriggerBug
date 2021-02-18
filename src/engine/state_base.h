@@ -1,4 +1,3 @@
-#pragma once
 #ifndef KERNEL_HEAD_DEF
 #define KERNEL_HEAD_DEF
 
@@ -6,8 +5,16 @@
 #include "engine/vex_context.h"
 #include "engine/variable.h"
 #include "engine/register.h"
+#include "engine/memory.h"
+
+
+sv::tval tUnop(IROp, sv::tval const&);
+sv::tval tBinop(IROp, sv::tval const&, sv::tval const&);
+sv::tval tTriop(IROp, sv::tval const&, sv::tval const&, sv::tval const&);
+sv::tval tQop(IROp, sv::tval const&, sv::tval const&, sv::tval const&, sv::tval const&);
 
 namespace TR {
+
 
 
     template<class BState>
@@ -96,10 +103,7 @@ namespace TR {
 
 
     class TRsolver :public z3::solver {
-        friend class State;
         friend class BranchChunk;
-        friend class StateX86;
-        friend class StateAMD64;
         bool                    m_solver_snapshot = false;//if solver::push() m_solver_snapshot = true
         std::vector<sbool>        m_asserts;
     public:
@@ -131,17 +135,17 @@ namespace TR {
     };
 
     //Functional programming
-    template<typename HWord>
+    template<typename T = Addr64>
     class InvocationStack {
-        std::deque<HWord> guest_call_stack;
-        std::deque<HWord> guest_stack;
+        std::deque<T> guest_call_stack;
+        std::deque<T> guest_stack;
     public:
         inline InvocationStack() {}
-        inline InvocationStack(InvocationStack<HWord> const& fsk) {
+        inline InvocationStack(InvocationStack<T> const& fsk) {
             guest_call_stack = fsk.guest_call_stack;
             guest_stack = fsk.guest_stack;
         }
-        inline void push(HWord call_ptr, HWord bp/*栈底*/) {
+        inline void push(T call_ptr, T bp/*栈底*/) {
             guest_call_stack.push_back(call_ptr);
             guest_stack.push_back(bp);
         }
@@ -151,8 +155,8 @@ namespace TR {
                 guest_stack.pop_back();
             }
         }
-        template<typename HWord> friend bool operator==(InvocationStack<HWord> const& a, InvocationStack<HWord> const& b);
-        void operator=(InvocationStack<HWord> const& b) {
+        template<typename T> friend bool operator==(InvocationStack<T> const& a, InvocationStack<T> const& b);
+        void operator=(InvocationStack<T> const& b) {
             guest_call_stack = b.guest_call_stack;
             guest_stack = b.guest_stack;
         }
@@ -160,93 +164,97 @@ namespace TR {
         void clear() { guest_call_stack.clear(); guest_stack.clear(); }
         bool empty() const { return guest_call_stack.empty(); }
         UInt size() const { return guest_call_stack.size(); }
+        const std::deque<T>& get_guest_stack() const { return guest_stack; }
+        const std::deque<T>& get_guest_call_stack() const { return guest_call_stack; }
         operator std::string() const;
     };
 
 
+
+    class State;
+
     class StateBase {
-        friend class TR::State;
+        friend class State;
 
-        z3::vcontext m_ctx;
-        vex_info&    m_vex_info;
+        z3::vcontext m_ctx;   // z3 prove
+        vex_info     m_vinfo; // 支持32/64模式切换 
+        vex_context& m_vctx;  // state tree 共用一个 vctx
         //当前state的入口点
-        HWord        guest_start_ep;
+        HWord        guest_start_ep; // 虚拟 OEP
         //客户机state的eip（计数器eip）
-        HWord        guest_start;
-
+        HWord        guest_start;    // 虚拟 IP
+        HWord        m_delta;        // NEXT_IP = CURR_IP + m_delta
         bool         m_dirty_vex_mode = false;
         //DirtyCtx     m_dctx = nullptr;
         VexArchInfo* vai_guest, * vai_host;
 
         Bool         m_need_record;
-        UInt         m_z3_bv_const_n;
-        std::mutex   m_state_lock;
-        HWord        m_delta;
-        State_Tag    m_status;
-        IRJumpKind   m_jump_kd;
-        InvocationStack<HWord>   m_InvokStack;
+        std::atomic_uint32_t m_z3_bv_const_n;
+        State_Tag    m_status;       // state状态
+        IRJumpKind   m_jump_kd;      // 
 
+        StateBase(vex_context& vctx, VexArch guest_arch);
+        StateBase(StateBase& father, HWord gse);
+        void read_mem_dump(const char*);
+        virtual ~StateBase();
     public:
         //客户机寄存器
-        TRsolver                 solv;
-        Register<REGISTER_LEN>  regs;
+        TRsolver               solv;
+        Register<REGISTER_LEN> regs;
+        //客户机内存 （多线程设置相同user，不同state设置不同user）
+        Mem                     mem;
         BranchManager<StateBase> branch;
+
 
         inline HWord get_cpu_ip() { return guest_start; }
         inline HWord get_state_ep() { return guest_start_ep; }
         //ip = ip + offset
         inline void set_delta(HWord offset) { m_delta = offset; };
+        inline HWord get_delta() const { return m_delta; };
         inline void goto_ptr(HWord addr) { m_delta = addr - guest_start; };
         inline State_Tag status() { return m_status; }
         inline void set_status(State_Tag t) { m_status = t; };
         inline IRJumpKind jump_kd() const { return m_jump_kd; }
         inline void set_jump_kd(IRJumpKind kd) { m_jump_kd = kd; }
-        inline InvocationStack<HWord>& get_InvokStack() { return m_InvokStack; }
 
-        tval mk_int_const(UShort nbit);
-        tval mk_int_const(UShort n, UShort nbit);
-        void read_mem_dump(const char*);
+        sv::tval mk_int_const(UShort nbit);
+        sv::tval mk_int_const(UShort n, UShort nbit);
         operator std::string() const;
 
-        StateBase(TR::vctx_base& vctx_base, HWord gse, Bool _need_record);
+        void read_bin_dump(const char* binDump);
 
-        StateBase(StateBase& father, HWord gse);
+        UInt getStr(std::stringstream& st, HWord addr);
+        inline operator z3::context& () { return m_ctx; }
+        inline operator z3::vcontext& () { return m_ctx; }
+        inline operator Z3_context() const { return m_ctx; }
 
-        virtual StateBase* ForkState(HWord ges) { VPANIC("need to implement the method"); return nullptr; }
-    public:
-        std::queue<Z3_ast>  io_buff;
-
-        static tval tUnop(IROp, tval const&);
-        static tval tBinop(IROp, tval const&, tval const&);
-        static tval tTriop(IROp, tval const&, tval const&, tval const&);
-        static tval tQop(IROp, tval const&, tval const&, tval const&, tval const&);
-
-        inline operator const z3::context& () const { return m_ctx; }
-        inline operator const z3::vcontext& () const { return m_ctx; }
-        inline operator const Z3_context() const { return m_ctx; }
         inline z3::vcontext& ctx() { return m_ctx; }
-        inline const TR::vex_info& info() const { return m_vex_info; }
-        
-        virtual MEM_BASE& membase() {};
-        //inline operator TR::State<Addr32>& () { return *reinterpret_cast <TR::State<Addr32>*>(this); };
-        //inline operator TR::State<Addr64>& () { return *reinterpret_cast <TR::State<Addr64>*>(this); };
-        //inline operator TR::State<Addr32>* () { return reinterpret_cast <TR::State<Addr32>*>(this); };
-        //inline operator TR::State<Addr64>* () { return reinterpret_cast <TR::State<Addr64>*>(this); };
-        ////必须存在至少一个virtual喔，不然上面4句转换就会产生错位
-        //virtual Addr64 get_cpu_ip() { return 0; };
+        inline vex_context& vctx() { return m_vctx; }
+        inline vex_info& vinfo() { return m_vinfo; }
+        inline TRsolver& solver() { return solv; }
+
+    public:
+    // interface 
+        virtual StateBase* ForkState(HWord ges) { VPANIC("need to implement the method"); return nullptr; }
+
+        //virtual inline Ke::Kernel& get_kernel() { VPANIC("need to implement the method"); return *(Ke::Kernel*)(1); }
 
     private:
 
-
+        //virtual TR::State_Tag call_back_hook(TR::Hook_struct const& hs) override { setFlag(hs.cflag); return (hs.cb) ? (hs.cb)(this) : Running; }
+        //virtual bool  StateCompression(TR::StateBase const& next) override { return true; }
+        //virtual void  StateCompressMkSymbol(TR::StateBase const& newState) override {  };
     };
 
 
 
 
-    template<typename HWord>
-    inline bool operator==(InvocationStack<HWord> const& a, InvocationStack<HWord> const& b) {
-        return (a.guest_call_stack == b.guest_call_stack) && (a.guest_stack == b.guest_stack);
-    }
+    bool operator==(InvocationStack<HWord> const& a, InvocationStack<HWord> const& b);
+
+    std::ostream& operator<<(std::ostream& out, const TR::StateBase& n);
+
+    std::ostream& operator << (std::ostream& out, const TR::InvocationStack<HWord>& e);
+
 
 };
 

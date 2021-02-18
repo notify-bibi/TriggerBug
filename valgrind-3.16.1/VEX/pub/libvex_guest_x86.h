@@ -140,67 +140,115 @@
 typedef
    struct __attribute__((__aligned__(LibVEX_GUEST_STATE_ALIGN))) {
       /* Event check fail addr and counter. */
+
       UInt  host_EvC_FAILADDR; /* 0 */
       UInt  host_EvC_COUNTER;  /* 4 */
-      UInt  guest_EAX;         /* 8 */
+      ULong pad0;
+      UInt  guest_EAX;         /* 16 */
+      UInt  pad1;
       UInt  guest_ECX;
+      UInt  pad2;
       UInt  guest_EDX;
+      UInt  pad3;
       UInt  guest_EBX;
+      UInt  pad4;
       UInt  guest_ESP;
+      UInt  pad5;
       UInt  guest_EBP;
+      UInt  pad6;
       UInt  guest_ESI;
-      UInt  guest_EDI;         /* 36 */
+      UInt  pad7;
+      UInt  guest_EDI;         /* 72 */
+      UInt  pad8;
+
+
+      /*  80 */ ULong  pad8_R8;
+      /*  88 */ ULong  pad8_R9;
+      /*  96 */ ULong  pad8_R10;
+      /* 104 */ ULong  pad8_R11;
+      /* 112 */ ULong  pad8_R12;
+      /* 120 */ ULong  pad8_R13;
+      /* 128 */ ULong  pad8_R14;
+      /* 136 */ ULong  pad8_R15;
 
       /* 4-word thunk used to calculate O S Z A C P flags. */
-      UInt  guest_CC_OP;       /* 40 */
+      UInt  guest_CC_OP;       /* 144 */
+      UInt  pad9;
       UInt  guest_CC_DEP1;
+      UInt  pad10;
       UInt  guest_CC_DEP2;
-      UInt  guest_CC_NDEP;     /* 52 */
+      UInt  pad11;
+      UInt  guest_CC_NDEP;     /* 168 */
+      UInt  pad12;
       /* The D flag is stored here, encoded as either -1 or +1 */
-      UInt  guest_DFLAG;       /* 56 */
-      /* Bit 21 (ID) of eflags stored here, as either 0 or 1. */
-      UInt  guest_IDFLAG;      /* 60 */
-      /* Bit 18 (AC) of eflags stored here, as either 0 or 1. */
-      UInt  guest_ACFLAG;      /* 64 */
-
+      UInt  guest_DFLAG;       /* 176 */
+      UInt  pad13;
       /* EIP */
-      UInt  guest_EIP;         /* 68 */
+      UInt  guest_EIP;         /* 184 */
+      UInt  pad14;
+      /* Bit 18 (AC) of eflags stored here, as either 0 or 1. */
+      UInt  guest_ACFLAG;      
+      UInt  pad15;
+      /* Bit 21 (ID) of eflags stored here, as either 0 or 1. */
+      UInt  guest_IDFLAG;      /* 192 */
+      UInt  pad16;
 
-      /* FPU */
-      ULong guest_FPREG[8];    /* 72 */
-      UChar guest_FPTAG[8];   /* 136 */
-      UInt  guest_FPROUND;    /* 144 */
-      UInt  guest_FC3210;     /* 148 */
-      UInt  guest_FTOP;       /* 152 */
+      ULong pad17; // guest_FS_CONST
+
+
+
 
       /* SSE */
       UInt  guest_SSEROUND;   /* 156 */
+      UInt  pad18;
       U128  guest_XMM0;       /* 160 */
+      U128  pad19;
       U128  guest_XMM1;
+      U128  pad20;
       U128  guest_XMM2;
+      U128  pad21;
       U128  guest_XMM3;
+      U128  pad22;
       U128  guest_XMM4;
+      U128  pad23;
       U128  guest_XMM5;
+      U128  pad24;
       U128  guest_XMM6;
+      U128  pad25;
       U128  guest_XMM7;
+      U128  pad26;
 
-      /* Segment registers. */
-      UShort guest_CS;
-      UShort guest_DS;
-      UShort guest_ES;
-      UShort guest_FS;
-      UShort guest_GS;
-      UShort guest_SS;
-      /* LDT/GDT stuff. */
-      ULong  guest_LDT; /* host addr, a VexGuestX86SegDescr* */
-      ULong  guest_GDT; /* host addr, a VexGuestX86SegDescr* */
+
+      U256  pad_YMM8;
+      U256  pad_YMM9;
+      U256  pad_YMM10;
+      U256  pad_YMM11;
+      U256  pad_YMM12;
+      U256  pad_YMM13;
+      U256  pad_YMM14;
+      U256  pad_YMM15;
+      U256  pad_YMM16;
+
+      /* FPU */
+      UInt  guest_FTOP;
+      UInt  pad27;
+      ULong guest_FPREG[8];
+      UChar guest_FPTAG[8];
+      UInt  guest_FPROUND;
+      UInt  pad28;
+      UInt  guest_FC3210;
+      UInt  pad29;
 
       /* Emulation notes */
       UInt   guest_EMNOTE;
+      UInt  pad30;
+
 
       /* For clflush/clinval: record start and length of area */
       UInt guest_CMSTART;
+      UInt  pad31;
       UInt guest_CMLEN;
+      UInt  pad32;
 
       /* Used to record the unredirected guest address at the start of
          a translation whose start has been redirected.  By reading
@@ -209,15 +257,31 @@ typedef
          Note, this is only set for wrap-style redirects, not for
          replace-style ones. */
       UInt guest_NRADDR;
+      UInt  pad33;
 
       /* Used for Darwin syscall dispatching. */
       UInt guest_SC_CLASS;
+      UInt  pad34;
+
+      ULong pad35; // guest_GS_CONST
 
       /* Needed for Darwin (but mandated for all guest architectures):
          EIP at the last syscall insn (int 0x80/81/82, sysenter,
          syscall).  Used when backing up to restart a syscall that has
          been interrupted by a signal. */
       UInt guest_IP_AT_SYSCALL;
+      UInt  pad36;
+
+      /* LDT/GDT stuff. */
+      ULong  guest_LDT; /* host addr, a VexGuestX86SegDescr* */
+      ULong  guest_GDT; /* host addr, a VexGuestX86SegDescr* */
+      /* Segment registers. */
+      UShort guest_CS;
+      UShort guest_DS;
+      UShort guest_ES;
+      UShort guest_FS;
+      UShort guest_GS;
+      UShort guest_SS;
 
       /* Padding to make it have an 16-aligned size */
       UInt padding1;

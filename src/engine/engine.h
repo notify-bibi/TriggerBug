@@ -44,74 +44,17 @@
 #define dirty2rea(addr) ((ULong)(addr))|(1ull<<63)
 #define rea2dirty(addr) ((ULong)(addr))&(~(1ull<<63))
 
-#include <mmintrin.h>  //SSE(include mmintrin.h)
-#include <xmmintrin.h> //SSE2(include xmmintrin.h)
-#include <emmintrin.h> //SSE3(include emmintrin.h)
-#include <pmmintrin.h> //SSSE3(include pmmintrin.h)
-#include <tmmintrin.h> //SSE4.1(include tmmintrin.h)
-#include <smmintrin.h> //SSE4.2(include smmintrin.h)
-#include <nmmintrin.h> //AES(include nmmintrin.h)
-#include <wmmintrin.h> //AVX(include wmmintrin.h)
+//#include <mmintrin.h>  //SSE(include mmintrin.h)
+//#include <xmmintrin.h> //SSE2(include xmmintrin.h)
+//#include <emmintrin.h> //SSE3(include emmintrin.h)
+//#include <pmmintrin.h> //SSSE3(include pmmintrin.h)
+//#include <tmmintrin.h> //SSE4.1(include tmmintrin.h)
+//#include <smmintrin.h> //SSE4.2(include smmintrin.h)
+//#include <nmmintrin.h> //AES(include nmmintrin.h)
+//#include <wmmintrin.h> //AVX(include wmmintrin.h)
 #include <immintrin.h> //(include immintrin.h)
-/*
- * Intel(R) AVX compiler intrinsic functions.
- */
-typedef union __declspec(align(32)) _m256 {
-    float m256_f32[8];
-} _m256;
-
-typedef struct __declspec(align(32)) _m256d {
-    double m256d_f64[4];
-} _m256d;
-
-typedef union  __declspec(align(32)) _m256i {
-    __int8              m256i_i8[32];
-    __int16             m256i_i16[16];
-    __int32             m256i_i32[8];
-    __int64             m256i_i64[4];
-    unsigned __int8     m256i_u8[32];
-    unsigned __int16    m256i_u16[16];
-    unsigned __int32    m256i_u32[8];
-    unsigned __int64    m256i_u64[4];
-} _m256i;
-
-typedef union __declspec(align(16)) _m128i {
-    __int8              m128i_i8[16];
-    __int16             m128i_i16[8];
-    __int32             m128i_i32[4];
-    __int64             m128i_i64[2];
-    unsigned __int8     m128i_u8[16];
-    unsigned __int16    m128i_u16[8];
-    unsigned __int32    m128i_u32[4];
-    unsigned __int64    m128i_u64[2];
-} _m128i;
-
-typedef struct __declspec(align(16)) _m128d {
-    double              m128d_f64[2];
-} _m128d;
 
 
-typedef union __declspec(align(16)) _m128 {
-    float               m128_f32[4];
-    unsigned __int64    m128_u64[2];
-    __int8              m128_i8[16];
-    __int16             m128_i16[8];
-    __int32             m128_i32[4];
-    __int64             m128_i64[2];
-    unsigned __int8     m128_u8[16];
-    unsigned __int16    m128_u16[8];
-    unsigned __int32    m128_u32[4];
-} _m128;
-
-
-
-#define M256i(v) (*(_m256i*)(&v))
-#define M256d(v) (*(_m256d*)(&v))
-#define M256(v) (*(_m256*)(&v))
-
-#define M128i(v) (*(_m128i*)(&v))
-#define M128d(v) (*(_m128d*)(&v))
-#define M128(v) (*(_m128*)(&v))
 
 
 
@@ -232,30 +175,30 @@ IRType       length2ty(UShort bit);
 #define SET2(addr, value) *(UShort*)((addr)) = (value)
 #define SET4(addr, value) *(UInt*)((addr)) = (value)
 #define SET8(addr, value) *(ULong*)((addr)) = (value)
-#define SET16(addr, value) *(__m128i*)((addr)) = (value)
-#define SET32(addr, value) *(__m256i*)((addr)) = (value)
+#define SET16(addr,fromaddr) _mm_storeu_si128(  *(__m128i_u*)((addr))), GET16(fromaddr))
+#define SET32(addr,fromaddr) _mm256_storeu_si256(*(__m256i_u*)((addr)), GET32(fromaddr))
 
 #define GET1(addr) (*(UChar*)((addr))) 
 #define GET2(addr) (*(UShort*)((addr)))
 #define GET4(addr) (*(UInt*)((addr)))
 #define GET8(addr) (*(ULong*)((addr)))
-#define GET16(addr) (*(__m128i*)((addr)))
-#define GET32(addr) (*(__m256i*)((addr)))
+#define GET16(addr) _mm_loadu_si128((__m128i_u*)((addr)))
+#define GET32(addr) _mm256_loadu_si256((__m256i_u*)((addr)))
 
 
 #define GETS1(addr) (*(Char*)((addr))) 
 #define GETS2(addr) (*(Short*)((addr)))
 #define GETS4(addr) (*(Int*)((addr)))
 #define GETS8(addr) (*(Long*)((addr)))
-#define GETS16(addr) (*(__m128i*)((addr)))
-#define GETS32(addr) (*(__m256i*)((addr)))
+#define GETS16(addr) GET16((addr))
+#define GETS32(addr) GET32((addr))
 
 #define MV1(addr,fromaddr) *(UChar*)((addr))=(*(UChar*)((fromaddr))) 
 #define MV2(addr,fromaddr) *(UShort*)((addr))=(*(UShort*)((fromaddr)))
 #define MV4(addr,fromaddr) *(UInt*)((addr))=(*(UInt*)((fromaddr)))
 #define MV8(addr,fromaddr) *(ULong*)((addr))=(*(ULong*)((fromaddr)))
-#define MV16(addr,fromaddr) *(__m128i*)((addr))=(*(__m128i*)((fromaddr)))
-#define MV32(addr,fromaddr) *(__m256i*)((addr))=(*(__m256i*)((fromaddr)))
+#define MV16(addr,fromaddr) SET16(addr, fromaddr)
+#define MV32(addr,fromaddr) SET32(addr, fromaddr)
 
 
 //class spin_mutex {
@@ -337,6 +280,67 @@ static inline bool ctz(int& r, unsigned int v) { if (v == 0) return false; r = _
 //
 //    return index;
 //}
+
+
+/*
+ * Intel(R) AVX compiler intrinsic functions.
+ */
+typedef union __declspec(align(32)) _m256 {
+    float m256_f32[8];
+} _m256;
+
+typedef struct __declspec(align(32)) _m256d {
+    double m256d_f64[4];
+} _m256d;
+
+typedef union  __declspec(align(32)) _m256i {
+    __int8              m256i_i8[32];
+    __int16             m256i_i16[16];
+    __int32             m256i_i32[8];
+    __int64             m256i_i64[4];
+    unsigned __int8     m256i_u8[32];
+    unsigned __int16    m256i_u16[16];
+    unsigned __int32    m256i_u32[8];
+    unsigned __int64    m256i_u64[4];
+} _m256i;
+
+typedef union __declspec(align(16)) _m128i {
+    __int8              m128i_i8[16];
+    __int16             m128i_i16[8];
+    __int32             m128i_i32[4];
+    __int64             m128i_i64[2];
+    unsigned __int8     m128i_u8[16];
+    unsigned __int16    m128i_u16[8];
+    unsigned __int32    m128i_u32[4];
+    unsigned __int64    m128i_u64[2];
+} _m128i;
+
+typedef struct __declspec(align(16)) _m128d {
+    double              m128d_f64[2];
+} _m128d;
+
+
+typedef union __declspec(align(16)) _m128 {
+    float               m128_f32[4];
+    unsigned __int64    m128_u64[2];
+    __int8              m128_i8[16];
+    __int16             m128_i16[8];
+    __int32             m128_i32[4];
+    __int64             m128_i64[2];
+    unsigned __int8     m128_u8[16];
+    unsigned __int16    m128_u16[8];
+    unsigned __int32    m128_u32[4];
+} _m128;
+
+
+
+#define M256i(v) (*(_m256i*)(&v))
+#define M256d(v) (*(_m256d*)(&v))
+#define M256(v) (*(_m256*)(&v))
+
+#define M128i(v) (*(_m128i*)(&v))
+#define M128d(v) (*(_m128d*)(&v))
+#define M128(v) (*(_m128*)(&v))
 
 
 #endif // _TR_head
