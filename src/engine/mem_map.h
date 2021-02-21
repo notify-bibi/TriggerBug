@@ -55,6 +55,7 @@ namespace TR {
 
     private:
         PML4T _CR3_;
+        HASH_MAP<Int, ST*> m_host_map;
 
         virtual ST* map_interface(ULong address) { vassert(0); };
         virtual void copy_interface(ST* pt_dst[1], ST* pt_src[1]) { vassert(0); };
@@ -72,7 +73,7 @@ namespace TR {
 
         //类似于linux的sys_fork.写时复制.速度快
         void copy(PML4T* cr3);
-
+        void mount(Addr ea, ST* p);
         //释放物理页
         ULong unmap(ULong address, ULong length);
         

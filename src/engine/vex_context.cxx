@@ -2,6 +2,8 @@
 #include "engine/memory.h"
 #include "engine/state_base.h"
 #include "engine/z3_target_call/z3_target_call.h"
+#include "engine/irsb_cache.h"
+
 
 using namespace TR;
 
@@ -90,7 +92,7 @@ static void _vex_log_bytes(const HChar* bytes, SizeT nbytes) {
 }
 
 clock_t tr_begin_run = clock();
-
+static bool is_LibVEX_Init = False;
 void vex_info::ir_init() {
     VexControl vc;
     LibVEX_default_VexControl(&vc);
@@ -105,7 +107,8 @@ void vex_info::ir_init() {
 
 
     tr_begin_run = clock();
-    Func_Map_Init();
+    if (!is_LibVEX_Init) Func_Map_Init();
+    is_LibVEX_Init = true;
     LibVEX_Init(&failure_exit, &_vex_log_bytes, 0/*debuglevel*/, &vc);
 }
 
@@ -459,10 +462,25 @@ Int vex_info::gRegsIpOffset(VexArch guest) {
     }
 
     
+    vex_context::vex_context(Int max_threads)
+        :vctx_base(max_threads)
+    {
+
+        m_irsb_cache = new_IRSBCache();
+        
+        constructer();
+    };
+
     void vex_context::constructer()
     {
             hook_read(io_vex_read);
             hook_write(io_vex_write);
+    }
+
+    vex_context::~vex_context()
+    {
+        del_IRSBCache(m_irsb_cache);
+        m_irsb_cache = nullptr;
     }
 
     void vex_context::hook_del(HWord addr)
@@ -588,10 +606,10 @@ Int vex_info::gRegsIpOffset(VexArch guest) {
 
         vta_chunk.arch_guest = guest_arch;
         vta_chunk.archinfo_guest.endness = guest_endness;
-        vta_chunk.archinfo_guest.hwcaps = arch_hwcaps(vta_chunk.arch_guest);
+        //vta_chunk.archinfo_guest.hwcaps = arch_hwcaps(vta_chunk.arch_guest);
         vta_chunk.arch_host = guest_arch;
         vta_chunk.archinfo_host.endness = guest_endness;
-        vta_chunk.archinfo_host.hwcaps = arch_hwcaps(vta_chunk.arch_host);
+        //vta_chunk.archinfo_host.hwcaps = arch_hwcaps(vta_chunk.arch_host);
 
         memset(&vge_chunk, 0 , sizeof(vge_chunk));
         vta_chunk.guest_extents = &vge_chunk;

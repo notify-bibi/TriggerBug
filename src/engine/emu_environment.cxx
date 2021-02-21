@@ -3,6 +3,11 @@
 #include "engine/state_base.h"
 #include "engine/memory.h"
 #include "gen_global_var_call.hpp"
+#include "engine/irsb_cache.h"
+
+
+IRSB* irsb_cache_find(HWord ea);
+
 
 namespace TR {
 
@@ -24,14 +29,14 @@ namespace TR {
     sv::tval& IR_Manager::operator[](UInt idx)
     {
         UInt tidx = idx / MAX_IRTEMP;
-        if (m_size_ir_temp <= tidx || !m_ir_unit[tidx]) {
+        if (m_size_ir_temp <= tidx) {
             vassert(m_size_ir_temp == m_ir_unit.size());
             for (UInt idx = m_ir_unit.size(); idx <= tidx; idx++) {
                 m_ir_unit.emplace_back(nullptr);
             }
-            m_ir_unit[tidx] = new tval_thunk(m_ctx);
             m_size_ir_temp = tidx + 1;
         }
+        if(!m_ir_unit[tidx]) m_ir_unit[tidx] = new tval_thunk(m_ctx);
         return m_ir_unit[tidx]->operator[](idx% MAX_IRTEMP);
     }
 
@@ -42,56 +47,6 @@ namespace TR {
         }
     }
 
-    typedef struct IRSB_CHUNK {
-        IRSB* irsb;
-        ULong hash;
-        Addr guest_start, guest_end;
-        ULong bbsize; //base block
-        bool has_changed; // irsb was old need refresh
-    } IRSB_CHUNK;
-
-    class IRSBCache {
-        using _Kty = Addr;
-        using _Vty = int;
-        using CacheType = std::unordered_map<_Kty, _Vty>;
-        CacheType m_cache;
-
-
-    public:
-        IRSBCache() {
-
-        }
-        void push(IRSB* irsb, std::deque<void*>&& irsb_mem_alloc) {
-
-        }
-
-        IRSB* find(HWord guest_addr) {
-            CacheType::iterator k = m_cache.find(guest_addr);
-            //mem.mem_real_hash(guest_addr, 0x20);
-            // make hash 
-            //k->second
-
-            //look up hash
-
-
-
-            return nullptr;
-        }
-
-        bool destoryIRSB(IRSB* irsb) {
-
-        }
-
-        bool refresh() {
-
-        }
-
-        ~IRSBCache() {
-
-        }
-    };
-
-    static IRSBCache irsbCache;
 
     // ------------------------EmuEnvGuest--------------------------
 
@@ -100,12 +55,30 @@ namespace TR {
         return mem->libvex_guest_insn_control(guest_IP_sbstart, delta, guest_code);
     };
 
-    EmuEnvGuest::EmuEnvGuest(vex_info const& info, MBase& mem_obj)
+    EmuEnvGuest::EmuEnvGuest(vex_context& vctx, vex_info const& info, MBase& mem_obj)
         : EmuEnvironment(info.gguest(), info.gtraceflags()),
-          m_info(const_cast<vex_info&>(info)), 
-          m_ir_temp(mem_obj.ctx()),
-          m_mem(mem_obj)
+        m_vctx(vctx),
+        m_info(const_cast<vex_info&>(info)),
+        m_ir_temp(mem_obj.ctx()),
+        m_mem(mem_obj)
     {
+    }
+
+    void EmuEnvGuest::block_integrity(Addr wl, UInt sz)
+    {
+        //std::map<Addr, UInt>::iterator fd = m_cache_map.lower_bound(address);
+        //if LIKELY(fd != m_cache_map.end()) {
+        //    if UNLIKELY(address <= fd->first + fd->second) {
+
+        //    }
+        //}
+        Addr wr = wl + sz;
+        Addr cr = m_guest_start_of_block + m_base_block_sz;
+
+        if UNLIKELY((m_guest_start_of_block <= wr && wr < cr) || (m_guest_start_of_block <= wl && wl < cr)){
+            vex_printf("\n********* anti debug [code ea: %p] has been patched!! i will updated irsb *********\n", (wl));
+            m_is_dynamic_block = true;
+        }
     }
 
     void EmuEnvGuest::set_guest_bb_insn_control_obj()
@@ -132,21 +105,21 @@ namespace TR {
         }*/
         VexRegisterUpdates pxControl;
         VexTranslateResult res;
-        IRSB* cache_irsb = irsbCache.find(ea);
+        
+        IRSB* cache_irsb = irsb_cache_find(m_vctx.get_irsb_cache(), m_mem, ea);
         if (LIKELY(cache_irsb != nullptr)) {
             return cache_irsb;
         }
 
         VexTranslateArgs* vta = get_ir_vex_translate_args();
         set_guest_bytes_addr(m_mem.get_vex_insn_linear(ea), ea);
+        
+        m_guest_start_of_block = ea;
+        m_is_dynamic_block = false;
         IRSB* irsb = LibVEX_FrontEnd(vta, &res, &pxControl);
-        // irsb = dirty_code_deal_BB(irsb);
-        // irsbCache.push(irsb, LibVEX_IRSB_transfer());
+        m_base_block_sz = vta->guest_extents->len[0];
+        irsb_cache_push(m_vctx.get_irsb_cache(), m_mem, vta->guest_extents, irsb, LibVEX_IRSB_transfer());
         return irsb;
-
-        //static ctx64 v(VexArchAMD64, "");
-        //IRSB* bb = emu_ev.translate_front(mem, (Addr)func);
-        //static TR::EmuEnvironment emu_ev(v, mem, VexArchAMD64);
     }
 
     sv::tval& EmuEnvGuest::operator[](UInt idx)
@@ -155,18 +128,16 @@ namespace TR {
     }
 
 
-
-    void EmuEnvironment::set_start(HWord s)
-    {
-        m_guest_start_of_block = s;
-        m_is_dynamic_block = false;
+    void EmuEnvironment::block_integrity(Addr ea, UInt sz) {
+        return;
     }
 
+
+    
     void EmuEnvironment::set_guest_bytes_addr(const UChar* bytes, Addr64 virtual_addr)
     {
         m_vta_chunk.guest_bytes = bytes;
         m_vta_chunk.guest_bytes_addr = virtual_addr;
-        set_start(virtual_addr);
     }
 
     void EmuEnvironment::set_host_addr(Addr64 host_virtual_addr)
@@ -182,26 +153,6 @@ namespace TR {
         vex_info::init_vta_chunk(m_vta_chunk, m_vge_chunk, arch, traceflags);
     }
 
-    IRSB* EmuEnvironment::find(HWord ea)
-    {
-        return irsbCache.find(ea);;
-    }
-
-    void EmuEnvironment::block_integrity(bool is_code_page, Addr address, UInt insn_block_delta) {
-        if (!is_code_page) return;
-
-        std::map<Addr, UInt>::iterator fd = m_cache_map.lower_bound(address);
-        if LIKELY(fd != m_cache_map.end()) {
-            if UNLIKELY(address <= fd->first + fd->second) {
-
-            }
-        }
-        Addr delta = (address)-m_guest_start_of_block;
-        if (delta > 0 && delta < insn_block_delta) {
-            vex_printf("\n********* code: %p has been patched!! *********\n", (address));
-            m_is_dynamic_block = true;
-        }
-    }
 
     EmuEnvironment::~EmuEnvironment()
     {

@@ -1,6 +1,26 @@
 #ifndef _TR_head
 #define _TR_head
 
+
+#define GET_MEM_ACCESS_FLAG1(v)  ((UInt)(((ULong)(v)) >> 56))
+#define GET_MEM_ACCESS_FLAG2(v)  ((UInt)(((ULong)(v)) >> 48)&0xff)
+
+#define SET_MEM_ACCESS_FLAG1(v, f1)  v | = ((f1)&0xff)<<56;
+#define SET_MEM_ACCESS_FLAG2(v, f2)  v | = ((f2)&0xff)<<48;
+
+#define CHECK_MEM_ACCESS_FLAG1(v, f1)  (GET_MEM_ACCESS_FLAG1(v) == f1)
+#define CHECK_MEM_ACCESS_FLAG2(v, f2)  (GET_MEM_ACCESS_FLAG2(v) == f2)
+
+
+#define GET_MEM_ACCESS_NO_FLAG(v)  ((v) & ((1ull<<48)-1))
+
+
+#define DIRTY_HOST_CODE_F1  0xff
+
+
+
+
+
 // std::aligned_storage
 #define _DISABLE_EXTENDED_ALIGNED_STORAGE  
 
@@ -115,11 +135,8 @@ template <class...> constexpr std::false_type always_false{};
 #include "thread_pool/thread_pool.h"
 #include "engine/trException.h"
 
-//觉得引擎没bug了就取消注释，加快速度
+//觉得引擎没bug了就取消这个注释，加快速度
 //#define RELEASE_OFFICIALLY
-
-//所有客户机寄存器的ir层的最大长度。建议>=100
-#define REGISTER_LEN 0x800
 
 //任意基本快所需 IR temp 连续块大小，数量无限制
 #define MAX_IRTEMP 0x80

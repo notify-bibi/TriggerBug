@@ -12,8 +12,253 @@
 #define UNDEFREG
 #include "register.h"
 
+class Translate {
+    z3::vcontext& m_toctx;
+    Z3_ast m_ast;
+public:
+    inline Translate(z3::vcontext& ctx, z3::vcontext& toctx, Z3_ast s) :
+        m_toctx(toctx)
+    {
+#if !defined(CLOSECNW)&&!defined(USECNWNOAST)
+        spin_unique_lock lock(ctx);
+#endif
+        m_ast = Z3_translate(ctx, s, toctx);
+        Z3_inc_ref(toctx, m_ast);
+    }
+
+    inline operator Z3_ast() {
+        return m_ast;
+    }
+
+    inline ~Translate() {
+        Z3_dec_ref(m_toctx, m_ast);
+    }
+
+};
+
 
 namespace TR {
+    Symbolic::Symbolic(z3::vcontext& ctx, UInt size)
+        : m_ctx(ctx), m_size(size) 
+    {
+        memset(m_fastindex, 0, size);
+    }
+
+    TR::Symbolic::Symbolic(z3::vcontext& ctx, TR::Symbolic* father)
+        : m_ctx(ctx), m_size(father->m_size)
+    {
+        memcpy(m_fastindex, father->m_fastindex, m_size);
+        memset(m_fastindex + m_size, 0, 32);
+
+        HASH_MAP<Int, Z3_ast>& fast = father->m_ast.m_mem;
+        auto it_end = fast.end();
+        for (auto it = fast.begin(); it != it_end; it++) {
+            if (m_fastindex[it->first] == 1) {
+                Z3_ast translate_ast = Translate(father->m_ctx, m_ctx, it->second);
+                m_ast[it->first] = translate_ast;
+                vassert(translate_ast != NULL);
+                Z3_inc_ref(m_ctx, translate_ast);
+            }
+        }
+    }
+
+    Symbolic::~Symbolic()
+    {
+        int _pcur = m_size - 1;
+        int N;
+        for (; _pcur > 0; ) {
+
+            if (clzll(N, ((ULong*)(m_fastindex))[_pcur >> 3] & fastMaskBI1(_pcur % 8))) {
+                N = 63 - N;
+                _pcur = ALIGN(_pcur, 8) + (N >> 3);
+                _pcur = _pcur - m_fastindex[_pcur] + 1;
+                Z3_dec_ref(m_ctx, m_ast[_pcur]);
+                _pcur--;
+            }
+            else {
+                _pcur = ALIGN(_pcur - 8, 8) + 7;
+            }
+        };
+    }
+    Symbolic* Symbolic::mk_Symbolic(z3::vcontext& ctx, UInt size)
+    {
+        UChar* ptr = new UChar[sizeof(Symbolic) + size] ;
+        new (ptr) Symbolic(ctx, size);
+        return reinterpret_cast<Symbolic*>(ptr);
+    }
+    Symbolic* Symbolic::mk_Symbolic(z3::vcontext& ctx, Symbolic* father)
+    {
+        UChar* ptr = new UChar[sizeof(Symbolic) + father->m_size];
+        new (ptr) Symbolic(ctx, father);
+        return reinterpret_cast<Symbolic*>(ptr);
+    }
+    void Symbolic::del_Symbolic(Symbolic* ptr)
+    {
+        delete ptr;
+    }
+};
+
+
+namespace TR {
+
+
+
+    //Record
+    //写入记录器，8字节记录为m_flag的一个bit
+    template<int maxlength>
+    class Record {
+    public:
+        UChar m_flag[(maxlength >> 6) + 1];
+        Record() {
+            memset(m_flag, 0, sizeof(m_flag));
+            UInt shift = (maxlength & ((1 << 6) - 1)) >> 3;
+            m_flag[maxlength >> 6] = shift ? 0x1 << shift : 0x1;
+        };
+
+        void clearRecord() {
+            memset(m_flag, 0, sizeof(m_flag));
+            UInt shift = (maxlength & ((1 << 6) - 1)) >> 3;
+            m_flag[maxlength >> 6] = shift ? 0x1 << shift : 0x1;
+        };
+
+        template<int nbytes>
+        inline void write(int offset) {
+            *(UShort*)(m_flag + (offset >> 6)) |=
+                (UShort)
+                (
+                    (offset + nbytes) < ALIGN(offset, 8) + 8
+                    ?
+                    (nbytes <= 8) ? 0x01u :
+                    (nbytes == 16) ? 0b11u :
+                    0b1111u
+                    :
+                    (nbytes <= 8) ? 0b11u :
+                    (nbytes == 16) ? 0b111u :
+                    0b11111u
+                    ) << ((offset >> 3) & 7);
+
+        }
+
+        template<> inline void write<1>(int offset) { m_flag[offset >> 6] |= 1 << ((offset >> 3) & 7); }
+
+
+
+        inline UInt get_count() {
+            UInt write_count = 0;
+            for (auto offset : *this) {
+                write_count += 1;
+            }
+            return write_count;
+        }
+
+        //写入遍历器
+        class iterator
+        {
+        private:
+            UInt _pcur;
+            UInt m_len;
+            ULong* m_flag;
+        public:
+            inline iterator(UChar* flag) :_pcur(0), m_flag((ULong*)flag), m_len(0) {
+                Int N;
+                for (; ; _pcur += 64) {
+                    if (ctzll(N, m_flag[_pcur >> 6])) {
+                        _pcur += N;
+                        return;
+                    }
+                }
+            }
+            iterator(UChar* flag, UInt length) :
+                _pcur(length >> 3),
+                m_flag((ULong*)flag),
+                m_len(length)
+            {}
+            inline bool operator!=(const iterator& src)
+            {
+                return (_pcur << 3) < src.m_len;
+            }
+
+            inline void operator++()
+            {
+                int N;
+                for (;;) {
+                    if (ctzll(N, m_flag[_pcur >> 6] & fastMaskReverse(_pcur % 64))) {
+                        _pcur = ALIGN(_pcur, 64) + N;
+                        return;
+                    }
+                    else {
+                        _pcur = ALIGN(_pcur + 64, 64);
+                    }
+                }
+            }
+
+            inline int operator*()
+            {
+                return (_pcur++) << 3;
+            }
+        };
+
+        inline iterator begin() {
+            return iterator(m_flag);
+        }
+
+        inline iterator end() {
+            return iterator(m_flag, maxlength);
+        }
+    };
+
+    Register::Register(z3::vcontext& ctx, UInt size) 
+        : m_ctx(ctx),
+        m_is_symbolic(false),
+        m_symbolic(NULL),
+        m_size(size)
+    {
+        //static_assert(offsetof(Register, m_bytes) + maxlength == sizeof(Register), "err");
+    }
+
+    Register::Register(Register& father_regs, z3::vcontext& ctx) 
+        : m_ctx(ctx),
+        m_is_symbolic(father_regs.m_is_symbolic),
+        m_symbolic(father_regs.m_symbolic ? Symbolic::mk_Symbolic(m_ctx, father_regs.m_symbolic) : NULL),
+        m_size(father_regs.m_size)
+    {
+        memcpy(m_bytes, father_regs.m_bytes, m_size);
+    }
+
+
+    void Register::mk_Symbolic()
+    {
+        if (!m_is_symbolic) {
+            m_is_symbolic = true;
+            m_symbolic = Symbolic::mk_Symbolic(m_ctx, m_size);
+        }
+    }
+
+    void Register::init_padding_v(Char v)
+    {
+        memset(m_bytes, v, m_size);
+    }
+
+    Register::~Register() {
+        if (m_is_symbolic) Symbolic::del_Symbolic(m_symbolic);
+    }
+    Register* Register::mk_Register(z3::vcontext& ctx, UInt size)
+    {
+        UChar* ptr = new UChar[sizeof(Register) + size];
+        new (ptr) Register(ctx, size);
+        return reinterpret_cast<Register*>(ptr);
+    }
+    Register* Register::mk_Register(Register& father_regs, z3::vcontext& ctx)
+    {
+        UChar* ptr = new UChar[sizeof(Register) + father_regs.m_size];
+        new (ptr) Register(father_regs, ctx);
+        return reinterpret_cast<Register*>(ptr);
+    }
+    void Register::del_Register(Register* ptr)
+    {
+        delete ptr;
+    }
+    ;
 
     void setfast(void* fast_ptr, UInt __nbytes) {
         class RegisterStatic final {
@@ -32,11 +277,11 @@ namespace TR {
                     m32_mask_reverse[i] = _mm256_setzero_si256();
                     memset(&M256i(m32_mask_reverse[i]).m256i_i8[i], -1ul, 32 - i);
                 }
-        }
+            }
             const inline __m256i* mask_ptr() const { return reinterpret_cast<const __m256i*>(&data_A); }
             const inline __m256i* re_mask_ptr() const { return reinterpret_cast<const __m256i*>(&data_B); }
-    };
-        static RegisterStatic table;
+        };
+        static const RegisterStatic table;
 
         if ((__nbytes) <= 8) {
             if ((__nbytes) == 8) {
@@ -96,17 +341,231 @@ namespace TR {
                 )
             );
         }
-};
+    }
 
+
+    sv::tval Register::Iex_Get(UInt offset, IRType ty)
+    {
+        switch (ty) {
+#define lazydef(vectype,nbit)                                \
+    case Ity_##vectype##nbit:                                \
+        return     get<Ity_##vectype##nbit>(offset);
+            lazydef(I, 8);
+            lazydef(I, 16);
+            lazydef(F, 32);
+            lazydef(I, 32);
+            lazydef(F, 64);
+            lazydef(I, 64);
+            lazydef(V, 128);
+            lazydef(I, 128);
+            lazydef(V, 256);
+#undef lazydef
+        default:
+            vex_printf("ty = 0x%x\n", (UInt)ty); vpanic("tIRType");
+        }
+        return sv::tval();
+    }
+
+    sv::tval Register::Iex_Get(UInt offset, IRType ty, z3::vcontext& ctx)
+    {
+        switch (ty) {
+#define lazydef(vectype,nbit)                                   \
+    case Ity_##vectype##nbit:                                   \
+        return     get<Ity_##vectype##nbit>(offset, ctx);
+            lazydef(I, 8);
+            lazydef(I, 16);
+            lazydef(F, 32);
+            lazydef(I, 32);
+            lazydef(F, 64);
+            lazydef(I, 64);
+            lazydef(V, 128);
+            lazydef(I, 128);
+            lazydef(V, 256);
+#undef lazydef
+        default: vex_printf("ty = 0x%x\n", (UInt)ty); vpanic("tIRType");
+        }
+    }
+
+#define m_fastindex m_symbolic->ast_idx_list()
+#define m_ast m_symbolic->ast_select()
+
+    void Register::Ist_Put(UInt offset, sv::tval const& ir)
+    {
+        if (ir.symb()) {
+            switch (ir.nbits()) {
+            case 8: set(offset, ir.tos<true, 8, Z3_BV_SORT>()); break;
+            case 16:set(offset, ir.tos<true, 16, Z3_BV_SORT>()); break;
+            case 32:set(offset, ir.tos<true, 32, Z3_BV_SORT>()); break;
+            case 64:set(offset, ir.tos<true, 64, Z3_BV_SORT>()); break;
+            case 128:set(offset, ir.tos<true, 128, Z3_BV_SORT>()); break;
+            case 256:set(offset, ir.tos<true, 256, Z3_BV_SORT>()); break;
+            default:
+                VPANIC("error");
+            }
+        }
+        else {
+            switch (ir.nbits()) {
+            case 8: set(offset, (UChar)ir); break;
+            case 16:set(offset, (UShort)ir); break;
+            case 32:set(offset, (UInt)ir); break;
+            case 64:set(offset, (ULong)ir); break;
+            case 128:set(offset, (__m128i)ir); break;
+            case 256:set(offset, (__m256i)ir); break;
+            default:
+                VPANIC("error");
+            }
+        }
+    }
+
+    void Register::Ist_Put(UInt offset, const void* data, UInt nbytes)
+    {
+        vassert(offset + nbytes <= m_size);
+        if (m_is_symbolic) {
+            clear(offset, nbytes);
+            memset(m_fastindex + offset, 0, nbytes);
+        };
+        memcpy(m_bytes + offset, data, nbytes);
+    }
+
+    void Register::Ist_Put(UInt offset, Z3_ast _ast, UInt nbytes)
+    {
+        mk_Symbolic();
+        clear(offset, nbytes);
+        auto fastindex = m_fastindex + offset;
+        for (unsigned i = 0; i < nbytes; i++) { fastindex[i] = i + 1; };
+        m_ast[offset] = _ast;
+        Z3_inc_ref(m_ctx, _ast);
+    }
+
+    sv::tval Register::Iex_Get(UInt offset, UInt nbytes)
+    {
+        vassert(nbytes <= 32);
+        if (this->m_is_symbolic) {
+            auto fastindex = m_fastindex + offset;
+            auto _nbytes = nbytes;
+            while (_nbytes) {
+                if (_nbytes >= 8) { _nbytes -= 8; if (GET8(fastindex + _nbytes)) { goto has_sym; }; }
+                else if (_nbytes >= 4) { _nbytes -= 4; if (GET4(fastindex + _nbytes)) { goto has_sym; }; }
+                else if (_nbytes >= 2) { _nbytes -= 2; if (GET2(fastindex + _nbytes)) { goto has_sym; }; }
+                else { _nbytes--; if (GET1(fastindex + _nbytes)) { goto has_sym; }; }
+            };
+        }
+        return sv::tval(m_ctx, GET32(m_bytes + offset), nbytes << 3);
+    has_sym:
+        return sv::tval(m_ctx, TR::freg2AstSSE(nbytes, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx), Z3_BV_SORT, nbytes << 3, no_inc{});
+    }
+
+    void Register::clear(UInt org_offset, Int LEN) {
+        Char length = LEN;
+        char fastR = m_fastindex[org_offset + length] - 1;
+        if (fastR > 0) {
+            auto index = org_offset + length - fastR;
+            auto sort_size = Z3_get_bv_sort_size(m_ctx, Z3_get_sort(m_ctx, m_ast[index]));
+
+            auto AstR = Z3_mk_extract(m_ctx, sort_size - 1, (fastR << 3), m_ast[index]);
+            Z3_inc_ref(m_ctx, AstR);
+            m_ast[org_offset + length] = AstR;
+            setfast(m_fastindex + org_offset + length, (sort_size >> 3) - fastR);
+            if (fastR > length) {
+                auto AstL = Z3_mk_extract(m_ctx, ((fastR - length) << 3) - 1, 0, m_ast[index]);
+                Z3_inc_ref(m_ctx, AstL);
+                Z3_dec_ref(m_ctx, m_ast[index]);
+                m_ast[index] = AstL;
+                return;
+            }
+            else if (fastR == length) {
+                Z3_dec_ref(m_ctx, m_ast[index]);
+                return;
+            }
+            length -= fastR;
+            Z3_dec_ref(m_ctx, m_ast[index]);
+        }
+        char fastL = m_fastindex[org_offset] - 1;
+        if (fastL > 0) {
+            auto index = org_offset - fastL;
+            auto sort_size = Z3_get_bv_sort_size(m_ctx, Z3_get_sort(m_ctx, m_ast[index])) >> 3;
+            auto newAst = Z3_mk_extract(m_ctx, ((fastL) << 3) - 1, 0, m_ast[index]);
+            Z3_inc_ref(m_ctx, newAst);
+            Z3_dec_ref(m_ctx, m_ast[index]);
+            m_ast[index] = newAst;
+            org_offset += (sort_size - fastL);
+            length -= (sort_size - fastL);
+        }
+        Int index;
+        if (LEN <= 8) {
+            ULong fast_index = GET8(m_fastindex + org_offset);
+            while (length > 0) {
+                if (clzll(index, fast_index & fastMaskB(length))) {
+                    index = 63 - index;
+                    index >>= 3;
+                    auto fast = m_fastindex[org_offset + index] - 1;
+                    length = index - fast;
+                    Z3_dec_ref(m_ctx, m_ast[org_offset + length]);
+                }
+                else {
+                    return;
+                }
+            }
+        }
+        else {
+            // It's fast for CPU to reads data from aligned addresses .
+            UInt _pcur = org_offset + length - 1;
+            if (_pcur < org_offset)
+                return;
+            for (; ; ) {
+
+                if (clzll(index, ((ULong*)(m_fastindex))[_pcur >> 3] & fastMaskBI1(_pcur % 8))) {
+                    index = 63 - index;
+                    _pcur = ALIGN(_pcur, 8) + (index >> 3);
+                    _pcur = _pcur - m_fastindex[_pcur] + 1;
+                    if (_pcur >= org_offset)
+                        Z3_dec_ref(m_ctx, m_ast[_pcur]);
+                    else
+                        return;
+                    _pcur--;
+                }
+                else {
+                    _pcur = ALIGN(_pcur - 8, 8) + 7;
+                    if (_pcur < org_offset)
+                        return;
+                }
+            }
+        }
+    };
+
+    sv::tval Register::Iex_Get(UInt offset, UInt nbytes, z3::vcontext& ctx){
+        vassert(nbytes <= 32);
+        if (this->m_is_symbolic) {
+            auto fastindex = m_fastindex + offset;
+            auto _nbytes = nbytes;
+            while (_nbytes) {
+                if (_nbytes >= 8) { _nbytes -= 8; if (GET8(fastindex + _nbytes)) { goto has_sym; }; }
+                else if (_nbytes >= 4) { _nbytes -= 4; if (GET4(fastindex + _nbytes)) { goto has_sym; }; }
+                else if (_nbytes >= 2) { _nbytes -= 2; if (GET2(fastindex + _nbytes)) { goto has_sym; }; }
+                else { _nbytes--; if (GET1(fastindex + _nbytes)) { goto has_sym; }; };
+            }
+        }
+        return sv::tval(ctx, GET32(m_bytes + offset), nbytes << 3);
+    has_sym:
+        return sv::tval(ctx, TR::freg2AstSSE_cov(nbytes, m_bytes + offset, m_fastindex + offset, m_ast + offset, m_ctx, ctx), Z3_BV_SORT, nbytes << 3, no_inc{});
+    }
+
+};
+#undef m_fastindex
+#undef m_ast
+
+
+namespace TR {
+    
 
     //取值函数。将多个ast和真值组合为一个ast
 #ifdef USE_HASH_AST_MANAGER
-    Z3_ast freg2Ast(int nbytes, UChar* m_bytes, UChar* m_fastindex, TR::AstManager::AstManagerX& m_ast, z3::vcontext& ctx) {
+    Z3_ast freg2Ast(int nbytes, UChar* r_bytes, UChar* ast_fastindex, TR::AstManager::AstManagerX&& m_ast, z3::vcontext& ctx) {
 #else
-    Z3_ast TR::freg2Ast(int nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_ast, z3::vcontext & ctx) {
+    Z3_ast TR::freg2Ast(int nbytes, UChar * r_bytes, UChar * ast_fastindex, Z3_ast * m_ast, z3::vcontext & ctx) {
 #endif
         vassert(nbytes <= 8);
-        ULong scan = GET8(m_fastindex);
+        ULong scan = GET8(ast_fastindex);
         Z3_ast result;
         Int index;
         Z3_ast reast;
@@ -114,12 +573,12 @@ namespace TR {
             index = 63 - index;
             auto offset = (index >> 3);
             Char relen = nbytes - offset - 1;
-            auto fast = m_fastindex[offset];
+            auto fast = ast_fastindex[offset];
             if (relen) {
                 nbytes -= relen;
                 auto zsort = Z3_mk_bv_sort(ctx, relen << 3);
                 Z3_inc_ref(ctx, reinterpret_cast<Z3_ast>(zsort));
-                reast = Z3_mk_unsigned_int64(ctx, GET8(m_bytes + nbytes), zsort);
+                reast = Z3_mk_unsigned_int64(ctx, GET8(r_bytes + nbytes), zsort);
                 Z3_inc_ref(ctx, reast);
                 if (fast > nbytes) {
                     Z3_ast need_extract = Z3_mk_extract(ctx, (fast << 3) - 1, (fast - nbytes) << 3, m_ast[nbytes - fast]);
@@ -143,7 +602,7 @@ namespace TR {
                     Z3_inc_ref(ctx, result);
                     return result;
                 }
-                if (m_fastindex[nbytes] >> 1) {
+                if (ast_fastindex[nbytes] >> 1) {
                     result = Z3_mk_extract(ctx, (fast << 3) - 1, 0, m_ast[nbytes - fast]);
                     nbytes -= fast;
                 }
@@ -163,7 +622,7 @@ namespace TR {
         else {
             auto zsort = Z3_mk_bv_sort(ctx, nbytes << 3);
             Z3_inc_ref(ctx, reinterpret_cast<Z3_ast>(zsort));
-            reast = Z3_mk_unsigned_int64(ctx, GET8(m_bytes), zsort);
+            reast = Z3_mk_unsigned_int64(ctx, GET8(r_bytes), zsort);
             Z3_inc_ref(ctx, reast);
             Z3_dec_ref(ctx, reinterpret_cast<Z3_ast>(zsort));
             return reast;
@@ -173,12 +632,12 @@ namespace TR {
                 index = 63 - index;
                 auto offset = index >> 3;
                 Char relen = nbytes - offset - 1;
-                auto fast = m_fastindex[offset];
+                auto fast = ast_fastindex[offset];
                 if (relen) {
                     nbytes -= relen;
                     auto zsort = Z3_mk_bv_sort(ctx, relen << 3);
                     Z3_inc_ref(ctx, reinterpret_cast<Z3_ast>(zsort));
-                    reast = Z3_mk_unsigned_int64(ctx, GET8(m_bytes + nbytes), zsort);
+                    reast = Z3_mk_unsigned_int64(ctx, GET8(r_bytes + nbytes), zsort);
                     Z3_inc_ref(ctx, reast);
                     Z3_dec_ref(ctx, reinterpret_cast<Z3_ast>(zsort));
                     Z3_ast newresult = Z3_mk_concat(ctx, result, reast);
@@ -224,7 +683,7 @@ namespace TR {
             else {
                 auto zsort = Z3_mk_bv_sort(ctx, nbytes << 3);
                 Z3_inc_ref(ctx, reinterpret_cast<Z3_ast>(zsort));
-                reast = Z3_mk_unsigned_int64(ctx, GET8(m_bytes), zsort);
+                reast = Z3_mk_unsigned_int64(ctx, GET8(r_bytes), zsort);
                 Z3_inc_ref(ctx, reast);
                 Z3_dec_ref(ctx, reinterpret_cast<Z3_ast>(zsort));
                 Z3_ast newresult = Z3_mk_concat(ctx, result, reast);
@@ -238,74 +697,13 @@ namespace TR {
     }
 
 
-    class Translate {
-        z3::vcontext& m_toctx;
-        Z3_ast m_ast;
-    public:
-        inline Translate(z3::vcontext& ctx, z3::vcontext& toctx, Z3_ast s) :
-            m_toctx(toctx)
-        {
-#if !defined(CLOSECNW)&&!defined(USECNWNOAST)
-            spin_unique_lock lock(ctx);
-#endif
-            m_ast = Z3_translate(ctx, s, toctx);
-            Z3_inc_ref(toctx, m_ast);
-        }
-
-        inline operator Z3_ast() {
-            return m_ast;
-        }
-
-        inline ~Translate() {
-            Z3_dec_ref(m_toctx, m_ast);
-        }
-
-    };
-
-    template<int maxlength>
-    TR::Symbolic<maxlength>::Symbolic(z3::vcontext & ctx, TR::Symbolic<maxlength>*father)
-        : m_ctx(ctx)
-    {
-        memcpy(m_fastindex, father->m_fastindex, maxlength);
-        memset(m_fastindex + maxlength, 0, 32);
-#ifndef USE_HASH_AST_MANAGER
-        Int _pcur = maxlength - 1;
-        Int N;
-        for (; _pcur > 0; ) {
-            if (clzll(N, ((ULong*)(m_fastindex))[_pcur >> 3] & fastMaskBI1[_pcur % 8]);) {
-                N = 63 - N;
-                _pcur = ALIGN(_pcur, 8) + (N >> 3);
-                _pcur = _pcur - m_fastindex[_pcur] + 1;
-                m_ast[_pcur] = Translate(father->m_ctx, m_ctx, father->m_ast[_pcur]);
-                vassert(m_ast[_pcur] != NULL);
-                Z3_inc_ref(m_ctx, m_ast[_pcur]);
-                _pcur--;
-            }
-            else {
-                _pcur = ALIGN(_pcur - 8, 8) + 7;
-            }
-        };
-#else
-        HASH_MAP<Int, Z3_ast>& fast = father->m_ast.m_mem;
-        auto it_end = fast.end();
-        for (auto it = fast.begin(); it != it_end; it++) {
-            if (m_fastindex[it->first] == 1) {
-                Z3_ast translate_ast = Translate(father->m_ctx, m_ctx, it->second);
-                m_ast[it->first] = translate_ast;
-                vassert(translate_ast != NULL);
-                Z3_inc_ref(m_ctx, translate_ast);
-            }
-        }
-#endif
-    };
-
 #ifdef USE_HASH_AST_MANAGER
-    Z3_ast TR::freg2Ast_cov(int nbytes, UChar * m_bytes, UChar * m_fastindex, TR::AstManager::AstManagerX & m_ast, z3::vcontext & ctx, z3::vcontext & toctx) {
+    Z3_ast TR::freg2Ast_cov(int nbytes, UChar * r_bytes, UChar * ast_fastindex, TR::AstManager::AstManagerX && m_ast, z3::vcontext & ctx, z3::vcontext & toctx) {
 #else
-    Z3_ast TR::freg2Ast_cov(int nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_ast, z3::vcontext & ctx, z3::vcontext & toctx) {
+    Z3_ast TR::freg2Ast_cov(int nbytes, UChar * r_bytes, UChar * ast_fastindex, Z3_ast * m_ast, z3::vcontext & ctx, z3::vcontext & toctx) {
 #endif
         vassert(nbytes <= 8);
-        ULong scan = GET8(m_fastindex);
+        ULong scan = GET8(ast_fastindex);
         Z3_ast result;
         Int index;
         Z3_ast reast;
@@ -313,12 +711,12 @@ namespace TR {
             index = 63 - index;
             auto offset = (index >> 3);
             Char relen = nbytes - offset - 1;
-            auto fast = m_fastindex[offset];
+            auto fast = ast_fastindex[offset];
             if (relen) {
                 nbytes -= relen;
                 auto zsort = Z3_mk_bv_sort(toctx, relen << 3);
                 Z3_inc_ref(toctx, reinterpret_cast<Z3_ast>(zsort));
-                reast = Z3_mk_unsigned_int64(toctx, GET8(m_bytes + nbytes), zsort);
+                reast = Z3_mk_unsigned_int64(toctx, GET8(r_bytes + nbytes), zsort);
                 Z3_inc_ref(toctx, reast);
                 if (fast > nbytes) {
                     Z3_ast need_extract = Z3_mk_extract(toctx, (fast << 3) - 1, (fast - nbytes) << 3, Translate(ctx, toctx, m_ast[nbytes - fast]));
@@ -342,7 +740,7 @@ namespace TR {
                     Z3_inc_ref(toctx, result);
                     return result;
                 }
-                if (m_fastindex[nbytes] >> 1) {
+                if (ast_fastindex[nbytes] >> 1) {
                     result = Z3_mk_extract(toctx, (fast << 3) - 1, 0, Translate(ctx, toctx, m_ast[nbytes - fast]));
                     nbytes -= fast;
                 }
@@ -366,7 +764,7 @@ namespace TR {
         else {
             auto zsort = Z3_mk_bv_sort(toctx, nbytes << 3);
             Z3_inc_ref(toctx, reinterpret_cast<Z3_ast>(zsort));
-            reast = Z3_mk_unsigned_int64(toctx, GET8(m_bytes), zsort);
+            reast = Z3_mk_unsigned_int64(toctx, GET8(r_bytes), zsort);
             Z3_inc_ref(toctx, reast);
             Z3_dec_ref(toctx, reinterpret_cast<Z3_ast>(zsort));
             return reast;
@@ -376,12 +774,12 @@ namespace TR {
                 index = 63 - index;
                 auto offset = index >> 3;
                 Char relen = nbytes - offset - 1;
-                auto fast = m_fastindex[offset];
+                auto fast = ast_fastindex[offset];
                 if (relen) {
                     nbytes -= relen;
                     auto zsort = Z3_mk_bv_sort(toctx, relen << 3);
                     Z3_inc_ref(toctx, reinterpret_cast<Z3_ast>(zsort));
-                    reast = Z3_mk_unsigned_int64(toctx, GET8(m_bytes + nbytes), zsort);
+                    reast = Z3_mk_unsigned_int64(toctx, GET8(r_bytes + nbytes), zsort);
                     Z3_inc_ref(toctx, reast);
                     Z3_dec_ref(toctx, reinterpret_cast<Z3_ast>(zsort));
                     Z3_ast newresult = Z3_mk_concat(toctx, result, reast);
@@ -427,7 +825,7 @@ namespace TR {
             else {
                 auto zsort = Z3_mk_bv_sort(toctx, nbytes << 3);
                 Z3_inc_ref(toctx, reinterpret_cast<Z3_ast>(zsort));
-                reast = Z3_mk_unsigned_int64(toctx, GET8(m_bytes), zsort);
+                reast = Z3_mk_unsigned_int64(toctx, GET8(r_bytes), zsort);
                 Z3_inc_ref(toctx, reast);
                 Z3_dec_ref(toctx, reinterpret_cast<Z3_ast>(zsort));
                 Z3_ast newresult = Z3_mk_concat(toctx, result, reast);
@@ -447,22 +845,22 @@ namespace TR {
 
     //取值函数。将多个ast和真值组合为一个ast
 #ifdef USE_HASH_AST_MANAGER
-    Z3_ast TR::freg2AstSSE(int nbytes, UChar * m_bytes, UChar * m_fastindex, AstManager::AstManagerX & m_ast, z3::vcontext & ctx) {
+    Z3_ast TR::freg2AstSSE(int nbytes, UChar * r_bytes, UChar * ast_fastindex, AstManager::AstManagerX && m_ast, z3::vcontext & ctx) {
 #else
-    Z3_ast TR::freg2AstSSE(int nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_ast, z3::vcontext & ctx) {
+    Z3_ast TR::freg2AstSSE(int nbytes, UChar * r_bytes, UChar * ast_fastindex, Z3_ast * m_ast, z3::vcontext & ctx) {
 #endif
         vassert(nbytes <= 32);
-        UInt scan = ~_mm256_movemask_epi8(_mm256_cmpeq_epi8(_mm256_setzero_si256(), _mm256_loadu_si256((__m256i*)m_fastindex)));
+        UInt scan = ~_mm256_movemask_epi8(_mm256_cmpeq_epi8(_mm256_setzero_si256(), _mm256_loadu_si256((__m256i*)ast_fastindex)));
         Z3_ast result;
         Int index;
         Z3_ast reast;
         if (clzll(index, scan & fastMask(nbytes))) {
             index = 63 - index;
             Char relen = nbytes - index - 1;
-            auto fast = m_fastindex[index];
+            auto fast = ast_fastindex[index];
             if (relen) {
                 nbytes -= relen;
-                reast = mk_large_int(ctx, m_bytes + nbytes, relen << 3);
+                reast = mk_large_int(ctx, r_bytes + nbytes, relen << 3);
                 if (fast > nbytes) {
                     Z3_ast need_extract = Z3_mk_extract(ctx, (fast << 3) - 1, (fast - nbytes) << 3, m_ast[nbytes - fast]);
                     Z3_inc_ref(ctx, need_extract);
@@ -484,7 +882,7 @@ namespace TR {
                     Z3_inc_ref(ctx, result);
                     return result;
                 }
-                if (m_fastindex[nbytes] >> 1) {
+                if (ast_fastindex[nbytes] >> 1) {
                     result = Z3_mk_extract(ctx, (fast << 3) - 1, 0, m_ast[nbytes - fast]);
                     nbytes -= fast;
                 }
@@ -502,16 +900,16 @@ namespace TR {
             }
         }
         else {
-            return mk_large_int(ctx, m_bytes, nbytes << 3);
+            return mk_large_int(ctx, r_bytes, nbytes << 3);
         }
         while (nbytes > 0) {
             if (clzll(index, scan & fastMask(nbytes))) {
                 index = 63 - index;
                 Char relen = nbytes - index - 1;
-                auto fast = m_fastindex[index];
+                auto fast = ast_fastindex[index];
                 if (relen) {
                     nbytes -= relen;
-                    reast = mk_large_int(ctx, m_bytes + nbytes, relen << 3);
+                    reast = mk_large_int(ctx, r_bytes + nbytes, relen << 3);
                     Z3_ast newresult = Z3_mk_concat(ctx, result, reast);
                     Z3_inc_ref(ctx, newresult);
                     Z3_dec_ref(ctx, result);
@@ -553,7 +951,7 @@ namespace TR {
 
             }
             else {
-                reast = mk_large_int(ctx, m_bytes, nbytes << 3);
+                reast = mk_large_int(ctx, r_bytes, nbytes << 3);
                 Z3_ast newresult = Z3_mk_concat(ctx, result, reast);
                 Z3_inc_ref(ctx, newresult);
                 Z3_dec_ref(ctx, reast);
@@ -565,12 +963,12 @@ namespace TR {
     }
 
 #ifdef USE_HASH_AST_MANAGER
-    Z3_ast TR::freg2AstSSE_cov(int nbytes, UChar * m_bytes, UChar * m_fastindex, AstManager::AstManagerX & m_ast, z3::vcontext & ctx, z3::vcontext & toctx) {
+    Z3_ast TR::freg2AstSSE_cov(int nbytes, UChar * r_bytes, UChar * ast_fastindex, AstManager::AstManagerX && m_ast, z3::vcontext & ctx, z3::vcontext & toctx) {
 #else
-    Z3_ast TR::freg2AstSSE_cov(int nbytes, UChar * m_bytes, UChar * m_fastindex, Z3_ast * m_ast, z3::vcontext & ctx, z3::vcontext & toctx) {
+    Z3_ast TR::freg2AstSSE_cov(int nbytes, UChar * r_bytes, UChar * ast_fastindex, Z3_ast * m_ast, z3::vcontext & ctx, z3::vcontext & toctx) {
 #endif
         vassert(nbytes <= 32);
-        UInt scan = ~_mm256_movemask_epi8(_mm256_cmpeq_epi8(_mm256_setzero_si256(), _mm256_loadu_si256((__m256i*)m_fastindex)));
+        UInt scan = ~_mm256_movemask_epi8(_mm256_cmpeq_epi8(_mm256_setzero_si256(), _mm256_loadu_si256((__m256i*)ast_fastindex)));
         Z3_ast result;
         Int index;
         Z3_ast reast;
@@ -578,10 +976,10 @@ namespace TR {
         if (clzll(index, scan & fastMask(nbytes))) {
             index = 63 - index;
             Char relen = nbytes - index - 1;
-            auto fast = m_fastindex[index];
+            auto fast = ast_fastindex[index];
             if (relen) {
                 nbytes -= relen;
-                reast = mk_large_int(toctx, m_bytes + nbytes, relen << 3);
+                reast = mk_large_int(toctx, r_bytes + nbytes, relen << 3);
                 if (fast > nbytes) {
                     Z3_ast need_extract = Z3_mk_extract(toctx, (fast << 3) - 1, (fast - nbytes) << 3, Translate(ctx, toctx, m_ast[nbytes - fast]));
                     Z3_inc_ref(toctx, need_extract);
@@ -603,7 +1001,7 @@ namespace TR {
                     Z3_inc_ref(toctx, result);
                     return result;
                 }
-                if (m_fastindex[nbytes] >> 1) {
+                if (ast_fastindex[nbytes] >> 1) {
                     result = Z3_mk_extract(toctx, (fast << 3) - 1, 0, Translate(ctx, toctx, m_ast[nbytes - fast]));
                     nbytes -= fast;
                 }
@@ -625,16 +1023,16 @@ namespace TR {
             }
         }
         else {
-            return mk_large_int(toctx, m_bytes, nbytes << 3);
+            return mk_large_int(toctx, r_bytes, nbytes << 3);
         }
         while (nbytes > 0) {
             if (clzll(index, scan & fastMask(nbytes))) {
                 index = 63 - index;
                 Char relen = nbytes - index - 1;
-                auto fast = m_fastindex[index];
+                auto fast = ast_fastindex[index];
                 if (relen) {
                     nbytes -= relen;
-                    reast = mk_large_int(toctx, m_bytes + nbytes, relen << 3);
+                    reast = mk_large_int(toctx, r_bytes + nbytes, relen << 3);
                     Z3_ast newresult = Z3_mk_concat(toctx, result, reast);
                     Z3_inc_ref(toctx, newresult);
                     Z3_dec_ref(toctx, result);
@@ -676,7 +1074,7 @@ namespace TR {
 
             }
             else {
-                reast = mk_large_int(toctx, m_bytes, nbytes << 3);
+                reast = mk_large_int(toctx, r_bytes, nbytes << 3);
                 Z3_ast newresult = Z3_mk_concat(toctx, result, reast);
                 Z3_inc_ref(toctx, newresult);
                 Z3_dec_ref(toctx, reast);
@@ -687,7 +1085,4 @@ namespace TR {
         return result;
     }
 
-};
-
-template TR::Symbolic<REGISTER_LEN>::Symbolic(z3::vcontext&, TR::Symbolic<REGISTER_LEN>*);
-template TR::Symbolic<0x1000>::Symbolic(z3::vcontext&, TR::Symbolic<0x1000>*);
+    };

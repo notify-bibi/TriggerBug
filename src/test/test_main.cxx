@@ -622,6 +622,7 @@ bool test_creakme();
 
 
 
+
 int main() {
 
 
@@ -632,11 +633,11 @@ int main() {
     IR_TEST(test_basic_var_real);
     IR_TEST(test_basic_var_sym);
 
+    IR_TEST(test_creakme);
     //testz3();
     IR_TEST(test_mem);
-    //IR_TEST(test_code_no_linear);
+    IR_TEST(test_code_no_linear);
     IR_TEST(test_ir_dirty_rflags);
-    IR_TEST(test_creakme);
 }
 
 //int main() {

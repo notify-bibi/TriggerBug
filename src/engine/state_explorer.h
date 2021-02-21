@@ -157,7 +157,6 @@ namespace TR {
         // ------------- dirty end -------------
 
         sv::tval ILGop(const IRLoadG* lg);
-        Addr64 tGSPTR();
         void do_Ijk_Ret();
         template<int ea_nbits>
         void do_Ijk_Call(const IRExpr* irsb_next);
@@ -171,18 +170,17 @@ namespace TR {
         Vex_Kind emu_irsb(std::deque<BTSType>& tmp_branch, HWord& guest_start, State_Tag& status, const IRSB* irsb);
 
 
-        bool vex_main_loop(HWord& guest_start);
+        bool vex_main_loop(IRSB*& irsb, HWord& guest_start, Addr avoid);
         void start(); // guest emu
         void start(HWord ep); // guest emu
-        void start(HWord& guest_start, EmuEnvironment*); // guest or host emu
+        void start(HWord& guest_start, EmuEnvironment*, Addr avoid); // guest or host emu
     private:
-        void v_start(HWord& guest_start); // emu
+        void v_start(HWord& guest_start, Addr avoid); // emu
 
         void set_dirty_mode() { m_is_dirty_mode = true; }
         void clean_dirty_mode() { m_is_dirty_mode = false; }
         bool is_dirty_mode() { return m_is_dirty_mode; }
     public:
-
         void dirty_call_run(IRTemp tmp, IRType tmpType, const IRDirty* dirty);
 
         void branchGo();
@@ -195,9 +193,7 @@ namespace TR {
         void compress(cmpr::CmprsContext<StateBase, State_Tag>& ctx);
 
         inline EmuEnvironment& irvex() { return *m_irvex; }
-        void set_irvex(EmuEnvironment* e) { m_irvex = e; if (e) e->set_guest_bb_insn_control_obj(); }
-
-
+        void set_irvex(EmuEnvironment* e);
 
 
         inline InvocationStack<HWord>& get_InvokStack() { return m_InvokStack; }

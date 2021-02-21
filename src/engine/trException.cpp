@@ -80,7 +80,7 @@ Expt::SolverNoSolution::SolverNoSolution(char const* msg, z3::solver& solver) :E
  std::string Expt::GuestMemWriteErr::msg() const {
     assert(m_errorId == GuestMem_write_err);
     char buffer[50];
-    snprintf(buffer, 50, "Gest : mem write addr(%llu) :::  ", m_gaddr);
+    snprintf(buffer, 50, "Gest : mem write addr(%llx) :::  ", m_gaddr);
     std::string ret;
     return ret.assign(buffer) + m_msg;
 }
@@ -88,7 +88,7 @@ Expt::SolverNoSolution::SolverNoSolution(char const* msg, z3::solver& solver) :E
  std::string Expt::GuestMemReadErr::msg() const {
     assert(m_errorId == GuestMem_read_err);
     char buffer[50];
-    snprintf(buffer, 50, "Gest : mem read addr(%llu) :::  ", m_gaddr);
+    snprintf(buffer, 50, "Gest : mem read addr(%llx) :::  ", m_gaddr);
     std::string ret;
     return ret.assign(buffer) + m_msg;
 }

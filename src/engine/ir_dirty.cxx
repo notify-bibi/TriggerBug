@@ -17,6 +17,16 @@
 #include "engine/state_explorer.h"
 #include "engine/z3_target_call/z3_target_call.h"
 #include "pub/gen_global_var_call.hpp"
+#include "engine/irsb_cache.h"
+
+static constexpr VexArch host_arch = VexArchAMD64;
+static constexpr Addr64 vex_code_addr_mask = (ULong)0xff << 56;
+static constexpr Addr64 vex_code_ret_addr = vex_code_addr_mask | 0xfa1ec3;
+
+static constexpr Addr64 vex_GS_ptr_map_addr = ((ULong)0x94FF << 32);
+static constexpr Addr64 stack_map_addr = ((ULong)0xffff << 32);
+
+static constexpr Addr64 vex_host_reg_base = REGISTER_LEN / 2;
 
 #ifdef _DEBUG
 //#define OUTPUT_STMTS
@@ -39,9 +49,13 @@ namespace TR {
         static constexpr ULong traceflags = 0;
         static thread_local IR_Manager static_dirty_ir_temp;
         IR_Manager& m_ir_temp;
-    public:
-        EmuEnvHost(z3::vcontext& ctx) : EmuEnvironment(host, traceflags), m_ir_temp(static_dirty_ir_temp) { }
+        IRSBCache* m_host_irsb_cache;
 
+    public:
+        EmuEnvHost(z3::vcontext& ctx) : EmuEnvironment(host, traceflags), m_ir_temp(static_dirty_ir_temp) {
+            m_host_irsb_cache = host_get_IRSBCache();
+        }
+        ~EmuEnvHost();
 
         void set_guest_bb_insn_control_obj() override;
         //new ir temp
@@ -56,6 +70,11 @@ namespace TR {
     thread_local IR_Manager EmuEnvHost::static_dirty_ir_temp;
 
     // ------------------------EmuEnvHost--------------------------
+
+    EmuEnvHost::~EmuEnvHost()
+    {
+        host_clean_IRSBCache(m_host_irsb_cache);
+    }
 
     void EmuEnvHost::set_guest_bb_insn_control_obj()
     {
@@ -82,31 +101,36 @@ namespace TR {
                 continue;
 
             /* Deal with Gets -> load */
+            /*if (st->tag == Ist_IMark) {
+                st->Ist.IMark.addr |= vex_code_addr_mask;
+            }*/
+
+            /*if (st->tag == Ist_WrTmp && st->Ist.WrTmp.data->tag == Iex_Load) {
+                IRExpr* load = st->Ist.WrTmp.data;
+                if (load->Iex.Load.addr->tag == Iex_Const) {
+                    load->Iex.Load.addr->Iex.Const.con->Ico.U64 |= vex_code_addr_mask;
+                }
+            }*/
+
+            /* Deal with Gets -> load */
             if (st->tag == Ist_WrTmp && st->Ist.WrTmp.data->tag == Iex_Get) {
                 IRExpr* get = st->Ist.WrTmp.data;
-                get->Iex.Get.offset += 0x400;
+                get->Iex.Get.offset += vex_host_reg_base;
             }
 
             if (st->tag == Ist_WrTmp && st->Ist.WrTmp.data->tag == Iex_GetI) {
                 IRExpr* get = st->Ist.WrTmp.data;
-                get->Iex.GetI.descr->base += 0x400;
+                get->Iex.GetI.descr->base += vex_host_reg_base;
             }
 
             if (st->tag == Ist_Put) {
-                st->Ist.Put.offset += 0x400;
+                st->Ist.Put.offset += vex_host_reg_base;
             };
             
             if (st->tag == Ist_PutI) {
-                st->Ist.PutI.details->descr->base += 0x400;
+                st->Ist.PutI.details->descr->base += vex_host_reg_base;
             }
 
-
-            if (st->tag == Ist_WrTmp && st->Ist.WrTmp.data->tag == Iex_Load) {
-                IRExpr* load = st->Ist.WrTmp.data;
-                if (load->Iex.Load.addr->tag == Iex_Const) {
-                    load->Iex.Load.addr->Iex.Const.con->Ico.U64 |= 1ull << 56;
-                }
-            }
 
         } /* for (i = 0; i < bb->stmts_used; i++) */
 
@@ -119,19 +143,26 @@ namespace TR {
     {
         VexRegisterUpdates pxControl;
         VexTranslateResult res;
-        IRSB* cache_irsb = find(ea);
+
+
+        IRSB* cache_irsb = host_irsb_cache_find(m_host_irsb_cache, ea);
         if (LIKELY(cache_irsb != nullptr)) {
             return cache_irsb;
         }
+
         VexTranslateArgs* vta = get_ir_vex_translate_args();
-        set_guest_bytes_addr((const UChar*)ea, ea);
+
+        HWord host_ea = (HWord)(ea & fastMask(48));
+
+        set_guest_bytes_addr((const UChar*)host_ea, ea);
         IRSB* irsb = LibVEX_FrontEnd(vta, &res, &pxControl);
 
         irsb = dirty_code_deal_BB(irsb);
+        host_irsb_cache_push(m_host_irsb_cache, vta->guest_extents, irsb, LibVEX_IRSB_transfer());
         //irsbCache.push(irsb, LibVEX_IRSB_transfer());
         return irsb;
-
     }
+
     sv::tval& EmuEnvHost::operator[](UInt idx)
     {
         return m_ir_temp[idx];
@@ -140,39 +171,40 @@ namespace TR {
 
 
 class VexIRDirty {
-    static constexpr VexArch host_arch =  VexArchAMD64;
-    static constexpr Addr64 m_stack_addr = (0x7fll << 56);
-    static constexpr Addr64 m_guest_regs_map_addr = (0x80ull << 56) | 0x0;
-    static constexpr Addr64 vex_ret_addr = (0x1ull << 56) | 0xfa1e;
-    static constexpr Addr64 vex_host_reg_base = 0x400;
     State& m_state;
     //当前dirty func的入口点
     HWord        m_host_OEP; // 虚拟 OEP
     //host rip（计数器eip）
     HWord        m_host_ip;    // 虚拟 IP
     Addr64       m_stack_reserve_size = 0x1000;
+    PAGE_DATA    *m_gs_regs_map;
 public:
     VexIRDirty(State& s) 
         :m_state(s)
     {
+        //
         //m_stack_addr = s.mem.find_block_reverse((Addr64)0 - 0x1000, m_stack_reserve_size);
         //m_guest_regs_map_addr = s.mem.find_block_forward(0x1000, REGISTER_LEN);
-        s.mem.map(m_stack_addr, m_stack_reserve_size);
+        s.mem.map(stack_map_addr, m_stack_reserve_size);
+        m_gs_regs_map = new PAGE_DATA(m_state.mem.get_user(), m_state.ctx(), &m_state.regs);
+        s.mem.mount(vex_GS_ptr_map_addr, m_gs_regs_map);
     };
 
-    Addr64 getGSPTR() { return 0; }
+    Addr64 getGSPTR() { 
+        return vex_GS_ptr_map_addr;
+    }
 
     void   set_ip(UChar* Haddr) {
-        m_host_OEP = (HWord)Haddr;
+        m_host_OEP = (HWord)Haddr | vex_code_addr_mask;
     };
     void init_param(const IRCallee* cee, IRExpr** const exp_args) {
         set_ip((UChar*)cee->addr);
-        Addr64 stack_ret = m_stack_addr + m_stack_reserve_size - 0x8ull * MAX_GUEST_DIRTY_CALL_PARARM_NUM;
+        Addr64 stack_ret = stack_map_addr + m_stack_reserve_size - 0x8ull * MAX_GUEST_DIRTY_CALL_PARARM_NUM;
         m_state.regs.set(vex_host_reg_base + AMD64_IR_OFFSET::RAX, -1ll);
         m_state.regs.set(vex_host_reg_base + AMD64_IR_OFFSET::RSP, stack_ret);
         m_state.regs.set(vex_host_reg_base + AMD64_IR_OFFSET::RBP, 0x233ull);
         //code : call cee->addr
-        m_state.mem.store(stack_ret, vex_ret_addr);
+        m_state.mem.store(stack_ret, vex_code_ret_addr);
 
         {
             //x64 fastcall 
@@ -194,13 +226,13 @@ public:
 
     void init_param(const IRCallee* cee, const std::initializer_list<rsval<Addr64>>& exp_args) {
         set_ip((UChar*)cee->addr);
-        Addr64 stack_ret = m_stack_addr + m_stack_reserve_size - 0x8ull * MAX_GUEST_DIRTY_CALL_PARARM_NUM;
+        Addr64 stack_ret = stack_map_addr + m_stack_reserve_size - 0x8ull * MAX_GUEST_DIRTY_CALL_PARARM_NUM;
         m_state.regs.set(vex_host_reg_base + AMD64_IR_OFFSET::RAX, -1ll);
         m_state.regs.set(vex_host_reg_base + AMD64_IR_OFFSET::RSP, stack_ret);
         m_state.regs.set(vex_host_reg_base + AMD64_IR_OFFSET::RBP, 0x233ull);
 
         //code : call cee->addr
-        m_state.mem.store(stack_ret, vex_ret_addr);
+        m_state.mem.store(stack_ret, vex_code_ret_addr);
         {
             //x64 fastcall 
             const UInt assembly_args[] = { AMD64_IR_OFFSET::RCX, AMD64_IR_OFFSET::RDX, AMD64_IR_OFFSET::R8, AMD64_IR_OFFSET::R9 };
@@ -226,28 +258,33 @@ public:
             return;
         }
         vex_info saved_vinfo = m_state.vinfo();
-        m_state.vinfo() = vex_info(host_arch);
-        
+        new(&m_state.vinfo()) vex_info(host_arch);
         TRControlFlags savedTraceFlag = (TRControlFlags)m_state.getFlags();
-        //m_state.setFlags(CF_None);
+#if 1
+        m_state.setFlags(CF_None);
+#else
         m_state.setFlags(CF_traceJmp);
+        m_state.setFlags(CF_ppStmts);
+#endif
         EmuEnvironment* saved_guest_irvex = &m_state.irvex();
         m_state.set_dirty_mode();
         EmuEnvHost ir(m_state.ctx());
+        m_state.mem.set_emu_env(&ir);
         ir.set_guest_bb_insn_control_obj();
         m_host_ip = m_host_OEP;
-        m_state.start(m_host_ip , &ir);
-
+        m_state.start(m_host_ip , &ir, vex_code_ret_addr);
+        m_state.mem.set_emu_env(saved_guest_irvex);
         m_state.set_irvex(saved_guest_irvex);
-        m_state.clean_dirty_mode();
         m_state.setFlags(savedTraceFlag);
-
         m_state.vinfo() = saved_vinfo;
+        m_state.clean_dirty_mode();
         //m_state.vinfo()
     }
 
     tval result(IRType ty) { return m_state.regs.Iex_Get(vex_host_reg_base + AMD64_IR_OFFSET::RAX, ty); };
-    ~VexIRDirty() {}
+    ~VexIRDirty() {
+        // m_gs_regs_map->dec_used_ref(); dont dec
+    }
 };
 
 

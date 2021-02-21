@@ -133,87 +133,87 @@ for (UInt i1 = 0; i1 < CR3_point->used; i1++) {                                 
 #define LSTRUCT5 ST
 
 
-ULong mapping<ST>::map(ULong address, ULong length){
-            ULong max = (address + length - 1) & (~0xfff);
-            UShort PML4T_max = (max >> 39 & 0x1ff);
-            UShort PDPT_max = (max >> 30 & 0x1ff);
-            UShort PDT_max = (max >> 21 & 0x1ff);
-            UShort PT_max = (max >> 12 & 0x1ff);
-            address &= (~0xfff);
-            while (address <= max) {
-                UShort PML4T_ind = (address >> 39 & 0x1ff);
-                UShort PDPT_ind = (address >> 30 & 0x1ff);
-                UShort PDT_ind = (address >> 21 & 0x1ff);
-                UShort PT_ind = (address >> 12 & 0x1ff);
-                if (!(*CR3)->pt) {
-                    (*CR3)->pt = (PDPT**)malloc((PML4T_max + 1) * 8);
-                    memset((*CR3)->pt, 0, (PML4T_max + 1) * sizeof(void*));
-                    (*CR3)->size = PML4T_max + 1;
-                }
-                else {
-                    if ((*CR3)->size <= PML4T_max) {
-                        (*CR3)->pt = (PDPT**)realloc((*CR3)->pt, (PML4T_ind + 1) * sizeof(void*));
-                        memset((*CR3)->pt + (*CR3)->size, 0, (PML4T_ind + 1 - (*CR3)->size) * sizeof(void*));
-                        (*CR3)->size = PML4T_ind + 1;
-                    }
-                }
-
-                LCODEDEF2(LMAX1, LIND1, LTAB2, LMAX2, LIND2, LTAB1, LSTRUCT2, LSTRUCT3, (LMAX1) == (LIND1));
-                LCODEDEF2(LMAX2, LIND2, LTAB3, LMAX3, LIND3, LTAB2, LSTRUCT3, LSTRUCT4, (LMAX1) == (LIND1) && (LMAX2) == (LIND2));
-                LCODEDEF2(LMAX3, LIND3, LTAB4, LMAX4, LIND4, LTAB3, LSTRUCT4, LSTRUCT5, (LMAX1) == (LIND1) && (LMAX2) == (LIND2) && (LMAX3) == (LIND3));
-                /* debug LCODEDEF2(LMAX1, LIND1, .... )
-                PT **pt = (*pdt)->pt + PDT_ind;
-                if (!*pt) {
-                    *pt = new PT;
-                    if (!*pt) goto _returnaddr; memset(*pt, 0, sizeof(PT));
-                    if (((PML4T_max) == (PML4T_ind) && (PDPT_max) == (PDPT_ind) && (PDT_max) == (PDT_ind))) {
-                        (*(pt))->pt = (PAGE**)malloc(((PT_max)+1) * sizeof(void *)); memset((*(pt))->pt, 0, (PT_max + 1) * sizeof(void *)); (*(pt))->size = (PT_max)+1;
-                    } else {
-                        (*(pt))->pt = (PAGE**)malloc(0x200 * sizeof(void *)); memset((*(pt))->pt, 0, 0x200 * sizeof(void *)); (*(pt))->size = 0x200;
-                    }
-                    (*pdt)->used += 1;
-                    PT *orignal = (*pdt)->top;
-                    (*pdt)->top = *pt; (*pt)->prev = 0;
-                    (*pt)->next = orignal;
-                    (*pt)->index = PDT_ind;
-                    if (orignal) orignal->prev = *pt;
-                }
-                else if ((*pt)->size <= PDPT_ind) {
-                    if (PDT_max == PDT_ind) {
-                        (*pt)->pt = (PAGE**)realloc((*pt)->pt, (PDPT_ind + 1) * sizeof(void *));
-                        memset((*pt)->pt + (*pt)->size, 0, (PDPT_ind + 1 - (*pt)->size) * sizeof(void *));
-                        (*pt)->size = PDPT_ind + 1;
-                    } else {
-                        (*pt)->pt = (PAGE**)realloc((*pt)->pt, 0x200 * sizeof(void *));
-                        memset((*pt)->pt + (*pt)->size, 0, (0x200 - (*pt)->size) * sizeof(void *)); (*pt)->size = 0x200;
-                    }
-                };*/
-
-                ST** page = (*pt)->pt + PT_ind;
-                if (!*page) {
-                    *page = map_interface(address);
-                    //Over
-                    PAGE_link* page_l = new PAGE_link;
-                    if (!*page)
-                        goto _returnaddr;
-                    (*pt)->used += 1;
-                    PAGE_link* orignal = (*pt)->top;
-                    (*pt)->top = page_l;
-                    (page_l)->prev = NULL;
-                    (page_l)->next = orignal;
-                    (page_l)->index = PT_ind;
-                    if (orignal) orignal->prev = page_l;
-                }
-                else {
-                    //goto _returnaddr; 
-                }
-                address += 0x1000;
-                if (address == 0) return -1ull;
-            }
-            return 0;
-        _returnaddr:
-            return max - address + 0x1000;
+ULong mapping<ST>::map(ULong address, ULong length) {
+    ULong max = (address + length - 1) & (~0xfff);
+    UShort PML4T_max = (max >> 39 & 0x1ff);
+    UShort PDPT_max = (max >> 30 & 0x1ff);
+    UShort PDT_max = (max >> 21 & 0x1ff);
+    UShort PT_max = (max >> 12 & 0x1ff);
+    address &= (~0xfff);
+    while (address <= max) {
+        UShort PML4T_ind = (address >> 39 & 0x1ff);
+        UShort PDPT_ind = (address >> 30 & 0x1ff);
+        UShort PDT_ind = (address >> 21 & 0x1ff);
+        UShort PT_ind = (address >> 12 & 0x1ff);
+        if (!(*CR3)->pt) {
+            (*CR3)->pt = (PDPT**)malloc((PML4T_max + 1) * 8);
+            memset((*CR3)->pt, 0, (PML4T_max + 1) * sizeof(void*));
+            (*CR3)->size = PML4T_max + 1;
         }
+        else {
+            if ((*CR3)->size <= PML4T_max) {
+                (*CR3)->pt = (PDPT**)realloc((*CR3)->pt, (PML4T_ind + 1) * sizeof(void*));
+                memset((*CR3)->pt + (*CR3)->size, 0, (PML4T_ind + 1 - (*CR3)->size) * sizeof(void*));
+                (*CR3)->size = PML4T_ind + 1;
+            }
+        }
+
+        LCODEDEF2(LMAX1, LIND1, LTAB2, LMAX2, LIND2, LTAB1, LSTRUCT2, LSTRUCT3, (LMAX1) == (LIND1));
+        LCODEDEF2(LMAX2, LIND2, LTAB3, LMAX3, LIND3, LTAB2, LSTRUCT3, LSTRUCT4, (LMAX1) == (LIND1) && (LMAX2) == (LIND2));
+        LCODEDEF2(LMAX3, LIND3, LTAB4, LMAX4, LIND4, LTAB3, LSTRUCT4, LSTRUCT5, (LMAX1) == (LIND1) && (LMAX2) == (LIND2) && (LMAX3) == (LIND3));
+        /* debug LCODEDEF2(LMAX1, LIND1, .... )
+        PT **pt = (*pdt)->pt + PDT_ind;
+        if (!*pt) {
+            *pt = new PT;
+            if (!*pt) goto _returnaddr; memset(*pt, 0, sizeof(PT));
+            if (((PML4T_max) == (PML4T_ind) && (PDPT_max) == (PDPT_ind) && (PDT_max) == (PDT_ind))) {
+                (*(pt))->pt = (PAGE**)malloc(((PT_max)+1) * sizeof(void *)); memset((*(pt))->pt, 0, (PT_max + 1) * sizeof(void *)); (*(pt))->size = (PT_max)+1;
+            } else {
+                (*(pt))->pt = (PAGE**)malloc(0x200 * sizeof(void *)); memset((*(pt))->pt, 0, 0x200 * sizeof(void *)); (*(pt))->size = 0x200;
+            }
+            (*pdt)->used += 1;
+            PT *orignal = (*pdt)->top;
+            (*pdt)->top = *pt; (*pt)->prev = 0;
+            (*pt)->next = orignal;
+            (*pt)->index = PDT_ind;
+            if (orignal) orignal->prev = *pt;
+        }
+        else if ((*pt)->size <= PDPT_ind) {
+            if (PDT_max == PDT_ind) {
+                (*pt)->pt = (PAGE**)realloc((*pt)->pt, (PDPT_ind + 1) * sizeof(void *));
+                memset((*pt)->pt + (*pt)->size, 0, (PDPT_ind + 1 - (*pt)->size) * sizeof(void *));
+                (*pt)->size = PDPT_ind + 1;
+            } else {
+                (*pt)->pt = (PAGE**)realloc((*pt)->pt, 0x200 * sizeof(void *));
+                memset((*pt)->pt + (*pt)->size, 0, (0x200 - (*pt)->size) * sizeof(void *)); (*pt)->size = 0x200;
+            }
+        };*/
+
+        ST** page = (*pt)->pt + PT_ind;
+        if (!*page) {
+            *page = map_interface(address);
+            //Over
+            PAGE_link* page_l = new PAGE_link;
+            if (!*page)
+                goto _returnaddr;
+            (*pt)->used += 1;
+            PAGE_link* orignal = (*pt)->top;
+            (*pt)->top = page_l;
+            (page_l)->prev = NULL;
+            (page_l)->next = orignal;
+            (page_l)->index = PT_ind;
+            if (orignal) orignal->prev = page_l;
+        }
+        else {
+            //goto _returnaddr; 
+        }
+        address += 0x1000;
+        if (address == 0) return -1ull;
+    }
+    return 0;
+_returnaddr:
+    return max - address + 0x1000;
+};
 
 template<class ST>
 void TR::mapping<ST>::copy(PML4T* cr3)
@@ -255,6 +255,19 @@ void TR::mapping<ST>::copy(PML4T* cr3)
     lCR3->size = CR3_point->size;
 }
 
+template<class ST>
+void TR::mapping<ST>::mount(Addr ea, ST* p)
+{
+    ST** page = get_pointer_of_mem_page(ea);
+    if (!page || !*page) {
+        map(ea, 0x1000);
+        page = get_pointer_of_mem_page(ea);
+    }
+    unmap_interface(page);
+    
+    vassert(page[0] == nullptr);
+    page[0] = p;
+}
 
 template<class ST>
 ULong TR::mapping<ST>::unmap(ULong address, ULong length)

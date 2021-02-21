@@ -128,6 +128,7 @@ namespace Ke {
                 UInt BaseAddress = st.mem.load<Ity_I32>(arg1).tor();
                 UInt RegionSize = st.mem.load<Ity_I32>(arg3).tor();
                 st.mem.map(BaseAddress, RegionSize);
+                std::cout << "ntdll_NtAllocateVirtualMemory map(ea:" << std::hex << BaseAddress << ", sz:" << std::hex << RegionSize << ")" << std::endl;
 
                 regs.set(X86_IR_OFFSET::EAX, 0);
                 return TR::Running;
@@ -149,6 +150,12 @@ namespace Ke {
                 }
                 regs.set(X86_IR_OFFSET::EAX, 0);
                 return TR::Running;
+            }
+            case 0x23: { // ntdll_ZwQueryVirtualMemory 遍历进程模块
+                return TR::Death;
+            }
+            case 0x25: { // ntdll_ZwQueryInformationThread
+                return TR::Death;
             }
             case 0x43: {
                 PWOW64_CONTEXT wow64_ctx = (PWOW64_CONTEXT)(size_t)(DWORD)arg0.tor();
@@ -196,7 +203,8 @@ namespace Ke {
 
 
                 rsval<Long> count = st.vctx().get_hook_read()(st, arg5, arg6);
-                st.mem.store(arg4, count);
+                st.mem.store(arg4, 0ull);
+                st.mem.store(arg4 + 8, count);
                 regs.set(X86_IR_OFFSET::EAX, 1);
                 return TR::Running;
             }
@@ -216,7 +224,8 @@ namespace Ke {
                 */
 
                 st.vctx().get_hook_write()(st, arg5, arg6);
-                st.mem.store(arg4, arg6);
+                st.mem.store(arg4, 0);
+                st.mem.store(arg4 + 8, arg6);
                 regs.set(X86_IR_OFFSET::EAX, 0);
                 return TR::Running;
             }

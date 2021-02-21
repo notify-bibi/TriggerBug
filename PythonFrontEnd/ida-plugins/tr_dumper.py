@@ -24,6 +24,7 @@ import keystone
 arch = None
 mode = None
 GDT_MAP_ADDR = (1<<47) | 0xfff00000
+X86G_CC_OP_COPY = 0
 
 FSMSR = 0xC0000100
 GSMSR = 0xC0000101
@@ -528,7 +529,7 @@ class gdt32():
         to_ret |= (DPL & 0xb11) << 45;  # DPL 描述符特权级 0~3
         to_ret |= (1 & 0xb1) << 47;  # 1
         to_ret |= ((limit >> 16) & 0xf) << 48;  # [48:52]    limit[16:20]: 存放段最后一个内存单元的偏移量
-        to_ret |= (flags & 0xf) << 52;  # [52:56]    flag: G<<3|D<<2|0<1|AVL (各1bit )如果G=0那么段大小为0~1MB, G=1段大小为4KB~4GB  D或B 这个我还没搞懂 以后再说只要知道32位访问为1 AVL: linux忽略这个
+        to_ret |= (flags & 0xf) << 52;  # [52:56]    flag: Granularity<<3|Default_Big<<2|Reserved_0<<1|Sys (各1bit )如果G=0那么段大小为0~1MB, G=1段大小为4KB~4GB  D或B 这个我还没搞懂 以后再说只要知道32位访问为1 AVL: linux忽略这个
         to_ret |= ((base >> 24) & 0xff) << 56;  # [56:64]    base[24:32]
         return struct.pack('<Q', to_ret)
 
@@ -677,8 +678,8 @@ class AMD64_dump(Dump):
         AVX_state_st = AMD64_dump._windbg_get_regs_same(["ymm%s"%n for n in range(16)])
         # mm0-7
         MMX_registers = AMD64_dump._windbg_get_regs_same(["mm%s"%n for n in range(8)])
-        # other DF
-        other_regs = AMD64_dump._windbg_get_regs_same(["df"], fms = 'ud')
+        # other DF mxcsr
+        other_regs = AMD64_dump._windbg_get_regs_same(["df", "mxcsr"], fms = 'ud')
         
         return {"general":general_state, "fp":floating_state_fp, "st":floating_state_st, "sregs":segment_registers, "segm_desc":segment_desc, "avx":AVX_state_st, "mmx": MMX_registers, "other" : other_regs }
     
@@ -697,17 +698,7 @@ class AMD64_dump(Dump):
         
         # for rn, v in reg_vals.items():
         #    print(rn, v )
-        reg_vals.pop("iopl")
-        reg_vals.pop("efl")
         
-        def getfpround(tag):
-            return (tag >> 10) & 0b11
-
-
-        def getSseRound(name):
-            assert (name == 'sseround')
-            return (idc.get_reg_value('MXCSR') >> 13) & 0b11
-
 
         def getftop(tag):
             # fld
@@ -726,6 +717,43 @@ class AMD64_dump(Dump):
             return re
             
 
+        reg_vals.pop("iopl")
+        # reg_vals.pop("efl")
+        """
+        X86_EFLAGS_CF = 1 << 0
+        X86_EFLAGS_FIXED = 1 << 1
+        X86_EFLAGS_PF = 1 << 2
+        X86_EFLAGS_AF = 1 << 4
+        X86_EFLAGS_ZF = 1 << 6
+        X86_EFLAGS_SF = 1 << 7
+        X86_EFLAGS_TF = 1 << 8
+        X86_EFLAGS_IF = 1 << 9
+        X86_EFLAGS_DF = 1 << 10
+        X86_EFLAGS_OF = 1 << 11
+        X86_EFLAGS_IOPL = 1 << 12
+        X86_EFLAGS_IOPL_MASK = 3 << 12
+        X86_EFLAGS_NT = 1 << 14
+        X86_EFLAGS_RF = 1 << 16
+        X86_EFLAGS_VM = 1 << 17
+        X86_EFLAGS_AC = 1 << 18
+        X86_EFLAGS_VIF = 1 << 19
+        X86_EFLAGS_VIP = 1 << 20
+        X86_EFLAGS_ID = 1 << 21
+        """
+        efl = reg_vals['efl']
+        reg_vals.pop("efl")
+        
+        reg_vals["cc_op"] = X86G_CC_OP_COPY
+        reg_vals["cc_dep1"] = efl
+        reg_vals["cc_dep2"] = 0
+        reg_vals["cc_ndep"] = 0
+        
+        mxcsr = reg_vals['mxcsr']
+        reg_vals.pop("mxcsr")
+        
+        reg_vals["idflag"] = efl & (1 << 21)
+        reg_vals["acflag"] = efl & (1 << 18)
+        
         reg_vals['fptag'] = getfpu_tags(reg_vals['fptw'])
         reg_vals.pop("fptw")
         
@@ -734,15 +762,16 @@ class AMD64_dump(Dump):
         reg_vals.pop("fpsw")
         
         
-        reg_vals['fpround'] = getfpround(reg_vals['fpcw'])
+        reg_vals['fpround'] = (reg_vals['fpcw'] >> 10) & 0b11
         reg_vals.pop("fpcw")
         
-        reg_vals["sseround"] = getSseRound("sseround")
+        reg_vals["sseround"] = (mxcsr >> 13) & 0b11
         
         reg_vals["gdt"] = GDT_MAP_ADDR
         
         reg_vals["dflag"] = -1 if reg_vals["df"] else 0x1
         reg_vals.pop("df")
+        
         
         
         reg_vals['gs_const'] = AMD64_dump._windbg_get_teb64_gs_const()
@@ -761,6 +790,11 @@ class AMD64_dump(Dump):
             descs = Dump.reg_ug_str_value_convert({}, desc, lambda x:int(x, 16))
             sel, base, limit, flags = descs["sel"], descs["base"], descs["limit"], descs["flags"]
             print(".sel :{:x}  .base :0x{:x}  .limit :{:x}  .flags :{:x}".format(sel, base, limit, flags))
+            Granularity = (limit & 0xfff) == 0xfff
+            Default_Big = 0
+            Reserved_0 = 0
+            Sys = 0
+            flags = Granularity<<3|Default_Big<<2|Reserved_0<<1|Sys 
             gdt.addSegDiscription(sel, base, limit, DPL, S, TYPE, flags=flags)
         
         return gdt.get_gdt()

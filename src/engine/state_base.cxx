@@ -6,6 +6,13 @@ using namespace TR;
 
 
 
+VexGuestState* TR::StateBase::get_regs_maps()
+{
+    constexpr int sb = sizeof(regs_bytes);
+    static_assert(REGISTER_LEN == sb, "error align");
+    return reinterpret_cast<VexGuestState*>(&regs_bytes);
+}
+
 sv::tval StateBase::mk_int_const(UShort nbit) {
     auto res = m_z3_bv_const_n++;
     char buff[20];
@@ -140,7 +147,7 @@ void StateBase::read_mem_dump(const char* filename)
 
     for (unsigned int segnum = 0; segnum < length; segnum++) {
         infile.read((char*)&buf, 32);
-        char* data = (char*)malloc(buf.length);
+        char* data = (char*)malloc(buf.length+32);
         std::streampos fp = infile.tellg();
         infile.seekg(buf.dataoffset, std::ios::beg);
         infile.read(data, buf.length);
@@ -188,7 +195,7 @@ TR::StateBase::StateBase(vex_context& vctx, VexArch guest_arch)
     m_status(NewState),
     m_jump_kd(Ijk_Boring),
     solv(m_ctx),
-    regs(m_ctx),
+    regs(m_ctx, REGISTER_LEN),
     mem(solv, m_ctx, true),
     branch(*this)
 {

@@ -88,23 +88,22 @@ namespace TR {
         VexTranslateArgs    m_vta_chunk;
         VexGuestExtents     m_vge_chunk;
         Addr64 m_guest_start_of_block = 0;
+        UInt m_base_block_sz = 0;
         bool   m_is_dynamic_block = false;//Need to refresh IRSB memory?
         bool   m_is_dirty_mode = false;   // is dirty call mode
-        std::map<Addr, UInt> m_cache_map; /*block address -> size*/
 
         EmuEnvironment(VexArch arch, ULong traceflags) {
             set_vta_chunk(arch, traceflags);
         }
     public:
         void set_vta_chunk(VexArch arch, ULong traceflags);
-        IRSB* find(HWord ea);
         inline void set_dirty_mode() { m_is_dirty_mode = true; }
         inline void clean_dirty_mode() { m_is_dirty_mode = false; }
         inline VexTranslateArgs* get_ir_vex_translate_args() { return &m_vta_chunk; }
         inline VexGuestExtents* get_ir_vex_guest_extents() { return &m_vge_chunk; }
         inline bool check() { return m_is_dynamic_block; };
         //emu process write method will call back
-        void block_integrity(bool is_code, Addr address, UInt insn_block_delta);
+        virtual void block_integrity(Addr ea, UInt sz);
 
         virtual void set_guest_bb_insn_control_obj() {};
         //new ir temp
@@ -116,7 +115,6 @@ namespace TR {
         virtual sv::tval& operator[](UInt idx) {};
 
         // 模拟前调用
-        void set_start(HWord s);
         void set_guest_bytes_addr(const UChar* bytes, Addr64 virtual_addr);
         void set_host_addr(Addr64 host_virtual_addr);
 
@@ -124,14 +122,18 @@ namespace TR {
     };
 
     class EmuEnvGuest : public EmuEnvironment {
+        vex_context& m_vctx;
         vex_info& m_info;
         IR_Manager m_ir_temp;
         MBase& m_mem;
     public:
         //init vex
-        EmuEnvGuest(vex_info const& info, MBase& mem_obj);
-        
+        EmuEnvGuest(vex_context& vctx, vex_info const& info, MBase& mem_obj);
+
+        void block_integrity(Addr ea, UInt sz) override;
         void set_guest_bb_insn_control_obj() override;
+
+        //void block_integrity(Addr address, UInt insn_block_delta) override;
 
         inline bool check() { return m_is_dynamic_block; };
         //new ir temp

@@ -15,6 +15,17 @@ Revision History:
 #include "engine/memory.h"
 using namespace TR;
 
+mem_trace Mem::default_trace;
+
+void PAGE_DATA::self_delete()
+{
+    delete this;
+}
+void PAGE_PADDING::self_delete()
+{
+    delete this;
+}
+
 PAGE_DATA* PAGE_DATA::get_write_page(int user, PAGE* pt[1], z3::vcontext& ctx)
 {
     if (user == m_user) 
@@ -26,13 +37,15 @@ PAGE_DATA* PAGE_DATA::get_write_page(int user, PAGE* pt[1], z3::vcontext& ctx)
     return page;
 }
 
+
+
 PAGE_DATA* PAGE_PADDING::get_write_page(int user, PAGE* pt[1], z3::vcontext& ctx)
 {
     vassert(pt[0] == this);
     PAGE_DATA* res = new PAGE_DATA(user, ctx, get_padding_value());
     if (user == m_user) {
         dec_used_ref();
-        delete pto_padding(pt[0]);
+        pt[0]->self_delete();
     }
     else {
         dec_used_ref();
@@ -113,13 +126,7 @@ void TR::MBase::unmap_interface(PAGE* pt[1]) {
     page->dec_used_ref();
     if (page->get_user() == m_user) {
         page->check_ref_cound(0);
-        if (page->is_padding()) {
-            delete pto_padding(page);
-        }
-        else {
-            delete pto_data(page);
-        }
-        
+        page->self_delete();
         pt[0] = nullptr;
     }else{
         vassert(page->get_used_ref() >= 1);
@@ -132,7 +139,7 @@ PAGE_DATA* PAGE_PADDING::convert_to_data(PAGE* pt[1], z3::vcontext& ctx)
     PAGE_PADDING* p_bak = (PAGE_PADDING*)pt[0];
     PAGE_DATA* res = new PAGE_DATA(p_bak->get_user(), ctx, p_bak->get_padding_value());
     if UNLIKELY(p_bak->dec_used_ref()==0) {
-        delete pto_padding(p_bak);
+        p_bak->self_delete();
     }
     pt[0] = res;
     return res;
@@ -347,7 +354,7 @@ UInt TR::MBase::write_bytes(ULong address, ULong length, UChar* data) {
                     init_page(p_page, address);
                     //p_page->malloc_unit(m_ctx, need_record);
                 }
-                pto_data(p_page)->get_unit().set(address & 0xfff, data[count]);
+                pto_data(p_page)->get_writer().set(address & 0xfff, data[count]);
                 address += 1;
                 count += 1;
             };
@@ -368,7 +375,7 @@ UInt TR::MBase::write_bytes(ULong address, ULong length, UChar* data) {
         if UNLIKELY(!sse_cmp(pad, data, align_l) || !p_page->is_padding()) {
             //p_page->malloc_unit(m_ctx, need_record);
             first_flag = true;
-            pto_data(p_page)->get_unit().Ist_Put(address & 0xfff, data, align_l);
+            pto_data(p_page)->get_writer().Ist_Put(address & 0xfff, data, align_l);
             write_count += align_l;
         }
         data += align_l;
@@ -416,7 +423,7 @@ UInt TR::MBase::write_bytes(ULong address, ULong length, UChar* data) {
                 }
             }
         }
-        pto_data(p_page)->get_unit().set((address + count) & 0xfff, _mm256_loadu_si256((__m256i*) (data + count)));
+        pto_data(p_page)->get_writer().set((address + count) & 0xfff, _mm256_loadu_si256((__m256i*) (data + count)));
         count += 32;
         write_count += 32;
     };
@@ -432,7 +439,7 @@ UInt TR::MBase::write_bytes(ULong address, ULong length, UChar* data) {
             if (p_page->is_padding()) {
                 p_page = ((PAGE_PADDING*)p_page)->convert_to_data(p_pt, m_ctx);
             }
-            pto_data(p_page)->get_unit().Ist_Put((address + count) & 0xfff, &data[count], align_r);
+            pto_data(p_page)->get_writer().Ist_Put((address + count) & 0xfff, &data[count], align_r);
             write_count += align_r;
         }
         else {
@@ -451,8 +458,8 @@ sv::tval Mem::_Iex_Load(PAGE* P, HWord address, UShort size)
     MEM_ACCESS_ASSERT_R(nP, address + 0x1000);
     UInt plength = 0x1000 - ((UShort)address & 0xfff);
 
-    sv::tval L = pto_data(nP)->get_unit().Iex_Get(m_user, 0, size - plength, m_ctx);
-    sv::tval R = pto_data(P)->get_unit().Iex_Get(m_user, ((UShort)address & 0xfff), plength, m_ctx);
+    sv::tval L = pto_data(nP)->Iex_Get(m_user, 0, size - plength, m_ctx);
+    sv::tval R = pto_data(P)->Iex_Get(m_user, ((UShort)address & 0xfff), plength, m_ctx);
     return L.concat(R);
 }
 ;
@@ -608,5 +615,71 @@ void TR::Mem::Ist_Store(const subval<ea_nbits>& address, sv::tval const& data)
         };
     }
 }
+
+
+
+static ULong genericg_compute_checksum_8al(HWord first_w64, HWord n_w64s)
+{
+    ULong  sum1 = 0, sum2 = 0;
+    ULong* p = (ULong*)first_w64;
+    /* unrolled */
+    while (n_w64s >= 4) {
+        ULong  w;
+        w = p[0];  sum1 = __rolq(sum1 ^ w, 63);  sum2 += w;
+        w = p[1];  sum1 = __rolq(sum1 ^ w, 63);  sum2 += w;
+        w = p[2];  sum1 = __rolq(sum1 ^ w, 63);  sum2 += w;
+        w = p[3];  sum1 = __rolq(sum1 ^ w, 63);  sum2 += w;
+        p += 4;
+        n_w64s -= 4;
+        sum1 ^= sum2;
+    }
+    while (n_w64s >= 1) {
+        ULong  w;
+        w = p[0];  sum1 = __rolq(sum1 ^ w, 63);  sum2 += w;
+        p += 1;
+        n_w64s -= 1;
+        sum1 ^= sum2;
+    }
+    return sum1 + sum2;
+}
+
+
+
+
+ULong TR::MBase::genericg_compute_checksum(HWord base2check, UInt len2check)
+{
+    HWord first_hW = ALIGN(((HWord)base2check), 8);
+    HWord last_hW = ALIGN((((HWord)base2check) + len2check - 1), 8);
+    vassert(first_hW <= last_hW);
+    HWord hW_diff = last_hW - first_hW;
+    HWord hWs_to_check = (hW_diff + 8) / 8;
+    vassert(hWs_to_check > 0);
+
+
+    UInt n_w64s = hWs_to_check;
+
+    HWord L_idx = first_hW;
+    HWord R_idx = ALIGN(last_hW, 0x1000);
+    ULong checksum = 0;
+    UInt spend = ((R_idx - L_idx) % (0x1000)) >> 3;
+    while (n_w64s != 0) {
+        PAGE* page = get_mem_page(L_idx);
+        const UChar* data_base = pto_data(page)->get_bytes(0);
+        if(n_w64s < spend) spend = n_w64s;
+        checksum = checksum ^ genericg_compute_checksum_8al((HWord)data_base + (L_idx & 0xfff), spend);
+        n_w64s -= spend;
+        L_idx += spend << 3;
+        spend = 0x1000/8;
+    }
+    return checksum;
+
+}
+
+
+
+
+
+
+
 template void TR::Mem::Ist_Store(const subval<32>& address, sv::tval const& data);
 template void TR::Mem::Ist_Store(const subval<64>& address, sv::tval const& data);

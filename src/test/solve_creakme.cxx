@@ -2,18 +2,23 @@
 
 using namespace TR;
 
-static State_Tag hoo(StateBase&s) {
+static State_Tag hook(State& s) {
 
-    auto eax = s.regs.get<Ity_I32>(X86_IR_OFFSET::EAX);
-    auto esi = s.regs.get<Ity_I32>(X86_IR_OFFSET::ESI);
-    
-    return Exit;
+
+    //s.setFlags(CF_None);
+
+    return Running;
 }
 
 static State_Tag hook2(State& s) {
-   /* s.setFlag(CF_traceJmp);
-    s.setFlag(CF_ppStmts);*/
-    auto m64 = s.mem.load<Ity_I64>(0x756EF004);
+    int ecx = s.regs.get<Ity_I32>(AMD64_IR_OFFSET::RCX).tor();
+    int edi = s.regs.get<Ity_I32>(AMD64_IR_OFFSET::RDI).tor();
+    int esi = s.regs.get<Ity_I32>(AMD64_IR_OFFSET::RSI).tor();
+    //if (ecx < 10) {
+
+    s.setFlag(CF_traceJmp);
+    s.setFlag(CF_ppStmts);
+    //
     
     return Running;
 }
@@ -34,26 +39,45 @@ static State_Tag hook2(State& s) {
 //    return Vns(ctx, 28);
 //}
 
+rsval<Long> symbolic_read(StateBase &s, const rsval<ULong>& addr, const rsval<Long>& count) {
+    int n = 0;
+    for (; n < 10; n++) {
+        auto FLAG = s.mk_int_const(8).tos<false, 8>();
+        s.mem.Ist_Store(addr + n, FLAG);
+        /*auto ao1 = FLAG >= 'A' && FLAG <= 'Z';
+        auto ao2 = FLAG >= 'a' && FLAG <= 'z';
+        auto ao3 = FLAG >= '0' && FLAG <= '9';
+        auto ao4 = FLAG == 0xD || FLAG == 0xA;
+        s.solv.add_assert(ao1 || ao2 || ao3 || ao4);*/
+    }
+    auto res_count = s.mk_int_const(8).tors<false, 8>();
+    s.solv.add_assert( (res_count < 12).tos() );
+    return res_count;
+}
+
 bool test_creakme() {
 
     vex_context v(-1);
     v.param().set("ntdll_KiUserExceptionDispatcher", (void*)0x777B3BC0);
     v.param().set("Kernel", gen_kernel(Ke::OS_Kernel_Kd::OSK_Windows));
     TR::State state(v, VexArchX86);
-    state.read_bin_dump("C:\\Users\\Notify\\Desktop\\CrakeMe.exe.dump");
+    state.read_bin_dump("Y:\\vmp\\Project1.vmp.exe.dump");
+    v.hook_read(symbolic_read);
+
     //state.setFlag(CF_traceJmp);
     //v.hook_read(read);
     //state.setFlag(CF_ppStmts);
+    auto dd = &state.get_regs_maps()->guest.amd64;
     state.avoid_anti_debugging();
 
-    auto sd = state.mem.load<Ity_I64>(0x004023ec);
-
-    v.hook_add(0x756EEFC5, hook2);
+    //005671c8 0f31            rdtsc
+   // v.hook_add(0x76F91778, hook2);
+    //v.hook_add(0x74c922fc, nullptr, CF_ppStmts);
+    
     //state.hook_add(0x756EEFC5, hoo);
 
     //state.regs.set()
 
-    auto m64 = state.mem.load<Ity_I64>(0x756EF004);
     state.start();
     if (state.status() != Exit) {
         std::cerr << "guest create exception error" << std::endl;
@@ -65,5 +89,5 @@ bool test_creakme() {
     if (state.status() != Exit) {
         std::cerr << "guest create exception error" << std::endl;
     }
-
+    return true;
 }

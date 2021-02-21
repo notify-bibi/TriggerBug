@@ -23,8 +23,7 @@ Revision History:
 #include "engine/basic_var.hpp"
 #include "engine/register.h"
 #include "engine/mem_map.h"
-
-
+#include "engine/emu_environment.h"
 
 
 
@@ -33,6 +32,8 @@ Revision History:
 #define TRACE_AM
 #endif
 
+
+#define IRSB_LOACK_INTEGRITY(ea, sz) if LIKELY(m_emu) m_emu->block_integrity(ea, sz)
 
 class PAGE_DATA;
 class PAGE_PADDING;
@@ -80,6 +81,7 @@ constexpr double ANALYZER_TIMEOUT = 0.4;
 #define MEM_ACCESS_ASSERT_R(CODE, HWordESS) if UNLIKELY(!(CODE)) throw Expt::GuestMemReadErr(CONCATSTR(__FILE__, __LINE__), HWordESS);
 #define MEM_ACCESS_ASSERT_W(CODE, HWordESS) if UNLIKELY(!(CODE)) throw Expt::GuestMemWriteErr(CONCATSTR(__FILE__, __LINE__), HWordESS);
 
+class VexIRDirty;
 
 class PAGE {
     enum PageTy
@@ -87,23 +89,30 @@ class PAGE {
         mem_INVALID,
         mem_PADDING,
         mem_CODE,
-        mem_DATA
+        mem_DATA,
+        mem_Link
     };
 
     Int m_user;
     std::atomic_int m_ref_cound;
     PageTy m_mem_ty = mem_INVALID;
+    void* m_any_ext_ref = nullptr;
+
     friend class PAGE_DATA;
     friend class PAGE_PADDING;
     friend class TR::MBase;
+    friend class VexIRDirty;
 
     inline PAGE(Int u, PageTy mem_ty) : m_user(u), m_ref_cound(1), m_mem_ty(mem_ty){};
     inline void set_user(Int u) {  m_user = u; };
-public:
     inline ~PAGE() noexcept(false) { vassert(m_ref_cound == 0); }
+public:
+    virtual void self_delete() { vassert(0); }
+    inline void set_ext(void* p) { m_any_ext_ref = p; }
+    inline void* get_ext() { return m_any_ext_ref; }
     inline Int  get_user() const { return m_user; };
     inline bool is_code() { return m_mem_ty == mem_CODE; };
-    inline bool is_data() { return m_mem_ty == mem_DATA || m_mem_ty == mem_CODE; };
+    inline bool is_data() { return m_mem_ty != mem_PADDING; };
     inline bool is_padding() { return m_mem_ty == mem_PADDING; };
     inline void set_code_flag() { m_mem_ty = mem_CODE; };
 
@@ -122,65 +131,105 @@ public:
     virtual PAGE_DATA* get_write_page(int user, PAGE* pt[1]/*in&out*/, z3::vcontext& ctx) { return nullptr; }
 };
 
-class TR::mem_unit : public TR::Register<0x1000> {
-    Int m_user;
-    using page_class = TR::Register<0x1000>;
-    friend class PAGE_DATA;
-    friend class PAGE_PADDING;
+//class TR::mem_unit final {
+//    Int m_user;
+//    using page_class = ;
+//    friend class PAGE_DATA;
+//    friend class PAGE_PADDING;
+//    page_class* m_page;
+//    
+//    inline mem_unit(Int u, z3::vcontext& ctx) : m_page(page_class::mk_Register(ctx, page_size)), m_user(u){ }
+//    inline mem_unit(Int u, z3::vcontext& ctx, UChar init_value) : m_page(page_class::mk_Register(ctx, page_size)), m_user(u) { memset(m_bytes, init_value, sizeof(m_bytes)); }
+//    //翻译转换父register
+//    inline mem_unit(Int u, TR::mem_unit& father_page, z3::vcontext& ctx) : m_page(page_class::mk_Register(father_page.m_page, ctx)), m_user(u) { }
+//public:
+//    template<bool sign, int nbits, sv::z3sk sk>
+//    inline sv::rsval<sign, nbits, sk> load(Int target_user, UInt idx, z3::vcontext& target_ctx) {
+//        if UNLIKELY(m_user == target_user) {
+//            return page_class::get<sign, nbits, sk>(idx);
+//        }
+//        else {
+//            return page_class::get<sign, nbits, sk>(idx, target_ctx);
+//        }
+//    }
+//
+//    inline sv::tval Iex_Get(Int target_user, UInt offset, UInt nbytes, z3::vcontext& target_ctx) {
+//        if UNLIKELY(m_user == target_user) {
+//            return page_class::Iex_Get(offset, nbytes);
+//        }
+//        else {
+//            return page_class::Iex_Get(offset, nbytes, target_ctx);
+//        }
+//    }
+//    const UChar* get_bytes(UInt offst) { return &page_class::m_bytes[offst]; }
+//};
 
-    inline mem_unit(Int u, z3::vcontext& ctx) : page_class(ctx), m_user(u){ }
-    inline mem_unit(Int u, z3::vcontext& ctx, UChar init_value) : page_class(ctx), m_user(u) { memset(m_bytes, init_value, sizeof(m_bytes)); }
-    //翻译转换父register
-    inline mem_unit(Int u, TR::mem_unit& father_page, z3::vcontext& ctx) : page_class((page_class&)father_page, ctx), m_user(u) { }
-public:
-    template<bool sign, int nbits, sv::z3sk sk>
-    inline sv::rsval<sign, nbits, sk> load(Int target_user, UInt idx, z3::vcontext& target_ctx) {
-        if UNLIKELY(m_user == target_user) {
-            return page_class::get<sign, nbits, sk>(idx);
-        }
-        else {
-            return page_class::get<sign, nbits, sk>(idx, target_ctx);
-        }
-    }
 
-    inline sv::tval Iex_Get(Int target_user, UInt offset, UInt nbytes, z3::vcontext& target_ctx) {
-        if UNLIKELY(m_user == target_user) {
-            return page_class::Iex_Get(offset, nbytes);
-        }
-        else {
-            return page_class::Iex_Get(offset, nbytes, target_ctx);
-        }
-    }
-    const UChar* get_bytes(UInt offst) { return &page_class::m_bytes[offst]; }
-};
-
-
-class PAGE_DATA : public PAGE {
-    friend class TR::MBase;
+class PAGE_DATA final : public PAGE  {
     friend class TR::Mem;
+    friend class TR::MBase;
     friend class PAGE_PADDING;
-    TR::mem_unit m_unit;
-    inline PAGE_DATA(Int u,
-        z3::vcontext& ctx
-    ) : PAGE(u, mem_DATA), m_unit(u, ctx) { }
-
-
-    inline PAGE_DATA(Int u,
+    friend class VexIRDirty;
+    TR::Register* m_unit;
+    PAGE_DATA(Int u, z3::vcontext& ctx) : PAGE(u, mem_DATA){ 
+        m_unit = TR::Register::mk_Register(ctx, 0x1000);
+    }
+    PAGE_DATA(Int u,
         z3::vcontext& ctx, UChar init_value
-    ) : PAGE(u, mem_DATA), m_unit(u, ctx, init_value) { }
-
+    ) : PAGE(u, mem_DATA) {
+        m_unit = TR::Register::mk_Register(ctx, 0x1000);
+        m_unit->init_padding_v(init_value);
+    }
     // translate
-    inline PAGE_DATA(Int u,
+    PAGE_DATA(Int u,
         PAGE_DATA& father, z3::vcontext& ctx
-    ) : PAGE(u, mem_DATA), m_unit(u, father.get_unit(), ctx) { }
+    ) : PAGE(u, mem_DATA) { 
+        m_unit = TR::Register::mk_Register(*father.m_unit, ctx);
+    }
 
-    TR::mem_unit& get_unit() { return m_unit; }
-    const UChar* get_bytes(UInt offst) { return m_unit.get_bytes(offst); }
+    // link
+    PAGE_DATA(Int u,
+        z3::vcontext& ctx, TR::Register* link
+    ) : PAGE(u, mem_Link) {
+        m_unit = link;
+    }
 
+    void self_delete() override;
+public:
+    ~PAGE_DATA() {
+        if (m_mem_ty != mem_Link) {
+            TR::Register::del_Register(m_unit);
+        }
+        vassert(m_user != -1ul);
+    }
     inline bool is_code() = delete;
     inline bool is_data() = delete;
     inline bool is_padding() = delete;
     virtual PAGE_DATA* get_write_page(int user, PAGE* pt[1]/*in&out*/, z3::vcontext& ctx) override;
+
+
+
+    const UChar* get_bytes(UInt offst) { return m_unit->get_bytes(offst); }
+
+    template<bool sign, int nbits, sv::z3sk sk>
+    sv::rsval<sign, nbits, sk> load(Int user, UInt offset, z3::vcontext& ctx) {
+        if (user == m_user) {
+            return m_unit->get<sign, nbits, sk >(offset);
+        }
+        else {
+            return m_unit->get<sign, nbits, sk >(offset, ctx);
+        }
+    }
+    sv::tval Iex_Get(Int user, UInt offset, UInt nbytes, z3::vcontext& ctx) {
+        if (user == m_user) {
+            return m_unit->Iex_Get(offset, nbytes);
+        }
+        else {
+            return m_unit->Iex_Get(offset, nbytes, ctx);
+        }
+    }
+
+    inline TR::Register& get_writer() { return *m_unit; }
 };
 
 
@@ -195,6 +244,7 @@ class PAGE_PADDING : public PAGE {
 
     inline PAGE_PADDING(Int u, UChar pad_value) : PAGE(u, mem_PADDING), m_padding_value(pad_value) { m_padding = _mm256_set1_epi8(m_padding_value); }
 public:
+    void self_delete() override;
     template<bool sign, int nbits, sv::z3sk sk>
     inline sv::rsval<sign, nbits, sk> load(UInt idx, Z3_context target_ctx) {
         return sv::rsval<sign, nbits, sk>(target_ctx, (UChar*)&m_padding);
@@ -260,6 +310,7 @@ namespace TR {
         ~MBase() { recycle(); }
 
     public:
+        ULong genericg_compute_checksum(HWord ea, UInt nb);
 
         inline Int get_user() { return m_user; }
 
@@ -305,12 +356,13 @@ namespace TR {
 
 
 
-    static mem_trace default_trace;
+    class EmuEnvironment;
 
     class Mem : public MBase {
         friend class vex_context;
+        static mem_trace default_trace;
         mem_trace* m_trace = &default_trace;
-
+        EmuEnvironment* m_emu = nullptr;
     public:
 
 
@@ -398,24 +450,67 @@ namespace TR {
         sv::tval _Iex_Load(PAGE* P, HWord address, UShort size);
 
     public:
+        void set_emu_env(EmuEnvironment* e) { m_emu = e; }
+        EmuEnvironment* get_emu_env() { return m_emu; }
+
         void set_mem_traceer(mem_trace& t) { m_trace = &t; };
+
+        ////----------------------- hook load -----------------------
+
+        //template<bool sign, int nbits, sv::z3sk sk>
+        //sv::rsval<sign, nbits, sk> hook_load(HWord address) {
+        //    HWord ea = GET_MEM_ACCESS_NO_FLAG(address);
+        //    UInt flag = GET_MEM_ACCESS_FLAG2(address);
+        //    if (flag == DIRTY_HOST_CODE_F2) {
+        //        return sv::rsval<sign, nbits, sk>(m_ctx, (void*)ea);
+        //    }
+        //    /*if (flag == DIRTY_HOST_GSPTR_F2) {
+        //        PAGE* page = get_mem_page(address);
+        //        Register* gsptr = reinterpret_cast<Register*>(page->get_());
+        //        dassert(((UInt)ea > REGISTER_LEN) && (((UInt)ea) < REGISTER_LEN * 2));
+        //        return gsptr->get<sign, nbits, sk>((UInt)ea);
+        //    }*/
+        //    VPANIC("error flag");
+        //}
+        ////----------------------- hook store -----------------------
+
+
+        //template<class _Tye>
+        //void hook_store(HWord address, const _Tye& data) {
+        //    UInt flag = GET_MEM_ACCESS_FLAG2(address);
+        //    if (flag == DIRTY_HOST_CODE_F2) {
+        //        VPANIC("dirty func dont do store");
+        //    }
+        //    HWord ea = GET_MEM_ACCESS_NO_FLAG(address);
+        //    if (flag == DIRTY_HOST_GSPTR_F2) {
+        //        PAGE* page = get_mem_page(address);
+        //        Register* gsptr = reinterpret_cast<Register*>(page->);
+        //        dassert(((UInt)ea > REGISTER_LEN) && (((UInt)ea) < REGISTER_LEN * 2));
+        //        gsptr->set((UInt)ea, data);
+        //    }
+        //    VPANIC("error flag");
+        //}
+
         //----------------------- real address -----------------------
         // load<sign, 32, Z3_BV_SORT>(HWord)
         template<bool sign, int nbits, sv::z3sk sk>
         inline sv::rsval<sign, nbits, sk> load(HWord address) {
             static_assert((nbits & 7) == 0, "err load");
-            if ((address>>56)==1) {
-                return sv::rsval<sign, nbits, sk>(m_ctx, (void*)(address & fastMask(56)));
+            if UNLIKELY(CHECK_MEM_ACCESS_FLAG1(address, DIRTY_HOST_CODE_F1)) {
+                return sv::rsval<sign, nbits, sk>(m_ctx, (void*)GET_MEM_ACCESS_NO_FLAG(address));
             }
+            //if UNLIKELY(CHECK_MEM_ACCESS_FLAG1(address, MEM_HOOK_FLAG1)) { return hook_load<sign, nbits, sk>(address); }
             PAGE* page = get_mem_page(address);
             MEM_ACCESS_ASSERT_R(page, address);
             if UNLIKELY((address & 0xfff) >= (0x1001 - (nbits >> 3))) {
                 return _Iex_Load(page, address, nbits >> 3).template tors<sign, nbits, sk>();
             }
-            if (page->is_data())
-                return pto_data(page)->get_unit().load<sign, nbits, sk>(get_user(), (UInt)address & 0xfff, m_ctx);
-            else
+            if (page->is_data()) {
+                return pto_data(page)->load<sign, nbits, sk>(get_user(), (UInt)address & 0xfff, m_ctx);
+            }
+            else {
                 return pto_padding(page)->load<sign, nbits, sk>((UInt)address & 0xfff, m_ctx);
+            }
         }
 
             // IRType  load<Ity_I32>(HWord)
@@ -623,8 +718,8 @@ namespace TR {
             PAGE* npage = get_write_page(address + 0x1000);
             UInt plength = (0x1000 - offset);
             m_trace->write(page, npage, address, size_data);// trace
-            pto_data(page)->get_unit().Ist_Put(offset, (void*)data, plength);
-            pto_data(npage)->get_unit().Ist_Put(0, ((UChar*)((void*)data)) + plength, (size_data - plength));
+            pto_data(page)->get_writer().Ist_Put(offset, (void*)data, plength);
+            pto_data(npage)->get_writer().Ist_Put(0, ((UChar*)((void*)data)) + plength, (size_data - plength));
         }
 
         void storeS_between2page(HWord address, UInt offset, PAGE* page, UInt size_data, Z3_ast data) {
@@ -635,8 +730,8 @@ namespace TR {
             Z3_inc_ref(m_ctx, Low);
             Z3_ast HI = Z3_mk_extract(m_ctx, (size_data << 3) - 1, plength << 3, data);
             Z3_inc_ref(m_ctx, HI);
-            pto_data(page)->get_unit().Ist_Put(offset, Low, plength);
-            pto_data(npage)->get_unit().Ist_Put(0, HI, (size_data) - plength);
+            pto_data(page)->get_writer().Ist_Put(offset, Low, plength);
+            pto_data(npage)->get_writer().Ist_Put(0, HI, (size_data) - plength);
             Z3_dec_ref(m_ctx, Low);
             Z3_dec_ref(m_ctx, HI);
         }
@@ -648,6 +743,8 @@ namespace TR {
         template<typename DataTy, TASSERT(std::is_arithmetic_v<DataTy>)>
         void store(HWord address, DataTy data) {
             static constexpr int nbytes = ALLOC_ALIGN_BIT(sizeof(DataTy) << 3, 3);
+            //if UNLIKELY(CHECK_MEM_ACCESS_FLAG1(address, MEM_HOOK_FLAG1)) { return hook_store(address, data); }
+            IRSB_LOACK_INTEGRITY(address, nbytes);
             PAGE* page = get_write_page(address);
             UShort offset = address & 0xfff;
             if UNLIKELY(nbytes > 0x1000 - offset) {
@@ -655,7 +752,7 @@ namespace TR {
             }
             else {
                 m_trace->write(page, address, nbytes);// trace
-                pto_data(page)->get_unit().set(offset, data);
+                pto_data(page)->get_writer().set(offset, data);
             }
         }
 
@@ -663,6 +760,8 @@ namespace TR {
         template<typename DataTy, TASSERT(is_large_ctype_v<DataTy>)>
         void store(HWord address, const DataTy& data) {
             static constexpr int nbytes = ALLOC_ALIGN_BIT(sizeof(DataTy) << 3, 3);
+            //if UNLIKELY(CHECK_MEM_ACCESS_FLAG1(address, MEM_HOOK_FLAG1)) { return hook_store(address, data); }
+            IRSB_LOACK_INTEGRITY(address, nbytes);
             PAGE* page = get_write_page(address);
             UShort offset = address & 0xfff;
             if UNLIKELY(nbytes > 0x1000 - offset) {
@@ -670,7 +769,7 @@ namespace TR {
             }
             else {
                 m_trace->write(page, address, nbytes);// trace
-                pto_data(page)->get_unit().set(offset, data);
+                pto_data(page)->get_writer().set(offset, data);
             }
         }
 
@@ -686,6 +785,8 @@ namespace TR {
         void store(HWord address, const sv::symbolic<sign, nbits, sk>& data) {
             static_assert((nbits & 7) == 0, " store(HWord, Z3_ast) ?");
             static constexpr int nbytes = ALLOC_ALIGN_BIT(nbits, 3);
+            //if UNLIKELY(CHECK_MEM_ACCESS_FLAG1(address, MEM_HOOK_FLAG1)) { return hook_store(address, data); }
+            IRSB_LOACK_INTEGRITY(address, nbytes);
             PAGE* page = get_write_page(address);
             UShort offset = address & 0xfff;
             if UNLIKELY(nbytes > 0x1000 - offset) {
@@ -693,7 +794,7 @@ namespace TR {
             }
             else {
                 m_trace->write(page, address, nbytes);// trace
-                pto_data(page)->get_unit().set<nbits>(offset, data);
+                pto_data(page)->get_writer().set<nbits>(offset, data);
             }
         }
 
@@ -824,7 +925,6 @@ namespace TR {
         void Ist_Store(const z3::expr& address, const sv::tval& data) { Ist_Store(sv::expr2tval(address), data); };
 
         void Ist_Store(Z3_ast address, const sv::tval& data) { Ist_Store(z3::expr(m_ctx, address), data); };
-
 
     };
 

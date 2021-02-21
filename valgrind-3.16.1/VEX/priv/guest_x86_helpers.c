@@ -2221,7 +2221,8 @@ UInt x86g_calculate_daa_das_aaa_aas ( UInt flags_and_AX, UInt opcode )
    return result;
 }
 
-UInt x86g_calculate_aad_aam ( UInt flags_and_AX, UInt opcode )
+//  aad     0BEh  imm8 = 0BEh
+UInt x86g_calculate_aad_aam ( UInt flags_and_AX, UInt opcode , Int imm8)
 {
    UInt r_AL = (flags_and_AX >> 0) & 0xFF;
    UInt r_AH = (flags_and_AX >> 8) & 0xFF;
@@ -2235,12 +2236,12 @@ UInt x86g_calculate_aad_aam ( UInt flags_and_AX, UInt opcode )
 
    switch (opcode) {
       case 0xD4: { /* AAM */
-         r_AH = r_AL / 10;
-         r_AL = r_AL % 10;
+         r_AH = r_AL / imm8;
+         r_AL = r_AL % imm8;
          break;
       }
       case 0xD5: { /* AAD */
-         r_AL = ((r_AH * 10) + r_AL) & 0xff;
+         r_AL = ((r_AH * imm8) + r_AL) & 0xff;
          r_AH = 0;
          break;
       }

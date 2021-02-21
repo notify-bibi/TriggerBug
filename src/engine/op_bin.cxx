@@ -112,8 +112,13 @@ sv::tval tBinop(IROp op, sv::tval const& a, sv::tval const& b){
 
             Z3caseIopNS(CmpLE, false, 32, U, <= );
             Z3caseIopNS(CmpLE, false, 64, U, <= );
+            Z3caseIopNS(CmpLE, true, 32, S, <= );
+            Z3caseIopNS(CmpLE, true, 64, S, <= );
+
             Z3caseIopNS(CmpLT, true, 32, S, < );
             Z3caseIopNS(CmpLT, true, 64, S, < );
+            Z3caseIopNS(CmpLT, false, 32, U, < );
+            Z3caseIopNS(CmpLT, false, 64, U, < );
 
 
             case Iop_8HLto16:dassert(a.nbits() == 8); dassert(b.nbits() == 8); return concat((subval<8>&)a, (subval<8>&)b);

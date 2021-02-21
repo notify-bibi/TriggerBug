@@ -13,6 +13,28 @@ sv::tval tBinop(IROp, sv::tval const&, sv::tval const&);
 sv::tval tTriop(IROp, sv::tval const&, sv::tval const&, sv::tval const&);
 sv::tval tQop(IROp, sv::tval const&, sv::tval const&, sv::tval const&, sv::tval const&);
 
+union __attribute__((__aligned__(0x100))) GuestRegs
+{
+    VexGuestX86State   x86;
+    VexGuestAMD64State amd64;
+    VexGuestARMState   arm;
+    VexGuestARM64State arm64;
+    VexGuestS390XState s390;
+    VexGuestMIPS32State mips32;
+    VexGuestMIPS64State mips64;
+    VexGuestPPC32State ppc32;
+    VexGuestPPC64State ppc64;
+};
+
+//所有客户机寄存器的ir层的最大长度。建议>=100
+
+typedef struct{
+    GuestRegs guest;
+    GuestRegs host;
+} VexGuestState;
+
+static constexpr int REGISTER_LEN = ALIGN(sizeof(VexGuestState), 0x100);
+
 namespace TR {
 
 
@@ -168,8 +190,7 @@ namespace TR {
         const std::deque<T>& get_guest_call_stack() const { return guest_call_stack; }
         operator std::string() const;
     };
-
-
+    
 
     class State;
 
@@ -198,14 +219,19 @@ namespace TR {
         void read_mem_dump(const char*);
         virtual ~StateBase();
     public:
+        TRsolver solv;
         //客户机寄存器
-        TRsolver               solv;
-        Register<REGISTER_LEN> regs;
+        Register regs; // GuestRegs map一定一定要在 Register 后面
+    __declspec(align(16)) 
+        VexGuestState regs_bytes;
+        //UChar    regs_bytes[REGISTER_LEN];
+
         //客户机内存 （多线程设置相同user，不同state设置不同user）
-        Mem                     mem;
+        Mem      mem;
         BranchManager<StateBase> branch;
 
 
+        VexGuestState* get_regs_maps();
         inline HWord get_cpu_ip() { return guest_start; }
         inline HWord get_state_ep() { return guest_start_ep; }
         //ip = ip + offset

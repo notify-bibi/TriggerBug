@@ -77,7 +77,7 @@ class __attribute__((aligned(16)))  LibVEX_Alloc_M {
     VexAllocMode mode;
 
 public:
-    inline LibVEX_Alloc_M() :temporary(nullptr){
+    inline LibVEX_Alloc_M() :temporary(nullptr), private_LibVEX_alloc_first(nullptr), private_LibVEX_alloc_curr(nullptr), private_LibVEX_alloc_last(nullptr){
         this->m_alloc_list.clear();
         this->private_LibVEX_alloc_OOM();
     }
@@ -106,8 +106,14 @@ public:
         vassert(offsetof(struct align, x) <= REQ_ALIGN);
 
 #if 0
+        if (0x800 == nbytes) {
+            printf("??");
+        }
+        temporary = (HChar*)malloc(nbytes);
+        m_alloc_list.push_back(temporary);
+        memset(temporary, 0x23, nbytes);
         /* Nasty debugging hack, do not use. */
-        return malloc(nbytes);
+        return temporary;
 #else
         HChar* curr;
         HChar* next;
@@ -124,6 +130,8 @@ public:
         INNER_REQUEST(curr += VEX_REDZONE_SIZEB);
         INNER_REQUEST(VALGRIND_MEMPOOL_ALLOC(private_LibVEX_alloc_first,
             curr, nbytes));
+        vassert(curr + nbytes < private_LibVEX_alloc_last);
+        //memset(curr, 0x24, nbytes);
         return curr;
 #endif
     
@@ -156,8 +164,8 @@ public:
             m_alloc_list.pop_back();
             m_curr_chunk_size += one_chunk_size;
         }
-
         temporary = (HChar*)malloc(m_curr_chunk_size);
+        //memset(temporary, 0x11, m_curr_chunk_size);
         private_LibVEX_alloc_first = temporary;
         private_LibVEX_alloc_curr = temporary;
         private_LibVEX_alloc_last = &temporary[m_curr_chunk_size];
@@ -168,6 +176,8 @@ public:
         //life_cycle_transfer = true;
         std::deque<void*> res = m_alloc_list;
         m_alloc_list.clear();
+        this->~LibVEX_Alloc_M();
+        new (this) LibVEX_Alloc_M;
         return res;
     }
     

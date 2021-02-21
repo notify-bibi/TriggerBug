@@ -6,6 +6,7 @@
 #include "engine\basic_var.hpp"
 #include <functional>
 
+class IRSBCache;
 
 namespace TR {
 
@@ -173,6 +174,7 @@ namespace TR {
         using Hook_Write = void(*)(StateBase&, const rsval<ULong>&, const rsval<Long>&);
         //idx2v
         using Hook_idx2Value = z3::expr(*) (StateBase&, HWord /*base*/, Z3_ast /*idx*/);
+        
 
     private:
         vex_context(const vex_context& r) = delete;
@@ -182,7 +184,7 @@ namespace TR {
         HASH_MAP<Addr64/*static table base*/, Hook_idx2Value> m_tableIdxDict;
         void* m_hook_read;
         void* m_hook_write;
-
+        IRSBCache* m_irsb_cache = nullptr;
     public:
         //backpoint add
         void hook_add(HWord addr, Hook_CallBack cb, TRControlFlags cflag);
@@ -191,20 +193,16 @@ namespace TR {
 
     public:
 
-        vex_context(Int max_threads)
-            :vctx_base(max_threads)
-        {
-            constructer();
-        };
+        vex_context(Int max_threads);
         
         void constructer();
-        ~vex_context() {}
+        ~vex_context();
         void hook_del(HWord addr);
         void hook_read(Hook_Read read_call) { m_hook_read = (void*)read_call; }
         void hook_write(Hook_Write write_call) { m_hook_write = (void*)write_call; }
         Hook_Read get_hook_read() { return (Hook_Read)m_hook_read; }
         Hook_Write get_hook_write() { return (Hook_Write)m_hook_write; }
-
+        IRSBCache* get_irsb_cache() { return m_irsb_cache; }
         inline ThreadPool& pool() { return m_pool; };
 
 

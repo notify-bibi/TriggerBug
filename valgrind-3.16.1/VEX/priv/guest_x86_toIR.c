@@ -13076,6 +13076,7 @@ DisResult disInstr_X86_WRK (
    /* ---------------------------------------------------- */
 
    /* Get the primary opcode. */
+decode_redo:
    opc = getIByte(delta); delta++;
 
    /* We get here if the current insn isn't SSE, or this CPU doesn't
@@ -13245,7 +13246,8 @@ DisResult disInstr_X86_WRK (
    case 0xD4: /* AAM */
    case 0xD5: /* AAD */
       d32 = getIByte(delta); delta++;
-      if (sz != 4 || d32 != 10) goto decode_failure;
+      //if (sz != 4 || d32 != 10) goto decode_failure;
+      if (sz != 4) goto decode_failure;
       t1 = newTemp(Ity_I32);
       t2 = newTemp(Ity_I32);
       /* Make up a 32-bit value (t1), with the old value of AX in the
@@ -13265,9 +13267,10 @@ DisResult disInstr_X86_WRK (
               mkIRExprCCall(
                  Ity_I32, 0/*regparm*/, "x86g_calculate_aad_aam",
                  &x86g_calculate_aad_aam,
-                 mkIRExprVec_2( mkexpr(t1), mkU32( opc & 0xFF) )
+                 mkIRExprVec_3( mkexpr(t1), mkU32( opc & 0xFF), mkU32(d32 & 0xFF))
             ));
-      putIReg(2, R_EAX, unop(Iop_32to16, mkexpr(t2) ));
+      
+      putIReg(2, R_EAX, unop(Iop_32to16, mkexpr(t2)));
 
       stmt( IRStmt_Put( OFFB_CC_OP,   mkU32(X86G_CC_OP_COPY) ));
       stmt( IRStmt_Put( OFFB_CC_DEP2, mkU32(0) ));
@@ -14271,7 +14274,9 @@ DisResult disInstr_X86_WRK (
          break;
 
       default:
-         goto decode_failure;
+          // like bnd jnz short $esperror$4
+          delta--;
+         goto decode_redo;
       }
       break;
    }

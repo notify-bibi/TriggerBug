@@ -83,7 +83,7 @@ int eval_all_bool(z3::solver& solv, Z3_ast _exp) {
     z3::context& ctx = solv.ctx();
     z3::expr exp(ctx, _exp);
 
-    //std::cout << exp << std::endl;
+    std::cout << exp << std::endl;
     //std::cout << solv.assertions() << std::endl;
 
     solv.push();
@@ -96,7 +96,7 @@ int eval_all_bool(z3::solver& solv, Z3_ast _exp) {
             goto faild;
         }
         z3::model m1 = solv.get_model();
-        z3::expr e1 = m1.eval(exp);
+        z3::expr e1 = m1.eval(exp, true);
         bool_L = e1.decl().decl_kind();
         if (!(bool_L == Z3_OP_TRUE || bool_L == Z3_OP_FALSE))
             goto faild;
@@ -212,7 +212,7 @@ InvocationStack<HWord>::operator std::string() const {
 
 TR::TRsolver::TRsolver(z3::context& c)
     :
-#if 1
+#if 0
     z3::solver(mk_tactic_solver_default(c))
 #else
     z3::solver(c)
@@ -308,7 +308,7 @@ z3::solver TR::TRsolver::mk_tactic_solver_default(z3::context& c)
         
         & z3::tactic(c, "factor")
         & z3::tactic(c, "bv1-blast")
-          // z3::tactic(c, "qe-sat") &
+         // &  z3::tactic(c, "qe-sat") 
         & z3::tactic(c, "ctx-solver-simplify")
         & z3::tactic(c, "nla2bv")
         & z3::tactic(c, "symmetry-reduce")
@@ -350,13 +350,13 @@ HWord TR::State::getGSPTR()
 template<typename T>
 class DirtyFunction {
 public:
-    using Function_6 = T(*) (T, T, T, T, T, T);
-    using Function_5 = T(*) (T, T, T, T, T);
-    using Function_4 = T(*) (T, T, T, T);
-    using Function_3 = T(*) (T, T, T);
-    using Function_2 = T(*) (T, T);
-    using Function_1 = T(*) (T);
-    using Function_0 = T(*) ();
+    using Function_6 = ULong(*) (T, T, T, T, T, T);
+    using Function_5 = ULong(*) (T, T, T, T, T);
+    using Function_4 = ULong(*) (T, T, T, T);
+    using Function_3 = ULong(*) (T, T, T);
+    using Function_2 = ULong(*) (T, T);
+    using Function_1 = ULong(*) (T);
+    using Function_0 = ULong(*) ();
 
     using Z3_Function6 = sv::tval(*) (sv::tval&, sv::tval&, sv::tval&, sv::tval&, sv::tval&, sv::tval&);
     using Z3_Function5 = sv::tval(*) (sv::tval&, sv::tval&, sv::tval&, sv::tval&, sv::tval&);
@@ -457,16 +457,12 @@ inline sv::tval State::ILGop(const IRLoadG *lg) {
     }
 }
 
-Addr64 TR::State::tGSPTR()
-{
-    return Addr64();
-}
 
 void TR::State::do_Ijk_Ret() {
     if UNLIKELY(!m_is_dirty_mode) {
         return;
     }
-    if UNLIKELY(m_call_stack_is_empty || m_InvokStack.empty()) {
+    if UNLIKELY(m_InvokStack.empty()) {
         if (!m_call_stack_is_empty) {
             m_call_stack_is_empty = true;
             std::cout << "call stack end :: " << std::hex << get_cpu_ip() << std::endl;
@@ -536,7 +532,7 @@ sv::tval State::tIRExpr(const IRExpr* e)
             return regs.Iex_Get(regoff, e->Iex.GetI.descr->elemTy);
         }
     };
-    case Iex_GSPTR: { return sv::tval(m_ctx, tGSPTR(), vinfo().is_mode_32() ? 32 : 64); };
+    case Iex_GSPTR: { return sv::tval(m_ctx, getGSPTR(), sizeof(HWord) << 3); };
     case Iex_Binder: {
         Int binder = e->Iex.Binder.binder;
         vex_printf("tIRExpr Iex_Binder:  %d", binder);
@@ -632,7 +628,8 @@ void State::tIRStmt(const IRTypeEnv* tyenv, const IRStmt* s)
             VPANIC("auto guard = tIRExpr(dirty->guard); symbolic");
         }
         if LIKELY(guard.tor()) {
-            dirty_call_run(dirty->tmp, typeOfIRTemp(tyenv, dirty->tmp), dirty);
+            IRType tmpTy = dirty->tmp == IRTemp_INVALID ? Ity_INVALID : typeOfIRTemp(tyenv, dirty->tmp);
+            dirty_call_run(dirty->tmp, tmpTy, dirty);
         }
         break;// fresh changed block
     }
@@ -724,14 +721,23 @@ TR::Vex_Kind State::emu_irsb(std::deque<BTSType>& tmp_branch, HWord& guest_start
         case Ist_NoOp: break;
         case Ist_IMark: {
             guest_start = (THWord)s->Ist.IMark.addr;
+            // 虚拟断点
             if (m_vctx.get_hook(hs, guest_start)) {
+                setFlags(hs.cflag);
+                if (!hs.cb) break;
                 set_status(hs.cb(*this));
                 if (this->status() != Running) {
+                    return vStop;
+                }
+                if (get_delta()) {
+                    guest_start = guest_start + get_delta();
+                    set_delta(0);
                     return vUpdate;
                 }
             }
+            /*fresh changed block 检测执行base block时恶意修改该块指令*/
             if UNLIKELY(irvex().check()) { 
-                return vUpdate; /*fresh changed block*/ 
+                return vUpdate; 
             }
             break;
         };
@@ -752,8 +758,9 @@ TR::Vex_Kind State::emu_irsb(std::deque<BTSType>& tmp_branch, HWord& guest_start
                         return vUpdate;
                     }
                     else {
-                        vassert((THWord)s->Ist.Exit.dst->Ico.U64 == guest_start);
-                        //ppIRSB(irsb);
+                        if UNLIKELY((THWord)s->Ist.Exit.dst->Ico.U64 == guest_start) { // 异常循环
+                            ppIRSB(irsb);
+                        }
                         status = Ijk_call(s->Ist.Exit.jk);
                         if (status == Running) {
                             if (get_delta()) {
@@ -785,12 +792,10 @@ TR::Vex_Kind State::emu_irsb(std::deque<BTSType>& tmp_branch, HWord& guest_start
                     // guard true path
                     if (s->Ist.Exit.jk == Ijk_Boring) {
                         tmp_branch.push_back(BTSType(*this, s->Ist.Exit.dst->Ico.U64, guard));
-                        break;
                     }
                     if (s->Ist.Exit.jk >= Ijk_SigILL && s->Ist.Exit.jk <= Ijk_SigFPE_IntOvf) {
                         tmp_branch.push_back(BTSType(*this, s->Ist.Exit.dst->Ico.U64, guard));
                         tmp_branch.back().set_jump_kd(s->Ist.Exit.jk);
-                        break;
                     }
                     // guard false path
                     IRStmt* next_stmt = irsb->stmts[stmtn + 1];
@@ -841,7 +846,7 @@ TR::Vex_Kind State::emu_irsb(std::deque<BTSType>& tmp_branch, HWord& guest_start
 }
 
 
-bool State::vex_main_loop(HWord& guest_start) {
+bool State::vex_main_loop(IRSB*& irsb, HWord& guest_start, Addr avoid) {
 
     
 
@@ -862,7 +867,7 @@ bool State::vex_main_loop(HWord& guest_start) {
     Vex_Kind vkd;
 
     do {
-        IRSB* irsb = irvex().translate_front(guest_start);
+        irsb = irvex().translate_front(guest_start);
         //ppIRSB(irsb);
         traceIRSB(guest_start, irsb);
         if (vinfo().is_mode_32()) {
@@ -872,7 +877,7 @@ bool State::vex_main_loop(HWord& guest_start) {
             vkd = emu_irsb<64>(tmp_branch, guest_start, m_status, irsb);
         }
         traceIrsbEnd(irsb);
-        if (guest_start == 0x10000000000fa1e) {
+        if (guest_start == avoid) {
             break;
         }
 
@@ -896,36 +901,37 @@ void TR::State::start() {
     if (vinfo().gguest() == VexArchAMD64 || vinfo().gguest() == VexArchX86) {
         x86_set_mode(regs.get<Ity_I16>(X86_IR_OFFSET::CS).tor());
     }
-    EmuEnvGuest ir(vinfo(), mem);
+    EmuEnvGuest ir(vctx(), vinfo(), mem);
     clean_dirty_mode();
-    start(guest_start , &ir);
+    start(guest_start , &ir, 0);
 }
 
-void TR::State::start(HWord& guest_start, EmuEnvironment * ir) {
+void TR::State::start(HWord& guest_start, EmuEnvironment * ir, Addr avoid) {
     EmuEnvironment* bak = m_irvex;
+    mem.set_emu_env(bak);
     m_irvex = ir;
-    v_start(guest_start);
-
-    if (bak) {
-        m_irvex = bak; // host -> guest
-    }
-    else {
-        m_irvex = nullptr;
-    }
+    v_start(guest_start, avoid);
 }
 
-void TR::State::v_start(HWord& guest_start) {
+void TR::State::v_start(HWord& guest_start, Addr avoid) {
     set_status(Running);
     traceStart(guest_start);
-
+    IRSB* irsb = nullptr;
 Begin_try:
     try {
         irvex().malloc_ir_buff(m_ctx);
-        vex_main_loop(guest_start);
+        vex_main_loop(irsb, guest_start, avoid);
         irvex().free_ir_buff();
     }
     catch (Expt::ExceptionBase& error) {
         //mem.set(nullptr);
+        if (1) {
+
+            for (Int i = 0; i < irsb->tyenv->types_used; i++) {
+                std::cout << std::hex << i << "  " << irvex()[i].str() << std::endl;
+            }
+            ppIRSB(irsb);
+        }
         irvex().free_ir_buff();
         switch (error.errTag()) {
         case Expt::GuestRuntime_exception:
@@ -971,6 +977,14 @@ void State::branchGo()
        m_vctx.pool().enqueue([b] {
           
             });
+    }
+}
+
+void TR::State::set_irvex(EmuEnvironment* e)
+{
+    m_irvex = e;
+    if (e) {
+        e->set_guest_bb_insn_control_obj();
     }
 }
 
