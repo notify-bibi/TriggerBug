@@ -10,6 +10,7 @@ Revision History:
 --*/
 #pragma once
 #include <utility>
+#include <atomic>
 
 template<typename T>
 class ref {
@@ -123,8 +124,19 @@ public:
    This class is used for allowing us to create instantiations of the ref_vector and ref_buffer
    templates for unmanaged objects.
 */
-template<typename T>
-class unmanged_ref_manager {
-    static void inc_ref(T * o) { o->inc_ref(); }
-    static void dec_ref(T * o) { o->dec_ref(); }
+
+class ref_manager {
+    template<typename> friend class ref;
+public:
+    void inc_ref() { m_ref_count++; }
+    void dec_ref() { 
+        m_ref_count--;
+        vassert(m_ref_count >= 0);
+        if (!m_ref_count) {
+            delete this;
+        }
+    }
+    virtual ~ref_manager(){  }
+private:
+    std::atomic_int32_t m_ref_count = 0;
 };

@@ -17,14 +17,6 @@ using namespace TR;
 
 mem_trace Mem::default_trace;
 
-void PAGE_DATA::self_delete()
-{
-    delete this;
-}
-void PAGE_PADDING::self_delete()
-{
-    delete this;
-}
 
 PAGE_DATA* PAGE_DATA::get_write_page(int user, PAGE* pt[1], z3::vcontext& ctx)
 {
@@ -45,7 +37,7 @@ PAGE_DATA* PAGE_PADDING::get_write_page(int user, PAGE* pt[1], z3::vcontext& ctx
     PAGE_DATA* res = new PAGE_DATA(user, ctx, get_padding_value());
     if (user == m_user) {
         dec_used_ref();
-        pt[0]->self_delete();
+        delete pt[0];
     }
     else {
         dec_used_ref();
@@ -126,7 +118,7 @@ void TR::MBase::unmap_interface(PAGE* pt[1]) {
     page->dec_used_ref();
     if (page->get_user() == m_user) {
         page->check_ref_cound(0);
-        page->self_delete();
+        delete page;
         pt[0] = nullptr;
     }else{
         vassert(page->get_used_ref() >= 1);
@@ -139,7 +131,7 @@ PAGE_DATA* PAGE_PADDING::convert_to_data(PAGE* pt[1], z3::vcontext& ctx)
     PAGE_PADDING* p_bak = (PAGE_PADDING*)pt[0];
     PAGE_DATA* res = new PAGE_DATA(p_bak->get_user(), ctx, p_bak->get_padding_value());
     if UNLIKELY(p_bak->dec_used_ref()==0) {
-        p_bak->self_delete();
+       delete p_bak;
     }
     pt[0] = res;
     return res;

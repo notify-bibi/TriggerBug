@@ -552,7 +552,7 @@ bool test_code_no_linear() {
 
     state.regs.set(AMD64_IR_OFFSET::RAX, 0x8000ll);
 
-    state.setFlag(CF_traceJmp);
+    state.get_trace()->setFlag(CF_traceJmp);
     //state.setFlag(CF_ppStmts);
     state.start(0x1900);
 
@@ -597,15 +597,16 @@ void recfun_example_2() {
 
     sort dom[] = { I, I, I };
     func_decl f = c.recfun(c.str_symbol("f"), 3, dom, I);
-
+    std::cout << f << std::endl;
     expr_vector args(c);
     args.push_back(i); args.push_back(x); args.push_back(ix);
     c.recdef(f, args, ite(i<=ix, f( i*2+2 , x+i*i , ix), x+i));
+    std::cout << f << std::endl;
     model m(c);
     expr zero_numeral = c.int_val(0);
     expr one_numeral = c.int_val(1);
     //m.add_const_interp(f, zero_numeral);
-    std::cout << f(c.int_val(12), c.int_val(5), c.int_val(5000)).simplify() << std::endl;;
+    std::cout << f(c.int_val(12), c.int_val(5), c.int_val(5000)) << std::endl;;
     prove(f(c.int_val(0), i, c.int_val(0)) > 0);
 }
 
@@ -621,10 +622,7 @@ void recfun_example_2() {
 bool test_creakme();
 
 
-
-
 int main() {
-
 
 #ifdef TESTZ3
     recfun_example_2();

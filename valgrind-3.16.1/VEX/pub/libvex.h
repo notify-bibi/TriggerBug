@@ -832,7 +832,6 @@ IRSB* LibVEX_FrontEnd ( /*MOD*/ VexTranslateArgs*,
                         /*OUT*/ VexTranslateResult* res,
                         /*OUT*/ VexRegisterUpdates* pxControl );
 
-
 /* A subtlety re interaction between self-checking translations and
    bb-chasing.  The supplied chase_into_ok function should say NO
    (False) when presented with any address for which you might want to

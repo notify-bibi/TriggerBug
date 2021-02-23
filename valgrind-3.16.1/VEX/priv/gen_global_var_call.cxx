@@ -1,7 +1,19 @@
 /*clang-cl.exe -E MKG.c 1>> xx.txt*/
 extern "C" {
-#include "libvex.h"
-#include "main_util.h"
+    #include "libvex.h"
+    #include "main_util.h"
+    #include "main_globals.h"
+
+
+    /* debug paranoia level */
+    Int* get_vex_debuglevel() { return &vex_debuglevel; };
+
+    /* trace flags */
+    Int* get_vex_traceflags() { return &vex_traceflags; };
+
+    /* Max # guest insns per bb */
+    VexControl* get_vex_control() { return &vex_control; };
+
 }
 #include <deque>
 extern std::deque<void*> LibVEX_Alloc_transfer(void);
@@ -75,7 +87,6 @@ class __attribute__((aligned(16)))  LibVEX_Alloc_M {
     HChar* private_LibVEX_alloc_last;
     std::deque<void*> m_alloc_list;
     VexAllocMode mode;
-
 public:
     inline LibVEX_Alloc_M() :temporary(nullptr), private_LibVEX_alloc_first(nullptr), private_LibVEX_alloc_curr(nullptr), private_LibVEX_alloc_last(nullptr){
         this->m_alloc_list.clear();
@@ -105,6 +116,12 @@ public:
         /* Make sure the compiler does no surprise us */
         vassert(offsetof(struct align, x) <= REQ_ALIGN);
 
+        if (mode == VexAllocModePERM) {
+            HChar* perm = (HChar*)malloc(nbytes);
+            memset(perm, 0x23, nbytes);
+            /* Nasty debugging hack, do not use. */
+            return perm;
+        }
 #if 0
         if (0x800 == nbytes) {
             printf("??");
@@ -115,6 +132,7 @@ public:
         /* Nasty debugging hack, do not use. */
         return temporary;
 #else
+
         HChar* curr;
         HChar* next;
         SizeT  ALIGN;
@@ -154,7 +172,6 @@ public:
 
 
     inline void  vexSetAllocModeTEMP_and_clear(void) {
-
     }
 
 

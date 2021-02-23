@@ -4594,7 +4594,7 @@ ULong dis_Grp5 ( const VexAbiInfo* vbi,
              assign(t3, unop(Iop_32Uto64, loadLE(Ity_I32, mkexpr(addr))));
              assign(t4, loadLE(Ity_I16, binop(Iop_Add64, mkexpr(addr), mkU(Ity_I64, 4))));
              stmt(IRStmt_Put(segmentGuestRegOffset(R_CS), mkexpr(t4)));
-             jmp_treg(dres, Ijk_translate_changed, t3);
+             jmp_treg(dres, Ijk_Sys_int32, t3);
              vassert(dres->whatNext == Dis_StopHere);
              showSz = False;
              break;

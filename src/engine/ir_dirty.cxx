@@ -63,7 +63,7 @@ namespace TR {
         //free ir temp
         virtual void free_ir_buff() override;
         // host dirty fuc translate
-        IRSB* translate_front(HWord /*dirty/guest_addr*/) override;
+        ref<IRSB_CHUNK> translate_front(HWord /*dirty/guest_addr*/) override;
         virtual sv::tval& operator[](UInt idx) override;
     };
 
@@ -139,13 +139,13 @@ namespace TR {
         return bb;
     }
 
-    IRSB* EmuEnvHost::translate_front(HWord ea)
+    ref<IRSB_CHUNK> EmuEnvHost::translate_front(HWord ea)
     {
         VexRegisterUpdates pxControl;
         VexTranslateResult res;
 
 
-        IRSB* cache_irsb = host_irsb_cache_find(m_host_irsb_cache, ea);
+        ref<IRSB_CHUNK> cache_irsb = host_irsb_cache_find(m_host_irsb_cache, ea);
         if (LIKELY(cache_irsb != nullptr)) {
             return cache_irsb;
         }
@@ -158,9 +158,7 @@ namespace TR {
         IRSB* irsb = LibVEX_FrontEnd(vta, &res, &pxControl);
 
         irsb = dirty_code_deal_BB(irsb);
-        host_irsb_cache_push(m_host_irsb_cache, vta->guest_extents, irsb, LibVEX_IRSB_transfer());
-        //irsbCache.push(irsb, LibVEX_IRSB_transfer());
-        return irsb;
+        return host_irsb_cache_push(m_host_irsb_cache, vta->guest_extents, irsb, LibVEX_IRSB_transfer());
     }
 
     sv::tval& EmuEnvHost::operator[](UInt idx)
@@ -259,9 +257,9 @@ public:
         }
         vex_info saved_vinfo = m_state.vinfo();
         new(&m_state.vinfo()) vex_info(host_arch);
-        TRControlFlags savedTraceFlag = (TRControlFlags)m_state.getFlags();
+        TRControlFlags savedTraceFlag = (TRControlFlags)(m_state.get_trace()->getFlags());
 #if 1
-        m_state.setFlags(CF_None);
+        m_state.get_trace()->setFlags(CF_None);
 #else
         m_state.setFlags(CF_traceJmp);
         m_state.setFlags(CF_ppStmts);
@@ -275,7 +273,7 @@ public:
         m_state.start(m_host_ip , &ir, vex_code_ret_addr);
         m_state.mem.set_emu_env(saved_guest_irvex);
         m_state.set_irvex(saved_guest_irvex);
-        m_state.setFlags(savedTraceFlag);
+        m_state.get_trace()->setFlags(savedTraceFlag);
         m_state.vinfo() = saved_vinfo;
         m_state.clean_dirty_mode();
         //m_state.vinfo()

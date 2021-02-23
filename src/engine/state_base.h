@@ -159,35 +159,32 @@ namespace TR {
     //Functional programming
     template<typename T = Addr64>
     class InvocationStack {
-        std::deque<T> guest_call_stack;
-        std::deque<T> guest_stack;
+
+        typedef typename std::pair<T, T> value_pair_t;
+        std::deque<value_pair_t> m_guest_saved_ret;
     public:
         inline InvocationStack() {}
         inline InvocationStack(InvocationStack<T> const& fsk) {
-            guest_call_stack = fsk.guest_call_stack;
-            guest_stack = fsk.guest_stack;
+            m_guest_saved_ret = fsk.m_guest_saved_ret;
         }
         inline void push(T call_ptr, T bp/*栈底*/) {
-            guest_call_stack.push_back(call_ptr);
-            guest_stack.push_back(bp);
+            m_guest_saved_ret.push_back(value_pair_t(call_ptr, bp));
         }
-        inline void pop() {
-            if (!guest_call_stack.empty()) {
-                guest_call_stack.pop_back();
-                guest_stack.pop_back();
-            }
+        inline value_pair_t pop() {
+            vassert(!m_guest_saved_ret.empty());
+            auto r = m_guest_saved_ret.back();
+            m_guest_saved_ret.pop_back();
+            return r;
         }
         template<typename T> friend bool operator==(InvocationStack<T> const& a, InvocationStack<T> const& b);
         void operator=(InvocationStack<T> const& b) {
-            guest_call_stack = b.guest_call_stack;
-            guest_stack = b.guest_stack;
+            m_guest_saved_ret = b.m_guest_saved_ret;
         }
 
-        void clear() { guest_call_stack.clear(); guest_stack.clear(); }
-        bool empty() const { return guest_call_stack.empty(); }
-        UInt size() const { return guest_call_stack.size(); }
-        const std::deque<T>& get_guest_stack() const { return guest_stack; }
-        const std::deque<T>& get_guest_call_stack() const { return guest_call_stack; }
+        void clear() { m_guest_saved_ret.clear(); }
+        bool empty() const { return m_guest_saved_ret.empty(); }
+        UInt size() const { return m_guest_saved_ret.size(); }
+        const std::deque<value_pair_t>& get_guest_saved_ret() const { return m_guest_saved_ret; }
         operator std::string() const;
     };
     

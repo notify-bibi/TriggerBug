@@ -161,7 +161,6 @@ namespace Ke {
                 PWOW64_CONTEXT wow64_ctx = (PWOW64_CONTEXT)(size_t)(DWORD)arg0.tor();
                 //**Addr32 next = dirty_call("getExecptionCtx32", Kc32::getExecptionCtx, { rsval<Addr64>(ctx, (size_t)wow64_ctx), rsval<Addr64>(ctx, getGSPTR()) }, Ity_I32);
                 //**goto_ptr(next);
-                st.get_InvokStack().clear();
                 regs.set(X86_IR_OFFSET::EAX, 0);
                 return TR::Running;
             }
@@ -239,7 +238,7 @@ namespace Ke {
 
         }
         std::cerr << std::hex << st.get_cpu_ip() << ": Sys_syscall_windows(\nid:" << eax << "\narg0:" << arg0 << "\narg1:" << arg1 << "\narg2:" << arg2 << "\narg3:" << arg3 << "\narg4:" << arg4 << "\narg5:" << arg5 << "\n) not define" << std::endl;
-        std::cerr << "Invok Stack :\n" << st.get_InvokStack() << std::endl;
+        /*std::cerr << "Invok Stack :\n" << (std::string)st.get_InvokStack() << std::endl;*/
         return TR::Death;
     };
 
@@ -252,7 +251,7 @@ namespace Ke {
 		case Ijk_Sys_syscall: {
             return Sys_syscall(st);
 		}
-        case Ijk_translate_changed: {
+        case Ijk_Sys_int32: {
             UShort cs = (UShort)st.regs.get<Ity_I16>(AMD64_IR_OFFSET::CS).tor();
             st.x86_set_mode(cs);
             return TR::Running;

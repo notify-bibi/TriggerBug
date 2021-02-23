@@ -13479,7 +13479,7 @@ decode_redo:
        UShort d16 = getSDisp(2, delta);
        delta += 2;
        putSReg(R_CS, mkU16(d16));
-       jmp_lit(&dres, Ijk_translate_changed, d32);
+       jmp_lit(&dres, Ijk_Sys_int32, d32);
        vassert(dres.whatNext == Dis_StopHere);
        DIP("jmp %x:0x%x\n", d16, d32);
        break;

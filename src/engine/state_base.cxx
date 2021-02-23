@@ -181,6 +181,11 @@ void StateBase::read_mem_dump(const char* filename)
 
 TR::StateBase::~StateBase()
 {
+
+    for (auto bs : branch) {
+        std::cout << *bs << std::endl;
+        delete bs;
+    }
 }
 
 TR::StateBase::StateBase(vex_context& vctx, VexArch guest_arch)
@@ -200,7 +205,7 @@ TR::StateBase::StateBase(vex_context& vctx, VexArch guest_arch)
     branch(*this)
 {
     m_vctx.set_top_state(this);
-    m_vinfo.ir_init();
+    m_vinfo.init_VexControl();
 }
 
 
@@ -251,7 +256,7 @@ UInt TR::StateBase::getStr(std::stringstream& st, HWord addr)
 
 bool TR::operator==(InvocationStack<HWord> const& a, InvocationStack<HWord> const& b)
 {
-    return (a.get_guest_call_stack() == b.get_guest_call_stack()) && (a.get_guest_stack() == b.get_guest_stack());
+    return (a.get_guest_saved_ret() == b.get_guest_saved_ret());
 }
 
 std::ostream& TR::operator<<(std::ostream& out, const TR::StateBase& n)

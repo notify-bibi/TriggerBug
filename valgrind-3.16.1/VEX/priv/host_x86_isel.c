@@ -43,6 +43,7 @@
 #include "host_generic_simd128.h"
 #include "host_x86_defs.h"
 
+
 /* TODO 21 Apr 2005:
 
    -- (Really an assembler issue) don't emit CMov32 as a cmov
@@ -383,7 +384,6 @@ void callHelperAndClearArgs ( ISelEnv* env, X86CondCode cc,
    /* Complication.  Need to decide which reg to use as the fn address
       pointer, in a way that doesn't trash regparm-passed
       parameters. */
-   vassert(sizeof(void*) == 4);
 
    addInstr(env, X86Instr_Call( cc, (Addr)cee->addr,
                                 cee->regparms, rloc));
@@ -1658,8 +1658,8 @@ static X86RMI* iselIntExpr_RMI_wrk ( ISelEnv* env, const IRExpr* e )
 
    /* special case: 32-bit GET */
    if (e->tag == Iex_Get && ty == Ity_I32) {
-      return X86RMI_Mem(X86AMode_IR(e->Iex.Get.offset,
-                                    hregX86_EBP()));
+       return X86RMI_Mem(X86AMode_IR(e->Iex.Get.offset,
+           hregX86_EBP()));
    }
 
    /* special case: 32-bit load from memory */

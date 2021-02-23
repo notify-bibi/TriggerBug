@@ -93,7 +93,7 @@ static void _vex_log_bytes(const HChar* bytes, SizeT nbytes) {
 
 clock_t tr_begin_run = clock();
 static bool is_LibVEX_Init = False;
-void vex_info::ir_init() {
+VexControl vex_info::init_VexControl() {
     VexControl vc;
     LibVEX_default_VexControl(&vc);
     vc.iropt_verbosity = 0;
@@ -106,10 +106,13 @@ void vex_info::ir_init() {
     vc.iropt_register_updates_default = gRegisterUpdates();
 
 
-    tr_begin_run = clock();
-    if (!is_LibVEX_Init) Func_Map_Init();
-    is_LibVEX_Init = true;
+    if (!is_LibVEX_Init) {
+        tr_begin_run = clock();
+        Func_Map_Init();
+        is_LibVEX_Init = true;
+    }
     LibVEX_Init(&failure_exit, &_vex_log_bytes, 0/*debuglevel*/, &vc);
+    return vc;
 }
 
 
@@ -340,7 +343,7 @@ Int vex_info::gRegsIpOffset(VexArch guest) {
      {
      }
      vex_info::vex_info(VexArch guest) 
-         :vex_info(guest, 2, 0xffff, VexRegUpdSpAtMemAccess, 0, gMaxThreadsNum())
+         :vex_info(guest, 2, 0x200, VexRegUpdSpAtMemAccess, 0, gMaxThreadsNum())
      {}
 
      vex_info::vex_info(const vex_info& v) :
@@ -572,6 +575,7 @@ Int vex_info::gRegsIpOffset(VexArch guest) {
         VexEndness guest_endness = arch_endness(guest_arch);
         VexEndness host_endness = arch_endness(host_arch);
 
+        memset(&vta_chunk, 0, sizeof(vta_chunk));
         LibVEX_default_VexArchInfo(&vta_chunk.archinfo_guest);
         LibVEX_default_VexArchInfo(&vta_chunk.archinfo_host);
 
@@ -616,7 +620,12 @@ Int vex_info::gRegsIpOffset(VexArch guest) {
         vta_chunk.chase_into_ok = chase_into_ok;
         vta_chunk.needs_self_check = needs_self_check;
         vta_chunk.traceflags = traceflags;
-    }
 
+#ifdef VEX_BACKEND_FN
+        vta_chunk.host_bytes_size = 0x2000;
+        vta_chunk.host_bytes = new UChar[0x2000];
+        vta_chunk.host_bytes_used = new Int;
+#endif
+    }
 
 };

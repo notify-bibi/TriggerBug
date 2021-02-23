@@ -309,7 +309,7 @@ typedef union {
    ULong serialized;
 } s390x_vec_op_details_t;
 
-STATIC_ASSERT(sizeof(s390x_vec_op_details_t) == sizeof(ULong));
+static_assert(sizeof(s390x_vec_op_details_t) == sizeof(ULong));
 
 /* Macro definitions for opcodes that are not generally available.
 

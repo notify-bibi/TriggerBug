@@ -298,7 +298,6 @@ void LibVEX_Init (
    vexSetAllocMode ( VexAllocModeTEMP );
 }
 
-
 /* --------- Make a translation. --------- */
 
 /* KLUDGE: S390 need to know the hwcaps of the host when generating
@@ -312,6 +311,8 @@ UInt s390_host_hwcaps;
 
 
 /* Exported to library client. */
+
+
 
 IRSB* LibVEX_FrontEnd ( /*MOD*/ VexTranslateArgs* vta,
                         /*OUT*/ VexTranslateResult* res,
@@ -725,8 +726,8 @@ IRSB* LibVEX_FrontEnd ( /*MOD*/ VexTranslateArgs* vta,
 
 
 /* Back end of the compilation pipeline.  Is not exported. */
-
-static void libvex_BackEnd ( const VexTranslateArgs *vta,
+static
+void libvex_BackEnd ( const VexTranslateArgs *vta,
                              /*MOD*/ VexTranslateResult* res,
                              /*MOD*/ IRSB* irsb,
                              VexRegisterUpdates pxControl )

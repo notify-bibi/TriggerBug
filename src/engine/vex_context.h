@@ -84,7 +84,7 @@ namespace TR {
 
         vex_info(const vex_info& v);
         void operator =(const vex_info& v);
-        void ir_init();
+        VexControl init_VexControl();
         VexArch enable_long_mode();
         VexArch disable_long_mode();
         static void init_vta_chunk(VexTranslateArgs& vta_chunk, VexGuestExtents& vge_chunk, VexArch guest, ULong traceflags);

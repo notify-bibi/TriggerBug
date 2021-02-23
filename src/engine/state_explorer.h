@@ -23,7 +23,7 @@ Revision History:
 #include "engine/emu_environment.h"
 #include "z3_target_call/z3_target_call.h"
 #include <deque>
-
+#include "engine/ref.h"
 
 
 namespace cmpr {
@@ -56,7 +56,7 @@ namespace TR {
 
     //branch_temp_state
     template<class STATE>
-    class BTS {
+    class BTS : public ref_manager {
         STATE& m_state;
         Addr64 m_oep;
         rsbool m_guard;
@@ -107,6 +107,8 @@ namespace TR {
         BTS(const BTS& a) : m_state(a.m_state), m_oep(a.m_oep), m_guard(a.m_guard), m_addr_eq(a.m_addr_eq), m_child_state(a.m_child_state) {};
         
         void operator = (const BTS& a) { this->BTS::~BTS(); this->BTS::BTS(a); }
+
+        virtual void self_del() { delete this; }
     };
 
 
@@ -117,28 +119,58 @@ namespace TR {
         vStop,
     };
 
+    class TraceInterface : public ref_manager {
+        TRControlFlags         m_trtraceflags;
+    public:
+        TraceInterface(TRControlFlags f) :m_trtraceflags(f) {};
+        TraceInterface() :m_trtraceflags(CF_None) {};
+        virtual void traceStart(State& s, HWord ea);
+          virtual void traceIRSB(State& s, HWord ea, ref<IRSB_CHUNK>&);;
+              virtual void traceIRStmtStart(State& s, const IRSB* irsb, UInt stmtn);
+              virtual void traceIRStmtEnd(State& s, const IRSB* irsb, UInt stmtn);
+            virtual void traceIRnext(State& s, const IRSB* irsb, const tval& next);
+          virtual void traceIrsbEnd(State& s, ref<IRSB_CHUNK>&);
+        virtual void traceFinish(State& s, HWord ea);
+
+        inline TR::TRControlFlags setFlag(TR::TRControlFlags t) { return (TR::TRControlFlags)setFlag((ULong)t); }
+        inline ULong setFlag(ULong f) { return *(ULong*)&m_trtraceflags |= f; }
+
+        inline TR::TRControlFlags delFlag(TR::TRControlFlags f) { return (TR::TRControlFlags)delFlag((ULong)f); }
+        inline ULong delFlag(ULong f) { return *(ULong*)&m_trtraceflags &= ~f; }
+
+        inline bool getFlag(TR::TRControlFlags t) const { return m_trtraceflags & t; }
+        inline ULong getFlags() const { return m_trtraceflags; }
+        inline void setFlags(TR::TRControlFlags t) { m_trtraceflags = t; };
+        //inline ULong& getFlagRef() { return m_trtraceflags; }
+        virtual ~TraceInterface() {}
+        virtual TraceInterface* mk_new_TraceInterface() { return new TraceInterface(m_trtraceflags); }
+    protected:
+        void pp_call_space(State& s);
+        void pp_call_space(State& s, HWord addr);
+    };
 
     // i'm just a cpu hardware
     class State : public StateBase {
         friend class StateAnalyzer;
         friend class StateCmprsInterface;
         friend class VexIRDirty;
+    public:
         using vsize_t = rsval<HWord>;
-        using BTSType = BTS<State>;
-
+        using BtsType = BTS<State>;
+        using BtsRefType = ref<BtsType>;
+    private:
         bool                   m_call_stack_is_empty = false;
         std::mutex             m_state_lock;
-        InvocationStack<HWord> m_InvokStack;
         EmuEnvironment        *m_irvex;
-        TRControlFlags         m_trtraceflags;
         DirtyCtx               m_dctx = nullptr;
         Bool                   m_is_dirty_mode; // vex状态
+        ref<TraceInterface>    m_trace;
     public:
 
         State(vex_context& vctx, VexArch guest_arch);
         State(State& father, HWord gse);
 
-        ~State();
+        virtual ~State();
         // x96
         void x86_set_mode(UChar cs);
 
@@ -157,30 +189,27 @@ namespace TR {
         // ------------- dirty end -------------
 
         sv::tval ILGop(const IRLoadG* lg);
-        void do_Ijk_Ret();
-        template<int ea_nbits>
-        void do_Ijk_Call(const IRExpr* irsb_next);
         sv::tval tIRExpr(const IRExpr*);
         template<int ea_nbits> void tIRStmt(const IRTypeEnv* tyenv, const IRStmt *s);
 
         template<int ea_nbits>
-        Vex_Kind emu_irsb_next(std::deque<BTSType>& tmp_branch, HWord& guest_start, IRJumpKind jumpkind, const IRExpr* next);
+        Vex_Kind emu_irsb_next(std::deque<BtsRefType>& tmp_branch, HWord& guest_start, const IRSB* irsb);
 
         template<int ea_nbits>
-        Vex_Kind emu_irsb(std::deque<BTSType>& tmp_branch, HWord& guest_start, State_Tag& status, const IRSB* irsb);
+        Vex_Kind emu_irsb(std::deque<BtsRefType>& tmp_branch, HWord& guest_start, State_Tag& status, const IRSB* irsb);
 
 
-        bool vex_main_loop(IRSB*& irsb, HWord& guest_start, Addr avoid);
-        void start(); // guest emu
-        void start(HWord ep); // guest emu
-        void start(HWord& guest_start, EmuEnvironment*, Addr avoid); // guest or host emu
+        bool vex_main_loop(std::deque<BtsRefType>& tmp_branch, IRSB*& irsb, HWord& guest_start, Addr avoid);
+        std::deque<BtsRefType> start(); // guest emu
+        std::deque<BtsRefType> start(HWord ep); // guest emu
+        std::deque<BtsRefType> start(HWord& guest_start, EmuEnvironment*, Addr avoid); // guest or host emu
     private:
-        void v_start(HWord& guest_start, Addr avoid); // emu
+        std::deque<BtsRefType> v_start(HWord& guest_start, Addr avoid); // emu
 
         void set_dirty_mode() { m_is_dirty_mode = true; }
         void clean_dirty_mode() { m_is_dirty_mode = false; }
-        bool is_dirty_mode() { return m_is_dirty_mode; }
     public:
+        bool is_dirty_mode() { return m_is_dirty_mode; }
         void dirty_call_run(IRTemp tmp, IRType tmpType, const IRDirty* dirty);
 
         void branchGo();
@@ -194,10 +223,6 @@ namespace TR {
 
         inline EmuEnvironment& irvex() { return *m_irvex; }
         void set_irvex(EmuEnvironment* e);
-
-
-        inline InvocationStack<HWord>& get_InvokStack() { return m_InvokStack; }
-
 
 
         // ---------------------   stack  ---------------------
@@ -232,31 +257,13 @@ namespace TR {
         virtual void avoid_anti_debugging();
     public:
         void clean();//清空多余的指针对象（m_dctx）
-        inline TR::TRControlFlags setFlag(TR::TRControlFlags t) { return (TR::TRControlFlags)setFlag((ULong)t); }
-        inline ULong setFlag(ULong f) { return *(ULong*)&m_trtraceflags |= f; }
+        ref<TraceInterface>& get_trace() { return m_trace; }
+        void set_trace(ref<TraceInterface> trace) { m_trace = trace; }
 
-        inline TR::TRControlFlags delFlag(TR::TRControlFlags f) { return (TR::TRControlFlags)delFlag((ULong)f); }
-        inline ULong delFlag(ULong f) { return *(ULong*)&m_trtraceflags &= ~f; }
-
-        inline bool getFlag(TR::TRControlFlags t) const { return m_trtraceflags & t; }
-        inline ULong getFlags() const { return m_trtraceflags; }
-        inline void setFlags(TR::TRControlFlags t) { m_trtraceflags = t; };
-        //inline ULong& getFlagRef() { return m_trtraceflags; }
-
-
-        void pp_call_space();
-        void pp_call_space(HWord addr);
 
     public:
         // interface
 
-        virtual void traceStart(HWord ea);
-        virtual void traceFinish(HWord ea);
-        virtual void traceIRSB(HWord ea, const IRSB*);;
-        virtual void traceIrsbEnd(const IRSB*);
-        virtual void traceIRStmtStart(const IRStmt*);
-        virtual void traceIRStmtEnd(const IRStmt*);
-        virtual void traceInvoke(HWord call, HWord bp);
 
     };
 

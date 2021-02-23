@@ -264,8 +264,8 @@ void TR::mapping<ST>::mount(Addr ea, ST* p)
         page = get_pointer_of_mem_page(ea);
     }
     unmap_interface(page);
-    
-    vassert(page[0] == nullptr);
+
+    //vassert(page[0] == nullptr);
     page[0] = p;
 }
 

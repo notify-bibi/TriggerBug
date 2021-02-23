@@ -8,6 +8,17 @@
 
 IRSB* irsb_cache_find(HWord ea);
 
+#ifdef VEX_BACKEND_FN
+void (*libvex_BackEnd)(const VexTranslateArgs * vta,
+    /*MOD*/ VexTranslateResult * res,
+    /*MOD*/ IRSB * irsb,
+    VexRegisterUpdates pxControl);
+
+
+void set_cvdf(void*p) {
+    libvex_BackEnd = (decltype(libvex_BackEnd))p;
+}
+#endif
 
 namespace TR {
 
@@ -58,7 +69,6 @@ namespace TR {
     EmuEnvGuest::EmuEnvGuest(vex_context& vctx, vex_info const& info, MBase& mem_obj)
         : EmuEnvironment(info.gguest(), info.gtraceflags()),
         m_vctx(vctx),
-        m_info(const_cast<vex_info&>(info)),
         m_ir_temp(mem_obj.ctx()),
         m_mem(mem_obj)
     {
@@ -97,16 +107,14 @@ namespace TR {
     {
     }
 
-    IRSB* EmuEnvGuest::translate_front(HWord ea)
+    ref<IRSB_CHUNK> EmuEnvGuest::translate_front(HWord ea)
     {
         set_guest_bb_insn_control_obj();
         /*if (ea == 0x77736009) {
             printf("xd");
         }*/
-        VexRegisterUpdates pxControl;
-        VexTranslateResult res;
         
-        IRSB* cache_irsb = irsb_cache_find(m_vctx.get_irsb_cache(), m_mem, ea);
+        ref<IRSB_CHUNK> cache_irsb = irsb_cache_find(m_vctx.get_irsb_cache(), m_mem, ea);
         if (LIKELY(cache_irsb != nullptr)) {
             return cache_irsb;
         }
@@ -116,10 +124,14 @@ namespace TR {
         
         m_guest_start_of_block = ea;
         m_is_dynamic_block = false;
-        IRSB* irsb = LibVEX_FrontEnd(vta, &res, &pxControl);
+        IRSB* irsb = LibVEX_FrontEnd(vta, &m_res, &m_pxControl);
+
+#ifdef VEX_BACKEND_FN
+        if(irsb->jumpkind != Ijk_Sys_int32)
+            libvex_BackEnd(vta, get_res(), irsb, *get_pxControl());
         m_base_block_sz = vta->guest_extents->len[0];
-        irsb_cache_push(m_vctx.get_irsb_cache(), m_mem, vta->guest_extents, irsb, LibVEX_IRSB_transfer());
-        return irsb;
+#endif
+        return irsb_cache_push(m_vctx.get_irsb_cache(), m_mem, vta->guest_extents, irsb, LibVEX_IRSB_transfer());
     }
 
     sv::tval& EmuEnvGuest::operator[](UInt idx)

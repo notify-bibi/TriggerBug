@@ -105,9 +105,8 @@ class PAGE {
 
     inline PAGE(Int u, PageTy mem_ty) : m_user(u), m_ref_cound(1), m_mem_ty(mem_ty){};
     inline void set_user(Int u) {  m_user = u; };
-    inline ~PAGE() noexcept(false) { vassert(m_ref_cound == 0); }
+    virtual ~PAGE() noexcept(false) { vassert(m_ref_cound == 0); }
 public:
-    virtual void self_delete() { vassert(0); }
     inline void set_ext(void* p) { m_any_ext_ref = p; }
     inline void* get_ext() { return m_any_ext_ref; }
     inline Int  get_user() const { return m_user; };
@@ -194,9 +193,8 @@ class PAGE_DATA final : public PAGE  {
         m_unit = link;
     }
 
-    void self_delete() override;
 public:
-    ~PAGE_DATA() {
+    virtual ~PAGE_DATA() {
         if (m_mem_ty != mem_Link) {
             TR::Register::del_Register(m_unit);
         }
@@ -244,7 +242,6 @@ class PAGE_PADDING : public PAGE {
 
     inline PAGE_PADDING(Int u, UChar pad_value) : PAGE(u, mem_PADDING), m_padding_value(pad_value) { m_padding = _mm256_set1_epi8(m_padding_value); }
 public:
-    void self_delete() override;
     template<bool sign, int nbits, sv::z3sk sk>
     inline sv::rsval<sign, nbits, sk> load(UInt idx, Z3_context target_ctx) {
         return sv::rsval<sign, nbits, sk>(target_ctx, (UChar*)&m_padding);
@@ -257,6 +254,7 @@ public:
     inline bool is_data() = delete;
     inline bool is_padding() = delete;
     virtual PAGE_DATA* get_write_page(int user, PAGE* pt[1]/*in&out*/, z3::vcontext& ctx) override;
+    virtual ~PAGE_PADDING(){}
 };
 
 #define pto_data(p)      ((PAGE_DATA*)  (p))
@@ -307,7 +305,7 @@ namespace TR {
         MBase(z3::solver& so, z3::vcontext& ctx, Bool _need_record);
         MBase(z3::solver& so, z3::vcontext& ctx, MBase& father_mem, Bool _need_record);
 
-        ~MBase() { recycle(); }
+        virtual ~MBase() { recycle(); }
 
     public:
         ULong genericg_compute_checksum(HWord ea, UInt nb);
@@ -443,6 +441,7 @@ namespace TR {
             MBase(so, ctx, father_mem, _need_record)
         { ; }
 
+        virtual ~Mem() {}
 
         Itaddress addr_begin(z3::solver& s, Z3_ast addr, int wide) { return Itaddress(s, addr, wide); }
 

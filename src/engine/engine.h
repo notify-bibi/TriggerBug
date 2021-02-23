@@ -1,6 +1,7 @@
 #ifndef _TR_head
 #define _TR_head
 
+//#define VEX_BACKEND_FN
 
 #define GET_MEM_ACCESS_FLAG1(v)  ((UInt)(((ULong)(v)) >> 56))
 #define GET_MEM_ACCESS_FLAG2(v)  ((UInt)(((ULong)(v)) >> 48)&0xff)

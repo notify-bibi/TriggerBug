@@ -4,7 +4,8 @@
 
 #include "engine/engine.h"
 #include "engine/vex_context.h"
-#include <map>   
+#include <map>
+#include "engine/irsb_cache.h"
 
 namespace TR {
     class MBase;
@@ -87,6 +88,10 @@ namespace TR {
 
         VexTranslateArgs    m_vta_chunk;
         VexGuestExtents     m_vge_chunk;
+
+        VexRegisterUpdates m_pxControl;
+        VexTranslateResult m_res;
+
         Addr64 m_guest_start_of_block = 0;
         UInt m_base_block_sz = 0;
         bool   m_is_dynamic_block = false;//Need to refresh IRSB memory?
@@ -101,6 +106,9 @@ namespace TR {
         inline void clean_dirty_mode() { m_is_dirty_mode = false; }
         inline VexTranslateArgs* get_ir_vex_translate_args() { return &m_vta_chunk; }
         inline VexGuestExtents* get_ir_vex_guest_extents() { return &m_vge_chunk; }
+        inline VexRegisterUpdates* get_pxControl() { return &m_pxControl; }
+        inline VexTranslateResult* get_res(){ return &m_res; }
+
         inline bool check() { return m_is_dynamic_block; };
         //emu process write method will call back
         virtual void block_integrity(Addr ea, UInt sz);
@@ -111,7 +119,7 @@ namespace TR {
         //free ir temp
         virtual void free_ir_buff() {};
         // translate
-        virtual IRSB* translate_front(HWord /*dirty/guest_addr*/) {};
+        virtual ref<IRSB_CHUNK> translate_front(HWord /*dirty/guest_addr*/) {};
         virtual sv::tval& operator[](UInt idx) {};
 
         // 模拟前调用
@@ -123,7 +131,6 @@ namespace TR {
 
     class EmuEnvGuest : public EmuEnvironment {
         vex_context& m_vctx;
-        vex_info& m_info;
         IR_Manager m_ir_temp;
         MBase& m_mem;
     public:
@@ -141,7 +148,7 @@ namespace TR {
         //free ir temp
         virtual void free_ir_buff() override;
         // guest translate
-        IRSB* translate_front( HWord /*guest_addr*/) override;
+        ref<IRSB_CHUNK> translate_front( HWord /*guest_addr*/) override;
         virtual sv::tval& operator[](UInt idx) override;
     };
 
