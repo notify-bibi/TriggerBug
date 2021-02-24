@@ -290,11 +290,13 @@ Set up the development environment ：See  <<[development manual][Develop]>>
 
 Warmly welcome to join us in the development. Study together.
 
-缓解路径爆炸的原理展示
+
+
+​                               缓解路径爆炸的原理展示
 
  cmpr::Compress<target_state, ...>, 配合StateAnalyzer（已剔除）
 
-- [x] ```powershell
+```powershell
                          P1 top
     
             A  (P1 fork)                B  (P1 fork) 
@@ -318,11 +320,11 @@ Warmly welcome to join us in the development. Study together.
   P1 A B state
   Q sbool rea == sea
   如果分支条件约束未添加，if.else被命中那么很可能会导致求解结果错误。并不是合并就完美解决路径爆炸，如果多个不等返回地址被合并，合并只能增加负荷
-  ```
+```
 
-  ## Release
+## Release
 
-  ------
+------
 
   ​        [Dlls & python module][Plre]   *need build by yourself*
 
