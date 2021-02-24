@@ -12,63 +12,20 @@ The engine was developed to solve some of Angr's more intractable problems.
 进展：
 
 - [x] 解决了并提供求解AES等一些列现代加密算法的方案。（原理层方案，非实现Aes decrypto。demo example有实例）。某些隐式加密在原理上是解不开的，只能爆破，故准备写一个常见现代加密算法的crypto ANAlyzer, 方便构建exp，不需要hook table_base进行显式转换。crypto_finder(目前仅添加支持aes)
-
 - [x] 采用模拟host code实现guest code的方法去支持所有ir dirty code（guest code 的微操作）和ir dirty call, dirty call regs合并到客户机regs末尾，并挂载到guest memory map 上，以此实现dirty call支持完整性， 将host dirty call分解为target_ir_call和标准ir指令来支持执行。host dirty call stack使用客户机未分配区，IRDirty class 管理生命周期，设计原理限制，无法递归。
-
 - [x] 符号地址读写策略变更，之前是求解子集再读写，速度极慢，现在实现了超集求解算法，快速极快。再根据求得的超集读写。
-
-- [x] 自动合并路径的算法已经构造完毕. 缓解路径爆炸状态合并模块 cmpr::Compress<target_state, ...>, 配合StateAnalyzer（已剔除）
-
-- [ ] ```powershell
-                         P1 top
-  
-            A  (P1 fork)                B  (P1 fork) 
-            P2
-  
-      a1  a2  -a1 -a2              b-1  b0   b1
-      Q1  Q2   q1  q2
-  
-  yes  P2 → (Q1 ∨ Q2) <=> ┐P2 ∨ (Q1 ∨ Q2) <=> ┐P2 ∨ Q1 ∨ Q2
-  sat:  P2 Q1 Q2
-        1  1  1
-        1  0  1
-        1  1  0
-        0  x  x
-  
-  yes  P2 → (┐q1 ∧ ┐q2) <=> P2 → ┐(q1 ∨ q2) <=> ┐P2 ∨ (┐q1 ∧ ┐q2) <=> ┐P2 ∨ (┐q1 ∧ ┐q2)
-  sat:  P2 q1 q2
-        1  0  0
-        0  x  x
-  a assert
-  P1 A B state
-  Q sbool rea == sea
-  如果分支条件约束未添加，if.else被命中那么很可能会导致求解结果错误。并不是合并就完美解决路径爆炸，如果多个不等返回地址被合并，合并只能增加负荷
-  ```
-
-  
-
+- [x] 自动合并路径的算法已经构造完毕. 路径爆炸缓解方案详见文末
 - [x] 移植，计划将代码部署在linux、darwin、windows(clang)
-
 - [x] 反反调试功能（vmp检测通过）
-
 - [x] 代码重构，所有基础符号变量全部使用basic_var.hpp中的sv::模版类，涵盖所有操作，编译时期确定并计算参数（提速），编译时检查所有AST误操作等问题。
-
-- [x] windows 异常支持（Eha/ EHsc）vmp喜欢异常检测
-
-- [x] 支持windows wow64子系统，支持cpu长模式和32位模式动态切换， 需要配合windbg, 内核全部使用64位
-
+- [x] windows ntdll_KiUserExceptionDispatcher 异常支持（Eha/ EHsc）vmp喜欢异常检测.
+- [x] 支持模拟windows wow64嵌套子系统，支持cpu长模式和32位模式动态切换， 需要配合windbg, 内核全部使用64位
 - [ ] Python前端重写（结构太复杂、项目重构不易同步）推迟。
-
 - [x] 代码控制流目标路径探索算法完成，计划写主动式路径合并分析器，正在完善 (目前只有被动式的可以自动合并分支，某些子状态回收不是很好) 
-
 - [ ] 设计分析器，使用valgrind优化block，日志型模拟基本块，记录执行指令分析，分析循环条件等手段来解决问题。在原理上，对于很多大型程序，符号执行并不能构建出程序的所有的执行状态，时间复杂度O(k^n)，加入各种预测约束、快速解析符号地址遍历读写技术、状态合并技术、Cr3用户页复制等也仅仅是一种缓解手段，但不是说没有用，其在无环路分支上表现非常好。挖坑 ...
-
 - [ ] VMP等强壳的随机地址解密释放代码再执行会干扰分析器，地址不再具有意义，irsb和hash进行绑定，有待解决
-
 - [x] 添加IRU cache模块，加快翻译速度，已完成
-
 - [ ] 设计将分析指令流的寄存器读写，对未读后写的寄存器操作进行分析剔除，用于反指令混淆，但是表现不佳，考虑将IR tree经过准换为z3 ast,使用z3优化器放混淆，但是需要z3 ast 2 ir tree, 构建ing
-
 - [ ] 设计basic block分析模块，将不再操作任何客户机寄存器，使用中间变量ir进行表达内存操作与交换.基本块树构建完整性由符号执行探索，未命中返回使用后端继续探索。可以以此设计IR层的反编译调试器，设计中
 
 坚持✊
@@ -85,7 +42,7 @@ The engine was developed to solve some of Angr's more intractable problems.
 |compress State|support(Is not very good)|support(automatically)|
 |vex(dirtycall)|Incomplete support<br />Implementation by developers|fully supported<br />emu all host code|
 |binary load|[py module:cle(Incomplete loading)<br />Parsing is not complete<br />slowly][CLE]|[py dump mem from  IDA <br/>1:1 Fully symbolic loading<br/>200MB/1s][MDB]|
-|speed| ... |like qemu|
+|speed| Orz  🙏 |like qemu|
 
 
 
@@ -110,26 +67,18 @@ $ mkdir build && cmake .. && make
 In  **windows**
 
 ```bash
-cmake -G "Visual Studio 16 2019" -T ClangCL X:\TriggerBug
-pls use ms build IDE
+$ cmake -G "Visual Studio 16 2019" -T ClangCL X:\TriggerBug
+  pls use MSBuild IDE
 ```
 
-**dev option**
+**interesting dev option**
 
 `-DDEBUG_GABLE=ON`
 `-DZ3_BUILD_LIBZ3_SHARED=ON `
 `-DZ3_USE_LIB_GMP=OFF `
 `-DZ3_SINGLE_THREADED=OFF `
 
-
-
-## Release
-
-------
-
-​        [Dlls & python module][Plre]
-
-## Install 
+## Install
 
 ------
 前端暂不可用
@@ -155,11 +104,9 @@ bcdedit.exe -dbgsettings net hostip:127.0.0.1 port:50000
 bcdedit -dbgsettings
 ```
 
- Open ida, switch windbg ->connect string  tcp:server=127.0.0.1,port=50000 -> make a backpoint(bpt). 
+Open ida, **switch windbg** ->**connect string  tcp:server=127.0.0.1,port=50000** -> **make a backpoint(bpt)**. 
 
-When you get to the bpt. 
-
-At the Windbg commond line , enter `!sw`   to open wow64exts
+When you hit one bpt.  At the Windbg commond line , **enter !sw**   to open wow64exts. (不然32位程序一个含有系统调用的库函数都不可执行)
 
 Just **(Shift-3)** to dump binary.
 
@@ -222,12 +169,16 @@ term() called!
 
 
 介绍下c++写代码使用引擎技巧
+
 例如 examples 的ctf题目 xctf-asong.  本引擎不到20s解出, angr用时4分钟
+
 此题使用angr必定路径爆炸，某些模拟执行的地址访问可能是符号地址访问，angr可能会直接将该state添加到Death的state管理器
+
 库函数底层调用系统调用可能才会失败，比如malloc、printf、微软闭源库函数等均无问题（sys_brk、nt_proc_information、非标准IO等系统调用已经实现）
 
-下面使用本引擎
-速度很快的，主要是z3太耗时，如果没有大量处理符号，仿真速度基本不用担心
+下面使用本引擎，速度很快, 不用担心某符号执行引擎跑进VMP出不来了 ：）
+
+主要是z3太耗时，如果没有大量处理符号，仿真速度基本不用担心
 
 
 
@@ -321,16 +272,14 @@ namespace: <p_>       len: 38{
 也可以看看creakme一题，一个aes的题目，上面的特性全部能够展露
 ```
 
-goto   [examples][Pltest]  ;
-
-## Salute to you
-
-------
-Thanks to the developers of the  [Z3][Plz3] ,[Valgrind][Plvgrd] and [Angr][Plangr] projects.
 
 
+goto   [TRtest][trTest]  ;   
 
-## Development 
+goto   [examples program][Pltest]  ;
+
+## Development
+
 ------
 
 Want to contribute? Great! 
@@ -339,8 +288,50 @@ Set up the development environment ：See  <<[development manual][Develop]>>
 
 **Of course, you can also use this engine to develop your own tools**
 
-
 Warmly welcome to join us in the development. Study together.
+
+缓解路径爆炸的原理展示
+
+ cmpr::Compress<target_state, ...>, 配合StateAnalyzer（已剔除）
+
+- [x] ```powershell
+                         P1 top
+    
+            A  (P1 fork)                B  (P1 fork) 
+            P2
+    
+      a1  a2  -a1 -a2              b-1  b0   b1
+      Q1  Q2   q1  q2
+    
+  yes  P2 → (Q1 ∨ Q2) <=> ┐P2 ∨ (Q1 ∨ Q2) <=> ┐P2 ∨ Q1 ∨ Q2
+  sat:  P2 Q1 Q2
+        1  1  1
+        1  0  1
+        1  1  0
+        0  x  x
+  
+  yes  P2 → (┐q1 ∧ ┐q2) <=> P2 → ┐(q1 ∨ q2) <=> ┐P2 ∨ (┐q1 ∧ ┐q2) <=> ┐P2 ∨ (┐q1 ∧ ┐q2)
+  sat:  P2 q1 q2
+        1  0  0
+        0  x  x
+  a assert
+  P1 A B state
+  Q sbool rea == sea
+  如果分支条件约束未添加，if.else被命中那么很可能会导致求解结果错误。并不是合并就完美解决路径爆炸，如果多个不等返回地址被合并，合并只能增加负荷
+  ```
+
+  ## Release
+
+  ------
+
+  ​        [Dlls & python module][Plre]   *need build by yourself*
+
+## Salute to you
+
+------
+Thanks to the developers of the  [Z3][Plz3] , [Valgrind][Plvgrd], [Spdloger][Spdlog] and [Angr][Plangr] projects.
+
+
 
 
 [Plvgrd]: <http://valgrind.org/>
@@ -348,12 +339,15 @@ Warmly welcome to join us in the development. Study together.
 [Plangr]: <https://github.com/angr>
 [Pltest]: <https://github.com/notify-bibi/TriggerBug/tree/master/PythonFrontEnd/examples>
 [Plre]: <https://github.com/notify-bibi/TriggerBug/releases>
-[Plxml]: <https://github.com/notify-bibi/TriggerBug/blob/master/PythonFrontEnd/TriggerBug-default32.xml>
 [Develop]: <https://github.com/notify-bibi/TriggerBug/blob/master/develop.md>
 
 [MDB]: <https://github.com/notify-bibi/TriggerBug/blob/master/PythonFrontEnd/ida-plugins/tr_dumper.py>
 [CLE]: <https://github.com/angr/cle>
 
+[Spdlog]: <https://github.com/gabime/spdlog>
 
+[trTest]: <https://github.com/notify-bibi/TriggerBug/blob/master/src/test/test_main.cxx>
 
-另外值得高兴的是，windows终于支持clang了，早点放弃自家编译器该多好啊，有些时候还是不要那么执着的好
+另外值得高兴的是, vs终终终于支持clang了，早点放弃自家编译器该多好啊，有些时候还是不要那么执着的好 :)
+
+cmake里已经做了ms编译兼容
