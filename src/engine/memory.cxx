@@ -668,9 +668,221 @@ ULong TR::MBase::genericg_compute_checksum(HWord base2check, UInt len2check)
 }
 
 
+class Itaddress {
+private:
+    z3::solver& m_solver;
+    z3::context& m_ctx;
+    Z3_ast m_addr;
+    Z3_ast last_avoid_addr;
+    Z3_lbool m_lbool;
+    int m_ea_nbits;
+    //std::vector<Z3_model> v_model;
+public:
+    Itaddress(z3::solver& s, Z3_ast addr, int ea_nbits) :
+        m_solver(s), m_ctx(m_solver.ctx()), m_addr(addr), m_ea_nbits(ea_nbits)
+    {
+        m_addr = Z3_simplify(s.ctx(), m_addr);
+        Z3_inc_ref(m_ctx, m_addr);
+        m_solver.push();
+        Z3_ast so = Z3_mk_bvule(m_ctx, m_addr, m_ctx.bv_val((HWord)-1, ea_nbits));
+        Z3_inc_ref(m_ctx, so);
+        Z3_solver_assert(m_ctx, m_solver, so);
+        Z3_dec_ref(m_ctx, so);
+        //v_model.reserve(20);
+    }
+
+    inline bool check() {
+        m_lbool = Z3_solver_check(m_ctx, m_solver);
+        vassert(m_lbool != Z3_L_UNDEF);
+        return m_lbool == Z3_L_TRUE;
+    }
+
+    inline void operator++(int)
+    {
+        Z3_ast eq = Z3_mk_eq(m_ctx, m_addr, last_avoid_addr);
+        Z3_inc_ref(m_ctx, eq);
+        Z3_ast neq = Z3_mk_not(m_ctx, eq);
+        Z3_inc_ref(m_ctx, neq);
+        Z3_solver_assert(m_ctx, m_solver, neq);
+        Z3_dec_ref(m_ctx, eq);
+        Z3_dec_ref(m_ctx, neq);
+        Z3_dec_ref(m_ctx, last_avoid_addr);
+    }
+
+    tval operator*()
+    {
+        Z3_model m_model = Z3_solver_get_model(m_ctx, m_solver); vassert(m_model);
+        Z3_model_inc_ref(m_ctx, m_model);
+        //v_model.emplace_back(m_model);
+        Z3_ast r = 0;
+        bool status = Z3_model_eval(m_ctx, m_model, m_addr, /*model_completion*/false, &r);
+        vassert(status);
+        Z3_inc_ref(m_ctx, r);
+        last_avoid_addr = r;
+        ULong ret;
+        vassert(Z3_get_ast_kind(m_ctx, r) == Z3_NUMERAL_AST);
+        vassert(Z3_get_numeral_uint64(m_ctx, r, &ret));
+        Z3_model_dec_ref(m_ctx, m_model);
+        return tval(m_ctx, ret, r, sv::z3sk::Z3_BV_SORT, m_ea_nbits, no_inc{});
+    }
+    inline ~Itaddress() {
+        Z3_dec_ref(m_ctx, m_addr);
+        m_solver.pop();
+        //for (auto m : v_model) Z3_model_dec_ref(m_ctx, m);
+    }
+};
+
+
+static Itaddress addr_begin(z3::solver& s, Z3_ast addr, int ea_nbits) { return Itaddress(s, addr, ea_nbits); }
+
+
+template<bool sign, int nbits, sv::z3sk sk, int ea_nbits>
+sv::rsval<sign, nbits, sk> TR::Mem::load(const subval<ea_nbits>& address)
+{
+    static_assert((nbits & 7) == 0, "err load");
+    //            TR::addressingMode<HWord> am(z3::expr(m_ctx, address));
+    //            auto kind = am.analysis_kind();
+    //            if (kind != TR::addressingMode<HWord>::cant_analysis) {
+    //#ifdef TRACE_AM
+    //                printf("Iex_Load  base: %p {\n", (void*)(size_t)am.getBase());
+    //                am.print();
+    //                printf("}\n");
+    //                //am.print_offset();
+    //#endif
+    //                z3::expr tast = idx2Value(am.getBase(), am.getoffset());
+    //                if ((Z3_ast)tast) {
+    //                    return sv::rsval<sign, nbits, sk>(m_ctx, (Z3_ast)tast);
+    //                }
+    //                else {
+    //                    if (kind == TR::addressingMode<HWord>::support_bit_blast) {
+    //                        sv::symbolic<sign, nbits, sk> ret(m_ctx);
+    //                        bool first = true;
+    //                        for (typename TR::addressingMode<HWord>::iterator off_it = am.begin();
+    //                            off_it.check();
+    //                            off_it.next()) {
+    //                            HWord offset = *off_it;
+    //                            sv::rsval<sign, nbits, sk> data = load<sign, nbits, sk>(am.getBase() + offset);
+    //
+    //                            if (first) {
+    //                                first = false;
+    //                                ret = data.tos();
+    //                            }
+    //                            else {
+    //                                sbool _if = subval<wide>(am.getoffset()) == offset;
+    //                                ret = ite(_if, data.tos(), ret);
+    //                            }
+    //                        }
+    //                        if (!(Z3_ast)ret) { throw Expt::SolverNoSolution("load error", m_solver); };
+    //                        return ret;
+    //                    }
+    //                }
+    //            }
+    return load_all<sign, nbits, sk>(address);
+};
+
+
+template<bool sign, int nbits, sv::z3sk sk, int ea_nbits>
+sv::rsval<sign, nbits, sk> TR::Mem::load_all(const subval<ea_nbits>& address)
+{
+    sv::symbolic<sign, nbits, sk> ret(m_ctx);
+    bool first = true;
+    {
+        Itaddress it = addr_begin(m_solver, address, ea_nbits);
+        while (it.check()) {
+            auto addr = *it;
+            sv::rsval<sign, nbits, sk>  data = load<sign, nbits, sk>((HWord)addr.tor<false, ea_nbits>());
+            if (first) {
+                first = false;
+                ret = data.tos();
+            }
+            else {
+                //std::cout << address << std::endl;
+                //std::cout << addr.tos<false, ea_nbits>().str() << std::endl;
+                ret = ite(address == addr.tos<false, ea_nbits>(), data.tos(), ret);
+            }
+            it++;
+        };
+    }
+    if (!(Z3_ast)ret) {
+        throw Expt::SolverNoSolution("load error", m_solver);
+    };
+    return ret;
+}
+
+
+template<bool sign, int nbits, sv::z3sk sk, int ea_nbits>
+void TR::Mem::store(const subval<ea_nbits>& address, const sv::symbolic<sign, nbits, sk>& data)
+{
+    //            TR::addressingMode<HWord> am(z3::expr(m_ctx, address));
+    //            auto kind = am.analysis_kind();
+    int count = 0;
+    //            if (kind == TR::addressingMode<HWord>::support_bit_blast) {
+    //#ifdef TRACE_AM
+    //                printf("Ist_Store base: %p {\n", (void*)(size_t)am.getBase());
+    //                am.print();
+    //                printf("}\n");
+    //#endif
+    //                for (typename TR::addressingMode<HWord>::iterator off_it = am.begin();
+    //                    off_it.check();
+    //                    off_it.next()) {
+    //                    count++;
+    //                    auto offset = *off_it;
+    //                    HWord raddr = am.getBase() + offset;
+    //                    auto oData = load<DataTy>(raddr);
+    //                    auto rData = ite(subval<wide>(am.getoffset()) == offset, sval<DataTy>(m_ctx, data), oData.tos());
+    //                    store(raddr, rData);
+    //                }
+    //            }
+    //            else {
+    Itaddress it = addr_begin(m_solver, address, ea_nbits);
+    while (it.check()) {
+        count++;
+        tval addr = *it;
+        HWord addr_re = addr.tor<false, ea_nbits>();
+        auto oData = load<sign, nbits, Z3_BV_SORT>(addr_re);
+        auto rData = ite(address == addr.tos<false, ea_nbits>(), data, oData.tos());
+        store(addr, rData);
+        it++;
+    }
+    //}
+    if (!count) { throw Expt::SolverNoSolution("store error", m_solver); };
+}
 
 
 
+
+
+#define mem_op_sign(template_macro, nbits, sk, ea_nbits)\
+template_macro(true, nbits, sk, ea_nbits)\
+template_macro(false, nbits, sk, ea_nbits)
+
+
+#define mem_op_nbits(template_macro, sk, ea_nbits)\
+mem_op_sign(template_macro, 8, sk, ea_nbits)\
+mem_op_sign(template_macro, 16, sk, ea_nbits)\
+mem_op_sign(template_macro, 32, sk, ea_nbits)\
+mem_op_sign(template_macro, 64, sk, ea_nbits)\
+mem_op_sign(template_macro, 128, sk, ea_nbits)\
+mem_op_sign(template_macro, 256, sk, ea_nbits)
+
+
+#define mem_op_sk(template_macro, ea_nbits)\
+mem_op_nbits(template_macro, Z3_BV_SORT, ea_nbits)
+
+#define mem_op_ea_nbits(template_macro)\
+mem_op_sk(template_macro, 32)\
+mem_op_sk(template_macro, 64)
+
+
+#define template_macro_load(sign, nbits, sk, ea_nbits) template sv::rsval<sign, nbits, sk> TR::Mem::load(const subval<ea_nbits>& address);
+
+#define template_macro_load_all(sign, nbits, sk, ea_nbits) template sv::rsval<sign, nbits, sk> TR::Mem::load_all(const subval<ea_nbits>& address);
+ 
+#define template_macro_store(sign, nbits, sk, ea_nbits) template void TR::Mem::store(const subval<ea_nbits>& address, const sv::symbolic<sign, nbits, sk>& data);
+
+mem_op_ea_nbits(template_macro_load);
+mem_op_ea_nbits(template_macro_load_all);
+mem_op_ea_nbits(template_macro_store);
 
 
 template void TR::Mem::Ist_Store(const subval<32>& address, sv::tval const& data);

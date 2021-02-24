@@ -1,6 +1,4 @@
-extern "C" {
-#include "priv/guest_amd64_defs.h"
-}
+
 #include "engine/basic_var.hpp"
 #include "z3_target_defs.h"
 

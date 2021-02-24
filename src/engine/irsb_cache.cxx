@@ -4,7 +4,7 @@
 #include <list>
 #include <cstddef>
 #include <stdexcept>
-#include "engine/ref.h"
+
 extern "C" {
     #include "guest_x86_defs.h"
     #include "guest_amd64_defs.h"
@@ -84,9 +84,7 @@ namespace cache {
 class IRSBCache {
 public:
     using _Kty = HWord; // ea
-    using REF_IRSB_CHUNK = ref<IRSB_CHUNK>;   // IRSB_CHUNK *
-
-    using CacheType = cache::lru_cache<_Kty, REF_IRSB_CHUNK>;
+    using CacheType = cache::lru_cache<_Kty, irsb_chunk>;
 private:
     CacheType m_cache;
 
@@ -94,24 +92,27 @@ private:
     std::atomic_int32_t m_hit = 0;
     Addr m_last_cache_ea;
     const char* m_say;
+
+    spin_mutex m_lock;
 public:
     IRSBCache(UInt sz, const char* saysome) : m_cache(sz), m_say(saysome) {
 
     }
-    REF_IRSB_CHUNK push(IRSB* irsb, Addr ea, UInt sz, HWord checksum, std::deque<void*>& irsb_mem_alloc) {
-        IRSB_CHUNK* ic = new IRSB_CHUNK(irsb, checksum, ea, sz, irsb_mem_alloc);
+    auto push(IRSB* irsb, Addr ea, UInt sz, HWord checksum, std::deque<void*>& irsb_mem_alloc) {
+        auto ic = std::make_shared<bb::IRSB_CHUNK>(irsb, checksum, ea, sz, irsb_mem_alloc);
         push(ic);
         return ic;
     }
 
-    void push(REF_IRSB_CHUNK bb) {
+    void push(irsb_chunk bb) {
+        spin_unique_lock lock(m_lock);
         if (m_cache.exists(bb->get_bb_base())) {
-            const REF_IRSB_CHUNK& old = m_cache.get(bb->get_bb_base()); // j即将更新为 ic
+            irsb_chunk old = m_cache.get(bb->get_bb_base()); // j即将更新为 ic
         }
         m_cache.put(bb->get_bb_base(), bb);
     }
 
-    REF_IRSB_CHUNK ado_treebuild(VexArch arch_guest, REF_IRSB_CHUNK src, VexRegisterUpdates pxControl) {
+    irsb_chunk ado_treebuild(VexArch arch_guest, irsb_chunk src, VexRegisterUpdates pxControl) {
         
         //ppIRSB(irsb);
         Bool(*preciseMemExnsFn) (Int, Int, VexRegisterUpdates);
@@ -124,7 +125,7 @@ public:
             preciseMemExnsFn = guest_amd64_state_requires_precise_mem_exns;
             break;
         default:
-            vpanic("LibVEX_Codegen: unsupported guest insn set");
+            VPANIC("LibVEX_Codegen: unsupported guest insn set");
         }
         Addr max_ga = ado_treebuild_BB(src->get_irsb(), preciseMemExnsFn, pxControl);
         auto junk = LibVEX_IRSB_transfer();
@@ -142,28 +143,31 @@ public:
             free(alloc_tmp);
         }
 
-        IRSB_CHUNK* ic = new IRSB_CHUNK(dst, src->get_checksum(), src->get_bb_base(), src->get_bb_size(), irsb_mem_alloc);
+        irsb_chunk ic = std::make_shared<bb::IRSB_CHUNK>(dst, src->get_checksum(), src->get_bb_base(), src->get_bb_size(), irsb_mem_alloc);
         vassert(max_ga == src->get_bb_base() + src->get_bb_size() - 1);
         return ic;
     }
 
-    REF_IRSB_CHUNK find(TR::MBase& mem, HWord ea) {
-
-        if UNLIKELY(!m_cache.exists(ea)) {
+    irsb_chunk find(TR::MBase& mem, HWord ea) {
+        irsb_chunk ic;
+        {
+            spin_unique_lock lock(m_lock);
+            if UNLIKELY(!m_cache.exists(ea)) {
 #ifdef CACHE_PP
-            printf("Cache miss %p\n", ea);
+                printf("Cache miss %p\n", ea);
 #endif
-            m_miss++;
-            return nullptr;
-        }
-        else if (m_last_cache_ea != ea) {
-            m_hit++;
-            m_last_cache_ea = ea;
+                m_miss++;
+                return nullptr;
+            }
+            else if (m_last_cache_ea != ea) {
+                m_hit++;
+                m_last_cache_ea = ea;
 #ifdef CACHE_PP
-            printf("Cache Hit %p\n", ea);
+                printf("Cache Hit %p\n", ea);
 #endif
-        }
-        auto ic = m_cache.get(ea);
+            }
+            ic = irsb_chunk(m_cache.get(ea));
+        };
         HWord checksum = mem.genericg_compute_checksum(ic->get_bb_base(), ic->get_bb_size());
         if LIKELY(ic->get_checksum() == checksum) {
             return ic;
@@ -188,7 +192,8 @@ public:
 
     }
 
-    ref<IRSB_CHUNK> host_find(HWord hea) {
+    irsb_chunk host_find(HWord hea) {
+        spin_unique_lock lock(m_lock);
         if UNLIKELY(!m_cache.exists(hea)) return nullptr;
         auto ic = m_cache.get(hea);
         return ic;
@@ -212,11 +217,11 @@ void del_IRSBCache(IRSBCache* c) {
     delete c; 
 }
 
-ref<IRSB_CHUNK> irsb_cache_find(IRSBCache* c, TR::MBase& mem, HWord ea) {
+irsb_chunk irsb_cache_find(IRSBCache* c, TR::MBase& mem, HWord ea) {
     return c->find(mem, ea);
 }
 
-ref<IRSB_CHUNK> irsb_cache_push(IRSBCache* c, TR::MBase& mem, const VexGuestExtents* vge, IRSB* irsb, std::deque<void*>&& irsb_mem_alloc) {
+irsb_chunk irsb_cache_push(IRSBCache* c, TR::MBase& mem, const VexGuestExtents* vge, IRSB* irsb, std::deque<void*>&& irsb_mem_alloc) {
     Addr     base2check;
     UInt     len2check;
     HWord    expectedhW;
@@ -244,10 +249,10 @@ void host_clean_IRSBCache(IRSBCache* c) {
     c->clean();
 }
 
-ref<IRSB_CHUNK> host_irsb_cache_find(IRSBCache* c, HWord ea) {
+irsb_chunk host_irsb_cache_find(IRSBCache* c, HWord ea) {
     return c->host_find(ea);
 }
-ref<IRSB_CHUNK> host_irsb_cache_push(IRSBCache* c, const VexGuestExtents* vge, IRSB* irsb, std::deque<void*>&& irsb_mem_alloc) {
+irsb_chunk host_irsb_cache_push(IRSBCache* c, const VexGuestExtents* vge, IRSB* irsb, std::deque<void*>&& irsb_mem_alloc) {
     Addr     base2check;
     UInt     len2check;
     base2check = vge->base[0];
@@ -256,11 +261,11 @@ ref<IRSB_CHUNK> host_irsb_cache_push(IRSBCache* c, const VexGuestExtents* vge, I
 }
 
 
-ref<IRSB_CHUNK> ado_treebuild(IRSBCache* c, VexArch arch_guest, ref<IRSB_CHUNK> src, VexRegisterUpdates pxControl) {
+irsb_chunk ado_treebuild(IRSBCache* c, VexArch arch_guest, irsb_chunk src, VexRegisterUpdates pxControl) {
     return c->ado_treebuild(arch_guest, src, pxControl);
 }
 
 
-void irsb_cache_push(IRSBCache* c, ref<IRSB_CHUNK> inbb) {
+void irsb_cache_push(IRSBCache* c, irsb_chunk inbb) {
     c->push(inbb);
 }

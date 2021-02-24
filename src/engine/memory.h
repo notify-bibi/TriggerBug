@@ -359,100 +359,35 @@ namespace TR {
     class Mem : public MBase {
         friend class vex_context;
         static mem_trace default_trace;
-        mem_trace* m_trace = &default_trace;
-        EmuEnvironment* m_emu = nullptr;
+        std::shared_ptr<mem_trace> m_trace;
+        std::shared_ptr<EmuEnvironment> m_emu;
     public:
-
-
-        class Itaddress {
-        private:
-            z3::solver& m_solver;
-            z3::context& m_ctx;
-            Z3_ast m_addr;
-            Z3_ast last_avoid_addr;
-            Z3_lbool m_lbool;
-            //std::vector<Z3_model> v_model;
-        public:
-            Itaddress(z3::solver& s, Z3_ast addr, int wide) :m_solver(s), m_ctx(m_solver.ctx()), m_addr(addr) {
-                m_addr = Z3_simplify(s.ctx(), m_addr);
-                Z3_inc_ref(m_ctx, m_addr);
-                m_solver.push();
-                Z3_ast so = Z3_mk_bvule(m_ctx, m_addr, m_ctx.bv_val((HWord)-1, wide));
-                Z3_inc_ref(m_ctx, so);
-                Z3_solver_assert(m_ctx, m_solver, so);
-                Z3_dec_ref(m_ctx, so);
-                //v_model.reserve(20);
-            }
-
-            inline bool check() {
-                m_lbool = Z3_solver_check(m_ctx, m_solver);
-                vassert(m_lbool != Z3_L_UNDEF);
-                return m_lbool == Z3_L_TRUE;
-            }
-
-            inline void operator++(int)
-            {
-                Z3_ast eq = Z3_mk_eq(m_ctx, m_addr, last_avoid_addr);
-                Z3_inc_ref(m_ctx, eq);
-                Z3_ast neq = Z3_mk_not(m_ctx, eq);
-                Z3_inc_ref(m_ctx, neq);
-                Z3_solver_assert(m_ctx, m_solver, neq);
-                Z3_dec_ref(m_ctx, eq);
-                Z3_dec_ref(m_ctx, neq);
-                Z3_dec_ref(m_ctx, last_avoid_addr);
-    }
-
-            rsval<HWord> operator*()
-            {
-                Z3_model m_model = Z3_solver_get_model(m_ctx, m_solver); vassert(m_model);
-                Z3_model_inc_ref(m_ctx, m_model);
-                //v_model.emplace_back(m_model);
-                Z3_ast r = 0;
-                bool status = Z3_model_eval(m_ctx, m_model, m_addr, /*model_completion*/false, &r);
-                vassert(status);
-                Z3_inc_ref(m_ctx, r);
-                last_avoid_addr = r;
-                ULong ret;
-                vassert(Z3_get_ast_kind(m_ctx, r) == Z3_NUMERAL_AST);
-                vassert(Z3_get_numeral_uint64(m_ctx, r, &ret));
-                Z3_model_dec_ref(m_ctx, m_model);
-                return rsval<HWord>(m_ctx, ret, r);
-            }
-            inline ~Itaddress() {
-                Z3_dec_ref(m_ctx, m_addr);
-                m_solver.pop();
-                //for (auto m : v_model) Z3_model_dec_ref(m_ctx, m);
-            }
-        };
-
 
 
     public:
 
         Mem(z3::solver& s, z3::vcontext& ctx, PML4T** cr3, Int _user, Bool _need_record) :
-            MBase(s,ctx, cr3, _user, _need_record)
+            MBase(s,ctx, cr3, _user, _need_record), m_trace(std::make_shared<mem_trace>())
         { };
 
         Mem(z3::solver& so, z3::vcontext& ctx, Bool _need_record) :
-            MBase(so, ctx, _need_record)
+            MBase(so, ctx, _need_record), m_trace(std::make_shared<mem_trace>())
         {  }
 
         Mem(z3::solver& so, z3::vcontext& ctx, MBase& father_mem, Bool _need_record) :
-            MBase(so, ctx, father_mem, _need_record)
+            MBase(so, ctx, father_mem, _need_record), m_trace(std::make_shared<mem_trace>())
         { ; }
 
         virtual ~Mem() {}
-
-        Itaddress addr_begin(z3::solver& s, Z3_ast addr, int wide) { return Itaddress(s, addr, wide); }
 
     private:
         sv::tval _Iex_Load(PAGE* P, HWord address, UShort size);
 
     public:
-        void set_emu_env(EmuEnvironment* e) { m_emu = e; }
-        EmuEnvironment* get_emu_env() { return m_emu; }
+        inline void set_emu_env(std::shared_ptr<EmuEnvironment>& e) { m_emu = e; }
+        inline std::shared_ptr<EmuEnvironment>& get_emu_env() { return m_emu; }
 
-        void set_mem_traceer(mem_trace& t) { m_trace = &t; };
+        inline void set_mem_traceer(std::unique_ptr<mem_trace>&& t) { m_trace = std::move(t); };
 
         ////----------------------- hook load -----------------------
 
@@ -542,73 +477,11 @@ namespace TR {
         //----------------------- ast address -----------------------
 
         template<bool sign, int nbits, sv::z3sk sk, int ea_nbits>
-        sv::rsval<sign, nbits, sk> load_all(const subval<ea_nbits>& address) {
-            sv::symbolic<sign, nbits, sk> ret(m_ctx);
-            bool first = true;
-            {
-                Itaddress it = this->addr_begin(m_solver, address, ea_nbits);
-                while (it.check()) {
-                    rsval<HWord> addr = *it;
-                    sv::rsval<sign, nbits, sk>  data = load<sign, nbits, sk>((HWord)addr.tor());
-                    if (first) {
-                        first = false;
-                        ret = data.tos();
-                    }
-                    else {
-                        ret = ite(address == addr.tos(), data.tos(), ret);
-                    }
-                    it++;
-                };
-            }
-            if (!(Z3_ast)ret) {
-                throw Expt::SolverNoSolution("load error", m_solver);
-            };
-            return ret;
-        }
+        sv::rsval<sign, nbits, sk> load_all(const subval<ea_nbits>& address);
 
         // load<sign, nbits, z3sk>(subval<ea_nbits>)
         template<bool sign, int nbits, sv::z3sk sk, int ea_nbits>
-        inline sv::rsval<sign, nbits, sk> load(const subval<ea_nbits>& address) {
-            static_assert((nbits & 7) == 0, "err load");
-            //            TR::addressingMode<HWord> am(z3::expr(m_ctx, address));
-            //            auto kind = am.analysis_kind();
-            //            if (kind != TR::addressingMode<HWord>::cant_analysis) {
-            //#ifdef TRACE_AM
-            //                printf("Iex_Load  base: %p {\n", (void*)(size_t)am.getBase());
-            //                am.print();
-            //                printf("}\n");
-            //                //am.print_offset();
-            //#endif
-            //                z3::expr tast = idx2Value(am.getBase(), am.getoffset());
-            //                if ((Z3_ast)tast) {
-            //                    return sv::rsval<sign, nbits, sk>(m_ctx, (Z3_ast)tast);
-            //                }
-            //                else {
-            //                    if (kind == TR::addressingMode<HWord>::support_bit_blast) {
-            //                        sv::symbolic<sign, nbits, sk> ret(m_ctx);
-            //                        bool first = true;
-            //                        for (typename TR::addressingMode<HWord>::iterator off_it = am.begin();
-            //                            off_it.check();
-            //                            off_it.next()) {
-            //                            HWord offset = *off_it;
-            //                            sv::rsval<sign, nbits, sk> data = load<sign, nbits, sk>(am.getBase() + offset);
-            //
-            //                            if (first) {
-            //                                first = false;
-            //                                ret = data.tos();
-            //                            }
-            //                            else {
-            //                                sbool _if = subval<wide>(am.getoffset()) == offset;
-            //                                ret = ite(_if, data.tos(), ret);
-            //                            }
-            //                        }
-            //                        if (!(Z3_ast)ret) { throw Expt::SolverNoSolution("load error", m_solver); };
-            //                        return ret;
-            //                    }
-            //                }
-            //            }
-            return load_all<sign, nbits, sk>(address);
-        }
+        sv::rsval<sign, nbits, sk> load(const subval<ea_nbits>& address);
 
             // load<IRType>(subval<ea_nbits>)
             template<IRType ty, int ea_nbits, class _svc = sv::IRty<ty>>
@@ -813,41 +686,7 @@ namespace TR {
         // store(subval<ea_nbits>, symbolic)
         // symbolic symbolic
         template<bool sign, int nbits, sv::z3sk sk, int ea_nbits>
-        void store(const subval<ea_nbits>& address, const sv::symbolic<sign, nbits, sk>& data) {
-//            TR::addressingMode<HWord> am(z3::expr(m_ctx, address));
-//            auto kind = am.analysis_kind();
-            int count = 0;
-//            if (kind == TR::addressingMode<HWord>::support_bit_blast) {
-//#ifdef TRACE_AM
-//                printf("Ist_Store base: %p {\n", (void*)(size_t)am.getBase());
-//                am.print();
-//                printf("}\n");
-//#endif
-//                for (typename TR::addressingMode<HWord>::iterator off_it = am.begin();
-//                    off_it.check();
-//                    off_it.next()) {
-//                    count++;
-//                    auto offset = *off_it;
-//                    HWord raddr = am.getBase() + offset;
-//                    auto oData = load<DataTy>(raddr);
-//                    auto rData = ite(subval<wide>(am.getoffset()) == offset, sval<DataTy>(m_ctx, data), oData.tos());
-//                    store(raddr, rData);
-//                }
-//            }
-//            else {
-                Itaddress it = this->addr_begin(m_solver, address, ea_nbits);
-                while (it.check()) {
-                    count++;
-                    rsval<HWord> addr = *it;
-                    HWord addr_re = addr.tor();
-                    auto oData = load<sign, nbits, Z3_BV_SORT>(addr_re);
-                    auto rData = ite(address == addr.tos(), data, oData.tos());
-                    store(addr, rData);
-                    it++;
-                }
-            //}
-            if (!count) { throw Expt::SolverNoSolution("store error", m_solver); };
-        }
+        void store(const subval<ea_nbits>& address, const sv::symbolic<sign, nbits, sk>& data);
 
         // symbolic DataType
         template<int ea_nbits, typename DataTy, TASSERT(!is_large_ctype_v<DataTy>)>

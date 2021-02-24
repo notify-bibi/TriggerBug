@@ -39,8 +39,6 @@ sv::tval tQop(IROp op, sv::tval const& a, sv::tval const& b, sv::tval const& c, 
         goto FAILD;
     }
 FAILD:
-    vex_printf("unsupport Qop: ");
-    ppIROp(op);
-    vpanic("tIRType");
+    VPANIC("unsupport ir tQop ");
 
 }

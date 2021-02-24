@@ -55,7 +55,5 @@ sv::tval tTriop(IROp op, sv::tval const&a, sv::tval const&b, sv::tval const&c) {
         goto FAILD;
     }
 FAILD:
-    vex_printf("unsupport Triop: ");
-    ppIROp(op);
-    vpanic("tIRType");
+    VPANIC("unsupport ir tTriop ");
 }

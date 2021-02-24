@@ -1,5 +1,9 @@
 #include "amd64CCall.h"
-
+extern "C" {
+#include "priv/guest_amd64_defs.h"
+UInt vex_printf(const HChar* format, ...);
+__attribute__((noreturn))  void vpanic(const HChar* str);
+}
 #define CC_DEP1 cc_dep1_formal
 #define CC_DEP2 cc_dep2_formal
 #define CC_NDEP cc_ndep_formal

@@ -361,7 +361,7 @@ namespace TR {
             lazydef(V, 256);
 #undef lazydef
         default:
-            vex_printf("ty = 0x%x\n", (UInt)ty); vpanic("tIRType");
+            VPANIC("tIRType");
         }
         return sv::tval();
     }
@@ -382,7 +382,8 @@ namespace TR {
             lazydef(I, 128);
             lazydef(V, 256);
 #undef lazydef
-        default: vex_printf("ty = 0x%x\n", (UInt)ty); vpanic("tIRType");
+        default:
+            VPANIC("tIRType");
         }
     }
 

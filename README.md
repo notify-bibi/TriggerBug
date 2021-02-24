@@ -11,17 +11,41 @@ The engine was developed to solve some of Angr's more intractable problems.
 
 进展：
 
-- [x] 解决了并提供求解AES等一些列现代加密算法的方案。（原理层方案，非实现Aes decrypto。demo example有实例）。某些隐式加密在原理上是解不开的，只能爆破，故准备写一个常见现代加密算法的crypto ANAlyzer, 方便构建exp，不需要hook table_base进行显式转换。crypto_finder
+- [x] 解决了并提供求解AES等一些列现代加密算法的方案。（原理层方案，非实现Aes decrypto。demo example有实例）。某些隐式加密在原理上是解不开的，只能爆破，故准备写一个常见现代加密算法的crypto ANAlyzer, 方便构建exp，不需要hook table_base进行显式转换。crypto_finder(目前仅添加支持aes)
 
-- [x] 采用模拟host code实现guest code的方法去支持所有ir dirty code（guest code 的微操作）和ir dirty call, 但switch结构微操作尚未支持（使用if结构替换可解决【效率低】，或者直接实现微操作到z3_target_call项目代码中替换dirty call【效率高】）。[原因：本方法是将客户机寄存器和内存映射到模拟宿主机，客户机模拟微指令只可以使用宿主机的栈，switch结构的静态表不属于模拟栈。  
+- [x] 采用模拟host code实现guest code的方法去支持所有ir dirty code（guest code 的微操作）和ir dirty call, dirty call regs合并到客户机regs末尾，并挂载到guest memory map 上，以此实现dirty call支持完整性， 将host dirty call分解为target_ir_call和标准ir指令来支持执行。host dirty call stack使用客户机未分配区，IRDirty class 管理生命周期，设计原理限制，无法递归。
 
 - [x] 符号地址读写策略变更，之前是求解子集再读写，速度极慢，现在实现了超集求解算法，快速极快。再根据求得的超集读写。
 
-- [x] 自动合并路径的算法已经构造完毕.
+- [x] 自动合并路径的算法已经构造完毕. 缓解路径爆炸状态合并模块 cmpr::Compress<target_state, ...>, 配合StateAnalyzer（已剔除）
 
-- [x] 缓解路径爆炸状态合并模块 cmpr::Compress<target_state, ...>
+- [ ] ```powershell
+                         P1 top
+  
+            A  (P1 fork)                B  (P1 fork) 
+            P2
+  
+      a1  a2  -a1 -a2              b-1  b0   b1
+      Q1  Q2   q1  q2
+  
+  yes  P2 → (Q1 ∨ Q2) <=> ┐P2 ∨ (Q1 ∨ Q2) <=> ┐P2 ∨ Q1 ∨ Q2
+  sat:  P2 Q1 Q2
+        1  1  1
+        1  0  1
+        1  1  0
+        0  x  x
+  
+  yes  P2 → (┐q1 ∧ ┐q2) <=> P2 → ┐(q1 ∨ q2) <=> ┐P2 ∨ (┐q1 ∧ ┐q2) <=> ┐P2 ∨ (┐q1 ∧ ┐q2)
+  sat:  P2 q1 q2
+        1  0  0
+        0  x  x
+  a assert
+  P1 A B state
+  Q sbool rea == sea
+  如果分支条件约束未添加，if.else被命中那么很可能会导致求解结果错误。并不是合并就完美解决路径爆炸，如果多个不等返回地址被合并，合并只能增加负荷
+  ```
 
-- [x] 
+  
 
 - [x] 移植，计划将代码部署在linux、darwin、windows(clang)
 
@@ -29,19 +53,23 @@ The engine was developed to solve some of Angr's more intractable problems.
 
 - [x] 代码重构，所有基础符号变量全部使用basic_var.hpp中的sv::模版类，涵盖所有操作，编译时期确定并计算参数（提速），编译时检查所有AST误操作等问题。
 
-- [x] windows 异常支持（Eha/ EHsc）
+- [x] windows 异常支持（Eha/ EHsc）vmp喜欢异常检测
 
-- [x] 
+- [x] 支持windows wow64子系统，支持cpu长模式和32位模式动态切换， 需要配合windbg, 内核全部使用64位
 
 - [ ] Python前端重写（结构太复杂、项目重构不易同步）推迟。
 
-- [x] 代码控制流目标路径探索算法完成，计划写主动式路径合并分析器，正在完善。。。。。。 (目前只有被动式的可以自动合并分支，某些子状态回收不是很好) 
-
-  
+- [x] 代码控制流目标路径探索算法完成，计划写主动式路径合并分析器，正在完善 (目前只有被动式的可以自动合并分支，某些子状态回收不是很好) 
 
 - [ ] 设计分析器，使用valgrind优化block，日志型模拟基本块，记录执行指令分析，分析循环条件等手段来解决问题。在原理上，对于很多大型程序，符号执行并不能构建出程序的所有的执行状态，时间复杂度O(k^n)，加入各种预测约束、快速解析符号地址遍历读写技术、状态合并技术、Cr3用户页复制等也仅仅是一种缓解手段，但不是说没有用，其在无环路分支上表现非常好。挖坑 ...
 
 - [ ] VMP等强壳的随机地址解密释放代码再执行会干扰分析器，地址不再具有意义，irsb和hash进行绑定，有待解决
+
+- [x] 添加IRU cache模块，加快翻译速度，已完成
+
+- [ ] 设计将分析指令流的寄存器读写，对未读后写的寄存器操作进行分析剔除，用于反指令混淆，但是表现不佳，考虑将IR tree经过准换为z3 ast,使用z3优化器放混淆，但是需要z3 ast 2 ir tree, 构建ing
+
+- [ ] 设计basic block分析模块，将不再操作任何客户机寄存器，使用中间变量ir进行表达内存操作与交换.基本块树构建完整性由符号执行探索，未命中返回使用后端继续探索。可以以此设计IR层的反编译调试器，设计中
 
 坚持✊
 
@@ -116,82 +144,152 @@ python setup.py install
 ## Usage
 ------
 
-open ida, make a backpoint(bpt). When you get to the bpt. Just **(Shift-2)** to dump binary.
+
+
+Now you need to open Windbg server
+
+```powershell
+
+bcdedit.exe -set debug on
+bcdedit.exe -dbgsettings net hostip:127.0.0.1 port:50000
+bcdedit -dbgsettings
+```
+
+ Open ida, switch windbg ->connect string  tcp:server=127.0.0.1,port=50000 -> make a backpoint(bpt). 
+
+When you get to the bpt. 
+
+At the Windbg commond line , enter `!sw`   to open wow64exts
+
+Just **(Shift-3)** to dump binary.
+
+```powershell
+WINDBG>!sw
+Switched to Host mode
+.sel :20  .base :0x0  .limit :ffffffff  .flags :cfb
+.sel :28  .base :0x0  .limit :ffffffff  .flags :cf3
+.sel :50  .base :0x241000  .limit :fff  .flags :4f3
++ ------------- +----------------------+--------------------+----------+--------+
+| ----segment-- |          VA          |        size        |   flag   | status |
++ ------------- +----------------------+--------------------+----------+--------+
+| debug001      |               10000  |    10000 ->    64kb|    12    |   ok   |
+| Project1.exe  |              400000  |     1000 ->     4kb|    12    |   ok   |
+| Project1.exe1 |              401000  |    10000 ->    64kb|    12    |   ok   |
+| Project1.exe2 |              411000  |     c000 ->    48kb|     8    |   ok   |
+| Project1.exe3 |              41d000  |     3000 ->    12kb|    12    |   ok   |
+| Project1.exe4 |              420000  |     1000 ->     4kb|    12    |   ok   |
+....
+| wow64cpu      |            770b0000  |     1000 ->     4kb|    12    |   ok   |
+| wow64cpu6     |            770b7000  |     2000 ->     8kb|    12    |   ok   |
+| ntdll         |            770c0000  |     1000 ->     4kb|    12    |   ok   |
+| ntdll1        |            770c1000  |   11d000 ->  1140kb|    12    |   ok   |
+| ntdll3        |            771e4000  |    78000 ->   480kb|    12    |   ok   |
+| debug038      |            7fe40000  |     5000 ->    20kb|    12    |   ok   |
+| wow64win5     |        7ffdd28fd000  |     f000 ->    60kb|    12    |   ok   |
+| ntdll4        |        7ffdd2c50000  |     1000 ->     4kb|    12    |   ok   |
++ ------------- +----------------------+--------------------+----------+--------+
+ (rax        IR_offset: 16   ) (val:                           19ffcc nb:  8)
+ ....
+ (rbp        IR_offset: 56   ) (val:                           19ff80 nb:  8) 
+ (r8         IR_offset: 80   ) (val:                         77133c90 nb:  8)
+ (r15        IR_offset: 136  ) (val:                         770b3600 nb:  8) 
+ (st0        IR_offset: 776  ) (val:                                0 nb:  8) 
+ (st7        IR_offset: 832  ) (val:                                0 nb:  8) 
+ (cs         IR_offset: 936  ) (val:                               23 nb:  2) 
+ (ss         IR_offset: 946  ) (val:                               2b nb:  2) 
+ (fs         IR_offset: 942  ) (val:                               53 nb:  2) 
+ (gs         IR_offset: 944  ) (val:                               2b nb:  2) 
+ (ymm0       IR_offset: 224  ) (val:                                0 nb: 32) 
+ (ymm15      IR_offset: 704  ) (val:                                0 nb: 32) 
+ (cc_op      IR_offset: 144  ) (val:                                0 nb:  8) 
+ (cc_dep1    IR_offset: 152  ) (val:                              246 nb:  8) 
+ (cc_dep2    IR_offset: 160  ) (val:                                0 nb:  8) 
+ (cc_ndep    IR_offset: 168  ) (val:                                0 nb:  8) 
+ (idflag     IR_offset: 200  ) (val:                                0 nb:  8) 
+ (acflag     IR_offset: 192  ) (val:                                0 nb:  8) 
+ (fptag      IR_offset: 840  ) (val:                                0 nb:  8) 
+ (ftop       IR_offset: 768  ) (val:                                8 nb:  4) 
+ (fpround    IR_offset: 848  ) (val:                                0 nb:  8) 
+ (sseround   IR_offset: 216  ) (val:                                0 nb:  8) 
+ (gdt        IR_offset: 928  ) (val:                     8000fff00000 nb:  8) 
+ (dflag      IR_offset: 176  ) (val:                                1 nb:  8) 
+ (gs_const   IR_offset: 904  ) (val:                           23f000 nb:  8) 
+ (fs_const   IR_offset: 208  ) (val:                                0 nb:  8) 
+dump success:  Y:\vmp\Project1.vmp.exe.dump
+term() called!
+```
+
+
 
 介绍下c++写代码使用引擎技巧
-例如 examples 的ctf题目 xctf-asong
+例如 examples 的ctf题目 xctf-asong.  本引擎不到20s解出, angr用时4分钟
 此题使用angr必定路径爆炸，某些模拟执行的地址访问可能是符号地址访问，angr可能会直接将该state添加到Death的state管理器
 库函数底层调用系统调用可能才会失败，比如malloc、printf、微软闭源库函数等均无问题（sys_brk、nt_proc_information、非标准IO等系统调用已经实现）
 
 下面使用本引擎
 速度很快的，主要是z3太耗时，如果没有大量处理符号，仿真速度基本不用担心
 
+
+
+[shift-3] dump it
+
+![image-20210224233526227](https://github.com/notify-bibi/TriggerBug/blob/master/doc/readme/example_dump.png)
+
 ```
 
-[shift-2] dump it
-+-------------------+----------------------+--------------------+----------+--------+
-|      segment      |          VA          |        size        |   flag   | status |
-+-------------------+----------------------+--------------------+----------+--------+
-| LOAD              |              400000  |      f9c ->     3kb|    16    |   ok   |
-| .text             |              401000  |    a0ae5 ->   642kb|    16    |   ok   |
-| Roads             |              4a1ae5  |      51b ->     1kb|    12    |   ok   |
-...........
-| [heap]            |              5a16d8  |      928 ->     2kb|    12    |   ok   |
-| [vvar]            |        7ffff7ffa000  |     3000 ->    12kb|    12    |   war  |
-+-------------------+----------------------+--------------------+----------+--------+
-| [vvar]            |        7ffff7ffa000  |      400 ->     1kb|    12    |  faild |
-+-------------------+----------------------+--------------------+----------+--------+
-| [vdso]            |        7ffff7ffd000  |     2000 ->     8kb|    12    |   ok   |
-| [stack]           |        7ffffffde000  |    21000 ->   132kb|    12    |   ok   |
-| [vsyscall]        |    ffffffffff600000  |     1000 ->     4kb|    12    |   ok   |
-+-------------------+----------------------+--------------------+----------+--------+
-........
 ```
 
 
 ```c++
-编辑TriggerBug\src\test\test_main.cxx
+TriggerBug\src\test\test_main.cxx
 
-State_Tag success_ret(State<Addr64>& s) {
+State_Tag success_ret3(StateBase& s) {
     UChar bf[] = { 0xEC, 0x29, 0xE3, 0x41, 0xE1, 0xF7, 0xAA, 0x1D, 0x29, 0xED, 0x29, 0x99, 0x39, 0xF3, 0xB7, 0xA9, 0xE7, 0xAC, 0x2B, 0xB7, 0xAB, 0x40, 0x9F, 0xA9, 0x31, 0x35, 0x2C, 0x29, 0xEF, 0xA8, 0x3D, 0x4B, 0xB0, 0xE9, 0xE1, 0x68, 0x7B, 0x41 };
 
     auto enc = s.regs.get<Ity_I64>(AMD64_IR_OFFSET::RDI);
+    VexGuestAMD64State& amd64_reg_state = s.get_regs_maps()->guest.amd64;
     for (int i = 0; i < 38; i++) {
         auto e = s.mem.load<Ity_I8>(enc + i);
         s.solv.add(e == (UChar)bf[i]);
     }
-    vex_printf("checking\n\n");
-    if (s.solv.check() == z3::sat) {
-        vex_printf("issat");
+    printf("checking\n\n");
+    auto ret = s.solv.check();
+    if (ret == z3::sat) {
+        printf("issat");
         auto m = s.solv.get_model();
         std::cout << m << std::endl;
         exit(0);
     }
     else {
-        vex_printf("unsat?\n\n");
+        printf("unsat???\n\n%d", dfdfs);
     }
     s.solv.pop();
     return Death;
 }
 
+
 int main() {
-    vex_context<Addr64> v(VexArchAMD64, 4/*threads*/, PROJECT_DIR"PythonFrontEnd\\examples\\xctf-asong\\TriggerBug Engine\\asong.dump");
-    SP::linux64 state(v, 0, True);
-    state.setFlag(CF_ppStmts);
-    state.setFlag(CF_traceJmp);
-    for (int i = 0; i < 38; i++) {
-        auto flag = state.mk_int_const(8).tos<false, 8>();
-        auto g = flag >= 1u && flag <= 128u;
-        state.mem.store(state.regs.get<Ity_I64>(AMD64_IR_OFFSET::RDI) + i, flag);
-        state.solv.add_assert(g);
-    }
+    vex_context v(1);
+    v.param().set("ntdll_KiUserExceptionDispatcher", (void*)0x777B3BC0);
+    v.param().set("Kernel", gen_kernel(Ke::OS_Kernel_Kd::OSK_Windows));
+    TR::State state(v, VexArchX86);
+    state.read_bin_dump("Y:\\vmp\\Project1.vmp.exe.dump");
+    
+
+    state.get_trace()->setFlag(CF_traceInvoke);
+    //v.hook_read(read);
+    v.hook_read(symbolic_read);
+    //state.setFlag(CF_ppStmts);
+    VexGuestAMD64State& amd64_reg_state = state.get_regs_maps()->guest.amd64;
+    state.avoid_anti_debugging();
+    auto bts = state.start();
+  
     state.hook_add(0x400CC0, success_ret);
     //被动式的 路径爆炸解决方案
     StateAnalyzer gv(state);
     gv.Run();
 }
 
-不到20s解出, angr用时4分钟
 
 PS: TriggerBug\PythonFrontEnd\examples> python .\str2flag.py "sat(define-fun p_20 () (_ BitVec 8)
 >>   #x66)
@@ -253,7 +351,7 @@ Warmly welcome to join us in the development. Study together.
 [Plxml]: <https://github.com/notify-bibi/TriggerBug/blob/master/PythonFrontEnd/TriggerBug-default32.xml>
 [Develop]: <https://github.com/notify-bibi/TriggerBug/blob/master/develop.md>
 
-[MDB]: <https://github.com/notify-bibi/TriggerBug/blob/master/PythonFrontEnd/ida-plugins/memory_dump_BIN.py>
+[MDB]: <https://github.com/notify-bibi/TriggerBug/blob/master/PythonFrontEnd/ida-plugins/tr_dumper.py>
 [CLE]: <https://github.com/angr/cle>
 
 

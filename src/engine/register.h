@@ -21,6 +21,7 @@ Revision History:
 class PAGE_DATA;
 
 namespace TR {
+    class VRegs;
     class mem_unit;
 
     class AstManager {
@@ -109,13 +110,16 @@ namespace TR {
         static Symbolic* mk_Symbolic(z3::vcontext& ctx, Symbolic* father);
         static void del_Symbolic(Symbolic*);
     };
+
+
     __declspec(align(16))
     class Register /*final*/ {
         friend class StateBase;
+        friend class VRegs;
         z3::vcontext& m_ctx;
-        bool m_is_symbolic;
         Symbolic* m_symbolic;
         UInt m_size;
+        bool m_is_symbolic;
         __declspec(align(16))
         UChar m_bytes[0];
 
@@ -344,7 +348,6 @@ namespace TR {
         Register(const Register& father_regs) = delete;
         void operator = (Register& a) = delete;
     };
-
 
 };
 

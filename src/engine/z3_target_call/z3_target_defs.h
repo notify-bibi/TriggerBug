@@ -11,5 +11,3 @@
 #define ULong_extract(value) (value)
 //Z3_ast bv2bool(Z3_context ctx, Z3_ast ast);
 rsbool parity_table(sv::rsval<true, 8, Z3_BV_SORT> const& d);
-extern "C" unsigned int vex_printf(const HChar * format, ...);
-extern "C" void vpanic(const HChar * str);

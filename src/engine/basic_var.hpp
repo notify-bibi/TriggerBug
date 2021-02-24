@@ -954,6 +954,8 @@ namespace sv {
             return str;
         }
 
+        friend std::ostream& operator<<(std::ostream& out, const ctype_val& n) { return out << n.str(); }
+
         template<z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BOOL_SORT)>
         inline cbool implies(const cbool& b) const {
             return cbool((Z3_context)m_ctx, !((bool)mr.m_value && !(bool)b));
@@ -1621,6 +1623,9 @@ namespace sv{
             snprintf(buffer, sizeof(buffer), "sbool< ");
             return _str(buffer);
         }
+
+        friend std::ostream& operator<<(std::ostream& out, const symbolic& n) { return out << n.str(); }
+
     private:
         std::string _str(char * buffer) const {
             std::string str, strContent;
@@ -2178,10 +2183,12 @@ namespace sv{
         //----------------------symbolic-----------------------------
 
         inline tval(Z3_context ctx, Z3_ast s, z3sk sk, int bits) noexcept : symbol(ctx, s) {
+            dassert(bits >= 0);
             m_bits = bits; m_data_inuse = false; m_sk = sk;
         }
 
         inline tval(Z3_context ctx, Z3_ast s, z3sk sk, int bits, no_inc) noexcept : symbol(ctx, s, no_inc{}) {
+            dassert(bits >= 0);
             m_bits = bits; m_data_inuse = false; m_sk = sk;
         }
 
@@ -2198,6 +2205,7 @@ namespace sv{
                     *(__m256i*)m_data = _mm256_load_si256((__m256i*)b.m_data);
             }
         }
+
 
         // translate
         explicit inline tval(Z3_context target_ctx, const tval& b) noexcept {
@@ -2239,6 +2247,17 @@ namespace sv{
             *(_Ty*)m_data = data;
             m_sk = sk;
         }
+
+        //real && symbolic
+        template<typename _Ty, typename std::enable_if_t<std::is_arithmetic<_Ty>::value>* = nullptr>
+        inline tval(Z3_context ctx, _Ty data, Z3_ast ast, z3sk sk, int bits, no_inc) :symbol(ctx, ast, no_inc{}) {
+            static_assert(offsetof(tval, m_data) == 0x10, "error");
+            m_bits = bits;
+            m_data_inuse = true;
+            *(_Ty*)m_data = data;
+            m_sk = sk;
+        }
+        
 
         //real with nbits
         template<typename _Ty, typename std::enable_if_t<std::is_arithmetic<_Ty>::value>* = nullptr>
@@ -2414,12 +2433,12 @@ namespace sv{
         tval sext(int i) const;
 
 
-        std::string str() const;
-
-
         Z3_ast mk_bv_ast() const;
         Z3_ast mk_bool_ast() const;
         Z3_ast mk_fpa_ast(unsigned ebits, unsigned sbits) const;
+
+        std::string str() const;
+        friend std::ostream& operator<<(std::ostream& out, const sv::tval& n) { return out << n.str(); }
     private:
         friend tval ite(const sbool& cond, const tval& iftrue, const tval& iffalse);
     };
@@ -2442,12 +2461,6 @@ template<bool _ts, int _tn1, int _tn2, sv::z3sk _tk, TASSERT(_tk == Z3_BV_SORT)>
 static inline sv::symbolic<_ts, _tn1 + _tn2, _tk> concat(const sv::symbolic<_ts, _tn1, _tk>& a, const sv::symbolic<_ts, _tn2, _tk>& b) { return a.concat(b); }
 template<int hi, int lo, bool _ts, int _tn, sv::z3sk _tk, TASSERT(_tk == Z3_BV_SORT)>
 inline auto extract(const sv::symbolic<_ts, _tn, _tk>& a) { return a.template extract<hi, lo>(); }
-
-template<bool _ts, int _tn, sv::z3sk _tk> 
-static inline std::ostream& operator<<(std::ostream& out, sv::symbolic<_ts, _tn, _tk> const& n) { return out << n.str(); }
-template<bool _ts, int _tn, sv::z3sk _tk>
-static inline std::ostream& operator<<(std::ostream& out, const sv::ctype_val<_ts, _tn, _tk>& n) { return out << n.str(); }
-static inline std::ostream& operator<<(std::ostream& out, const sv::tval & n) { return out << n.str(); }
 
 
 static inline sv::tval concat(const sv::tval& a, const sv::tval& b) { return a.concat(b); }

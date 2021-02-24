@@ -8,9 +8,7 @@ using namespace TR;
 
 VexGuestState* TR::StateBase::get_regs_maps()
 {
-    constexpr int sb = sizeof(regs_bytes);
-    static_assert(REGISTER_LEN == sb, "error align");
-    return reinterpret_cast<VexGuestState*>(&regs_bytes);
+    return reinterpret_cast<VexGuestState*>(&regs.regs_bytes);
 }
 
 sv::tval StateBase::mk_int_const(UShort nbit) {
@@ -125,7 +123,7 @@ void StateBase::read_mem_dump(const char* filename)
     infile.open(filename, std::ios::binary);
     if (!infile.is_open()) {
         if (filename[0] == 0) { return; }
-        std::cerr << filename << "not exit/n" << std::endl; return;
+        spdlog::critical("{} not exit/n", filename);
     }
     unsigned long long length, err, name_start_offset, name_end_offset, need_write_size = 0, write_count = 0;
     infile.seekg(0, std::ios::beg);
@@ -139,9 +137,10 @@ void StateBase::read_mem_dump(const char* filename)
     infile.read(name_buff, name_end_offset - name_start_offset);
     infile.seekg(0, std::ios::beg);
     char* name;
-    printf("Initializing Virtual Memory\n/------------------------------+--------------------+--------------------+------------\\\n");
-    printf("|              SN              |         VA         |         FOA        |     LEN    |\n");
-    printf("+------------------------------+--------------------+--------------------+------------+\n");
+    spdlog::info("Initializing Virtual Memory"); 
+    spdlog::info("/------------------------------+--------------------+--------------------+------------\\");
+    spdlog::info("|              SN              |         VA         |         FOA        |     LEN    |");
+    spdlog::info("+------------------------------+--------------------+--------------------+------------+");
     
     clock_t beginCount = clock();
 
@@ -154,49 +153,66 @@ void StateBase::read_mem_dump(const char* filename)
         name = &name_buff[buf.nameoffset - name_start_offset];
         if (GET8(name) == 0x7265747369676572) {
 #if 0
-            printf("name:%18s address:%016llx data offset:%010llx length:%010llx\n", name, buf.address, buf.dataoffset, buf.length);
+            spdlog::info("name:%18s address:%016llx data offset:%010llx length:%010llx", name, buf.address, buf.dataoffset, buf.length);
 #endif
             regs.Ist_Put(buf.address, data, buf.length);
-        }
+    }
         else {
-            printf("| %-28s |  %16llx  |  %16llx  | %10llx |\n", name, buf.address, buf.dataoffset, buf.length);
+            spdlog::info("| {:28s} |  {:16x}  |  {:16x}  | {:10x} |", name, buf.address, buf.dataoffset, buf.length);
             if (err = mem.map(buf.address, buf.length))
-                printf("warning %s had maped before length: %llx\n", name, err);
+                spdlog::info("warning %s had maped before length: %llx", name, err);
             need_write_size += buf.length;
             write_count += mem.write_bytes(buf.address, buf.length, (unsigned char*)data);
         }
         infile.seekg(fp);
         free(data);
-    }
-    printf("\\-------------------------------------------------------------------------------------/\n");
+}
+    spdlog::info("\\-------------------------------------------------------------------------------------/");
 
     clock_t closeCount = clock();
-    printf(
-        "Spend time in:   %16d s.\n"
-        "Need to write    %16lf MByte.\n"
-        "Actually written %16lf MByte\n", closeCount - beginCount, ((double)need_write_size) / 0x100000, ((double)write_count) / 0x100000);
+    spdlog::info("Spend time in:   {:16d} s.", closeCount - beginCount);
+    spdlog::info("Need to write    {} MByte.", ((double)need_write_size) / 0x100000);
+    spdlog::info("Actually written {} MByte.", ((double)write_count) / 0x100000);
     free(name_buff);
     infile.close();
 }
 
 TR::StateBase::~StateBase()
 {
-
+    vctx().pool().wait();
     for (auto bs : branch) {
         std::cout << *bs << std::endl;
         delete bs;
     }
 }
 
+#include "spdlog/async.h"
+#include "spdlog/sinks/basic_file_sink.h"
+
+std::string get_logger_name()
+{
+    static int n = 0;
+    char buff[50];
+    std::string str;
+    snprintf(buff, sizeof(buff), "sync_%d", n++);
+    str.append(buff);
+
+    return "log" + str + "_log.txt";
+};
+
+
 TR::StateBase::StateBase(vex_context& vctx, VexArch guest_arch)
-    :m_ctx(),
+    : m_fork_deep_num(0),
+    m_state_id(0),
+    m_z3_bv_const_n(0),
+    m_father(nullptr),
+    m_ctx(),
     m_vinfo(guest_arch),
     m_vctx(vctx),
     guest_start_ep(/*oep*/0),
     guest_start(/*oep*/0),
     m_delta(0),
     m_need_record(true),
-    m_z3_bv_const_n(0),
     m_status(NewState),
     m_jump_kd(Ijk_Boring),
     solv(m_ctx),
@@ -204,6 +220,9 @@ TR::StateBase::StateBase(vex_context& vctx, VexArch guest_arch)
     mem(solv, m_ctx, true),
     branch(*this)
 {
+    auto ln = get_logger_name();
+    logger = spdlog::basic_logger_mt<spdlog::async_factory>(ln, get_log_path().c_str());
+    logger->set_level(spdlog::get_level());
     m_vctx.set_top_state(this);
     m_vinfo.init_VexControl();
 }
@@ -211,14 +230,17 @@ TR::StateBase::StateBase(vex_context& vctx, VexArch guest_arch)
 
 
 TR::StateBase::StateBase(StateBase& father, HWord gse)
-    : m_ctx(),
+    : m_fork_deep_num((UInt)father.m_fork_deep_num + 1),
+    m_state_id((UInt)father.m_branch_state_id_max++),
+    m_z3_bv_const_n((UInt)father.m_z3_bv_const_n),
+    m_father(&father),
+    m_ctx(),
     m_vinfo(father.m_vinfo),
     m_vctx(father.m_vctx),
     guest_start_ep(gse),
     guest_start(guest_start_ep),
     m_delta(0),
     m_need_record(father.m_need_record),
-    m_z3_bv_const_n((UInt)father.m_z3_bv_const_n),
     m_status(NewState),
     m_jump_kd(Ijk_Boring),
     solv(m_ctx, father.solv, z3::solver::translate{}),
@@ -226,7 +248,9 @@ TR::StateBase::StateBase(StateBase& father, HWord gse)
     mem(solv, m_ctx, father.mem, father.m_need_record),
     branch(*this, father.branch)
 {
-
+    auto ln = get_logger_name();
+    logger = spdlog::basic_logger_mt<spdlog::async_factory>(ln, get_log_path().c_str());
+    logger->set_level(spdlog::get_level());
 }
 
 void TR::StateBase::read_bin_dump(const char* binDump)
@@ -254,17 +278,16 @@ UInt TR::StateBase::getStr(std::stringstream& st, HWord addr)
     return -1u;
 }
 
-bool TR::operator==(InvocationStack<HWord> const& a, InvocationStack<HWord> const& b)
+std::string TR::StateBase::get_log_path()
 {
-    return (a.get_guest_saved_ret() == b.get_guest_saved_ret());
+    char buff[50];
+    std::string str;
+    for (StateBase* b = this; b; b = b->m_father) {
+        UInt id = b->m_state_id;
+        snprintf(buff, sizeof(buff), "/s%d", id);
+        str.append(buff);
+    }
+
+    return "log" + str + "_log.txt";
 }
 
-std::ostream& TR::operator<<(std::ostream& out, const TR::StateBase& n)
-{
-    return out << (std::string)n;
-}
-
-std::ostream& TR::operator<<(std::ostream& out, const TR::InvocationStack<HWord>& e)
-{
-    return out << (std::string)e;
-}

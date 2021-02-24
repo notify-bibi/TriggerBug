@@ -582,8 +582,5 @@ sv::tval tBinop(IROp op, sv::tval const& a, sv::tval const& b){
     }
     
 FAILD:
-    vex_printf("unsupport ir binop: ");
-    ppIROp(op);
-    vpanic("tIRType");
-
+    VPANIC("unsupport ir binop ");
 }

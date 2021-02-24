@@ -1,7 +1,10 @@
 #include "engine/engine.h"
 #include "z3_target_call.h"
 #include "z3_target_defs.h"
-
+extern "C" {
+#include "priv/guest_amd64_defs.h"
+#include "priv/guest_x86_defs.h"
+}
 
 
 
@@ -69,8 +72,7 @@ UChar* extern_dealy_call(UChar* fuc) {
     //plt
 #warning "----------- ???? host OS ------------"
 #endif
-    vex_printf("func(%p) not found real func", fuc);
-    VPANIC("gg");
+    VPANIC("func(%p) not found real func");
     return nullptr;
 }
 

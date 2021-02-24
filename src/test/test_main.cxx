@@ -410,8 +410,10 @@ bool check(TRsolver &solver, sbool &&s) {
     return true;
 }
 
-
-
+extern "C" {
+#include "priv/guest_amd64_defs.h"
+#include "priv/guest_x86_defs.h"
+}
 bool test_ir_dirty_rflags() {
     z3::context c;
     TRsolver solver(c);
@@ -421,7 +423,7 @@ bool test_ir_dirty_rflags() {
         ssbval<64> ndep(c, c.bv_const("ndep", 64));
 
 
-        solver.add((z3_amd64g_calculate_condition(rsval<uint64_t>(c, AMD64CondLE), rsval<uint64_t>(c, AMD64G_CC_OP_SUBB), dep1, dep2, ndep).tos().extract<0, 0>() == 1) != dep1.extract<7,0>() <= dep2.extract<7, 0>());
+        solver.add((z3_amd64g_calculate_condition(rsval<uint64_t>(c, AMD64CondLE), rsval<uint64_t>(c, AMD64G_CC_OP_SUBB), dep1, dep2, ndep).tos().extract<0, 0>() == 1) != dep1.extract<7, 0>() <= dep2.extract<7, 0>());
         if (solver.check() != z3::unsat) return false;
         solver.pop();
 
@@ -456,17 +458,18 @@ bool test_ir_dirty_rflags() {
         sbool s0 = z3_amd64g_calculate_condition(rsval<uint64_t>(c, AMD64CondLE), rsval<uint64_t>(c, AMD64G_CC_OP_SUBL), dep1.ext<true, 24>() - 0xa, ssbval<64>(c, 0x55), ndep).tos().extract<0, 0>() == 1;
         sbool s1 = z3_amd64g_calculate_condition(rsval<uint64_t>(c, AMD64CondLE), rsval<uint64_t>(c, AMD64G_CC_OP_SUBB), dep1.to_ubv(), ssbval<64>(c, 0x2f), ndep).tos().extract<0, 0>() == 1;
         sbool s2 = z3_amd64g_calculate_condition(rsval<uint64_t>(c, AMD64CondLE), rsval<uint64_t>(c, AMD64G_CC_OP_SUBB), dep1.to_ubv(), ssbval<64>(c, 0x39), ndep).tos().extract<0, 0>() == 1;
-            
-        cbool_assert( check(solver, !s0 != (dep1.ext<true, 24>() - 0xa) > ssbval<32>(c, 0x55)));
+
+        cbool_assert(check(solver, !s0 != (dep1.ext<true, 24>() - 0xa) > ssbval<32>(c, 0x55)));
         cbool_assert(check(solver, !s1 != dep1 > ssbval<8>(c, 0x2f)));
         cbool_assert(check(solver, s2 != dep1 <= ssbval<8>(c, 0x39)));
-        
+
     }
 
 
     std::cout << std::endl;
     return true;
 }
+
 bool test_mem_at(int base) {
     constexpr int fs1 = offsetof(VexGuestAMD64State, guest_FS);
     constexpr int fs2 = offsetof(VexGuestX86State, guest_FS);
@@ -621,9 +624,130 @@ void recfun_example_2() {
 
 bool test_creakme();
 
+#include "spdlog/cfg/env.h"
+void load_levels_example()
+{
+    // Set the log level to "info" and mylogger to to "trace":
+    // SPDLOG_LEVEL=info,mylogger=trace && ./example
+    spdlog::cfg::load_env_levels();
+    // or from command line:
+    // ./example SPDLOG_LEVEL=info,mylogger=trace
+    // #include "spdlog/cfg/argv.h" // for loading levels from argv
+    // spdlog::cfg::load_argv_levels(args, argv);
+}
+#include "spdlog/sinks/stdout_color_sinks.h"
+void stdout_logger_example()
+{
+    // Create color multi threaded logger.
+    auto console = spdlog::stdout_color_mt("console");
+    // or for stderr:
+    // auto console = spdlog::stderr_color_mt("error-logger");
+}
+#include "spdlog/async.h"
+#include "spdlog/sinks/basic_file_sink.h"
+void async_example()
+{
+    // Default thread pool settings can be modified *before* creating the async logger:
+    // spdlog::init_thread_pool(32768, 1); // queue with max 32k items 1 backing thread.
+    auto async_file = spdlog::basic_logger_mt<spdlog::async_factory>("async_file_logger", "logs/async_log.txt");
+    // alternatively:
+    // auto async_file = spdlog::create_async<spdlog::sinks::basic_file_sink_mt>("async_file_logger", "logs/async_log.txt");
+
+    for (int i = 1; i < 101; ++i)
+    {
+        async_file->info("Async message #{}", i);
+    }
+}
+
+class MyStruct
+{
+public:
+    ULong* ptr;
+    int sf = 0x123;
+    MyStruct(ULong* p) : ptr(p) {
+
+    }
+};
+
+
+
+class Test {
+
+    ULong v = 99;
+    std::shared_ptr<MyStruct> l1 = std::make_shared<MyStruct>(&v);
+    std::shared_ptr<MyStruct> l2 = std::make_shared<MyStruct>(&v);
+
+public:
+    std::shared_ptr<MyStruct>& ref() { return l1; }
+    std::shared_ptr<MyStruct> get() { return l1; }
+    void set(std::shared_ptr<MyStruct> v) { l1 = v; }
+
+};
+
+
 
 int main() {
+    load_levels_example();
+    spdlog::info("Welcome to spdlog version {}.{}.{}  !", SPDLOG_VER_MAJOR, SPDLOG_VER_MINOR, SPDLOG_VER_PATCH);
 
+    spdlog::warn("Easy padding in numbers like {:08d}", 12);
+    spdlog::critical("Support for int: {0:d};  hex: {0:x};  oct: {0:o}; bin: {0:b}", 42);
+    spdlog::info("Support for floats {:03.2f}", 1.23456);
+    spdlog::info("Positional args are {1} {0}..", "too", "supported");
+    spdlog::info("{:>8} aligned, {:<8} aligned", "right", "left");
+
+    // Runtime log levels
+    spdlog::set_level(spdlog::level::info); // Set global log level to info
+    spdlog::debug("This message should not be displayed!");
+    spdlog::set_level(spdlog::level::trace); // Set specific logger's log level
+    spdlog::debug("This message should be displayed..");
+
+    // Customize msg format for all loggers
+    spdlog::set_pattern("[%H:%M:%S %z] [%^%L%$] [thread %t] %v");
+    spdlog::info("This an info message with custom format");
+    spdlog::set_pattern("%+"); // back to default format
+    spdlog::set_level(spdlog::level::debug);
+
+    // Backtrace support
+    // Loggers can store in a ring buffer all messages (including debug/trace) for later inspection.
+    // When needed, call dump_backtrace() to see what happened:
+    //spdlog::enable_backtrace(10); // create ring buffer with capacity of 10  messages
+    for (int i = 0; i < 100; i++)
+    {
+        spdlog::debug("Backtrace message {}", i); // not logged..
+    }
+    // e.g. if some error happened:
+    //spdlog::dump_backtrace(); // log them now!
+   /* stdout_logger_example();
+    load_levels_example();
+    async_example();*/
+
+
+    ThreadPool p(4);
+    spdlog::init_thread_pool(32768, 1);
+    // alternatively:
+    // auto async_file = spdlog::create_async<spdlog::sinks::basic_file_sink_mt>("async_file_logger", "logs/async_log.txt");
+
+    
+    //std::shared_ptr<spdlog::logger> log = std::move(async_file);
+    //{
+    //    Test t;
+    //    ULong v = 0x8;
+    //    for (int i = 0; i <= 10; i++) {
+    //        p.enqueue([&] {
+
+    //            for (int i = 1; i < 100001; ++i)
+    //            {
+    //                t.get()->ptr[0] = i;
+    //                //t.ref()->ptr[0] = i;
+    //                auto sd = t.get();
+    //                //t.set(std::make_shared<MyStruct>( &v ));
+    //                //log->info("Async message #{}", i);
+    //            }
+    //            });
+    //    }
+    //    p.wait();
+    //};
 #ifdef TESTZ3
     recfun_example_2();
     testz3();

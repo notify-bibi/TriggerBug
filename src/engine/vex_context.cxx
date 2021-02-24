@@ -1,3 +1,4 @@
+
 #include "engine/vex_context.h"
 #include "engine/memory.h"
 #include "engine/state_base.h"
@@ -15,26 +16,39 @@ using namespace TR;
 
 template<typename EaType, typename CountTy>
 static rsval<CountTy> vex_read(StateBase& s, const rsval<EaType>& addr, const rsval<CountTy>& len) {
-    vassert(len.real());
-    UInt size = len.tor();
+    UInt size = 0;
+    if (len.real()) {
+        size = len.tor();
+    }
+    else {
+        spdlog::info("symbolic vex_read :ea{:s} len:{:s}", addr.str(), len.str());
+        std::cin >> size;
+    }
+
     std::string st;
     char buff[2];
     buff[1] = 0;
     UInt n;
-    std::cout << "vex_read :[";
     for (n = 0; n < size && buff[0] != '\n'; n += 1) {
         buff[0] = getchar();
         s.mem.store(addr + n, buff[0]);
         st.append(buff);
     }
-    std::cout << "]" << std::endl;
+    spdlog::info("vex_read :ea{:s} len:{:s} get:{:d} [{:s}]", addr.str(), len.str(), size, st);
+    s.logger->info("vex_read :ea{:s} len:{:s} get:{:d} [{:s}]", addr.str(), len.str(), size, st);
     return rsval<EaType>(s.ctx(), n);
+    
 }
 
 template<typename EaType, typename CountTy>
 static void vex_write(StateBase& s, const rsval<EaType>& addr, const rsval<CountTy>& len) {
-    vassert(len.real());
-    UInt size = len.tor();
+    UInt size = 0;
+    if (len.real()) {
+        size = len.tor();
+    }else {
+        s.logger->warn("symbolic vex_write : ea:{:s} len:{:s}", addr.str(), len.str());
+        std::cin >> size;
+    }
     std::string st;
     char buff[2];
     buff[1] = 0;
@@ -48,7 +62,9 @@ static void vex_write(StateBase& s, const rsval<EaType>& addr, const rsval<Count
             st.append(chr.str());
         }
     }
-    std::cout << "vex_write :[" << st << "]" << std::endl;
+    spdlog::info("vex_write : ea:{:s} len:{:s} put:{:d} [{:s}]", addr.str(), len.str(), size, st);
+    s.logger->info("vex_write : ea:{:s} len:{:s} put:{:d} [{:s}]", addr.str(), len.str(), size, st);
+   
 }
 
 
@@ -87,9 +103,15 @@ static void failure_exit() {
     throw Expt::IRfailureExit("valgrind error exit");
 }
 
+//typedef void (*logger_function)(const HChar* bytes, SizeT nbytes);
+
+
+
 static void _vex_log_bytes(const HChar* bytes, SizeT nbytes) {
     std::cout << bytes;
+    throw Expt::IRfailureExit(bytes);
 }
+
 
 clock_t tr_begin_run = clock();
 static bool is_LibVEX_Init = False;
@@ -482,6 +504,7 @@ Int vex_info::gRegsIpOffset(VexArch guest) {
 
     vex_context::~vex_context()
     {
+        pool().wait(); // haha
         del_IRSBCache(m_irsb_cache);
         m_irsb_cache = nullptr;
     }

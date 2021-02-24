@@ -49,7 +49,7 @@ int eval_all(std::deque<sv::tval>& result, z3::solver& solv, Z3_ast _exp) {
             z3::model m = solv.get_model();
             Z3_model_inc_ref(ctx, m);
             z3::expr re = m.eval(exp);
-            std::cout << re << std::endl;
+            //std::cout << re << std::endl;
             if (re.is_numeral_u64(realu64)) {
                 result.emplace_back(sv::tval(ctx, realu64, nbits));
                 solv.add(exp != re);
@@ -80,7 +80,7 @@ int eval_all_bool(z3::solver& solv, Z3_ast _exp) {
     z3::expr exp(ctx, _exp);
 
    // std::cout << Z3_simplify_get_help(solv.ctx());
-    std::cout << exp.simplify() << std::endl;
+    //std::cout << exp.simplify() << std::endl;
     //std::cout << solv.assertions() << std::endl;
 
     solv.push();
@@ -183,7 +183,7 @@ void TR::State::x86_set_mode(UChar cs)
     }
     else
     {
-        vex_printf("cs : %x unkonow", cs);
+        logger->warn("cs : %x unkonow", cs);
     }
     regs.set(X86_IR_OFFSET::CS, (UShort)cs);
     if(m_irvex)
@@ -515,7 +515,7 @@ void TR::State::dirty_call_run(IRTemp tmp, IRType tmpType, const IRDirty* dirty)
     getDirtyVexCtx();
     dirty_run(m_dctx, dirty);
     if (dirty->tmp != IRTemp_INVALID) {
-        irvex()[dirty->tmp] = dirty_result(m_dctx, tmpType);
+        irvex().operator[](dirty->tmp) = dirty_result(m_dctx, tmpType);
     }
 
 }
@@ -524,7 +524,7 @@ sv::tval State::tIRExpr(const IRExpr* e)
 {
     switch (e->tag) {
     case Iex_Get: { return regs.Iex_Get(e->Iex.Get.offset, e->Iex.Get.ty); }
-    case Iex_RdTmp: { return irvex()[e->Iex.RdTmp.tmp]; }
+    case Iex_RdTmp: { return irvex().operator[](e->Iex.RdTmp.tmp); }
     case Iex_Unop: { return tUnop(e->Iex.Unop.op, tIRExpr(e->Iex.Unop.arg)); }
     case Iex_Binop: { return tBinop(e->Iex.Binop.op, tIRExpr(e->Iex.Binop.arg1), tIRExpr(e->Iex.Binop.arg2)); }
     case Iex_Triop: { return tTriop(e->Iex.Triop.details->op, tIRExpr(e->Iex.Triop.details->arg1), tIRExpr(e->Iex.Triop.details->arg2), tIRExpr(e->Iex.Triop.details->arg3)); }
@@ -557,11 +557,11 @@ sv::tval State::tIRExpr(const IRExpr* e)
     case Iex_GSPTR: { return sv::tval(m_ctx, getGSPTR(), sizeof(HWord) << 3); };
     case Iex_Binder: {
         Int binder = e->Iex.Binder.binder;
-        vex_printf("tIRExpr Iex_Binder:  %d", binder);
+        spdlog::critical("tIRExpr Iex_Binder:  {}", binder);
     }
     case Iex_VECRET:{ }
     default:
-        vex_printf("tIRExpr error:  %d", e->tag);
+        spdlog::critical("tIRExpr error:  {}", e->tag);
         VPANIC("not support");
     }
 }
@@ -655,13 +655,12 @@ void State::tIRStmt(const IRTypeEnv* tyenv, const IRStmt* s)
         break;// fresh changed block
     }
     case Ist_MBE:  /*内存总线事件，fence/请求/释放总线锁*/ {
-        vex_printf("IR-");
         ppIRMBusEvent(s->Ist.MBE.event);
         break;
     }
     case Ist_LLSC:
     default: {
-        vex_printf("what ppIRStmt %d\n", s->tag);
+        spdlog::critical("what ppIRStmt {}", s->tag);
         VPANIC("what ppIRStmt");
     }
     };
@@ -716,7 +715,7 @@ Vex_Kind State::emu_irsb_next(std::deque<BtsRefType>& tmp_branch, HWord& guest_s
         else {
             for (auto re : result) {
                 auto GN = re.tor<false, ea_nbits>();//guest next ip
-                tmp_branch.push_back(new BtsType(*this, (THWord)GN, next == (THWord)GN));
+                tmp_branch.push_back(std::make_shared<BtsType>(*this, (THWord)GN, next == (THWord)GN));
                 tmp_branch.back()->set_jump_kd(jumpkind);
             }
             set_status(Fork);
@@ -849,10 +848,10 @@ TR::Vex_Kind State::emu_irsb(std::deque<BtsRefType>& tmp_branch, HWord& guest_st
                     status = Fork;
                     // guard true path
                     if (s->Ist.Exit.jk == Ijk_Boring) {
-                        tmp_branch.push_back(new BtsType(*this, (THWord)s->Ist.Exit.dst->Ico.U64, guard));
+                        tmp_branch.push_back(std::make_shared<BtsType>(*this, (THWord)s->Ist.Exit.dst->Ico.U64, guard));
                     }
                     if (s->Ist.Exit.jk >= Ijk_SigILL && s->Ist.Exit.jk <= Ijk_SigFPE_IntOvf) {
-                        tmp_branch.push_back(new BtsType(*this, (THWord)s->Ist.Exit.dst->Ico.U64, guard));
+                        tmp_branch.push_back(std::make_shared<BtsType>(*this, (THWord)s->Ist.Exit.dst->Ico.U64, guard));
                         tmp_branch.back()->set_jump_kd(s->Ist.Exit.jk);
                     }
                     // guard false path
@@ -863,7 +862,7 @@ TR::Vex_Kind State::emu_irsb(std::deque<BtsRefType>& tmp_branch, HWord& guest_st
                             // ---- IMark ----
                             // ********
                             // irsb next
-                            tmp_branch.push_back(new BtsType(*this, (THWord)next_stmt->Ist.IMark.addr, !guard));
+                            tmp_branch.push_back(std::make_shared<BtsType>(*this, (THWord)next_stmt->Ist.IMark.addr, !guard));
                             return vFork;
                         }
                         else { //如果fork直接退出 会丢失ir指令
@@ -905,7 +904,7 @@ fork_exit:
     {
         sv::rsval<false, ea_nbits> next = tIRExpr(irsb->next).template tors<false, ea_nbits>();
         if LIKELY(next.real()) {
-            tmp_branch.push_back(new BtsType(*this, (THWord)next.tor(), !fork_exit_guard));
+            tmp_branch.push_back(std::make_shared<BtsType>(*this, (THWord)next.tor(), !fork_exit_guard));
         }
         else {
             std::deque<sv::tval> result;
@@ -915,12 +914,12 @@ fork_exit:
             }
             else if (eval_size == 1) {
                 auto GN = result[0].tor<false, ea_nbits>();
-                tmp_branch.push_back(new BtsType(*this, (HWord)GN, !fork_exit_guard));
+                tmp_branch.push_back(std::make_shared<BtsType>(*this, (HWord)GN, !fork_exit_guard));
             }
             else {
                 for (auto re : result) {
                     auto GN = re.tor<false, ea_nbits>();//guest next ip
-                    tmp_branch.push_back(new BtsType(*this, (THWord)GN, !fork_exit_guard, next == (THWord)GN));
+                    tmp_branch.push_back(std::make_shared<BtsType>(*this, (THWord)GN, !fork_exit_guard, next == (THWord)GN));
                 }
             }
         }
@@ -929,7 +928,7 @@ fork_exit:
 }
 
 
-bool State::vex_main_loop(std::deque<BtsRefType>& tmp_branch, IRSB*& irsb, HWord& guest_start, Addr avoid) {
+bool State::vex_main_loop(std::deque<BtsRefType>& tmp_branch, irsb_chunk& irsb_chunk, HWord& guest_start, Addr avoid) {
 
     
 
@@ -949,8 +948,8 @@ bool State::vex_main_loop(std::deque<BtsRefType>& tmp_branch, IRSB*& irsb, HWord
     Vex_Kind vkd;
 
     do {
-        auto irsb_chunk = irvex().translate_front(guest_start);
-        irsb = irsb_chunk->get_irsb();
+        irsb_chunk = irvex().translate_front(guest_start);
+        IRSB* irsb = irsb_chunk->get_irsb();
         //ppIRSB(irsb);
         get_trace()->traceIRSB(*this, guest_start, irsb_chunk);
         if (vinfo().is_mode_32()) {
@@ -974,7 +973,7 @@ bool State::vex_main_loop(std::deque<BtsRefType>& tmp_branch, IRSB*& irsb, HWord
 std::deque<TR::State::BtsRefType> TR::State::start(HWord ep)
 {
     guest_start = ep;
-    guest_start_ep = ep;
+    guest_start_ep = ep; 
     return start();
 }
 
@@ -983,22 +982,26 @@ std::deque<TR::State::BtsRefType> TR::State::start() {
     if (vinfo().gguest() == VexArchAMD64 || vinfo().gguest() == VexArchX86) {
         x86_set_mode(regs.get<Ity_I16>(X86_IR_OFFSET::CS).tor());
     }
-    EmuEnvGuest ir(vctx(), vinfo(), mem);
+    
     clean_dirty_mode();
-    return start(guest_start , &ir, 0);
+    return start(guest_start, std::make_unique< EmuEnvGuest>(vctx(), vinfo(), mem), 0);
 }
 
-std::deque<TR::State::BtsRefType> TR::State::start(HWord& guest_start, EmuEnvironment * ir, Addr avoid) {
-    EmuEnvironment* bak = m_irvex;
-    mem.set_emu_env(bak);
-    m_irvex = ir;
+std::deque<TR::State::BtsRefType> TR::State::start(HWord& guest_start, std::shared_ptr<EmuEnvironment> e, Addr avoid) {
+    mem.set_emu_env(e);
+    m_irvex = e;
     return v_start(guest_start, avoid);
 }
+
+static void logger_function(const HChar* bytes, SizeT nbytes) {
+
+}
+
 
 std::deque<TR::State::BtsRefType> TR::State::v_start(HWord& guest_start, Addr avoid) {
     set_status(Running);
     get_trace()->traceStart(*this, guest_start);
-    IRSB* irsb = nullptr;
+    irsb_chunk irsb;
     std::deque<BtsRefType> tmp_branch;
 Begin_try:
     try {
@@ -1008,12 +1011,14 @@ Begin_try:
     }
     catch (Expt::ExceptionBase& error) {
         //mem.set(nullptr);
+        spdlog::disable_backtrace();
+        spdlog::warn(" >> see exception contenxt {} at {}", error.msg(), get_log_path());
         if (1) {
 
-            for (Int i = 0; i < irsb->tyenv->types_used; i++) {
-                std::cout << " >> t" <<std::hex << i << "  " << irvex()[i].str() << std::endl;
+            for (Int i = 0; i < irsb->get_irsb()->tyenv->types_used; i++) {
+                logger->warn(" >> t{0:d} {1:s}", i, irvex()[i].str());
             }
-            ppIRSB(irsb);
+            ppIRSB(irsb->get_irsb());
         }
         irvex().free_ir_buff();
         switch (error.errTag()) {
@@ -1024,20 +1029,22 @@ Begin_try:
                 cpu_exception(error);
             }
             catch (Expt::ExceptionBase& cpu_exception_error) {
-                std::cerr << "Usage issues or simulation software problems.\nError message:" << std::endl;
-                std::cerr << error.msg() << std::endl;
+                spdlog::warn("Usage issues or simulation software problems.\nError message:");
+                spdlog::warn(error.msg());
+                logger->warn("Usage issues or simulation software problems.\nError message:");
+                logger->warn(error.msg());
                 set_status(Death);
             }
             break;
         }
         case Expt::IR_failure_exit: {
-            std::cerr << "Sorry This could be my design error. (BUG)\nError message:" << std::endl;
-            std::cerr << error.msg() << std::endl;
+            spdlog::critical("Sorry This could be my design error. (BUG)\nError message:");
+            spdlog::critical(error.msg());
             exit(1);
         }
         case Expt::Solver_no_solution: {
-            std::cerr << " There is no solution to this problem. But this COULD BE my design error (BUG).\nError message:" << std::endl;
-            std::cerr << error.msg() << std::endl;
+            spdlog::critical(" There is no solution to this problem. But this COULD BE my design error (BUG).\nError message:");
+            spdlog::critical(error.msg());
             exit(1);
         }
         };
@@ -1063,7 +1070,7 @@ void State::branchGo()
     }
 }
 
-void TR::State::set_irvex(EmuEnvironment* e)
+void TR::State::set_irvex(std::shared_ptr<EmuEnvironment> e)
 {
     m_irvex = e;
     if (e) {
@@ -1330,7 +1337,7 @@ unsigned int IRConstTag2nb(IRConstTag t) {
 
 unsigned int ty2length(IRType ty) {
     switch (ty) {
-    case Ity_INVALID: vex_printf("Ity_INVALID"); break;
+    case Ity_INVALID: VPANIC("Ity_INVALID"); break;
     case 1:
     case Ity_I1:      return 0;
     case 8:
@@ -1353,14 +1360,14 @@ unsigned int ty2length(IRType ty) {
     case Ity_V128:    return 16;
     case 256:
     case Ity_V256:    return 32;
-    default:vpanic("ty2length");
+    default:VPANIC("ty2length");
     }
     return 0;
 }
 
 unsigned int ty2bit(IRType ty) {
     switch (ty) {
-    case Ity_INVALID: vex_printf("Ity_INVALID"); break;
+    case Ity_INVALID: VPANIC("Ity_INVALID"); break;
     case 1:
     case Ity_I1:      return 1;
     case 8:
@@ -1383,7 +1390,7 @@ unsigned int ty2bit(IRType ty) {
     case Ity_V128:    return 128;
     case 256:
     case Ity_V256:    return 256;
-    default:vpanic("ty2length");
+    default:VPANIC("ty2length");
     }
     return 0;
 }
@@ -1399,7 +1406,7 @@ IRType length2ty(UShort bit) {
     case 64:   return Ity_I64;
     case 128:  return Ity_I128;
     case 256:  return Ity_V256;
-    default:vpanic("length2ty");
+    default:VPANIC("length2ty");
     }
     return Ity_INVALID;
 }
@@ -1541,70 +1548,73 @@ void TraceInterface::pp_call_space(State& s)
     //UInt size = s.get_InvokStack().size();
     UInt size = 0;
     if (s.is_dirty_mode()) {
-        printf("D[%-2d:%2d]", size, s.mem.get_user());
+        s.logger->debug("D[{:2d}:{:2d}]", size, s.mem.get_user());
     }
     else {
-        printf("[%-2d:%2d]", size, s.mem.get_user());
+        s.logger->debug("[{:2d}:{:2d}]", size, s.mem.get_user());
     }
-    for (UInt i = 0; i < size; i++) {
-        vex_printf("  ");
-    }
+    /*for (UInt i = 0; i < size; i++) {
+        s.logger->debug("  ");
+    }*/
 }
 
-void TraceInterface::pp_call_space(State& s, HWord addr)
-{
-    //UInt size = s.get_InvokStack().size();
-    UInt size = 0;
-    printf("[%-2d:%2d] 0x%-16x", size, s.mem.get_user(), addr);
-    for (UInt i = 0; i < size; i++) {
-        vex_printf("  ");
-    }
-}
 
 void   TraceInterface::traceStart(State& s, HWord ea) {
+    if (!s.logger->should_log(s.logger->level())) return;
     if (getFlag(TR::CF_traceState)) {
-        pp_call_space(s);
-        std::cout << "\n+++++++++++++++ Thread ID: " << currentThreadId() << "  address: " << std::hex << ea << "  Started +++++++++++++++\n" << std::endl;
+        s.logger->info("+++++++++++++++ Thread ID: {} ea: 0x{:x}  Started +++++++++++++++", currentThreadId(), ea);
     };
 }
 
 void   TraceInterface::traceFinish(State& s, HWord ea) {
+    if (!s.logger->should_log(s.logger->level())) return;
     if (getFlag(TR::CF_traceState)) {
+        ppIR pp;
         if (s.status() == TR::Fork) {
-            vex_printf("Fork from: %p to:{ ", ea);
             for (auto bc : s.branch) {
-                vex_printf(" %p", bc->get_state_ep());
+                pp.vex_printf(" %p", bc->get_state_ep());
             }
-            vex_printf(" };");
+            s.logger->info("\nFork from : 0x{:x} to : {{ \n{}\n }};", ea, pp.c_str());
         }
-        std::cout << "\n+++++++++++++++ Thread ID: " << currentThreadId() << "  address: " << std::hex << ea << "  OVER +++++++++++++++\n" << std::endl;
+        s.logger->info("+++++++++++++++ Thread ID: {} ea: 0x{:x}  OVER +++++++++++++++", currentThreadId(), ea);
     }
 };
 
 void TraceInterface::traceIRStmtStart(State& s, const IRSB* irsb, UInt stmtn)
 {
+
+    if (!s.logger->should_log(s.logger->level())) return;
+
     if (getFlag(TR::CF_ppStmts)) {
         pp_call_space(s);
         IRStmt* st = irsb->stmts[stmtn];
-        if (st->tag == Ist_WrTmp) {
-            UInt tmp = st->Ist.WrTmp.tmp;
-            vex_printf("t%u = ", tmp);
-            ppIRExpr(st->Ist.WrTmp.data);
-        }
-        else {
-            ppIRStmt(st);
-        }
     }
 };
 void   TraceInterface::traceIRStmtEnd(State& s, const IRSB* irsb, UInt stmtn) {
+
+    if (!s.logger->should_log(s.logger->level())) return;
+
     if (getFlag(TR::CF_ppStmts)) {
+        ppIR pp;
         IRStmt* st = irsb->stmts[stmtn];
+        //if (st->tag == Ist_WrTmp) {
+        //    UInt tmp = st->Ist.WrTmp.tmp;
+        //    vex_printf("\t=\t{:s}", s.irvex()[tmp].str());
+        //}
+        //else {
+        //    //vex_printf("\n")
+        //}
+
         if (st->tag == Ist_WrTmp) {
             UInt tmp = st->Ist.WrTmp.tmp;
-            std::cout << "\t=\t"<< s.irvex()[tmp].str();
+            pp.vex_printf("t%u = ", tmp);
+            pp.ppIRExpr(st->Ist.WrTmp.data);
+            s.logger->debug("{}", pp.c_str());
         }
-        
-        vex_printf("\n");
+        else {
+            pp.ppIRStmt(st);
+            s.logger->debug("{}", pp.c_str());
+        }
     }
 }
 void TR::TraceInterface::traceIRnext(State& s, const IRSB* irsb, const tval& val)
@@ -1628,14 +1638,14 @@ void TR::TraceInterface::traceIRnext(State& s, const IRSB* irsb, const tval& val
 //}
 //;
 
-void   TraceInterface::traceIRSB(State& s, HWord ea, ref<IRSB_CHUNK>& bb) {
+void   TraceInterface::traceIRSB(State& s, HWord ea, irsb_chunk& bb) {
     if (getFlag(TR::CF_traceJmp)) {
         pp_call_space(s);
-        vex_printf("Jmp: %llx \n", ea);
+        s.logger->debug("Jmp: %llx", ea);
         //ppIRSB(bb);
     }
 }
-void  TraceInterface::traceIrsbEnd(State& s, ref<IRSB_CHUNK>&)
+void  TraceInterface::traceIrsbEnd(State& s, irsb_chunk&)
 {
     return;
 }

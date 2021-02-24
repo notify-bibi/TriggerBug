@@ -15,12 +15,14 @@ project (TriggerBug
         )
 
 		
-SET(Z3_PROJ_DIR "z3-z3-4.8.10")
+set(Z3_PROJ_DIR "z3-z3-4.8.10")
 set(VALGRIND_PROJ_DIR "valgrind-3.16.1")
+set(SPDLOG_PROJ_DIR "spdlog-1.8.2")
 
 
 option(DEBUG_GABLE "print cmake info" OFF)
 option(BUILD_Z3 "BUILD Z3" OFF)
+option(BUILD_SPDLOG "BUILD SPDLOG" ON)
 option(BUILD_VALGRIND "BUILD VALGRIND" OFF)
 option(BUILD_TRIGGERBUG "BUILD TRIGGERBUG" OFF)
 option(BUILD_CRYPTO_ANALYZER "BUILD CRYPTO_ANALYZER" OFF)
@@ -132,7 +134,8 @@ SET(CMAKE_INCLUDE_PATH ${CMAKE_SOURCE_DIR}/include/)
 # add include path
 TR_add_include(libz3 ${Z3_PROJ_DIR}/ src src/api src/api/c++)
 TR_add_include(libvalgrind ${VALGRIND_PROJ_DIR}/VEX/ priv/ pub/)
-TR_add_include(libtriggerBug src/engine/ )
+TR_add_include(spdlog ${SPDLOG_PROJ_DIR}/include/)
+TR_add_include(libtriggerBug src/engine/)
 TR_add_include(threadPool src/thread_pool)
 
 
@@ -149,12 +152,23 @@ TR_lib_add(libz3 ${Z3_PROJ_DIR} BUILD_Z3 PATH ${CMAKE_INSTALL_LIBDIR})
 #    set_target_properties(libz3 PROPERTIES COMPILE_FLAGS "/Qopenmp" )#yes
 #ENDIF()
 
+
+# ----------! lib z3 ----------
+
+# ---------- add lib spdlog ----------
+
+set(CMAKE_BINARY_DIR "${CMAKE_BINARY_DIR}/${SPDLOG_PROJ_DIR}")
+set(CMAKE_SOURCE_DIR "${CMAKE_SOURCE_DIR}/${SPDLOG_PROJ_DIR}")
+
+TR_lib_add(spdlog ${SPDLOG_PROJ_DIR} BUILD_SPDLOG PATH ${CMAKE_INSTALL_LIBDIR})
+
+# ----------! lib spdlog ----------
+
 set(CMAKE_BINARY_DIR ${CMAKE_BINARY_DIR_tmp})
 set(CMAKE_SOURCE_DIR ${CMAKE_SOURCE_DIR_tmp})
 unset(CMAKE_BINARY_DIR_tmp)
 unset(CMAKE_SOURCE_DIR_tmp)
 
-# ----------! lib z3 ----------
 
 add_compile_options(-fdelayed-template-parsing)
 

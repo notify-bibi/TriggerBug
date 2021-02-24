@@ -47,6 +47,8 @@ namespace Expt {
         virtual std::string msg() const { return "???";  };
         virtual Addr64 addr() const { return 0; }
         virtual IRJumpKind jkd() const { return Ijk_INVALID; }
+        friend std::ostream& operator <<(std::ostream& os, const ExceptionBase& p) { return os << p; };
+
     };
 
     class GuestMem :public ExceptionBase {

@@ -86,7 +86,7 @@ namespace TR {
         Addr cr = m_guest_start_of_block + m_base_block_sz;
 
         if UNLIKELY((m_guest_start_of_block <= wr && wr < cr) || (m_guest_start_of_block <= wl && wl < cr)){
-            vex_printf("\n********* anti debug [code ea: %p] has been patched!! i will updated irsb *********\n", (wl));
+            spdlog::critical("\n********* anti debug [code ea: 0x{:x}] has been patched!! i will updated irsb *********\n", (wl));
             m_is_dynamic_block = true;
         }
     }
@@ -107,14 +107,14 @@ namespace TR {
     {
     }
 
-    ref<IRSB_CHUNK> EmuEnvGuest::translate_front(HWord ea)
+    irsb_chunk EmuEnvGuest::translate_front(HWord ea)
     {
         set_guest_bb_insn_control_obj();
         /*if (ea == 0x77736009) {
             printf("xd");
         }*/
         
-        ref<IRSB_CHUNK> cache_irsb = irsb_cache_find(m_vctx.get_irsb_cache(), m_mem, ea);
+        irsb_chunk cache_irsb = irsb_cache_find(m_vctx.get_irsb_cache(), m_mem, ea);
         if (LIKELY(cache_irsb != nullptr)) {
             return cache_irsb;
         }

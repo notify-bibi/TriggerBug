@@ -47,7 +47,7 @@ namespace Ke {
             break;
         }
         case Ijk_NoDecode: {
-            std::cerr << "Error message: valgrind Ijk_NoDecode " << std::hex << st.get_cpu_ip() << std::endl;
+            st.logger->critical("Error message: valgrind Ijk_NoDecode 0x{:x}", st.get_cpu_ip());
             return TR::NoDecode;
         }
         case Ijk_SigILL:         /* current instruction synths SIGILL */
@@ -59,7 +59,7 @@ namespace Ke {
         case Ijk_SigFPE_IntOvf:  /* current instruction synths SIGFPE - IntOvf */
         { throw Expt::RuntimeIrSig(st.get_cpu_ip(), kd); }
         default:
-            vex_printf("guest address: %p jmp kind: ", st.get_cpu_ip());
+            st.logger->warn("guest address: 0x{x} jmp kind: {}", st.get_cpu_ip(), kd);
         };
         return TR::State_Tag::Death;
     };
@@ -128,7 +128,7 @@ namespace Ke {
                 UInt BaseAddress = st.mem.load<Ity_I32>(arg1).tor();
                 UInt RegionSize = st.mem.load<Ity_I32>(arg3).tor();
                 st.mem.map(BaseAddress, RegionSize);
-                std::cout << "ntdll_NtAllocateVirtualMemory map(ea:" << std::hex << BaseAddress << ", sz:" << std::hex << RegionSize << ")" << std::endl;
+                st.logger->info("ntdll_NtAllocateVirtualMemory map(e a :0x{:x} sz : 0x{:x})", BaseAddress, RegionSize);
 
                 regs.set(X86_IR_OFFSET::EAX, 0);
                 return TR::Running;
@@ -142,7 +142,7 @@ namespace Ke {
 
                 if (ProcessInformationClass == ProcessDebugPort) {//kernelbase_CheckRemoteDebuggerPresent
                     st.mem.store((Addr32)(ULong)ProcessInformation, 0);
-                    std::cout << "war: ntdll_NtQueryInformationProcess(,,ProcessDebugPort,) hide" << std::endl;
+                    st.logger->info("war: ntdll_NtQueryInformationProcess(,,ProcessDebugPort,) hide");
 
                 }
                 if (ProcessInformationClass == 37) {//
@@ -237,7 +237,7 @@ namespace Ke {
             }
 
         }
-        std::cerr << std::hex << st.get_cpu_ip() << ": Sys_syscall_windows(\nid:" << eax << "\narg0:" << arg0 << "\narg1:" << arg1 << "\narg2:" << arg2 << "\narg3:" << arg3 << "\narg4:" << arg4 << "\narg5:" << arg5 << "\n) not define" << std::endl;
+        st.logger->critical("ip ea:0x{:x} : Sys_syscall_windows(id:0x{:} arg0:{} arg1:{} arg2:{} arg3:{} arg4:{} arg5:{}) not define", st.get_cpu_ip(), eax.str(), arg0.str(), arg1.str(), arg2.str(), arg3.str(), arg4.str(), arg5.str());
         /*std::cerr << "Invok Stack :\n" << (std::string)st.get_InvokStack() << std::endl;*/
         return TR::Death;
     };
@@ -269,7 +269,7 @@ namespace Ke {
                 st.set_delta(1);
 				return TR::Running;
 			}
-			std::cerr << "Error message: valgrind Ijk_NoDecode " << std::hex << st.get_cpu_ip() << std::endl;
+            st.logger->critical("Error message: valgrind Ijk_NoDecode 0x{:x}", st.get_cpu_ip());
 			return TR::NoDecode;
 		}
 		case Ijk_SigILL:         /* current instruction synths SIGILL */
@@ -281,9 +281,7 @@ namespace Ke {
 		case Ijk_SigFPE_IntOvf:  /* current instruction synths SIGFPE - IntOvf */
 		{ throw Expt::RuntimeIrSig(st.get_cpu_ip(), kd); }
 		default:
-			vex_printf("guest address: %p jmp kind: ", st.get_cpu_ip());
-			ppIRJumpKind(kd);
-			vex_printf("\n");
+            st.logger->warn("guest address: 0x{x} jmp kind: {}", st.get_cpu_ip(), kd);
 		}
 		return TR::Death;
 	}
@@ -306,8 +304,6 @@ namespace Ke {
         decltype(st.regs)& regs = st.regs;
         decltype(st.mem)& mem = st.mem;
 
-        std::cerr << "Error message:" << std::endl;
-        std::cerr << e.msg() << std::endl;
         UInt stack_size = sizeof(EXCEPTION_RECORD32) + sizeof(WOW64_CONTEXT);
         UInt sp_tmp = regs.get<Ity_I32>(X86_IR_OFFSET::ESP).tor();
         UInt esp = sp_tmp - 532;
@@ -390,7 +386,7 @@ namespace Ke {
 
         Addr32 ntdll_KiUserExceptionDispatcher = (Addr32)param().get("ntdll_KiUserExceptionDispatcher");
         if (!ntdll_KiUserExceptionDispatcher) {
-            std::cerr << "(ctx32).param().set(\"ntdll_KiUserExceptionDispatcher\", 0x-----);" << std::endl;
+            st.logger->warn("(ctx32).param().set(\"ntdll_KiUserExceptionDispatcher\", 0x-----);");
             st.set_status(TR::Death);
             return;
         }
@@ -414,25 +410,25 @@ namespace Ke {
         if (peb.real()) {
             UChar v = mem.load<Ity_I8>(peb + 2).tor();
             if (v) {
-                std::cout << "hide kernelbase_IsDebuggerPresent" << std::endl;
+                spdlog::info("hide kernelbase_IsDebuggerPresent");
                 mem.store(peb + 2, (UChar)0);
             }
             //PEB.NtGlobalFlag
             v = mem.load<Ity_I8>(peb + 0x68).tor();
             if (v == 0x70) {
-                std::cout << "hide PEB.NtGlobalFlag" << std::endl;
+                spdlog::info("hide PEB.NtGlobalFlag");
                 mem.store(peb + 0x68, (UChar)0);
             }
             //patch PEB.ProcessHeap.Flags/ForceFlags
             auto process_heap = mem.load<Ity_I32>(peb + 0x18);
             v = mem.load<Ity_I8>(process_heap + 0xc).tor();
             if (v != 2) {
-                std::cout << "hide PEB.ProcessHeap.Flags" << std::endl;
+                spdlog::info("hide PEB.ProcessHeap.Flags");
                 mem.store(process_heap + 0xc, 2);
             }
             v = mem.load<Ity_I8>(process_heap + 0x10).tor();
             if (v != 0) {
-                std::cout << "hide PEB.ProcessHeap.ForceFlags" << std::endl;
+                spdlog::info("hide PEB.ProcessHeap.ForceFlags");
                 mem.store(process_heap + 0x10, 0);
             }
         }

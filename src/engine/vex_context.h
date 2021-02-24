@@ -6,6 +6,13 @@
 #include "engine\basic_var.hpp"
 #include <functional>
 
+#include <cstdio>
+#include "spdlog/spdlog.h"
+#include "spdlog/cfg/env.h" // for loading levels from the environment variable
+#include "engine/tr_ir_opt.h"
+
+
+
 class IRSBCache;
 
 namespace TR {
@@ -152,7 +159,7 @@ namespace TR {
 
         vctx_base(const vctx_base& r) = delete;
         void operator =(const vctx_base& r) = delete;
-        ~vctx_base() {}
+        virtual ~vctx_base() { m_pool.wait(); }
     };
 
     typedef State_Tag(*Hook_CallBack) (State&);
@@ -196,7 +203,7 @@ namespace TR {
         vex_context(Int max_threads);
         
         void constructer();
-        ~vex_context();
+        virtual ~vex_context();
         void hook_del(HWord addr);
         void hook_read(Hook_Read read_call) { m_hook_read = (void*)read_call; }
         void hook_write(Hook_Write write_call) { m_hook_write = (void*)write_call; }

@@ -23,7 +23,6 @@ Revision History:
 #include "engine/emu_environment.h"
 #include "z3_target_call/z3_target_call.h"
 #include <deque>
-#include "engine/ref.h"
 
 
 namespace cmpr {
@@ -56,7 +55,7 @@ namespace TR {
 
     //branch_temp_state
     template<class STATE>
-    class BTS : public ref_manager {
+    class BTS {
         STATE& m_state;
         Addr64 m_oep;
         rsbool m_guard;
@@ -119,17 +118,17 @@ namespace TR {
         vStop,
     };
 
-    class TraceInterface : public ref_manager {
+    class TraceInterface {
         TRControlFlags         m_trtraceflags;
     public:
         TraceInterface(TRControlFlags f) :m_trtraceflags(f) {};
         TraceInterface() :m_trtraceflags(CF_None) {};
         virtual void traceStart(State& s, HWord ea);
-          virtual void traceIRSB(State& s, HWord ea, ref<IRSB_CHUNK>&);;
+          virtual void traceIRSB(State& s, HWord ea, irsb_chunk&);;
               virtual void traceIRStmtStart(State& s, const IRSB* irsb, UInt stmtn);
               virtual void traceIRStmtEnd(State& s, const IRSB* irsb, UInt stmtn);
             virtual void traceIRnext(State& s, const IRSB* irsb, const tval& next);
-          virtual void traceIrsbEnd(State& s, ref<IRSB_CHUNK>&);
+          virtual void traceIrsbEnd(State& s, irsb_chunk&);
         virtual void traceFinish(State& s, HWord ea);
 
         inline TR::TRControlFlags setFlag(TR::TRControlFlags t) { return (TR::TRControlFlags)setFlag((ULong)t); }
@@ -146,7 +145,6 @@ namespace TR {
         virtual TraceInterface* mk_new_TraceInterface() { return new TraceInterface(m_trtraceflags); }
     protected:
         void pp_call_space(State& s);
-        void pp_call_space(State& s, HWord addr);
     };
 
     // i'm just a cpu hardware
@@ -157,14 +155,14 @@ namespace TR {
     public:
         using vsize_t = rsval<HWord>;
         using BtsType = BTS<State>;
-        using BtsRefType = ref<BtsType>;
+        using BtsRefType = std::shared_ptr<BtsType>;
     private:
+        std::shared_ptr<EmuEnvironment> m_irvex;
+        std::shared_ptr<TraceInterface> m_trace;
         bool                   m_call_stack_is_empty = false;
         std::mutex             m_state_lock;
-        EmuEnvironment        *m_irvex;
         DirtyCtx               m_dctx = nullptr;
         Bool                   m_is_dirty_mode; // vex状态
-        ref<TraceInterface>    m_trace;
     public:
 
         State(vex_context& vctx, VexArch guest_arch);
@@ -199,10 +197,10 @@ namespace TR {
         Vex_Kind emu_irsb(std::deque<BtsRefType>& tmp_branch, HWord& guest_start, State_Tag& status, const IRSB* irsb);
 
 
-        bool vex_main_loop(std::deque<BtsRefType>& tmp_branch, IRSB*& irsb, HWord& guest_start, Addr avoid);
+        bool vex_main_loop(std::deque<BtsRefType>& tmp_branch, irsb_chunk& irsb, HWord& guest_start, Addr avoid);
         std::deque<BtsRefType> start(); // guest emu
         std::deque<BtsRefType> start(HWord ep); // guest emu
-        std::deque<BtsRefType> start(HWord& guest_start, EmuEnvironment*, Addr avoid); // guest or host emu
+        std::deque<BtsRefType> start(HWord& guest_start, std::shared_ptr<EmuEnvironment> e, Addr avoid); // guest or host emu
     private:
         std::deque<BtsRefType> v_start(HWord& guest_start, Addr avoid); // emu
 
@@ -221,8 +219,9 @@ namespace TR {
         //最大化缩合状态 
         void compress(cmpr::CmprsContext<StateBase, State_Tag>& ctx);
 
-        inline EmuEnvironment& irvex() { return *m_irvex; }
-        void set_irvex(EmuEnvironment* e);
+        inline EmuEnvironment& irvex() { return *m_irvex.get(); }
+        inline std::shared_ptr<EmuEnvironment> get_irvex() { return m_irvex; }
+        void set_irvex(std::shared_ptr<EmuEnvironment> e);
 
 
         // ---------------------   stack  ---------------------
@@ -257,8 +256,8 @@ namespace TR {
         virtual void avoid_anti_debugging();
     public:
         void clean();//清空多余的指针对象（m_dctx）
-        ref<TraceInterface>& get_trace() { return m_trace; }
-        void set_trace(ref<TraceInterface> trace) { m_trace = trace; }
+        std::shared_ptr<TraceInterface>& get_trace() { return m_trace; }
+        void set_trace(std::shared_ptr<TraceInterface> trace) { m_trace = trace; }
 
 
     public:

@@ -154,9 +154,7 @@ template <class...> constexpr std::false_type always_false{};
 //宿主机的平台架构
 #define HOSTARCH VexArchAMD64
 
-extern "C" NORETURN void vex_assert_fail(const HChar * expr, const HChar * file, Int line, const HChar * fn);
-extern "C" unsigned int vex_printf(const HChar * format, ...);
-extern "C" NORETURN void vpanic(const HChar * str);
+
 unsigned int IRConstTag2nb(IRConstTag t);
 unsigned int ty2length(IRType ty);
 unsigned int ty2bit(IRType ty);

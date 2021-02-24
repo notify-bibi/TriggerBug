@@ -370,7 +370,5 @@ sv::tval tUnop(IROp op, sv::tval const& a) {
         }
     }
 FAILD:
-    vex_printf("unsupport Unop: ");
-    ppIROp(op);
-    vpanic("tIRType");
+    VPANIC("unsupport ir tUnop");
 }

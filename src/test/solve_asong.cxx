@@ -14,16 +14,16 @@ State_Tag success_ret3(StateBase& s) {
         auto e = s.mem.load<Ity_I8>(enc + i);
         s.solv.add(e == (UChar)bf[i]);
     }
-    vex_printf("checking\n\n");
+    printf("checking\n\n");
     auto dfdfs = s.solv.check();
     if (dfdfs == z3::sat) {
-        vex_printf("issat");
+        printf("issat");
         auto m = s.solv.get_model();
         std::cout << m << std::endl;
         exit(0);
     }
     else {
-        vex_printf("unsat??????????\n\n%d", dfdfs);
+        printf("unsat??????????\n\n%d", dfdfs);
     }
     
     s.solv.pop();

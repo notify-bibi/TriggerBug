@@ -13,7 +13,7 @@ sv::tval tBinop(IROp, sv::tval const&, sv::tval const&);
 sv::tval tTriop(IROp, sv::tval const&, sv::tval const&, sv::tval const&);
 sv::tval tQop(IROp, sv::tval const&, sv::tval const&, sv::tval const&, sv::tval const&);
 
-union __attribute__((__aligned__(0x100))) GuestRegs
+union  GuestRegs
 {
     VexGuestX86State   x86;
     VexGuestAMD64State amd64;
@@ -28,7 +28,7 @@ union __attribute__((__aligned__(0x100))) GuestRegs
 
 //所有客户机寄存器的ir层的最大长度。建议>=100
 
-typedef struct{
+typedef struct {
     GuestRegs guest;
     GuestRegs host;
 } VexGuestState;
@@ -187,13 +187,31 @@ namespace TR {
         const std::deque<value_pair_t>& get_guest_saved_ret() const { return m_guest_saved_ret; }
         operator std::string() const;
     };
-    
+
+    class VRegs : public Register {
+    public:
+        VexGuestState regs_bytes;
+        static_assert(offsetof(VexGuestState, guest.x86.host_EvC_FAILADDR) == 0, "error align");
+
+        inline VRegs(z3::vcontext& ctx, UInt size) :Register(ctx, size) {};
+
+        //翻译转换父register
+        inline VRegs(Register& father_regs, z3::vcontext& ctx) : Register(father_regs, ctx) {};
+    };
+
 
     class State;
 
+    __declspec(align(16))
     class StateBase {
         friend class State;
+        static_assert(offsetof(VRegs, regs_bytes) == offsetof(Register, m_bytes), "error align");
+        std::atomic_uint32_t m_fork_deep_num;
+        std::atomic_uint32_t m_state_id; // deep_num ... state_id
+        std::atomic_uint32_t m_z3_bv_const_n;
+        std::atomic_uint32_t m_branch_state_id_max = 0; // deep_num ... state_id
 
+        StateBase*   m_father;
         z3::vcontext m_ctx;   // z3 prove
         vex_info     m_vinfo; // 支持32/64模式切换 
         vex_context& m_vctx;  // state tree 共用一个 vctx
@@ -204,10 +222,9 @@ namespace TR {
         HWord        m_delta;        // NEXT_IP = CURR_IP + m_delta
         bool         m_dirty_vex_mode = false;
         //DirtyCtx     m_dctx = nullptr;
-        VexArchInfo* vai_guest, * vai_host;
+        //VexArchInfo* vai_guest, * vai_host;
 
         Bool         m_need_record;
-        std::atomic_uint32_t m_z3_bv_const_n;
         State_Tag    m_status;       // state状态
         IRJumpKind   m_jump_kd;      // 
 
@@ -216,11 +233,10 @@ namespace TR {
         void read_mem_dump(const char*);
         virtual ~StateBase();
     public:
+        std::shared_ptr<spdlog::logger> logger;
         TRsolver solv;
         //客户机寄存器
-        Register regs; // GuestRegs map一定一定要在 Register 后面
-    __declspec(align(16)) 
-        VexGuestState regs_bytes;
+        VRegs    regs; // GuestRegs map一定一定要在 Register 后面
         //UChar    regs_bytes[REGISTER_LEN];
 
         //客户机内存 （多线程设置相同user，不同state设置不同user）
@@ -247,6 +263,7 @@ namespace TR {
         void read_bin_dump(const char* binDump);
 
         UInt getStr(std::stringstream& st, HWord addr);
+
         inline operator z3::context& () { return m_ctx; }
         inline operator z3::vcontext& () { return m_ctx; }
         inline operator Z3_context() const { return m_ctx; }
@@ -255,29 +272,20 @@ namespace TR {
         inline vex_context& vctx() { return m_vctx; }
         inline vex_info& vinfo() { return m_vinfo; }
         inline TRsolver& solver() { return solv; }
-
+        std::string get_log_path();
     public:
     // interface 
         virtual StateBase* ForkState(HWord ges) { VPANIC("need to implement the method"); return nullptr; }
 
         //virtual inline Ke::Kernel& get_kernel() { VPANIC("need to implement the method"); return *(Ke::Kernel*)(1); }
 
+        friend std::ostream& operator<<(std::ostream& out, const TR::StateBase& n) { return out << (std::string)n; };
     private:
 
         //virtual TR::State_Tag call_back_hook(TR::Hook_struct const& hs) override { setFlag(hs.cflag); return (hs.cb) ? (hs.cb)(this) : Running; }
         //virtual bool  StateCompression(TR::StateBase const& next) override { return true; }
         //virtual void  StateCompressMkSymbol(TR::StateBase const& newState) override {  };
     };
-
-
-
-
-    bool operator==(InvocationStack<HWord> const& a, InvocationStack<HWord> const& b);
-
-    std::ostream& operator<<(std::ostream& out, const TR::StateBase& n);
-
-    std::ostream& operator << (std::ostream& out, const TR::InvocationStack<HWord>& e);
-
 
 };
 

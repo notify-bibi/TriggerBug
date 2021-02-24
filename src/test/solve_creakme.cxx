@@ -52,11 +52,11 @@ rsval<Long> symbolic_read(StateBase &s, const rsval<ULong>& addr, const rsval<Lo
     for (; n < 10; n++) {
         auto FLAG = s.mk_int_const(8).tos<false, 8>();
         s.mem.Ist_Store(addr + n, FLAG);
-        /*auto ao1 = FLAG >= 'A' && FLAG <= 'Z';
+        auto ao1 = FLAG >= 'A' && FLAG <= 'Z';
         auto ao2 = FLAG >= 'a' && FLAG <= 'z';
         auto ao3 = FLAG >= '0' && FLAG <= '9';
         auto ao4 = FLAG == 0xD || FLAG == 0xA;
-        s.solv.add_assert(ao1 || ao2 || ao3 || ao4);*/
+        s.solv.add_assert(ao1 || ao2 || ao3 || ao4);
     }
     auto res_count = s.mk_int_const(8).tors<false, 8>();
     s.solv.add_assert( (res_count < 12).tos() );
@@ -82,16 +82,16 @@ namespace TIR {
 
 
 // 高级反编译 人看
-class AstBlock : public ref_manager {
+class AstBlock {
     typedef typename std::pair<Int, Int> key_value_pair_t;
     std::list<key_value_pair_t> m_param; // regOffset size
     std::list<key_value_pair_t> m_result; // regOffset size
 
     typedef typename std::list<key_value_pair_t>::iterator list_iterator_t;
-    ref<IRSB_CHUNK> m_block;
+    irsb_chunk m_block;
     IRJumpKind m_jmpkind;
 public:
-    AstBlock(ref<IRSB_CHUNK> irsb_chunk):m_block(irsb_chunk){
+    AstBlock(irsb_chunk irsb_chunk) :m_block(irsb_chunk) {
         IRSB* irsb = m_block->get_irsb();
         m_jmpkind = irsb->jumpkind;
         // Z3_mk_string
@@ -116,7 +116,7 @@ public:
                 update_interval(m_result, descr->base, descr->nElems * sizeofIRType(descr->elemTy));
                 setHints_Expr(puti->ix);
                 setHints_Expr(puti->data);
-                break; 
+                break;
             }
             case Ist_WrTmp:
                 setHints_Expr(st->Ist.WrTmp.data);
@@ -197,13 +197,10 @@ public:
                         next = (UInt)next;
 
                 }
-                
+
                 break;
             default:
-                vex_printf("\n");
-                ppIRStmt(st);
-                vex_printf("\n");
-                vpanic("flatten_Stmt");
+                VPANIC("flatten_Stmt");
             };
 
         }
@@ -287,14 +284,14 @@ public:
         case Iex_Const:
             return;
         default:
-            vex_printf("\n"); ppIRExpr(e); vex_printf("\n");
-            vpanic("setHints_Expr");
+            VPANIC("setHints_Expr");
         }
     }
     virtual ~AstBlock() {
 
     }
 };
+
 
 
 class GraphView {
@@ -311,7 +308,7 @@ class GraphView {
         Addr addr;
         loop_kind loop;
     };
-    using ast_block = ref<AstBlock>;
+    using ast_block = std::shared_ptr<AstBlock>;
     using jmps = _jmps;
     using jmp_kind = std::forward_list<jmp_info>;
     std::map<Addr, jmp_kind> m_jmp;
@@ -321,13 +318,13 @@ class GraphView {
     ThreadPool m_pool;
 
 
-    void _add_block(ref<IRSB_CHUNK> irsb_chunk) {
-        
+    void _add_block(irsb_chunk irsb_chunk) {
+
 
 
     }
 
-    Addr prev_code_addr(IRSB* irsb , Addr addr, Addr this_code) {
+    Addr prev_code_addr(IRSB* irsb, Addr addr, Addr this_code) {
         IRStmt* s = irsb->stmts[0];
         for (UInt stmtn = 0; stmtn < irsb->stmts_used;
             s = irsb->stmts[++stmtn])
@@ -339,7 +336,7 @@ class GraphView {
         return 0;
     }
 
-    void add_block(ref<IRSB_CHUNK> irsb_chunk, IRJumpKind kd) {
+    void add_block(irsb_chunk irsb_chunk, IRJumpKind kd) {
         Addr block_start = irsb_chunk->get_bb_base();
         Addr block_end = block_start + irsb_chunk->get_bb_size() - 1;
         if (kd == Ijk_SigSEGV) return;
@@ -355,7 +352,7 @@ class GraphView {
                 //m_block_begin.insert(std::make_pair(it->second.addr, nEnd));
                 _jmp_to_no_mutex(nEnd, block_start);
                 m_block_end[nEnd] = blockEnd{ Ijk_Boring, it->second.addr };
-                m_block_begin[block_start] = new AstBlock(irsb_chunk);
+                m_block_begin[block_start] = std::make_shared<AstBlock>(irsb_chunk);
 #ifdef OUTPUT
                 printf("update block %p   %p \n", it->second.addr, nEnd);
 #endif
@@ -376,7 +373,7 @@ class GraphView {
         else {
         NewBlock:
             m_block_end[block_end] = blockEnd{ kd, block_start };
-            m_block_begin[block_start] = new AstBlock(irsb_chunk);
+            m_block_begin[block_start] = std::make_shared<AstBlock>(irsb_chunk);
 #ifdef OUTPUT
             printf("new block %p   %p \n", block_start, block_end);
 #endif
@@ -437,7 +434,7 @@ class GraphView {
     Addr getEnd(Addr block_begin) {
         std::map<Addr, ast_block>::iterator it = m_block_begin.find(block_begin);
         if (it == m_block_begin.end()) { return 0; }
-        return it->second;
+        //return it->second;
     }
 
 
@@ -482,6 +479,65 @@ public:
 };
 
 
+class explorer : public TraceInterface {
+    GraphView& m_gv;
+public:
+    explorer(GraphView& gv) :m_gv(gv) {
+
+    }
+
+    virtual void traceStart(State& s, HWord ea) override;
+    virtual void traceIRSB(State& s, HWord ea, irsb_chunk&) override;
+    virtual void traceIRStmtStart(State& s, const IRSB* irsb, UInt stmtn) override;
+    virtual void traceIRStmtEnd(State& s, const IRSB* irsb, UInt stmtn) override;
+    virtual void traceIRnext(State& s, const IRSB* irsb, const tval& next) override;
+    virtual void traceIrsbEnd(State& s, irsb_chunk&) override;
+    virtual void traceFinish(State& s, HWord ea) override;
+
+    virtual TraceInterface* mk_new_TraceInterface() override { return new explorer(m_gv); }
+    virtual ~explorer() {}
+};
+
+
+void explorer::traceStart(State& s, HWord ea)
+{
+    TraceInterface::traceStart(s, ea);
+}
+
+void explorer::traceIRSB(State& s, HWord ea, irsb_chunk& irsb)
+{
+    TraceInterface::traceIRSB(s, ea, irsb);
+    //m_gv.add_block(irsb)
+
+   // AstBlock ab(irsb);
+    //ppIRSB(irsb->get_irsb());
+}
+
+void explorer::traceIRStmtStart(State& s, const IRSB* irsb, UInt stmtn)
+{
+    TraceInterface::traceIRStmtStart(s, irsb, stmtn);
+}
+
+void explorer::traceIRStmtEnd(State& s, const IRSB* irsb, UInt stmtn)
+{
+    TraceInterface::traceIRStmtEnd(s, irsb, stmtn);
+}
+
+void explorer::traceIRnext(State& s, const IRSB* irsb, const tval& next)
+{
+    TraceInterface::traceIRnext(s, irsb, next);
+}
+
+void explorer::traceIrsbEnd(State& s, irsb_chunk& irsb)
+{
+    TraceInterface::traceIrsbEnd(s, irsb);
+}
+
+void explorer::traceFinish(State& s, HWord ea)
+{
+    TraceInterface::traceFinish(s, ea);
+}
+
 //class Block : ref_manager {
 //    Addr m_sea; // start
 //    Addr m_eea; // end
@@ -508,7 +564,7 @@ extern "C" void libvex_BackEnd(const VexTranslateArgs * vta,
     VexRegisterUpdates pxControl);
 
 
-auto emu_one_irsb(Addr &guest_start, std::deque<TR::State::BtsRefType>& tmp_branch, TR::State_Tag& m_status, State& s, ref<IRSB_CHUNK> irsb) {
+auto emu_one_irsb(Addr &guest_start, std::deque<TR::State::BtsRefType>& tmp_branch, TR::State_Tag& m_status, State& s, irsb_chunk irsb) {
     Vex_Kind vkd;
     //ppIRSB(irsb);
     s.get_trace()->traceIRSB(s, guest_start, irsb);
@@ -523,115 +579,64 @@ auto emu_one_irsb(Addr &guest_start, std::deque<TR::State::BtsRefType>& tmp_bran
 }
 
 
-void gk(State&s, Addr ea) {
+void gk(State&s, Addr ea, GraphView& gv) {
     
-    std::deque<TR::State::BtsRefType> tmp_branch;
-    TR::State_Tag status = NewState;
-    EmuEnvGuest guest(s.vctx(), s.vinfo(), s.mem);
-    s.set_irvex(&guest);
+    
     s.get_trace()->setFlags(CF_traceJmp);
-    //s.get_trace()->setFlags(CF_ppStmts);
-    s.vctx().hook_add(0x00000000551ec50b, nullptr, CF_ppStmts);
+    s.get_trace()->setFlags(CF_ppStmts);
+    //s.vctx().hook_add(0x551AF328, nullptr, CF_ppStmts);
     Addr ip = ea;
     Vex_Kind vkd;
-    do {
-        ref<IRSB_CHUNK> irsb_chunk = s.irvex().translate_front(ip);
-        IRSB_CHUNK* c = irsb_chunk.get();
-        //irsb_chunk = ado_treebuild(s.vctx().get_irsb_cache(), s.vinfo().gguest(), irsb_chunk, *guest.get_pxControl());
-        IRSB* irsb = irsb_chunk->get_irsb();
-        vkd = emu_one_irsb(ip, tmp_branch, status, s, irsb_chunk);
-    } while (vkd == vUpdate);
+    std::deque<TR::State::BtsRefType> tmp_branch = s.start();
+    auto mr = std::make_shared<explorer>(gv);
+    vex_context& vctx = s.vctx();
+    if (s.status() == Fork) {
+        for (auto one_s : tmp_branch) {
+            Addr64 oep = one_s->get_oep();
+            State* child = one_s->child();
 
-#ifdef VEX_BACKEND_FN
-    libvex_BackEnd(vta, guest.get_res(), irsb, *guest.get_pxControl());
-#endif
+            child->set_trace(mr);
 
-}
+            vctx.pool().enqueue([child, oep, &gv] {
 
-class explorer : public TraceInterface {
-    GraphView &m_gv;
-public:
-    explorer(GraphView& gv) :m_gv(gv) {
+                gk(*child, oep, gv);
 
+                });
+        }
     }
+   
 
-    virtual void traceStart(State& s, HWord ea) override;
-        virtual void traceIRSB(State& s, HWord ea, ref<IRSB_CHUNK>&) override;
-                virtual void traceIRStmtStart(State& s, const IRSB* irsb, UInt stmtn) override;
-                virtual void traceIRStmtEnd(State& s, const IRSB* irsb, UInt stmtn) override;
-            virtual void traceIRnext(State& s, const IRSB* irsb, const tval& next) override;
-        virtual void traceIrsbEnd(State& s, ref<IRSB_CHUNK>&) override;
-    virtual void traceFinish(State& s, HWord ea) override;
-
-    virtual TraceInterface* mk_new_TraceInterface() override { return new explorer(m_gv); }
-    virtual ~explorer() {}
-};
-
-
-void explorer::traceStart(State& s, HWord ea)
-{
-    TraceInterface::traceStart(s, ea);
-}
-
-void explorer::traceIRSB(State& s, HWord ea, ref<IRSB_CHUNK>& irsb)
-{
-    TraceInterface::traceIRSB(s, ea, irsb);
-    //m_gv.add_block(irsb)
-
-   // AstBlock ab(irsb);
-    //ppIRSB(irsb->get_irsb());
-}
-
-void explorer::traceIRStmtStart(State& s, const IRSB* irsb, UInt stmtn)
-{
-    TraceInterface::traceIRStmtStart(s, irsb, stmtn);
-}
-
-void explorer::traceIRStmtEnd(State& s, const IRSB* irsb, UInt stmtn)
-{
-    TraceInterface::traceIRStmtEnd(s, irsb, stmtn);
-}
-
-void explorer::traceIRnext(State& s, const IRSB* irsb, const tval& next)
-{
-    TraceInterface::traceIRnext(s, irsb, next);
-}
-
-void explorer::traceIrsbEnd(State& s, ref<IRSB_CHUNK>& irsb)
-{ 
-    TraceInterface::traceIrsbEnd(s, irsb);
-}
-
-void explorer::traceFinish(State& s, HWord ea)
-{
-    TraceInterface::traceFinish(s, ea);
 }
 
 
 void vmp_reback(State& s) {
-
+    State* state = &s;
 
     auto bts = s.start();
     GraphView gv;
-    TraceInterface* mr = new explorer(gv);
+    auto mr = std::make_shared<explorer>(gv);
+    vex_context& vctx = s.vctx();
     if (s.status() == Fork) {
         for (auto one_s : bts) {
             Addr64 oep = one_s->get_oep();
             State* child = one_s->child();
 
             child->set_trace(mr);
-            gk(*child, oep);
+
+            vctx.pool().enqueue([child, oep, &gv] {
+
+                     gk(*child, oep, gv);
+                     
+                });
         }
     }
-    for (auto bs : s.branch) {
-        std::cout << *bs << std::endl;
-    }
+ 
 };
 
 
 bool test_creakme() {
 
-    vex_context v(-1);
+    vex_context v(1);
     v.param().set("ntdll_KiUserExceptionDispatcher", (void*)0x777B3BC0);
     v.param().set("Kernel", gen_kernel(Ke::OS_Kernel_Kd::OSK_Windows));
     TR::State state(v, VexArchX86);
@@ -641,7 +646,7 @@ bool test_creakme() {
     state.get_trace()->setFlag(CF_traceInvoke);
     //v.hook_read(read);
     //state.setFlag(CF_ppStmts);
-    auto dd = &state.get_regs_maps()->guest.amd64;
+    VexGuestAMD64State& amd64_reg_state = state.get_regs_maps()->guest.amd64;
     state.avoid_anti_debugging();
 
     //005671c8 0f31            rdtsc
@@ -653,6 +658,5 @@ bool test_creakme() {
     //state.regs.set()
 
     vmp_reback(state);
-
     return true;
 }

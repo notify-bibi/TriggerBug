@@ -1,5 +1,10 @@
 
 #include "X86/x86CCall.h"
+extern "C" {
+    #include "guest_x86_defs.h"
+    UInt vex_printf(const HChar* format, ...);
+    __attribute__((noreturn))  void vpanic(const HChar* str);
+}
 
 #define CC_DEP1 cc_dep1_formal
 #define CC_DEP2 cc_dep2_formal
