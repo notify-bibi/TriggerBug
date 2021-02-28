@@ -179,6 +179,7 @@ void StateBase::read_mem_dump(const char* filename)
 
 TR::StateBase::~StateBase()
 {
+    logger->flush();
     vctx().pool().wait();
     for (auto bs : branch) {
         std::cout << *bs << std::endl;
@@ -220,11 +221,13 @@ TR::StateBase::StateBase(vex_context& vctx, VexArch guest_arch)
     mem(solv, m_ctx, true),
     branch(*this)
 {
-    auto ln = get_logger_name();
-    logger = spdlog::basic_logger_mt<spdlog::async_factory>(ln, get_log_path().c_str());
-    logger->set_level(spdlog::get_level());
     m_vctx.set_top_state(this);
     m_vinfo.init_VexControl();
+    static int n_state = 0;
+    char buff[30];
+    sprintf_s(buff, sizeof(buff), "top%d", n_state++);
+    p_name.assign(buff);
+    init_logger();
 }
 
 
@@ -248,13 +251,23 @@ TR::StateBase::StateBase(StateBase& father, HWord gse)
     mem(solv, m_ctx, father.mem, father.m_need_record),
     branch(*this, father.branch)
 {
-    auto ln = get_logger_name();
-    logger = spdlog::basic_logger_mt<spdlog::async_factory>(ln, get_log_path().c_str());
-    logger->set_level(spdlog::get_level());
+    p_name = father.p_name;
+    init_logger();
+
 }
 
 void TR::StateBase::read_bin_dump(const char* binDump)
 {
+    const char* pname = nullptr;
+    if (binDump) {
+        pname = strrchr(binDump, '/');
+        if(!pname) pname = strrchr(binDump, '\\');
+        if (pname == NULL)
+            pname = binDump;
+        else
+            pname++;
+        p_name.assign(pname);
+    }
     read_mem_dump(binDump);
     guest_start_ep = regs.get<HWord>(vinfo().gRegsIpOffset()).tor();
     guest_start = guest_start_ep;
@@ -282,12 +295,20 @@ std::string TR::StateBase::get_log_path()
 {
     char buff[50];
     std::string str;
-    for (StateBase* b = this; b; b = b->m_father) {
+    for (StateBase* b = this->m_father; b; b = b->m_father) {
         UInt id = b->m_state_id;
-        snprintf(buff, sizeof(buff), "/s%d", id);
-        str.append(buff);
+        snprintf(buff, sizeof(buff), "/0x%x-0x%x", b->guest_start_ep, b->guest_start);
+        str = buff + str;
     }
+    snprintf(buff, sizeof(buff), "/0x%x/log.txt", guest_start_ep);
+    return p_name + str + buff;
+}
 
-    return "log" + str + "_log.txt";
+void TR::StateBase::init_logger()
+{
+    auto ln = get_logger_name();
+    logger = spdlog::basic_logger_mt<spdlog::async_factory>(ln, get_log_path().c_str());
+    logger->set_level(spdlog::level::info);
+    logger->set_pattern("%v");
 }
 

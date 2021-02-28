@@ -125,9 +125,9 @@ namespace TR {
         TraceInterface() :m_trtraceflags(CF_None) {};
         virtual void traceStart(State& s, HWord ea);
           virtual void traceIRSB(State& s, HWord ea, irsb_chunk&);;
-              virtual void traceIRStmtStart(State& s, const IRSB* irsb, UInt stmtn);
-              virtual void traceIRStmtEnd(State& s, const IRSB* irsb, UInt stmtn);
-            virtual void traceIRnext(State& s, const IRSB* irsb, const tval& next);
+              virtual void traceIRStmtStart(State& s, irsb_chunk&, UInt stmtn);
+              virtual void traceIRStmtEnd(State& s, irsb_chunk& irsb, UInt stmtn);
+            virtual void traceIRnext(State& s, irsb_chunk& irsb, const tval& next);
           virtual void traceIrsbEnd(State& s, irsb_chunk&);
         virtual void traceFinish(State& s, HWord ea);
 
@@ -191,10 +191,10 @@ namespace TR {
         template<int ea_nbits> void tIRStmt(const IRTypeEnv* tyenv, const IRStmt *s);
 
         template<int ea_nbits>
-        Vex_Kind emu_irsb_next(std::deque<BtsRefType>& tmp_branch, HWord& guest_start, const IRSB* irsb);
+        Vex_Kind emu_irsb_next(std::deque<BtsRefType>& tmp_branch, HWord& guest_start, irsb_chunk& irsb);
 
         template<int ea_nbits>
-        Vex_Kind emu_irsb(std::deque<BtsRefType>& tmp_branch, HWord& guest_start, State_Tag& status, const IRSB* irsb);
+        Vex_Kind emu_irsb(std::deque<BtsRefType>& tmp_branch, HWord& guest_start, State_Tag& status, irsb_chunk& irsb);
 
 
         bool vex_main_loop(std::deque<BtsRefType>& tmp_branch, irsb_chunk& irsb, HWord& guest_start, Addr avoid);

@@ -1,14 +1,25 @@
 
 #include "engine/tr_ir_opt.h"
 
+
+
+ppIR::~ppIR()
+{
+    m_logger->log(m_leve, m_str);
+}
+;
+
 UInt ppIR::vex_printf(const HChar* format, ...)
 
 {
+    HChar myprintf_buf[1000];
+
     UInt ret;
     va_list vargs;
     va_start(vargs, format);
-    ret = sprintf_s(myprintf_buf + n_myprintf_buf, 1000 - n_myprintf_buf, format, vargs);
+    ret = vsnprintf_s(myprintf_buf, sizeof(myprintf_buf), _TRUNCATE, format, vargs);
     va_end(vargs);
+    m_str.append(myprintf_buf);
     return ret;
 }
 
@@ -1717,3 +1728,4 @@ UInt ppIR::vex_printf(const HChar* format, ...)
     ppIRJumpKind(bb->jumpkind);
     vex_printf("\n}\n");
 }
+

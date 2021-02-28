@@ -158,7 +158,7 @@ namespace TR {
         IRSB* irsb = LibVEX_FrontEnd(vta, &res, &pxControl);
 
         irsb = dirty_code_deal_BB(irsb);
-        return host_irsb_cache_push(m_host_irsb_cache, vta->guest_extents, irsb, LibVEX_IRSB_transfer());
+        return host_irsb_cache_push(m_host_irsb_cache, host, vta->guest_extents, irsb, LibVEX_IRSB_transfer());
     }
 
     sv::tval& EmuEnvHost::operator[](UInt idx)
@@ -257,9 +257,10 @@ public:
         }
         vex_info saved_vinfo = m_state.vinfo();
         new(&m_state.vinfo()) vex_info(host_arch);
-        TRControlFlags savedTraceFlag = (TRControlFlags)(m_state.get_trace()->getFlags());
+        std::shared_ptr<TraceInterface> saved_guest_trace = m_state.get_trace();
+        std::shared_ptr<TraceInterface> dirty_trace = std::make_shared<TraceInterface>();
 #if 1
-        m_state.get_trace()->setFlags(CF_None);
+        m_state.set_trace(dirty_trace);
 #else
         m_state.setFlags(CF_traceJmp);
         m_state.setFlags(CF_ppStmts);
@@ -272,7 +273,7 @@ public:
         m_state.start(m_host_ip , std::move(ir), vex_code_ret_addr);
         m_state.mem.set_emu_env(saved_guest_irvex);
         m_state.set_irvex(saved_guest_irvex);
-        m_state.get_trace()->setFlags(savedTraceFlag);
+        m_state.set_trace(saved_guest_trace);
         m_state.vinfo() = saved_vinfo;
         m_state.clean_dirty_mode();
         //m_state.vinfo()

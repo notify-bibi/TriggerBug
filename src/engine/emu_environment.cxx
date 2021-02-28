@@ -131,7 +131,7 @@ namespace TR {
             libvex_BackEnd(vta, get_res(), irsb, *get_pxControl());
         m_base_block_sz = vta->guest_extents->len[0];
 #endif
-        return irsb_cache_push(m_vctx.get_irsb_cache(), m_mem, vta->guest_extents, irsb, LibVEX_IRSB_transfer());
+        return irsb_cache_push(m_vctx.get_irsb_cache(), m_mem, vta->arch_guest, vta->guest_extents, irsb, LibVEX_IRSB_transfer());
     }
 
     sv::tval& EmuEnvGuest::operator[](UInt idx)

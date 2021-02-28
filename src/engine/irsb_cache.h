@@ -16,14 +16,16 @@ namespace bb {
         ULong m_checksum;
         Addr  m_bb_base;
         ULong m_bb_size; //base block
+        VexArch m_arch;
         std::deque<void*> m_transfer;
 
     public:
-        IRSB_CHUNK(IRSB* sb, ULong checksum, Addr bbb, ULong bbs, std::deque<void*>& transfer)
+        IRSB_CHUNK(IRSB* sb, VexArch arch,  ULong checksum, Addr bbb, ULong bbs, std::deque<void*>& transfer)
             :m_irsb(sb),
             m_checksum(checksum),
             m_bb_base(bbb),
             m_bb_size(bbs),
+            m_arch(arch),
             m_transfer(transfer)
         {
             //if (!m_last_chunk.empty()) {
@@ -42,8 +44,7 @@ namespace bb {
             return m_irsb;
         }
         auto get_transfer() const { return m_transfer; }
-
-
+        auto get_arch() const { return m_arch; };
         void clean_call() {
             for (auto alloc_tmp : m_transfer) {
                 free(alloc_tmp);
@@ -63,13 +64,13 @@ using irsb_chunk = std::shared_ptr<bb::IRSB_CHUNK>;
 IRSBCache* new_IRSBCache();
 void del_IRSBCache(IRSBCache* c);
 irsb_chunk irsb_cache_find(IRSBCache* c, TR::MBase& mem, HWord ea);
-irsb_chunk irsb_cache_push(IRSBCache* c, TR::MBase& mem, const VexGuestExtents* vge, IRSB* irsb, std::deque<void*>&& irsb_mem_alloc);
+irsb_chunk irsb_cache_push(IRSBCache* c, TR::MBase& mem, VexArch arch, const VexGuestExtents* vge, IRSB* irsb, std::deque<void*>&& irsb_mem_alloc);
 
 IRSBCache* host_get_IRSBCache();
 void host_clean_IRSBCache(IRSBCache* c);
 irsb_chunk host_irsb_cache_find(IRSBCache* c, HWord ea);
-irsb_chunk host_irsb_cache_push(IRSBCache* c, const VexGuestExtents* vge, IRSB* irsb, std::deque<void*>&& irsb_mem_alloc);
-irsb_chunk ado_treebuild(IRSBCache* c, VexArch arch_guest, irsb_chunk src, VexRegisterUpdates pxControl);
+irsb_chunk host_irsb_cache_push(IRSBCache* c, VexArch arch, const VexGuestExtents* vge, IRSB* irsb, std::deque<void*>&& irsb_mem_alloc);
+irsb_chunk ado_treebuild(IRSBCache* c, irsb_chunk src, VexRegisterUpdates pxControl);
 void irsb_cache_push(IRSBCache* c, irsb_chunk inbb);
 
 

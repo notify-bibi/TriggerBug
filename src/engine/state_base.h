@@ -211,6 +211,7 @@ namespace TR {
         std::atomic_uint32_t m_z3_bv_const_n;
         std::atomic_uint32_t m_branch_state_id_max = 0; // deep_num ... state_id
 
+        std::string  p_name;
         StateBase*   m_father;
         z3::vcontext m_ctx;   // z3 prove
         vex_info     m_vinfo; // 支持32/64模式切换 
@@ -243,7 +244,6 @@ namespace TR {
         Mem      mem;
         BranchManager<StateBase> branch;
 
-
         VexGuestState* get_regs_maps();
         inline HWord get_cpu_ip() { return guest_start; }
         inline HWord get_state_ep() { return guest_start_ep; }
@@ -255,6 +255,7 @@ namespace TR {
         inline void set_status(State_Tag t) { m_status = t; };
         inline IRJumpKind jump_kd() const { return m_jump_kd; }
         inline void set_jump_kd(IRJumpKind kd) { m_jump_kd = kd; }
+        void set_level(spdlog::level::level_enum log_level) { logger->set_level(log_level); }
 
         sv::tval mk_int_const(UShort nbit);
         sv::tval mk_int_const(UShort n, UShort nbit);
@@ -281,6 +282,7 @@ namespace TR {
 
         friend std::ostream& operator<<(std::ostream& out, const TR::StateBase& n) { return out << (std::string)n; };
     private:
+        void init_logger();
 
         //virtual TR::State_Tag call_back_hook(TR::Hook_struct const& hs) override { setFlag(hs.cflag); return (hs.cb) ? (hs.cb)(this) : Running; }
         //virtual bool  StateCompression(TR::StateBase const& next) override { return true; }

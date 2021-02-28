@@ -5,6 +5,9 @@ extern "C" {
 }
 
 #include "engine/irsb_cache.h"
+#include <spdlog/sinks/basic_file_sink.h>
+#include <spdlog/async.h>
+
 using namespace TR;
 
 
@@ -60,7 +63,7 @@ rsval<Long> symbolic_read(StateBase &s, const rsval<ULong>& addr, const rsval<Lo
     }
     auto res_count = s.mk_int_const(8).tors<false, 8>();
     s.solv.add_assert( (res_count < 12).tos() );
-    return res_count;
+    return rsval<Long>(s.ctx(), 6);
 }
 namespace TIR {
     class IRStmt {
@@ -292,207 +295,115 @@ public:
     }
 };
 
-
-
+class BlockView {
+    irsb_chunk m_ic;
+    std::unordered_map<Addr, int> m_nexts;
+public:
+    BlockView(irsb_chunk& ic) :m_ic(ic) {}
+    BlockView(irsb_chunk& ic, Addr next) :m_ic(ic) { m_nexts[next] = 0; }
+    irsb_chunk get_irsb_chunk() { return m_ic; }
+    void add_next(Addr next) {
+        m_nexts[next] = 0;
+    }
+    void ppBlock(TR::vex_context&vctx, std::shared_ptr<spdlog::logger> log) {
+        ppIR pp(log, spdlog::level::debug);
+        irsb_chunk src = get_irsb_chunk();
+        irsb_chunk ic = ado_treebuild( vctx.get_irsb_cache(), src, VexRegUpdSpAtMemAccess);
+        auto bb_ea = ic->get_bb_base();
+        auto bb_sz = ic->get_bb_size();
+        pp.vex_printf("sub_0x%llx : \n\t/*\n\t* checksum:%16llx sz:%x\n\t*/{\n", bb_ea, ic->get_checksum(), bb_sz);
+        auto bb = ic->get_irsb();
+        int i;
+        for (i = 0; i < bb->stmts_used; i++) {
+            pp.vex_printf("\t");
+            pp.ppIRStmt(bb->stmts[i]);
+            pp.vex_printf("\n");
+        }
+        pp.vex_printf("\tPUT(%d) = ", bb->offsIP);
+        pp.ppIRExpr(bb->next);
+        pp.vex_printf("; exit-");
+        pp.ppIRJumpKind(bb->jumpkind);
+        if (bb->next->tag == Iex_Const) {
+            auto con = bb->next->Iex.Const.con;
+            Addr next = con->Ico.U64;
+            if (con->tag == Ico_U32) {
+                next &= 0xffffffff;
+            }
+            pp.vex_printf("\n\tjmp sub_0x%llx \n", next);
+        }
+        else {
+            for (auto it = m_nexts.begin(); it != m_nexts.end(); it++) {
+                auto next = it->first;
+                pp.vex_printf("\n\tif (");
+                pp.ppIRExpr(ic->get_irsb()->next);
+                pp.vex_printf(")== 0x%x jmp sub_0x%x ;\n", next, next);
+            }
+            pp.vex_printf("\ttranslate(");
+            pp.ppIRExpr(bb->next);
+            pp.vex_printf(")");
+            pp.vex_printf("}\n");
+        }
+    }
+};
 class GraphView {
     using _jmps = std::forward_list<Addr>;
     template<typename Addr> friend class PathExplorer;
 
     spin_mutex translate_mutex;
-    typedef struct blockEnd {
-        IRJumpKind kd;
-        Addr addr;
-    };
-    typedef enum { Loop_INVALID, Loop_True, Loop_False } loop_kind;
-    typedef struct jmp_info {
-        Addr addr;
-        loop_kind loop;
-    };
-    using ast_block = std::shared_ptr<AstBlock>;
-    using jmps = _jmps;
-    using jmp_kind = std::forward_list<jmp_info>;
-    std::map<Addr, jmp_kind> m_jmp;
-    std::map<Addr, _jmps> m_in;
-    std::map<Addr, ast_block> m_block_begin;
-    std::map<Addr, blockEnd>  m_block_end;
-    ThreadPool m_pool;
+    TR::vex_context& m_vctx;
+    using BBKey = std::pair <Addr, size_t>;
 
-
-    void _add_block(irsb_chunk irsb_chunk) {
-
-
-
-    }
-
-    Addr prev_code_addr(IRSB* irsb, Addr addr, Addr this_code) {
-        IRStmt* s = irsb->stmts[0];
-        for (UInt stmtn = 0; stmtn < irsb->stmts_used;
-            s = irsb->stmts[++stmtn])
+    class BBKeyHash
+    {
+    public:
+        size_t operator()(const BBKey& name) const
         {
-            if (s->tag == Ist_IMark && s->Ist.IMark.addr + s->Ist.IMark.len >= this_code) {
-                return s->Ist.IMark.addr;
-            }
+            return std::hash<size_t>()(name.first ^ name.second);
         }
-        return 0;
-    }
+    };
 
-    void add_block(irsb_chunk irsb_chunk, IRJumpKind kd) {
-        Addr block_start = irsb_chunk->get_bb_base();
-        Addr block_end = block_start + irsb_chunk->get_bb_size() - 1;
-        if (kd == Ijk_SigSEGV) return;
-        spin_unique_lock lock(translate_mutex);
-        std::map<Addr, blockEnd>::iterator it = m_block_end.find(block_end);
-        /*if (0x00007ffff7a8d33d == block_start||0x00007ffff7a8d34a == block_start) {
-            printf("");
-        }*/
-        if (it != m_block_end.end()) {
-            if (block_start > it->second.addr) {
-                Addr nEnd = prev_code_addr(nullptr, it->second.addr, block_start);
-                //m_block_begin[it->second.addr] = nEnd;
-                //m_block_begin.insert(std::make_pair(it->second.addr, nEnd));
-                _jmp_to_no_mutex(nEnd, block_start);
-                m_block_end[nEnd] = blockEnd{ Ijk_Boring, it->second.addr };
-                m_block_begin[block_start] = std::make_shared<AstBlock>(irsb_chunk);
-#ifdef OUTPUT
-                printf("update block %p   %p \n", it->second.addr, nEnd);
-#endif
-                it->second.addr = block_start;
-            }
-            else if (block_start < it->second.addr) {
-                block_end = prev_code_addr(nullptr, block_start, it->second.addr);
-                kd = Ijk_Boring;
-                if (!block_end) {
-                    vassert(0);
-                }
-                _jmp_to_no_mutex(block_end, it->second.addr);
-                vassert(block_start <= block_end);
-                vassert(block_end < it->second.addr);
-                goto NewBlock;
-            }
-        }
-        else {
-        NewBlock:
-            m_block_end[block_end] = blockEnd{ kd, block_start };
-            m_block_begin[block_start] = std::make_shared<AstBlock>(irsb_chunk);
-#ifdef OUTPUT
-            printf("new block %p   %p \n", block_start, block_end);
-#endif
-        }
-
-    }
-
-    void explore_block(Addr& block_task, Addr block_start) {
-        if (block_task) {
-            enqueue(block_start);
-        }
-        else {
-            block_task = block_start;
-        }
-    }
-
-    void enqueue(Addr block_start) {
-        if (!getEnd(block_start))
-        {
-        }
-    }
-
-    void _jmp_to(Addr from, Addr to) {
-        spin_unique_lock lock(translate_mutex);
-        _jmp_to_no_mutex(from, to);
-    }
-
-    inline  void _jmp_to_no_mutex(Addr from, Addr to) {
-        if (from == 0) {
-            vassert(0);
-        }
-#ifdef OUTPUT
-        printf("_jmp_to %p   %p \n", from, to);
-#endif
-        std::map<Addr, jmp_kind>::iterator it = m_jmp.find(from);
-        if (it == m_jmp.end()) {
-            m_jmp[from] = jmp_kind{ jmp_info{to, Loop_INVALID } };
-        }
-        else {
-            it->second.push_front(jmp_info{ to, Loop_INVALID });
-        }
-
-        std::map<Addr, _jmps>::iterator it_in = m_in.find(to);
-        if (it_in == m_in.end()) {
-            m_in[to] = _jmps{ from };
-        }
-        else {
-            it_in->second.push_front(from);
-        }
-    }
-
-    Addr getBegin(Addr block_end) {
-        std::map<Addr, blockEnd>::iterator it = m_block_end.find(block_end);
-        if (it == m_block_end.end()) { return 0; }
-        return it->second.addr;
-    }
-
-    Addr getEnd(Addr block_begin) {
-        std::map<Addr, ast_block>::iterator it = m_block_begin.find(block_begin);
-        if (it == m_block_begin.end()) { return 0; }
-        //return it->second;
-    }
-
+    std::unordered_map<BBKey, BlockView, BBKeyHash> m_blocks;
 
 public:
-    GraphView() :m_pool(2) {
-    }
-    void wait() { m_pool.wait(); }
-
-    void explore_block(Addr block_start) {
-        /*std::map<Addr, Addr>::iterator it = m_block_begin.find(block_start);
-        if (it != m_block_begin.end()) return;
-        enqueue(block_start);*/
+    std::shared_ptr<spdlog::logger> log;
+    GraphView(TR::vex_context& vctx) :m_vctx(vctx) {
+        log = spdlog::basic_logger_mt<spdlog::async_factory>("ircode", "ircode.txt");
+        log->set_level(spdlog::level::debug);
+        log->set_pattern("%v");
     }
 
-    void add_jmp(Addr from, Addr to) {
-        _jmp_to(from, to);
-        explore_block(to);
+    ~GraphView() {
+        auto it = m_blocks.begin();
+        for (; it != m_blocks.end(); it++) {
+            auto sub_ep = it->first.first;
+            auto check_sum = it->first.second;
+            BlockView& basic_irsb_chunk = it->second;
+            vassert(check_sum == basic_irsb_chunk.get_irsb_chunk()->get_checksum());
+            vassert(sub_ep == basic_irsb_chunk.get_irsb_chunk()->get_bb_base());
+            basic_irsb_chunk.ppBlock(m_vctx, log);
+        }
     }
 
-
-
-    Addr begin2End(Addr block_begin) {
-        //std::map<Addr, Addr>::iterator ait = m_block_begin.find(block_begin);
-        //if (ait == m_block_begin.end()) {
-        //    if (0x00007ffff7a8d34a == block_begin) {
-        //        printf("");
-        //    }
-        //    m_pool.enqueue(
-        //        [this, block_begin] {
-        //            _add_block(block_begin);
-        //        }
-        //    );
-        //    wait();
-        //}
-        //std::map<Addr, Addr>::iterator it = m_block_begin.find(block_begin);
-        //if (it == m_block_begin.end()) {
-        //    return 0;
-        //}
-        //return it->second;
-    }
-
+    void add_block(irsb_chunk irsb_chunk, Addr next);
+    void add_exit(irsb_chunk irsb_chunk, Addr code_ea, Addr next);
+    void explore_block(State& s);
 };
 
 
 class explorer : public TraceInterface {
     GraphView& m_gv;
+    UInt m_IMark_stmtn;
 public:
     explorer(GraphView& gv) :m_gv(gv) {
-
     }
-
-    virtual void traceStart(State& s, HWord ea) override;
-    virtual void traceIRSB(State& s, HWord ea, irsb_chunk&) override;
-    virtual void traceIRStmtStart(State& s, const IRSB* irsb, UInt stmtn) override;
-    virtual void traceIRStmtEnd(State& s, const IRSB* irsb, UInt stmtn) override;
-    virtual void traceIRnext(State& s, const IRSB* irsb, const tval& next) override;
-    virtual void traceIrsbEnd(State& s, irsb_chunk&) override;
-    virtual void traceFinish(State& s, HWord ea) override;
+    
+    virtual void traceStart(State& s, HWord ea);
+        virtual void traceIRSB(State& s, HWord ea, irsb_chunk&);;
+            virtual void traceIRStmtStart(State& s, irsb_chunk&, UInt stmtn);
+            virtual void traceIRStmtEnd(State& s, irsb_chunk& irsb, UInt stmtn);
+        virtual void traceIRnext(State& s, irsb_chunk& irsb, const tval& next);
+        virtual void traceIrsbEnd(State& s, irsb_chunk&);
+    virtual void traceFinish(State& s, HWord ea);
 
     virtual TraceInterface* mk_new_TraceInterface() override { return new explorer(m_gv); }
     virtual ~explorer() {}
@@ -507,25 +418,95 @@ void explorer::traceStart(State& s, HWord ea)
 void explorer::traceIRSB(State& s, HWord ea, irsb_chunk& irsb)
 {
     TraceInterface::traceIRSB(s, ea, irsb);
-    //m_gv.add_block(irsb)
 
    // AstBlock ab(irsb);
-    //ppIRSB(irsb->get_irsb());
+   //ppIRSB(irsb->get_irsb());
 }
+extern
+bool false_exit_check(Addr& guard_false_entry, UInt IMark_stmtn, UInt exit_stmtn, const IRSB* irsb);
 
-void explorer::traceIRStmtStart(State& s, const IRSB* irsb, UInt stmtn)
+
+void explorer::traceIRStmtStart(State& s, irsb_chunk& bb, UInt stmtn)
 {
-    TraceInterface::traceIRStmtStart(s, irsb, stmtn);
+    TraceInterface::traceIRStmtStart(s, bb, stmtn);
+    IRSB* irsb = bb->get_irsb();
+
+    //ppIR pp(m_gv.log);
+    IRStmt* st = irsb->stmts[stmtn];
+    if (st->tag == Ist_IMark) {
+        m_IMark_stmtn = stmtn;
+    }
+    if (st->tag == Ist_Exit) {
+        Addr64 exitptr = st->Ist.Exit.dst->Ico.U64;
+        if (st->Ist.Exit.dst->tag == Ico_U32) exitptr &= 0xffffffff;
+        m_gv.add_exit(bb, s.get_cpu_ip(), exitptr);
+    }
+    //    rsbool guard = s.tIRExpr(st->Ist.Exit.guard).tobool();
+    //    Addr64 exitptr = st->Ist.Exit.dst->Ico.U64;
+    //    if (st->Ist.Exit.dst->tag == Ico_U32) exitptr &= 0xffffffff;
+
+    //    Addr guard_false_entry;
+
+    //    if (false_exit_check(guard_false_entry, m_IMark_stmtn, stmtn, irsb)) {
+
+    //    }
+
+    //    if LIKELY(guard.real()) {
+    //        if LIKELY(guard.tor()) {
+    //        }
+    //    }
+    //    else {
+    //        pp.vex_printf("if (");
+    //        pp.ppIRExpr(st->Ist.Exit.guard);
+    //        pp.vex_printf("){\n");
+
+    //        pp.vex_printf("\tjmp sub_0x%x", exitptr);
+
+    //        pp.vex_printf("\n}\n");
+
+    //    }
+
+    //    /*UInt tmp = st->Ist.WrTmp.tmp;
+    //    pp.vex_printf("t%u = ", tmp, s.irvex()[tmp].str().c_str());
+    //    pp.ppIRExpr(st->Ist.WrTmp.data);
+    //    pp.vex_printf("\t%s", s.irvex()[tmp].str().c_str());*/
+    //}
+    //else {
+    //    pp.ppIRStmt(st);
+    //}
 }
 
-void explorer::traceIRStmtEnd(State& s, const IRSB* irsb, UInt stmtn)
+void explorer::traceIRStmtEnd(State& s, irsb_chunk& irsb, UInt stmtn)
 {
     TraceInterface::traceIRStmtEnd(s, irsb, stmtn);
+
 }
 
-void explorer::traceIRnext(State& s, const IRSB* irsb, const tval& next)
+void explorer::traceIRnext(State& s, irsb_chunk& irsb, const tval& next)
 {
     TraceInterface::traceIRnext(s, irsb, next);
+
+    //ppIR pp(m_gv.log);
+
+    std::deque<sv::tval> result;
+    if (next.real()) {
+        Addr64 ptr = next;
+        if (next.nbits() == 32)  ptr &= 0xffffffff;
+        m_gv.add_block(irsb, ptr);
+    }
+    else {
+        Int eval_size = eval_all(result, s.solv, next);
+        if (eval_size <= 0) {
+            throw Expt::SolverNoSolution("eval_size <= 0", s.solv);
+        }
+        else {
+            for (auto re : result) {
+                Addr64 ptr = re;
+                if (re.nbits() == 32)  ptr &= 0xffffffff;
+                m_gv.add_block(irsb, ptr);
+            }
+        }
+    }
 }
 
 void explorer::traceIrsbEnd(State& s, irsb_chunk& irsb)
@@ -569,10 +550,10 @@ auto emu_one_irsb(Addr &guest_start, std::deque<TR::State::BtsRefType>& tmp_bran
     //ppIRSB(irsb);
     s.get_trace()->traceIRSB(s, guest_start, irsb);
     if (s.vinfo().is_mode_32()) {
-        vkd = s.emu_irsb<32>(tmp_branch, guest_start, m_status, irsb->get_irsb());
+        vkd = s.emu_irsb<32>(tmp_branch, guest_start, m_status, irsb);
     }
     else {
-        vkd = s.emu_irsb<64>(tmp_branch, guest_start, m_status, irsb->get_irsb());
+        vkd = s.emu_irsb<64>(tmp_branch, guest_start, m_status, irsb);
     }
     s.get_trace()->traceIrsbEnd(s, irsb);
     return vkd;
@@ -588,72 +569,104 @@ void gk(State&s, Addr ea, GraphView& gv) {
     Addr ip = ea;
     Vex_Kind vkd;
     std::deque<TR::State::BtsRefType> tmp_branch = s.start();
-    auto mr = std::make_shared<explorer>(gv);
     vex_context& vctx = s.vctx();
-    if (s.status() == Fork) {
-        for (auto one_s : tmp_branch) {
-            Addr64 oep = one_s->get_oep();
-            State* child = one_s->child();
 
-            child->set_trace(mr);
 
-            vctx.pool().enqueue([child, oep, &gv] {
+    //if (s.status() == Fork) {
+    //    for (auto one_s : tmp_branch) {
+    //        Addr64 oep = one_s->get_oep();
+    //        State* child = one_s->child();
 
-                gk(*child, oep, gv);
+    //        child->set_trace(std::make_shared<explorer>(gv));
 
-                });
-        }
-    }
+    //        vctx.pool().enqueue([child, oep, &gv] {
+
+    //            gk(*child, oep, gv);
+
+    //            });
+    //    }
+    //}
    
 
 }
 
+void GraphView::add_block(irsb_chunk irsb_chunk, Addr next)
+{
+    auto ea = irsb_chunk->get_bb_base();
+    auto checksum = irsb_chunk->get_checksum();
+    auto key = BBKey(std::make_pair(ea, checksum));
+    auto it = m_blocks.find(key);
+    if (it == m_blocks.end()) {
+        m_blocks.emplace(key, BlockView(irsb_chunk, next));
+    }
+    else{
+        it->second.add_next(next);
+    }
+}
 
-void vmp_reback(State& s) {
-    State* state = &s;
+void GraphView::add_exit(irsb_chunk irsb_chunk, Addr code_ea, Addr next)
+{
+    auto ea = irsb_chunk->get_bb_base();
+    auto checksum = irsb_chunk->get_checksum();
+    auto key = BBKey(std::make_pair(ea, checksum));
+    auto it = m_blocks.find(key);
+    if (it == m_blocks.end()) {
+        m_blocks.emplace(key, BlockView(irsb_chunk));
+    }
+}
 
+void GraphView::explore_block(State& s)
+{
+    s.set_trace(std::make_shared<explorer>(*this));
     auto bts = s.start();
-    GraphView gv;
-    auto mr = std::make_shared<explorer>(gv);
     vex_context& vctx = s.vctx();
+    //vctx.param().set()
     if (s.status() == Fork) {
         for (auto one_s : bts) {
             Addr64 oep = one_s->get_oep();
             State* child = one_s->child();
 
-            child->set_trace(mr);
+            //child->set_trace(std::make_shared<explorer>(this));
 
-            vctx.pool().enqueue([child, oep, &gv] {
+            //vctx.pool().enqueue([child, oep, &gv] {
 
-                     gk(*child, oep, gv);
-                     
-                });
+            //    gk(*child, oep, this);
+
+            //    });
         }
     }
- 
+    vctx.pool().wait();
+}
+
+
+void vmp_reback(State& s) {
+    GraphView gv(s.vctx());
+    gv.explore_block(s);
+   
 };
 
 
 bool test_creakme() {
-
-    vex_context v(1);
-    v.param().set("ntdll_KiUserExceptionDispatcher", (void*)0x777B3BC0);
+    vex_context v(4);
+    v.param().set("ntdll_KiUserExceptionDispatcher", std::make_shared<TR::sys_params_value>((size_t)0x777B3BC0));
     v.param().set("Kernel", gen_kernel(Ke::OS_Kernel_Kd::OSK_Windows));
     TR::State state(v, VexArchX86);
     state.read_bin_dump("Y:\\vmp\\Project1.vmp.exe.dump");
-    v.hook_read(symbolic_read);
+    
 
     state.get_trace()->setFlag(CF_traceInvoke);
     //v.hook_read(read);
-    //state.setFlag(CF_ppStmts);
+    v.hook_read(symbolic_read);
+    state.get_trace()->setFlag(CF_ppStmts);
     VexGuestAMD64State& amd64_reg_state = state.get_regs_maps()->guest.amd64;
     state.avoid_anti_debugging();
-
+    state.set_level(spdlog::level::debug);
+    //auto bts = state.start();
     //005671c8 0f31            rdtsc
    // v.hook_add(0x76F91778, hook2);
     //v.hook_add(0x74c922fc, nullptr, CF_ppStmts);
     
-    //state.hook_add(0x756EEFC5, hoo);
+    //v.hook_add(0x50dd56a7, hoo);
 
     //state.regs.set()
 

@@ -8,18 +8,17 @@ extern "C" {
 #include <cstdarg>
 #include <stdio.h>
 #include "engine/trException.h"
+#include "spdlog/logger.h"
 
 class ppIR {
-
-    HChar myprintf_buf[1000];
-    Int   n_myprintf_buf;
+    std::string m_str;
+    std::shared_ptr<spdlog::logger> m_logger;
+    spdlog::level::level_enum m_leve;
 
 public:
-    ppIR() { n_myprintf_buf = 0; };
-
-    inline const HChar* c_str() { return myprintf_buf; }
-    inline std::string pop() { return myprintf_buf; }
-
+    ppIR(std::shared_ptr<spdlog::logger> log, spdlog::level::level_enum leve) : m_logger(log), m_leve(leve) { }
+    ppIR(std::shared_ptr<spdlog::logger> log) : ppIR(log, spdlog::level::debug) {}
+    ~ppIR();
 
     UInt vex_printf(const HChar* format, ...);
 

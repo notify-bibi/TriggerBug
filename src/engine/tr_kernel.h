@@ -47,7 +47,6 @@ namespace Ke {
         Kernel(const Kernel& r) = delete;
         void operator =(const Kernel& r) = delete;
     public:
-        virtual param_type fork_params(Kernel& father) { return father.m_params; }
         param_type& param() { return m_params; }
         inline OS_Kernel_Kd get_OS_Kind() { return m_os_kind; }
         virtual TR::State_Tag Ijk_call(TR::State& st, IRJumpKind kd) { return TR::Death; }
@@ -59,13 +58,12 @@ namespace Ke {
         //inline TR::vex_info& vinfo() { return m_state.vinfo(); }
         //inline TR::TRsolver& solver() { return m_state.solver(); }
 
-        ~Kernel() {}
+        virtual ~Kernel() {}
     };
 };
 
 namespace TR {
-    Ke::Kernel* gen_kernel(Ke::OS_Kernel_Kd kd);
-    void free_kernel(Ke::Kernel* kernel);
+    std::shared_ptr<TR::sys_params_value> gen_kernel(Ke::OS_Kernel_Kd kd);
 }
 
 

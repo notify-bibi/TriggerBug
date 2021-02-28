@@ -1556,7 +1556,7 @@ ULong x86g_check_fldcw ( UInt fpucw )
 UInt x86g_create_fpucw ( UInt fpround )
 {
    fpround &= 3;
-   return 0x037F | (fpround << 10);
+   return 0x027F | (fpround << 10);
 }
 
 

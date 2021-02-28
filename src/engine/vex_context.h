@@ -56,19 +56,6 @@ namespace TR {
     class vex_context;
 
 
-    template<class T>
-    class sys_params {
-        HASH_MAP<std::string, T> m_symbols;
-    public:
-        inline void set(const char*key, const T& value) {
-            m_symbols[key] = value;
-        }
-        inline bool is_exist(const char* key) const { return m_symbols.find(key) != m_symbols.end(); }
-        inline T& get(const char* key) { return m_symbols[key]; }
-        
-    };
-
-
 
     // vex_info
     class vex_info{
@@ -120,10 +107,25 @@ namespace TR {
     };
 
 
+
+    template<class T>
+    class sys_params {
+        HASH_MAP<std::string, T> m_symbols;
+    public:
+        sys_params(){}
+        inline void set(const char* key, const T& value) {
+            m_symbols[key] = value;
+        }
+        inline bool is_exist(const char* key) const { return m_symbols.find(key) != m_symbols.end(); }
+        inline T& get(const char* key) { return m_symbols[key]; }
+        sys_params(const sys_params&) = delete;
+        void operator =(const sys_params&) = delete;
+    };
+
     class sys_params_value {
         size_t m_value;
     public:
-        sys_params_value(size_t value) :m_value(value) { inc_ref(); }
+        sys_params_value(size_t value) :m_value(value) {  }  // inc_ref();
         virtual sys_params_value fork() { return sys_params_value(0); }
         virtual void delete_value() { m_value = 0; }
         virtual void inc_ref() { }
@@ -142,7 +144,7 @@ namespace TR {
     class vctx_base {
         friend class StateBase;
         friend class vex_context;
-        using paramType = sys_params<void*>;
+        using paramType = sys_params<std::shared_ptr<sys_params_value>>;
 
         StateBase* m_top_state;
         ThreadPool m_pool;

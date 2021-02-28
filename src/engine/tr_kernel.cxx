@@ -36,7 +36,7 @@ namespace Ke {
         virtual void cpu_exception(TR::State& st, Expt::ExceptionBase const& e) override;
         virtual void avoid_anti_debugging(TR::State& st) override {};
 
-        ~OS_Unknow() {}
+        virtual ~OS_Unknow() {}
     };
 
     TR::State_Tag OS_Unknow::Ijk_call(TR::State& st, IRJumpKind kd)
@@ -73,13 +73,156 @@ namespace Ke {
 
 #ifdef KE_WINDOWS_ENABLE
 // Windows
+#include <Windows.h>
+
+
+static UInt x86g_create_mxcsr(UInt sseround)
+{
+    sseround &= 3;
+    return 0x1F80 | (sseround << 13);
+}
+
+static UInt x86g_create_sseround(UInt mxcsr)
+{
+    return (mxcsr >> 13) & 3;
+}
+
+namespace Kc32 {
+
+    /*
+    The first element of the array contains a read-write flag that indicates the type of operation that caused the access violation.
+    数组的第一个元素包含了一个读写标志，表示引起访问违规的操作类型。
+    If this value is zero, the thread attempted to read the inaccessible data.
+    如果这个值为0，表示线程试图读取不可访问的数据。
+    If this value is 1, the thread attempted to write to an inaccessible address.
+    如果这个值为1，表示线程试图写入不可访问的地址。
+    If this value is 8, the thread causes a user-mode data execution prevention (DEP) violation.
+    如果这个值是8，表示线程线程引发了一个用户模式的DEP违规。
+    The second array element specifies the virtual address of the inaccessible data.
+    数组的第二个元素指定了不可访问数据的虚拟地址。
+    The first element of the array contains a read-write flag that indicates the type of operation that caused the access violation.
+    数组的第一个元素包含了一个读写标志，用于表示引起访问违规的操作类型。
+    If this value is zero, the thread attempted to read the inaccessible data.
+    如果值为0，表示线程试图读取不可访问的数据。
+    If this value is 1, the thread attempted to write to an inaccessible address.
+    如果值为1，表示线程试图写入不可访问的地址。
+    If this value is 8, the thread causes a user-mode data execution prevention (DEP) violation.
+    如果值为8，表示线程引起了一个用户模式的DEP违规。
+    The second array element specifies the virtual address of the inaccessible data.
+    数组的第二个元素指定了不可访问数据的虚拟地址。
+    The third array element specifies the underlying NTSTATUS code that resulted in the exception.
+    数组的第三个元素表示底层的NTSTATUS码引起的本次异常。
+    ntdll::KiUserExceptionDispatcher*/
+
+    VOID putExecptionCtx(
+        PEXCEPTION_RECORD32 ExceptionRecord, PWOW64_CONTEXT ContextRecord,
+        VexGuestX86State* gst, DWORD eflags,
+        DWORD ExceptionCode, DWORD ExceptionAddress, DWORD ExceptionFlags, DWORD NumberParameters, DWORD  nextExceptionRecord,
+        DWORD info0, DWORD info1, DWORD info2) {
+        ExceptionRecord->ExceptionCode = ExceptionCode;
+        ExceptionRecord->ExceptionFlags = ExceptionFlags;
+        ExceptionRecord->ExceptionRecord = nextExceptionRecord;
+        ExceptionRecord->ExceptionAddress = ExceptionAddress;
+        ExceptionRecord->NumberParameters = NumberParameters;
+
+        ExceptionRecord->ExceptionInformation[0] = info0;
+        ExceptionRecord->ExceptionInformation[1] = info1;
+        ExceptionRecord->ExceptionInformation[2] = info2;
+
+        for (int i = 3; i < EXCEPTION_MAXIMUM_PARAMETERS; i++) { ExceptionRecord->ExceptionInformation[i] = 0; }
+
+
+
+        ContextRecord->SegGs = gst->guest_GS;
+        ContextRecord->SegFs = gst->guest_FS;
+        ContextRecord->SegEs = gst->guest_ES;
+        ContextRecord->SegDs = gst->guest_DS;
+
+        ContextRecord->Edi = gst->guest_EDI;
+        ContextRecord->Esi = gst->guest_ESI;
+        ContextRecord->Ebx = gst->guest_EBX;
+        ContextRecord->Edx = gst->guest_EDX;
+        ContextRecord->Ecx = gst->guest_ECX;
+        ContextRecord->Eax = gst->guest_EAX;
+
+        ContextRecord->Ebp = gst->guest_EBP;
+        ContextRecord->Eip = gst->guest_EIP;
+        ContextRecord->SegCs = gst->guest_CS;
+
+        ContextRecord->EFlags = eflags;
+        ContextRecord->Esp = gst->guest_ESP;
+        ContextRecord->SegSs = gst->guest_SS;
+
+
+        XSAVE_FORMAT* sf = (XSAVE_FORMAT*)ContextRecord->ExtendedRegisters;
+        sf->MxCsr = x86g_create_mxcsr(gst->guest_SSEROUND);
+        __m128i* xmm = (__m128i*)sf->XmmRegisters;
+
+#  define COPY_U128(_dst,_src) _dst = *(__m128i*)_src
+        COPY_U128(xmm[0], gst->guest_XMM0);
+        COPY_U128(xmm[1], gst->guest_XMM1);
+        COPY_U128(xmm[2], gst->guest_XMM2);
+        COPY_U128(xmm[3], gst->guest_XMM3);
+        COPY_U128(xmm[4], gst->guest_XMM4);
+        COPY_U128(xmm[5], gst->guest_XMM5);
+        COPY_U128(xmm[6], gst->guest_XMM6);
+        COPY_U128(xmm[7], gst->guest_XMM7);
+#  undef COPY_U128
+
+
+    }
+
+
+    //ntdll::ntdll_NtContinue
+    UInt getExecptionCtx(IN PWOW64_CONTEXT ContextRecord, OUT VexGuestX86State* gst) {
+
+        gst->guest_GS = ContextRecord->SegGs;
+        gst->guest_FS = ContextRecord->SegFs;
+        gst->guest_ES = ContextRecord->SegEs;
+        gst->guest_DS = ContextRecord->SegDs;
+
+        gst->guest_EDI = ContextRecord->Edi;
+        gst->guest_ESI = ContextRecord->Esi;
+        gst->guest_EBX = ContextRecord->Ebx;
+        gst->guest_EDX = ContextRecord->Edx;
+        gst->guest_ECX = ContextRecord->Ecx;
+        gst->guest_EAX = ContextRecord->Eax;
+
+        gst->guest_EBP = ContextRecord->Ebp;
+        gst->guest_EIP = ContextRecord->Eip;
+        gst->guest_CS = ContextRecord->SegCs;
+
+        //eflags = ContextRecord->EFlags;
+        gst->guest_ESP = ContextRecord->Esp;
+        gst->guest_SS = ContextRecord->SegSs;
+
+
+        XSAVE_FORMAT* sf = (XSAVE_FORMAT*)ContextRecord->ExtendedRegisters;
+        gst->guest_SSEROUND = x86g_create_sseround(sf->MxCsr);
+        __m128i* xmm = (__m128i*)sf->XmmRegisters;
+
+#  define COPY_U128(_dst,_src) *(__m128i*)_dst = _src
+        COPY_U128(gst->guest_XMM0, xmm[0]);
+        COPY_U128(gst->guest_XMM1, xmm[1]);
+        COPY_U128(gst->guest_XMM2, xmm[2]);
+        COPY_U128(gst->guest_XMM3, xmm[3]);
+        COPY_U128(gst->guest_XMM4, xmm[4]);
+        COPY_U128(gst->guest_XMM5, xmm[5]);
+        COPY_U128(gst->guest_XMM6, xmm[6]);
+        COPY_U128(gst->guest_XMM7, xmm[7]);
+#  undef COPY_U128
+
+        return gst->guest_EIP;
+    }
+};
+
 namespace Ke {
 
 	class Windows : public Kernel {
         
 	public:
         Windows(): Kernel(OS_Kernel_Kd::OSK_Windows) {}
-
+        virtual ~Windows(){}
 
         TR::State_Tag Sys_syscall(TR::State& st);
 		virtual TR::State_Tag Ijk_call(TR::State& st, IRJumpKind kd) override;
@@ -152,15 +295,16 @@ namespace Ke {
                 return TR::Running;
             }
             case 0x23: { // ntdll_ZwQueryVirtualMemory 遍历进程模块
-                return TR::Death;
+                break;
             }
             case 0x25: { // ntdll_ZwQueryInformationThread
-                return TR::Death;
+                break;
             }
-            case 0x43: {
-                PWOW64_CONTEXT wow64_ctx = (PWOW64_CONTEXT)(size_t)(DWORD)arg0.tor();
-                //**Addr32 next = dirty_call("getExecptionCtx32", Kc32::getExecptionCtx, { rsval<Addr64>(ctx, (size_t)wow64_ctx), rsval<Addr64>(ctx, getGSPTR()) }, Ity_I32);
-                //**goto_ptr(next);
+            case 0x43: { // ntdll_NtContinue
+                auto wow64_ctx = arg0; // PWOW64_CONTEXT
+                auto next = st.dirty_call("getExecptionCtx32", Kc32::getExecptionCtx, { wow64_ctx, rsval<Addr64>(ctx, st.getGSPTR()) }, Ity_I32);
+                vassert(next.real());
+                st.goto_ptr(next);
                 regs.set(X86_IR_OFFSET::EAX, 0);
                 return TR::Running;
             }
@@ -281,7 +425,8 @@ namespace Ke {
 		case Ijk_SigFPE_IntOvf:  /* current instruction synths SIGFPE - IntOvf */
 		{ throw Expt::RuntimeIrSig(st.get_cpu_ip(), kd); }
 		default:
-            st.logger->warn("guest address: 0x{x} jmp kind: {}", st.get_cpu_ip(), kd);
+            st.logger->warn("guest address: 0x{:x} jmp kind: {}", st.get_cpu_ip(), kd);
+            spdlog::warn("guest address: 0x{:x} jmp kind: {}", st.get_cpu_ip(), kd);
 		}
 		return TR::Death;
 	}
@@ -303,6 +448,7 @@ namespace Ke {
     {
         decltype(st.regs)& regs = st.regs;
         decltype(st.mem)& mem = st.mem;
+        z3::vcontext& ctx = st.ctx();
 
         UInt stack_size = sizeof(EXCEPTION_RECORD32) + sizeof(WOW64_CONTEXT);
         UInt sp_tmp = regs.get<Ity_I32>(X86_IR_OFFSET::ESP).tor();
@@ -371,14 +517,14 @@ namespace Ke {
         mem.map(0x100000, 99999);
 
 
-        /*dirty_call("putExecptionCtx32", Kc32::putExecptionCtx,
+        st.dirty_call("putExecptionCtx32", Kc32::putExecptionCtx,
             {
                 rcval<Addr32>(ctx, (size_t)ExceptionRecord), rcval<Addr32>(ctx, (size_t)ContextRecord),
                 rcval<Addr64>(ctx, gst), eflags,
                 rcval<int>(ctx, ExceptionCode), rcval<Addr32>(ctx, ExceptionAddress), rcval<int>(ctx, ExceptionFlags),rcval<int>(ctx, NumberParameters), rcval<Addr32>(ctx, nextExceptionRecord),
                 rcval<Addr32>(ctx, info0), rcval<Addr32>(ctx, info1), rcval<Addr32>(ctx, info2)
             },
-            Ity_I32);*/
+            Ity_I32);
 
         regs.set(X86_IR_OFFSET::ESP, esp - stack_size);
         st.vex_push_const((Addr32)(ULong)ContextRecord);
@@ -780,45 +926,37 @@ namespace Ke {
 #endif // KE_DARWIND_ENABLE
 
 
+class kernel_v : public TR::sys_params_value {
+public:
+    kernel_v(Ke::Kernel* k) :sys_params_value((size_t)k) {
+        
+
+    }
+    ~kernel_v() {
+        Ke::Kernel* k = (Ke::Kernel*)value();
+        delete k;
+    }
+};
+
 
 namespace TR {
-     Ke::Kernel* gen_kernel(Ke::OS_Kernel_Kd kd) {
+    std::shared_ptr<TR::sys_params_value> gen_kernel(Ke::OS_Kernel_Kd kd) {
         switch (kd)
         {
 #ifdef KE_WINDOWS_ENABLE
-        case Ke::OS_Kernel_Kd::OSK_Windows: return new Ke::Windows; break;
+        case Ke::OS_Kernel_Kd::OSK_Windows: return std::make_shared<kernel_v>(new Ke::Windows); break;
 #endif
 #ifdef KE_LINUX_ENABLE
-        case Ke::OS_Kernel_Kd::OSK_Linux: m_kernel = new Ke::Linux; break;
+        case Ke::OS_Kernel_Kd::OSK_Linux: m_kernel = std::make_shared<kernel_v>(new Ke::Linux); break;
 #endif
 #ifdef KE_DARWIN_ENABLE
-        case Ke::OS_Kernel_Kd::OSK_Darwin:m_kernel = new Ke::Darwin; break;
+        case Ke::OS_Kernel_Kd::OSK_Darwin:m_kernel = std::make_shared<kernel_v>(new Ke::Darwin); break;
 #endif
         default: // Ke::OS_Kernel_Kd::OSK_Unknow
-                return new Ke::OS_Unknow; break;
+                return std::make_shared<kernel_v>(new Ke::OS_Unknow); break;
             }
     };
 
-
-
-    void free_kernel(Ke::Kernel* kernel)
-    {
-        switch (kernel->get_OS_Kind())
-        {
-        case Ke::OS_Kernel_Kd::OSK_Unknow: delete (Ke::OS_Unknow*)(kernel); break;
-#ifdef KE_WINDOWS_ENABLE
-        case Ke::OS_Kernel_Kd::OSK_Windows:delete (Ke::Windows*)(kernel); break;
-#endif
-#ifdef KE_LINUX_ENABLE
-        case Ke::OS_Kernel_Kd::OSK_Linux:  delete (Ke::Linux*)(kernel); break;
-#endif
-#ifdef KE_DARWIN_ENABLE
-        case Ke::OS_Kernel_Kd::OSK_Darwin: delete (Ke::Darwin*)(kernel); break;
-#endif
-        default:
-            VPANIC("error get_OS_Kind");
-        }
-    }
 
 
 

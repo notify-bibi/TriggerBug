@@ -109,7 +109,7 @@ static void failure_exit() {
 
 static void _vex_log_bytes(const HChar* bytes, SizeT nbytes) {
     std::cout << bytes;
-    throw Expt::IRfailureExit(bytes);
+    //throw Expt::IRfailureExit(bytes);
 }
 
 

@@ -81,6 +81,8 @@ namespace cache {
 
 // namespace cache
 
+
+
 class IRSBCache {
 public:
     using _Kty = HWord; // ea
@@ -98,8 +100,8 @@ public:
     IRSBCache(UInt sz, const char* saysome) : m_cache(sz), m_say(saysome) {
 
     }
-    auto push(IRSB* irsb, Addr ea, UInt sz, HWord checksum, std::deque<void*>& irsb_mem_alloc) {
-        auto ic = std::make_shared<bb::IRSB_CHUNK>(irsb, checksum, ea, sz, irsb_mem_alloc);
+    auto push(IRSB* irsb, VexArch arch, Addr ea, UInt sz, HWord checksum, std::deque<void*>& irsb_mem_alloc) {
+        auto ic = std::make_shared<bb::IRSB_CHUNK>(irsb, arch, checksum, ea, sz, irsb_mem_alloc);
         push(ic);
         return ic;
     }
@@ -112,12 +114,12 @@ public:
         m_cache.put(bb->get_bb_base(), bb);
     }
 
-    irsb_chunk ado_treebuild(VexArch arch_guest, irsb_chunk src, VexRegisterUpdates pxControl) {
+    irsb_chunk ado_treebuild(irsb_chunk src, VexRegisterUpdates pxControl) {
         
         //ppIRSB(irsb);
         Bool(*preciseMemExnsFn) (Int, Int, VexRegisterUpdates);
-
-        switch (arch_guest) {
+        
+        switch (src->get_arch()) {
         case VexArchX86:
             preciseMemExnsFn = guest_x86_state_requires_precise_mem_exns;
             break;
@@ -132,10 +134,12 @@ public:
         
             // -----------
             IRSB* dst;
-            dst = emptyIRSB();
+            /*dst = emptyIRSB();
             dst->tyenv = deepCopyIRTypeEnv(src->get_irsb()->tyenv);
             dst->offsIP = src->get_irsb()->offsIP;
-            concatenate_irsbs(dst, src->get_irsb());
+            concatenate_irsbs(dst, src->get_irsb());*/
+            dst = deepCopyIRSB(src->get_irsb());
+
             auto irsb_mem_alloc = LibVEX_IRSB_transfer();
             // ------------
 
@@ -143,7 +147,7 @@ public:
             free(alloc_tmp);
         }
 
-        irsb_chunk ic = std::make_shared<bb::IRSB_CHUNK>(dst, src->get_checksum(), src->get_bb_base(), src->get_bb_size(), irsb_mem_alloc);
+        irsb_chunk ic = std::make_shared<bb::IRSB_CHUNK>(dst, src->get_arch(), src->get_checksum(), src->get_bb_base(), src->get_bb_size(), irsb_mem_alloc);
         vassert(max_ga == src->get_bb_base() + src->get_bb_size() - 1);
         return ic;
     }
@@ -221,7 +225,7 @@ irsb_chunk irsb_cache_find(IRSBCache* c, TR::MBase& mem, HWord ea) {
     return c->find(mem, ea);
 }
 
-irsb_chunk irsb_cache_push(IRSBCache* c, TR::MBase& mem, const VexGuestExtents* vge, IRSB* irsb, std::deque<void*>&& irsb_mem_alloc) {
+irsb_chunk irsb_cache_push(IRSBCache* c, TR::MBase& mem, VexArch arch, const VexGuestExtents* vge, IRSB* irsb, std::deque<void*>&& irsb_mem_alloc) {
     Addr     base2check;
     UInt     len2check;
     HWord    expectedhW;
@@ -232,7 +236,7 @@ irsb_chunk irsb_cache_push(IRSBCache* c, TR::MBase& mem, const VexGuestExtents* 
         //if (len2check == 0)
    //         continue;
         expectedhW = mem.genericg_compute_checksum(base2check, len2check);
-        return c->push(irsb, base2check, len2check, expectedhW, irsb_mem_alloc);
+        return c->push(irsb, arch, base2check, len2check, expectedhW, irsb_mem_alloc);
    // }
 
 }
@@ -252,17 +256,18 @@ void host_clean_IRSBCache(IRSBCache* c) {
 irsb_chunk host_irsb_cache_find(IRSBCache* c, HWord ea) {
     return c->host_find(ea);
 }
-irsb_chunk host_irsb_cache_push(IRSBCache* c, const VexGuestExtents* vge, IRSB* irsb, std::deque<void*>&& irsb_mem_alloc) {
+irsb_chunk host_irsb_cache_push(IRSBCache* c, VexArch arch, const VexGuestExtents* vge, IRSB* irsb, std::deque<void*>&& irsb_mem_alloc) {
     Addr     base2check;
     UInt     len2check;
     base2check = vge->base[0];
     len2check = vge->len[0];
-    return c->push(irsb, base2check, len2check, 0x2333, irsb_mem_alloc);
+    
+    return c->push(irsb, arch, base2check, len2check, 0x2333, irsb_mem_alloc);
 }
 
 
-irsb_chunk ado_treebuild(IRSBCache* c, VexArch arch_guest, irsb_chunk src, VexRegisterUpdates pxControl) {
-    return c->ado_treebuild(arch_guest, src, pxControl);
+irsb_chunk ado_treebuild(IRSBCache* c, irsb_chunk src, VexRegisterUpdates pxControl) {
+    return c->ado_treebuild(src, pxControl);
 }
 
 
