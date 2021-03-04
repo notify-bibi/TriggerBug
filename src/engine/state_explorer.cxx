@@ -148,7 +148,7 @@ faild: {
 State::State(vex_context& vctx, VexArch guest_arch)
     : StateBase(vctx, guest_arch),
     m_irvex(nullptr),
-    m_trace(new TraceInterface(TR::CF_None))
+    m_trace(std::make_shared<TraceInterface>(TR::CF_None))
 {
 
     clean_dirty_mode();
@@ -387,9 +387,18 @@ public:
 #define CDFCHECK(arg0) if (arg0.symb()) { z3_mode = True; if (!cptr) { return dirty_call(cee, exp_args, ty); }; }
 
 
+template<class T>
+sv::tval dirty_result_check(const T& v, UShort nbits) {
+    if (v.real()) {
+        return sv::tval(v, (ULong)v.tor(), nbits);
+    }
+    else {
+        return sv::tval(v, (Z3_ast)v.tos(), Z3_BV_SORT, nbits);
+    }
+}
+
+
 // 不知道为什么DirtyFunction<ea_nbits>::Function_N 为什么不行，哎，编译器就tm离谱, 妥协一步
-
-
 template<>
 sv::tval TR::State::tIRCallee<32>(const IRCallee* cee, IRExpr** const exp_args, IRType ty)
 {
@@ -404,17 +413,17 @@ sv::tval TR::State::tIRCallee<32>(const IRCallee* cee, IRExpr** const exp_args, 
         return dirty_call(cee, exp_args, ty);
     }
     sv::tval arg0 = tIRExpr(exp_args[0]); CDFCHECK(arg0);
-    if (!exp_args[1]) return (z3_mode) ? ((DCF::Z3_Function1)(cptr))(arg0) : sv::tval(m_ctx, ((DCF::Function_1)(cee->addr))(arg0), bitn);
+    if (!exp_args[1]) return (z3_mode) ? dirty_result_check(((DCF::Z3_Function1)(cptr))(arg0), bitn) : sv::tval(m_ctx, ((DCF::Function_1)(cee->addr))(arg0), bitn);
     sv::tval arg1 = tIRExpr(exp_args[1]); CDFCHECK(arg1);
-    if (!exp_args[2]) return (z3_mode) ? ((DCF::Z3_Function2)(cptr))(arg0, arg1) : sv::tval(m_ctx, ((DCF::Function_2)(cee->addr))(arg0, arg1), bitn);
+    if (!exp_args[2]) return (z3_mode) ? dirty_result_check(((DCF::Z3_Function2)(cptr))(arg0, arg1), bitn) : sv::tval(m_ctx, ((DCF::Function_2)(cee->addr))(arg0, arg1), bitn);
     sv::tval arg2 = tIRExpr(exp_args[2]); CDFCHECK(arg2);
-    if (!exp_args[3]) return (z3_mode) ? ((DCF::Z3_Function3)(cptr))(arg0, arg1, arg2) : sv::tval(m_ctx, ((DCF::Function_3)(cee->addr))(arg0, arg1, arg2), bitn);
+    if (!exp_args[3]) return (z3_mode) ? dirty_result_check(((DCF::Z3_Function3)(cptr))(arg0, arg1, arg2), bitn) : sv::tval(m_ctx, ((DCF::Function_3)(cee->addr))(arg0, arg1, arg2), bitn);
     sv::tval arg3 = tIRExpr(exp_args[3]); CDFCHECK(arg3);
-    if (!exp_args[4]) return (z3_mode) ? ((DCF::Z3_Function4)(cptr))(arg0, arg1, arg2, arg3) : sv::tval(m_ctx, ((DCF::Function_4)(cee->addr))(arg0, arg1, arg2, arg3), bitn);
+    if (!exp_args[4]) return (z3_mode) ? dirty_result_check(((DCF::Z3_Function4)(cptr))(arg0, arg1, arg2, arg3), bitn) : sv::tval(m_ctx, ((DCF::Function_4)(cee->addr))(arg0, arg1, arg2, arg3), bitn);
     sv::tval arg4 = tIRExpr(exp_args[4]); CDFCHECK(arg4);
-    if (!exp_args[5]) return (z3_mode) ? ((DCF::Z3_Function5)(cptr))(arg0, arg1, arg2, arg3, arg4) : sv::tval(m_ctx, ((DCF::Function_5)(cee->addr))(arg0, arg1, arg2, arg3, arg4), bitn);
+    if (!exp_args[5]) return (z3_mode) ? dirty_result_check(((DCF::Z3_Function5)(cptr))(arg0, arg1, arg2, arg3, arg4), bitn) : sv::tval(m_ctx, ((DCF::Function_5)(cee->addr))(arg0, arg1, arg2, arg3, arg4), bitn);
     sv::tval arg5 = tIRExpr(exp_args[5]); CDFCHECK(arg5);
-    if (!exp_args[6]) return (z3_mode) ? ((DCF::Z3_Function6)(cptr))(arg0, arg1, arg2, arg3, arg4, arg5) : sv::tval(m_ctx, ((DCF::Function_6)(cee->addr))(arg0, arg1, arg2, arg3, arg4, arg5), bitn);
+    if (!exp_args[6]) return (z3_mode) ? dirty_result_check(((DCF::Z3_Function6)(cptr))(arg0, arg1, arg2, arg3, arg4, arg5), bitn) : sv::tval(m_ctx, ((DCF::Function_6)(cee->addr))(arg0, arg1, arg2, arg3, arg4, arg5), bitn);
     VPANIC("not support");
 };
 template<>
@@ -431,17 +440,17 @@ sv::tval TR::State::tIRCallee<64>(const IRCallee* cee, IRExpr** const exp_args, 
         return dirty_call(cee, exp_args, ty);
     }
     sv::tval arg0 = tIRExpr(exp_args[0]); CDFCHECK(arg0);
-    if (!exp_args[1]) return (z3_mode) ? ((DCF::Z3_Function1)(cptr))(arg0) : sv::tval(m_ctx, ((DCF::Function_1)(cee->addr))(arg0), bitn);
+    if (!exp_args[1]) return (z3_mode) ? dirty_result_check(((DCF::Z3_Function1)(cptr))(arg0), bitn) : sv::tval(m_ctx, ((DCF::Function_1)(cee->addr))(arg0), bitn);
     sv::tval arg1 = tIRExpr(exp_args[1]); CDFCHECK(arg1);
-    if (!exp_args[2]) return (z3_mode) ? ((DCF::Z3_Function2)(cptr))(arg0, arg1) : sv::tval(m_ctx, ((DCF::Function_2)(cee->addr))(arg0, arg1), bitn);
+    if (!exp_args[2]) return (z3_mode) ? dirty_result_check(((DCF::Z3_Function2)(cptr))(arg0, arg1), bitn) : sv::tval(m_ctx, ((DCF::Function_2)(cee->addr))(arg0, arg1), bitn);
     sv::tval arg2 = tIRExpr(exp_args[2]); CDFCHECK(arg2);
-    if (!exp_args[3]) return (z3_mode) ? ((DCF::Z3_Function3)(cptr))(arg0, arg1, arg2) : sv::tval(m_ctx, ((DCF::Function_3)(cee->addr))(arg0, arg1, arg2), bitn);
+    if (!exp_args[3]) return (z3_mode) ? dirty_result_check(((DCF::Z3_Function3)(cptr))(arg0, arg1, arg2), bitn) : sv::tval(m_ctx, ((DCF::Function_3)(cee->addr))(arg0, arg1, arg2), bitn);
     sv::tval arg3 = tIRExpr(exp_args[3]); CDFCHECK(arg3);
-    if (!exp_args[4]) return (z3_mode) ? ((DCF::Z3_Function4)(cptr))(arg0, arg1, arg2, arg3) : sv::tval(m_ctx, ((DCF::Function_4)(cee->addr))(arg0, arg1, arg2, arg3), bitn);
+    if (!exp_args[4]) return (z3_mode) ? dirty_result_check(((DCF::Z3_Function4)(cptr))(arg0, arg1, arg2, arg3), bitn) : sv::tval(m_ctx, ((DCF::Function_4)(cee->addr))(arg0, arg1, arg2, arg3), bitn);
     sv::tval arg4 = tIRExpr(exp_args[4]); CDFCHECK(arg4);
-    if (!exp_args[5]) return (z3_mode) ? ((DCF::Z3_Function5)(cptr))(arg0, arg1, arg2, arg3, arg4) : sv::tval(m_ctx, ((DCF::Function_5)(cee->addr))(arg0, arg1, arg2, arg3, arg4), bitn);
+    if (!exp_args[5]) return (z3_mode) ? dirty_result_check(((DCF::Z3_Function5)(cptr))(arg0, arg1, arg2, arg3, arg4), bitn) : sv::tval(m_ctx, ((DCF::Function_5)(cee->addr))(arg0, arg1, arg2, arg3, arg4), bitn);
     sv::tval arg5 = tIRExpr(exp_args[5]); CDFCHECK(arg5);
-    if (!exp_args[6]) return (z3_mode) ? ((DCF::Z3_Function6)(cptr))(arg0, arg1, arg2, arg3, arg4, arg5) : sv::tval(m_ctx, ((DCF::Function_6)(cee->addr))(arg0, arg1, arg2, arg3, arg4, arg5), bitn);
+    if (!exp_args[6]) return (z3_mode) ? dirty_result_check(((DCF::Z3_Function6)(cptr))(arg0, arg1, arg2, arg3, arg4, arg5), bitn) : sv::tval(m_ctx, ((DCF::Function_6)(cee->addr))(arg0, arg1, arg2, arg3, arg4, arg5), bitn);
     VPANIC("not support");
 };
 
@@ -795,7 +804,7 @@ TR::Vex_Kind State::emu_irsb(std::deque<BtsRefType>& tmp_branch, HWord& guest_st
     HWord block_start = guest_start;
     vassert(irsb->stmts[0]->tag == Ist_IMark);
     vassert(vinfo().gguest()==irvex().get_ir_vex_translate_args()->arch_guest);
-
+    m_last_bb = bb;
     for (UInt stmtn = 0; stmtn < irsb->stmts_used; s = irsb->stmts[++stmtn])
     {
         get_trace()->traceIRStmtStart(*this, bb, stmtn);
@@ -989,7 +998,7 @@ std::deque<TR::State::BtsRefType> TR::State::start() {
     }
     
     clean_dirty_mode();
-    return start(guest_start, std::make_unique< EmuEnvGuest>(vctx(), vinfo(), mem), 0);
+    return start(guest_start, std::make_shared< EmuEnvGuest>(vctx(), vinfo(), mem), 0);
 }
 
 std::deque<TR::State::BtsRefType> TR::State::start(HWord& guest_start, std::shared_ptr<EmuEnvironment> e, Addr avoid) {
@@ -1090,6 +1099,7 @@ void State::branchGo()
     }
 }
 
+
 void TR::State::set_irvex(std::shared_ptr<EmuEnvironment> e)
 {
     m_irvex = e;
@@ -1098,207 +1108,209 @@ void TR::State::set_irvex(std::shared_ptr<EmuEnvironment> e)
     }
 }
 
+#include "engine/compress.h"
 
-//
-//class StateCmprsInterface {
-//    cmpr::StateType m_type;
-//    cmpr::CmprsContext<State, State_Tag>& m_ctx;
-//    State& m_state;
-//    sbool m_condition;
-//    static bool StateCompression(State& a, State const& next) {
-//        bool ret = a.m_InvokStack == next.m_InvokStack;// 压缩条件
-//        return ret && a.StateCompression(next);//支持扩展条件
-//    }
-//
-//    static void StateCompressMkSymbol(State& a, State const& newState) {
-//        a.m_InvokStack = newState.m_InvokStack;// 使其满足压缩条件
-//        a.StateCompressMkSymbol(newState);//支持
-//    }
-//
-//    std::vector<sbool> const & get_asserts() const { return solv.get_asserts(); };
-//
-//public:
-//    StateCmprsInterface(
-//        cmpr::CmprsContext<State, State_Tag>& ctx,
-//        State& self,
-//        cmpr::StateType type
-//    ) :
-//        m_ctx(ctx), m_state(self), m_type(type), m_condition(m_ctx.ctx())
-//    { };
-//
-//    cmpr::CmprsContext<State, State_Tag>& cctx() { return m_ctx; }
-//    cmpr::StateType type() { return m_type; };
-//
-//    sbool const& get_assert() { 
-//        if (!(Z3_ast)m_condition) {
-//            m_condition = logic_and(get_asserts()).translate(m_ctx.ctx());
-//        }
-//        return m_condition;
-//    }
-//
-//    void get_write_map(HASH_MAP<Addr64, bool>& record) {
-//        if (regs.getRecord()) {
-//            for (auto offset : *regs.getRecord()) {
-//                record[offset];
-//            }
-//        }
-//        for (auto mcm : mem.change_map()) {
-//            vassert(mcm.second->getRecord() != NULL);
-//            for (auto offset : *(mcm.second->getRecord())) {
-//                auto Address = mcm.first + offset;
-//                auto p = mem.get_mem_page(Address);
-//                vassert(p);
-//                vassert(p->get_user() == mem.get_user());
-//                vassert(Address > REGISTER_LEN);
-//                record[Address];
-//            }
-//        }
-//    }
-//
-//    auto& branch() { return branch; };
-//
-//    cmpr::StateType tag(State* son) {
-//        if (son->status() == Fork) {
-//            return cmpr::Fork_Node;
-//        };
-//        if (m_ctx.is_avoid(son->status())) {
-//            return cmpr::Avoid_Node;
-//        };
-//        if (son->get_cpu_ip() == m_ctx.get_target_addr()) {
-//            return static_cast<cmpr::StateType>(get_group_id(son));
-//        }
-//        return cmpr::Survive_Node;
-//    };
-//
-//    Int get_group_id(State* s) {
-//        UInt group_count = 0;
-//        for (auto gs : m_ctx.group()) {
-//            if (StateCompression(*gs, *s)) {
-//                return group_count;
-//            }
-//            group_count++;
-//        }
-//        m_ctx.group().emplace_back(s);
-//        return group_count;
-//    }
-//
-//    void del_obj() {
-//        delete& m_state;
-//    }
-//
-//    PACK mem_Load(HWord addr) {
-//        return mem.template load<Ity_I64>(addr).translate(m_ctx.ctx());
-//    }
-//
-//    PACK reg_Get(UInt offset) {
-//        return regs.template get<Ity_I64>(offset).translate(m_ctx.ctx());
-//    }
-//
-//    PACK read(HWord addr) {
-//        if (addr < REGISTER_LEN) {
-//            return reg_Get(addr);
-//        }
-//        else {
-//            return mem_Load(addr);
-//        }
-//    }
-//
-//    StateCmprsInterface* mk(State* son, cmpr::StateType tag) {
-//        //实际上少于4个case intel编译器会转为if
-//        switch (tag) {
-//        case cmpr::Fork_Node:return new cmpr::CmprsFork<StateCmprsInterface>(m_ctx, *son);
-//        case cmpr::Avoid_Node:return new cmpr::CmprsAvoid<StateCmprsInterface>(m_ctx, *son);
-//        case cmpr::Survive_Node:return new cmpr::CmprsSurvive<StateCmprsInterface>(m_ctx, *son);
-//        default:return new cmpr::CmprsTarget<StateCmprsInterface>(m_ctx, *son, tag);
-//        };
-//
-//    }
-//
-//    virtual bool has_survive() { return false; }
-//    virtual cmpr::CmprsFork<StateCmprsInterface>& get_fork_node() { VPANIC("???"); }
-//    virtual cmpr::CmprsTarget<StateCmprsInterface>& get_target_node() { VPANIC("???"); }
-//    virtual ~StateCmprsInterface() {};
-//};
-//#ifdef _DEBUG
-//#define PPCMPR
-//#endif
-//
-//void State::compress(cmpr::CmprsContext<State, State_Tag>& ctx)
-//{
-//    cmpr::Compress<StateCmprsInterface<HWord>, State, State_Tag> cmp(ctx, *this);
-//    if (!ctx.group().size()) { 
-//        return;
-//    }
-//    else if (ctx.group().size() > 1 || (ctx.group().size() == 1 && cmp.has_survive())) {
-//
-//        for (cmpr::Compress<StateCmprsInterface<HWord>, State, State_Tag>::Iterator::StateRes state : cmp) {
-//            State* nbranch = (State*)mkState(ctx.get_target_addr());
-//            sv::tval condition = state.conditions().translate(*nbranch);
-//#ifdef  PPCMPR
-//            printf("%s\n", Z3_ast_to_string(condition, condition));
-//#endif //  _DEBUG
-//            nbranch->solv.add_assert(condition);
-//            HASH_MAP<Addr64, cmpr::GPMana> const& cm = state.changes();
-//            HASH_MAP<Addr64, cmpr::GPMana>::const_iterator itor = cm.begin();
-//            HASH_MAP<Addr64, cmpr::GPMana>::const_iterator end = cm.end();
-//
-//            for (; itor != end; itor++) {
-//                Addr64 addr = itor->first;
-//                sv::tval value = itor->second.get().translate(*nbranch);
-//#ifdef  PPCMPR
-//                printf("%p : {  %s  }\n", itor->first, Z3_ast_to_string(value, value));
-//#endif //  _DEBUG
-//                if (addr > REGISTER_LEN) {
-//#ifdef  PPCMPR
-//                    std::cout << std::hex << addr << value << std::endl;
-//#endif //  _DEBUG
-//                    nbranch->mem.Ist_Store(addr, value);
-//                }
-//                else {
-//#ifdef  PPCMPR
-//                    std::cout << std::hex << addr << value << std::endl;
-//#endif //  _DEBUG
-//                    nbranch->regs.Ist_Put(addr, value);
-//                }
-//            }
-//        }
-//    }
-//    else {
-//        for (cmpr::Compress<StateCmprsInterface<HWord>, State, State_Tag>::Iterator::StateRes state : cmp) {
-//            sv::tval condition = state.conditions();
-//#ifdef  PPCMPR
-//            printf("%s\n", Z3_ast_to_string(condition, condition));
-//#endif //  _DEBUG
-//            solv.add_assert(condition);
-//            HASH_MAP<Addr64, cmpr::GPMana> const& cm = state.changes();
-//            HASH_MAP<Addr64, cmpr::GPMana>::const_iterator itor = cm.begin();
-//            HASH_MAP<Addr64, cmpr::GPMana>::const_iterator end = cm.end();
-//            cmp.clear_nodes();
-//            for (; itor != end; itor++) {
-//                Addr64 addr = itor->first;
-//                sv::tval value = itor->second.get();
-//#ifdef  PPCMPR
-//                printf("%p : {  %s  }\n", itor->first, Z3_ast_to_string(value, value));
-//#endif //  _DEBUG
-//                if (addr > REGISTER_LEN) {
-//#ifdef  PPCMPR
-//                    std::cout << std::hex << addr << value << std::endl;
-//#endif //  _DEBUG
-//                    mem.Ist_Store(addr, value);
-//                }
-//                else {
-//#ifdef  PPCMPR
-//                    std::cout << std::hex << addr << value << std::endl;
-//#endif //  _DEBUG
-//                    regs.Ist_Put(addr, value);
-//                }
-//            }
-//        }
-//        guest_start = ctx.get_target_addr();
-//        set_status(NewState);
-//    }
-//}
-//
+class StateCmprsInterface {
+    cmpr::StateType m_type;
+    cmpr::CmprsContext<State, State_Tag>& m_ctx;
+    State& m_state;
+    sbool m_condition;
+    static bool StateCompression(State& a, State const& next) {
+        //bool ret = a.m_InvokStack == next.m_InvokStack;// 压缩条件
+        return a.StateCompression(next);//支持扩展条件
+    }
+
+    static void StateCompressMkSymbol(State& a, State const& newState) {
+        //a.m_InvokStack = newState.m_InvokStack;// 使其满足压缩条件
+        a.StateCompressMkSymbol(newState);//支持
+    }
+
+    std::vector<sbool> const & get_asserts() const { return m_state.solv.get_asserts(); };
+
+public:
+    StateCmprsInterface(
+        cmpr::CmprsContext<State, State_Tag>& ctx,
+        State& self,
+        cmpr::StateType type
+    ) :
+        m_ctx(ctx), m_state(self), m_type(type), m_condition(m_ctx.ctx())
+    { };
+
+    cmpr::CmprsContext<State, State_Tag>& cctx() { return m_ctx; }
+    cmpr::StateType type() { return m_type; };
+
+    sbool const& get_assert() { 
+        if (!(Z3_ast)m_condition) {
+            m_condition = logic_and(get_asserts()).translate(m_ctx.ctx());
+        }
+        return m_condition;
+    }
+
+    void get_write_map(HASH_MAP<Addr64, bool>& record) {
+        if (m_state.regs.getRecord()) {
+            for (auto offset : *m_state.regs.getRecord()) {
+                record[offset];
+            }
+        }
+        /*
+        for (auto mcm : m_state.mem.change_map()) {
+            vassert(mcm.second->getRecord() != NULL);
+            for (auto offset : *(mcm.second->getRecord())) {
+                auto Address = mcm.first + offset;
+                auto p = m_state.mem.get_mem_page(Address);
+                vassert(p);
+                vassert(p->get_user() == mem.get_user());
+                vassert(Address > REGISTER_LEN);
+                record[Address];
+            }
+        }*/
+    }
+
+    auto& branch() { return m_state.branch; };
+
+    cmpr::StateType tag(State* son) {
+        if (son->status() == Fork) {
+            return cmpr::Fork_Node;
+        };
+        if (m_ctx.is_avoid(son->status())) {
+            return cmpr::Avoid_Node;
+        };
+        if (son->get_cpu_ip() == m_ctx.get_target_addr()) {
+            return static_cast<cmpr::StateType>(get_group_id(son));
+        }
+        return cmpr::Survive_Node;
+    };
+
+    Int get_group_id(State* s) {
+        UInt group_count = 0;
+        for (auto gs : m_ctx.group()) {
+            if (StateCompression(*gs, *s)) {
+                return group_count;
+            }
+            group_count++;
+        }
+        m_ctx.group().emplace_back(s);
+        return group_count;
+    }
+
+    void del_obj() {
+        delete& m_state;
+    }
+
+    PACK mem_Load(HWord addr) {
+        return m_state.mem.template load<Ity_I64>(addr).translate(m_ctx.ctx());
+    }
+
+    PACK reg_Get(UInt offset) {
+        return m_state.regs.template get<Ity_I64>(offset).translate(m_ctx.ctx());
+    }
+
+    PACK read(HWord addr) {
+        if (addr < REGISTER_LEN) {
+            return reg_Get(addr);
+        }
+        else {
+            return mem_Load(addr);
+        }
+    }
+
+    StateCmprsInterface* mk(State* son, cmpr::StateType tag) {
+        //实际上少于4个case intel编译器会转为if
+        switch (tag) {
+        case cmpr::Fork_Node:return new cmpr::CmprsFork<StateCmprsInterface>(m_ctx, *son);
+        case cmpr::Avoid_Node:return new cmpr::CmprsAvoid<StateCmprsInterface>(m_ctx, *son);
+        case cmpr::Survive_Node:return new cmpr::CmprsSurvive<StateCmprsInterface>(m_ctx, *son);
+        default:return new cmpr::CmprsTarget<StateCmprsInterface>(m_ctx, *son, tag);
+        };
+
+    }
+
+    virtual bool has_survive() { return false; }
+    virtual cmpr::CmprsFork<StateCmprsInterface>& get_fork_node() { VPANIC("???"); }
+    virtual cmpr::CmprsTarget<StateCmprsInterface>& get_target_node() { VPANIC("???"); }
+    virtual ~StateCmprsInterface() {};
+};
+#ifdef _DEBUG
+#define PPCMPR
+#endif
+
+
+void TR::State::compress(cmpr::CmprsContext<State, State_Tag>& ctx)
+{
+    cmpr::Compress<StateCmprsInterface, State, State_Tag> cmp(ctx, *this);
+    if (!ctx.group().size()) { 
+        return;
+    }
+    else if (ctx.group().size() > 1 || (ctx.group().size() == 1 && cmp.has_survive())) {
+
+        for (cmpr::Compress<StateCmprsInterface, State, State_Tag>::Iterator::StateRes state : cmp) {
+            State* nbranch = (State*)ForkState(ctx.get_target_addr());
+            sv::tval condition = state.conditions().translate(*nbranch);
+#ifdef  PPCMPR
+            printf("%s\n", Z3_ast_to_string(condition, condition));
+#endif //  _DEBUG
+            nbranch->solv.add_assert(condition);
+            HASH_MAP<Addr64, cmpr::GPMana> const& cm = state.changes();
+            HASH_MAP<Addr64, cmpr::GPMana>::const_iterator itor = cm.begin();
+            HASH_MAP<Addr64, cmpr::GPMana>::const_iterator end = cm.end();
+
+            for (; itor != end; itor++) {
+                Addr64 addr = itor->first;
+                sv::tval value = itor->second.get().translate(*nbranch);
+#ifdef  PPCMPR
+                printf("%p : {  %s  }\n", itor->first, Z3_ast_to_string(value, value));
+#endif //  _DEBUG
+                if (addr > REGISTER_LEN) {
+#ifdef  PPCMPR
+                    std::cout << std::hex << addr << value << std::endl;
+#endif //  _DEBUG
+                    nbranch->mem.Ist_Store(addr, value);
+                }
+                else {
+#ifdef  PPCMPR
+                    std::cout << std::hex << addr << value << std::endl;
+#endif //  _DEBUG
+                    nbranch->regs.Ist_Put(addr, value);
+                }
+            }
+        }
+    }
+    else {
+        for (cmpr::Compress<StateCmprsInterface, State, State_Tag>::Iterator::StateRes state : cmp) {
+            sv::tval condition = state.conditions();
+#ifdef  PPCMPR
+            printf("%s\n", Z3_ast_to_string(condition, condition));
+#endif //  _DEBUG
+            solv.add_assert(condition);
+            HASH_MAP<Addr64, cmpr::GPMana> const& cm = state.changes();
+            HASH_MAP<Addr64, cmpr::GPMana>::const_iterator itor = cm.begin();
+            HASH_MAP<Addr64, cmpr::GPMana>::const_iterator end = cm.end();
+            cmp.clear_nodes();
+            for (; itor != end; itor++) {
+                Addr64 addr = itor->first;
+                sv::tval value = itor->second.get();
+#ifdef  PPCMPR
+                printf("%p : {  %s  }\n", itor->first, Z3_ast_to_string(value, value));
+#endif //  _DEBUG
+                if (addr > REGISTER_LEN) {
+#ifdef  PPCMPR
+                    std::cout << std::hex << addr << value << std::endl;
+#endif //  _DEBUG
+                    mem.Ist_Store(addr, value);
+                }
+                else {
+#ifdef  PPCMPR
+                    std::cout << std::hex << addr << value << std::endl;
+#endif //  _DEBUG
+                    regs.Ist_Put(addr, value);
+                }
+            }
+        }
+        guest_start = ctx.get_target_addr();
+        set_status(NewState);
+    }
+}
+
 
 
 

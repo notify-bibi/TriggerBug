@@ -19,8 +19,127 @@ Revision History:
 #define fastMaskB(n) fastMask(((n)<<3))
 #define fastMaskBI1(n) fastMask((((n)+1)<<3))
 class PAGE_DATA;
+namespace re {
+    //写入记录器，8字节记录为m_flag的一个bit
+    
+    class Record {
+        int maxlength;
+    public:
+        UChar m_flag[0];
+        Record(int maxlength) :maxlength(maxlength) {
+            memset(m_flag, 0, sizeof((maxlength >> 6) + 1));
+            UInt shift = (maxlength & ((1 << 6) - 1)) >> 3;
+            m_flag[maxlength >> 6] = shift ? 0x1 << shift : 0x1;
+        };
+
+        void clearRecord() {
+            memset(m_flag, 0, sizeof((maxlength >> 6) + 1));
+            UInt shift = (maxlength & ((1 << 6) - 1)) >> 3;
+            m_flag[maxlength >> 6] = shift ? 0x1 << shift : 0x1;
+        };
+
+        template<int nbytes>
+        inline void write(int offset) {
+            *(UShort*)(m_flag + (offset >> 6)) |=
+                (UShort)
+                (
+                    (offset + nbytes) < ALIGN(offset, 8) + 8
+                    ?
+                    (nbytes <= 8) ? 0x01u :
+                    (nbytes == 16) ? 0b11u :
+                    0b1111u
+                    :
+                    (nbytes <= 8) ? 0b11u :
+                    (nbytes == 16) ? 0b111u :
+                    0b11111u
+                    ) << ((offset >> 3) & 7);
+
+        }
+
+        template<> inline void write<1>(int offset) { m_flag[offset >> 6] |= 1 << ((offset >> 3) & 7); }
+
+
+
+        inline UInt get_count() {
+            UInt write_count = 0;
+            for (auto offset : *this) {
+                write_count += 1;
+            }
+            return write_count;
+        }
+
+        //写入遍历器
+        class iterator
+        {
+        private:
+            UInt _pcur;
+            UInt m_len;
+            ULong* m_flag;
+        public:
+            inline iterator(UChar* flag) :_pcur(0), m_flag((ULong*)flag), m_len(0) {
+                Int N;
+                for (; ; _pcur += 64) {
+                    if (ctzll(N, m_flag[_pcur >> 6])) {
+                        _pcur += N;
+                        return;
+                    }
+                }
+            }
+            iterator(UChar* flag, UInt length) :
+                _pcur(length >> 3),
+                m_flag((ULong*)flag),
+                m_len(length)
+            {}
+            inline bool operator!=(const iterator& src)
+            {
+                return (_pcur << 3) < src.m_len;
+            }
+
+            inline void operator++()
+            {
+                int N;
+                for (;;) {
+                    if (ctzll(N, m_flag[_pcur >> 6] & fastMaskReverse(_pcur % 64))) {
+                        _pcur = ALIGN(_pcur, 64) + N;
+                        return;
+                    }
+                    else {
+                        _pcur = ALIGN(_pcur + 64, 64);
+                    }
+                }
+            }
+
+            inline int operator*()
+            {
+                return (_pcur++) << 3;
+            }
+        };
+
+        inline iterator begin() {
+            return iterator(m_flag);
+        }
+
+        inline iterator end() {
+            return iterator(m_flag, maxlength);
+        }
+    };
+
+
+    class reg_trace {
+        Register& m_reg;
+    public:
+        reg_trace(Register& reg) :m_reg(reg) { }
+        virtual void write(UInt offset, UInt size) { }
+        virtual void read(UInt offset, HWord ea, UInt size) { }
+        virtual ~reg_trace() {}
+    };
+};
+
+
+
 
 namespace TR {
+
     class VRegs;
     class mem_unit;
 
@@ -120,8 +239,12 @@ namespace TR {
         Symbolic* m_symbolic;
         UInt m_size;
         bool m_is_symbolic;
+        
         __declspec(align(16))
         UChar m_bytes[0];
+
+        //void set_trace() { reg_trace }
+        //auto getRecord() { return m_trace; }
 
         Register(z3::vcontext& ctx, UInt size);
 

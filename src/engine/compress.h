@@ -161,7 +161,8 @@ namespace cmpr {
         CmprsFork(_CTX& ctx, _S& s) : STATEinterface(ctx, s, Fork_Node) {
             vassert(!this->branch().empty());
             m_child_nodes.reserve(this->branch().size());
-            for (auto bstate : this->branch()) {
+            for (auto _bstate : this->branch()) {
+                State* bstate = (State*)_bstate;
                 STATEinterface* ns = mk(bstate, this->tag(bstate));
                 m_child_nodes.emplace_back(ns);
                 if (ns->type() == Survive_Node) {

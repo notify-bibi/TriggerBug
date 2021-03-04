@@ -97,7 +97,7 @@ namespace TR {
                 m_child_state->solver().add_assert(m_addr_eq.tos());
             }
             return m_child_state;
-        }
+        };
 
         Addr64 get_oep() { return m_oep; }
         const sbool& get_guard() const { return m_guard; }
@@ -122,7 +122,9 @@ namespace TR {
         TRControlFlags         m_trtraceflags;
     public:
         TraceInterface(TRControlFlags f) :m_trtraceflags(f) {};
-        TraceInterface() :m_trtraceflags(CF_None) {};
+        TraceInterface() :m_trtraceflags(CF_None) {}
+        TraceInterface(const TraceInterface&) = delete;
+        void operator=(const TraceInterface&) = delete;
         virtual void traceStart(State& s, HWord ea);
           virtual void traceIRSB(State& s, HWord ea, irsb_chunk&);;
               virtual void traceIRStmtStart(State& s, irsb_chunk&, UInt stmtn);
@@ -142,7 +144,7 @@ namespace TR {
         inline void setFlags(TR::TRControlFlags t) { m_trtraceflags = t; };
         //inline ULong& getFlagRef() { return m_trtraceflags; }
         virtual ~TraceInterface() {}
-        virtual TraceInterface* mk_new_TraceInterface() { return new TraceInterface(m_trtraceflags); }
+        virtual  std::shared_ptr<TraceInterface> mk_new_TraceInterface() { return std::make_shared<TraceInterface>(m_trtraceflags); };
     protected:
         void pp_call_space(State& s);
     };
@@ -163,15 +165,16 @@ namespace TR {
         std::mutex             m_state_lock;
         DirtyCtx               m_dctx = nullptr;
         Bool                   m_is_dirty_mode; // vex状态
+        irsb_chunk             m_last_bb;
     public:
 
         State(vex_context& vctx, VexArch guest_arch);
         State(State& father, HWord gse);
-
+        
         virtual ~State();
         // x96
         void x86_set_mode(UChar cs);
-
+        inline irsb_chunk get_last_bb() { return m_last_bb; }
         // -------------   dirty  -------------
 
         DirtyCtx getDirtyVexCtx();
@@ -217,7 +220,7 @@ namespace TR {
 
         //cmpr::CmprsContext<StateBase, State_Tag> cmprContext(HWord target_addr, State_Tag tag) { return cmpr::CmprsContext<State, State_Tag>(m_ctx, target_addr, tag); }
         //最大化缩合状态 
-        void compress(cmpr::CmprsContext<StateBase, State_Tag>& ctx);
+        void compress(cmpr::CmprsContext<State, State_Tag>& ctx);
 
         inline EmuEnvironment& irvex() { return *m_irvex.get(); }
         inline std::shared_ptr<EmuEnvironment> get_irvex() { return m_irvex; }
@@ -257,7 +260,9 @@ namespace TR {
     public:
         void clean();//清空多余的指针对象（m_dctx）
         std::shared_ptr<TraceInterface>& get_trace() { return m_trace; }
-        void set_trace(std::shared_ptr<TraceInterface> trace) { m_trace = trace; }
+        void set_trace(std::shared_ptr<TraceInterface> trace) { 
+            m_trace = trace;
+        }
 
 
     public:

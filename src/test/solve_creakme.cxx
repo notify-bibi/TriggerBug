@@ -298,9 +298,20 @@ public:
 class BlockView {
     irsb_chunk m_ic;
     std::unordered_map<Addr, int> m_nexts;
+    std::vector<Addr> m_fork_ea;
 public:
-    BlockView(irsb_chunk& ic) :m_ic(ic) {}
-    BlockView(irsb_chunk& ic, Addr next) :m_ic(ic) { m_nexts[next] = 0; }
+    BlockView(irsb_chunk& ic) :m_ic(ic) {
+        auto bb = ic->get_irsb();
+        if (bb->next->tag == Iex_Const) {
+            auto con = bb->next->Iex.Const.con;
+            Addr next = con->Ico.U64;
+            if (con->tag == Ico_U32) {
+                next &= 0xffffffff;
+            }
+            add_next(next);
+        }
+    }
+    BlockView(irsb_chunk& ic, Addr next) :BlockView(ic) { m_nexts[next] = 0; }
     irsb_chunk get_irsb_chunk() { return m_ic; }
     void add_next(Addr next) {
         m_nexts[next] = 0;
@@ -323,12 +334,9 @@ public:
         pp.ppIRExpr(bb->next);
         pp.vex_printf("; exit-");
         pp.ppIRJumpKind(bb->jumpkind);
-        if (bb->next->tag == Iex_Const) {
-            auto con = bb->next->Iex.Const.con;
-            Addr next = con->Ico.U64;
-            if (con->tag == Ico_U32) {
-                next &= 0xffffffff;
-            }
+        if (m_nexts.size() == 1) {
+            //vassert(bb->next->tag == Iex_Const);
+            Addr next = m_nexts.begin()->first;
             pp.vex_printf("\n\tjmp sub_0x%llx \n", next);
         }
         else {
@@ -343,6 +351,17 @@ public:
             pp.vex_printf(")");
             pp.vex_printf("}\n");
         }
+    }
+
+    void makr_fork_ea(Addr ea){
+        auto bb_ea = m_ic->get_bb_base();
+        auto bb_sz = m_ic->get_bb_size();
+        vassert(bb_ea <= ea && bb_ea + bb_sz >= ea);
+        m_fork_ea.emplace_back(ea);
+    }
+
+    bool check_fork_ea(Addr ea) {
+        return std::find(m_fork_ea.begin(), m_fork_ea.end(), ea) != m_fork_ea.end();
     }
 };
 class GraphView {
@@ -363,6 +382,7 @@ class GraphView {
     };
 
     std::unordered_map<BBKey, BlockView, BBKeyHash> m_blocks;
+    
 
 public:
     std::shared_ptr<spdlog::logger> log;
@@ -373,6 +393,9 @@ public:
     }
 
     ~GraphView() {
+        ppGraphView();
+    }
+    void ppGraphView() {
         auto it = m_blocks.begin();
         for (; it != m_blocks.end(); it++) {
             auto sub_ep = it->first.first;
@@ -383,10 +406,49 @@ public:
             basic_irsb_chunk.ppBlock(m_vctx, log);
         }
     }
-
     void add_block(irsb_chunk irsb_chunk, Addr next);
     void add_exit(irsb_chunk irsb_chunk, Addr code_ea, Addr next);
-    void explore_block(State& s);
+    void state_task(State& s);
+    void explore_block(State* s);
+
+    auto mk_irsb_chunk_key(irsb_chunk irsb_chunk) {
+        auto ea = irsb_chunk->get_bb_base();
+        auto checksum = irsb_chunk->get_checksum();
+        return BBKey(std::make_pair(ea, checksum));
+    }
+    void mark_is_fork_ea(irsb_chunk irsb_chunk, Addr code_ea) {
+        auto key = mk_irsb_chunk_key(irsb_chunk);
+        auto it = m_blocks.find(key);
+        if (it == m_blocks.end()) {
+            vassert(0);
+            m_blocks.emplace(key, BlockView(irsb_chunk));
+        }
+        else {
+            it->second.makr_fork_ea(code_ea);
+        }
+
+    }
+
+    bool check_is_fork_ea(irsb_chunk irsb_chunk, Addr code_ea) {
+        auto key = mk_irsb_chunk_key(irsb_chunk);
+        auto it = m_blocks.find(key);
+
+        if (it == m_blocks.end()) {
+            vassert(0);
+            m_blocks.emplace(key, BlockView(irsb_chunk));
+            return false;
+        }
+        else {
+            return it->second.check_fork_ea(code_ea);
+        }
+    }
+
+    bool is_block_exist(irsb_chunk irsb_chunk) {
+        auto key = mk_irsb_chunk_key(irsb_chunk);
+        auto it = m_blocks.find(key);
+        return it != m_blocks.end();
+    }
+
 };
 
 
@@ -405,7 +467,7 @@ public:
         virtual void traceIrsbEnd(State& s, irsb_chunk&);
     virtual void traceFinish(State& s, HWord ea);
 
-    virtual TraceInterface* mk_new_TraceInterface() override { return new explorer(m_gv); }
+    virtual  std::shared_ptr<TraceInterface> mk_new_TraceInterface() override { return std::make_shared<explorer>(m_gv); }
     virtual ~explorer() {}
 };
 
@@ -440,8 +502,16 @@ void explorer::traceIRStmtStart(State& s, irsb_chunk& bb, UInt stmtn)
         Addr64 exitptr = st->Ist.Exit.dst->Ico.U64;
         if (st->Ist.Exit.dst->tag == Ico_U32) exitptr &= 0xffffffff;
         m_gv.add_exit(bb, s.get_cpu_ip(), exitptr);
+        rsbool guard = s.tIRExpr(st->Ist.Exit.guard).tobool();
+        if LIKELY(guard.real()) {
+            if LIKELY(guard.tor()) {
+            }
+        }
+        else {
+            m_gv.mark_is_fork_ea(bb, s.get_cpu_ip());
+        }
     }
-    //    rsbool guard = s.tIRExpr(st->Ist.Exit.guard).tobool();
+    //    
     //    Addr64 exitptr = st->Ist.Exit.dst->Ico.U64;
     //    if (st->Ist.Exit.dst->tag == Ico_U32) exitptr &= 0xffffffff;
 
@@ -615,34 +685,60 @@ void GraphView::add_exit(irsb_chunk irsb_chunk, Addr code_ea, Addr next)
     }
 }
 
-void GraphView::explore_block(State& s)
-{
-    s.set_trace(std::make_shared<explorer>(*this));
-    auto bts = s.start();
+void GraphView::state_task(State& s) {
+
+    //s.get_trace()->setFlags(CF_traceJmp);
+    //s.get_trace()->setFlags(CF_ppStmts);
+    //s.vctx().hook_add(0x551AF328, nullptr, CF_ppStmts);
+    Vex_Kind vkd;
     vex_context& vctx = s.vctx();
+    std::deque<TR::State::BtsRefType> tmp_branch = s.start();
+
+}
+
+void GraphView::explore_block(State* s)
+{
+    s->set_trace(std::make_shared<explorer>(*this));
+    auto bts = s->start();
+
+
+    vex_context& vctx = s->vctx();
     //vctx.param().set()
-    if (s.status() == Fork) {
+    Addr fork_ea = s->get_cpu_ip();
+    //auto fork_bb = s.get_last_bb();
+
+
+
+    if (s->status() == Fork) {
         for (auto one_s : bts) {
             Addr64 oep = one_s->get_oep();
+
             State* child = one_s->child();
+            //child->set_trace(std::make_shared<explorer>(*this));
+            child->set_irvex(std::make_shared< EmuEnvGuest>(child->vctx(), child->vinfo(), child->mem));
+            auto fork_bb = child->irvex().translate_front(oep);
+            if (is_block_exist(fork_bb)) {
+                spdlog::info("fork_ea:{:x} is fork. ep: {:x}", fork_ea, 0);
+                child->set_irvex(nullptr);
+                
+            }
+            else {
+                vctx.pool().enqueue([this, child] {
+                    explore_block(child);
+                    });
+            }
 
-            //child->set_trace(std::make_shared<explorer>(this));
 
-            //vctx.pool().enqueue([child, oep, &gv] {
-
-            //    gk(*child, oep, this);
-
-            //    });
         }
     }
-    vctx.pool().wait();
 }
 
 
 void vmp_reback(State& s) {
     GraphView gv(s.vctx());
-    gv.explore_block(s);
-   
+    gv.explore_block(&s);
+    s.vctx().pool().wait();
+    spdlog::info("state:{}", (std::string)s);
 };
 
 

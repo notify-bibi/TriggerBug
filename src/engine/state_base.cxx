@@ -180,9 +180,8 @@ void StateBase::read_mem_dump(const char* filename)
 TR::StateBase::~StateBase()
 {
     logger->flush();
-    vctx().pool().wait();
     for (auto bs : branch) {
-        std::cout << *bs << std::endl;
+        spdlog::info("delete state: {:p} ea:{:x}-{:x}", (void*)bs, bs->get_state_ep(), bs->get_cpu_ip());
         delete bs;
     }
 }
