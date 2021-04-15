@@ -16,7 +16,7 @@ project (TriggerBug
 
 		
 set(Z3_PROJ_DIR "z3-z3-4.8.10")
-set(VALGRIND_PROJ_DIR "valgrind-3.16.1")
+set(VALGRIND_PROJ_DIR "valgrind-3.17.0")
 set(SPDLOG_PROJ_DIR "spdlog-1.8.2")
 
 
@@ -55,7 +55,7 @@ IF (WIN32)
 	SET(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE}   /utf-8 /Ob2 /Gr /Ot /Oi /O3 /GS- ")
 	SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /utf-8 /Ob2 /Gr /Ot /Oi /O3 /GS- ")
 	add_definitions(/arch:AVX2)
-	add_compile_options(-ftrack-macro-expansion=0 -fno-diagnostics-show-caret)
+	# add_compile_options(-ftrack-macro-expansion=0 -fno-diagnostics-show-caret)
 else()
 	SET(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE}   -O3 -openmp -Qopenmp -Wall")
 	SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -openmp -Qopenmp -Wall")
@@ -77,6 +77,7 @@ add_compile_options(
 					-Wno-microsoft-template
 					-Wno-format
 					-Wno-switch
+					-Wno-unused-variable
 					)
 
 set(TR_COMPONENT_CXX_FLAGS "")			
@@ -145,24 +146,19 @@ set(CMAKE_SOURCE_DIR_tmp ${CMAKE_SOURCE_DIR})
 # ----------add lib z3----------
 set(CMAKE_BINARY_DIR "${CMAKE_BINARY_DIR}/${Z3_PROJ_DIR}")
 set(CMAKE_SOURCE_DIR "${CMAKE_SOURCE_DIR}/${Z3_PROJ_DIR}")
-
 TR_lib_add(libz3 ${Z3_PROJ_DIR} BUILD_Z3 PATH ${CMAKE_INSTALL_LIBDIR})
 #IF (TARGET libz3)
 #    set_target_properties(libz3 PROPERTIES COMPILE_FLAGS "/openmp" )#yes
 #    set_target_properties(libz3 PROPERTIES COMPILE_FLAGS "/Qopenmp" )#yes
 #ENDIF()
-
-
 # ----------! lib z3 ----------
 
 # ---------- add lib spdlog ----------
-
 set(CMAKE_BINARY_DIR "${CMAKE_BINARY_DIR}/${SPDLOG_PROJ_DIR}")
 set(CMAKE_SOURCE_DIR "${CMAKE_SOURCE_DIR}/${SPDLOG_PROJ_DIR}")
-
 TR_lib_add(spdlog ${SPDLOG_PROJ_DIR} BUILD_SPDLOG PATH ${CMAKE_INSTALL_LIBDIR})
-
 # ----------! lib spdlog ----------
+
 
 set(CMAKE_BINARY_DIR ${CMAKE_BINARY_DIR_tmp})
 set(CMAKE_SOURCE_DIR ${CMAKE_SOURCE_DIR_tmp})

@@ -1264,7 +1264,7 @@ namespace sv{
             return ext<_ts, _tn - _Tn>() op b;                                                                                        \
         }                                                                                                                                  \
         template<class _Ty, TASSERT(std::is_integral<_Ty>::value), z3sk __Tk = _Tk, TASSERT(__Tk == Z3_BV_SORT)>                           \
-        inline auto operator op(_Ty v) {                                                                                                   \
+        inline auto operator op(_Ty v) const noexcept {                                                                                                   \
             return *this op symbolic<is_my_signed<_Ty>::value, sizeof(_Ty)<<3, Z3_BV_SORT>((Z3_context)m_ctx, v);                          \
         };
 
@@ -2182,12 +2182,12 @@ namespace sv{
 
         //----------------------symbolic-----------------------------
 
-        inline tval(Z3_context ctx, Z3_ast s, z3sk sk, int bits) noexcept : symbol(ctx, s) {
+        inline tval(Z3_context ctx, Z3_ast s, z3sk sk, int bits) : symbol(ctx, s) {
             dassert(bits >= 0);
             m_bits = bits; m_data_inuse = false; m_sk = sk;
         }
 
-        inline tval(Z3_context ctx, Z3_ast s, z3sk sk, int bits, no_inc) noexcept : symbol(ctx, s, no_inc{}) {
+        inline tval(Z3_context ctx, Z3_ast s, z3sk sk, int bits, no_inc) : symbol(ctx, s, no_inc{}) {
             dassert(bits >= 0);
             m_bits = bits; m_data_inuse = false; m_sk = sk;
         }

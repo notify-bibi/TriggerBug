@@ -289,6 +289,7 @@ namespace TR {
 
         virtual void write(PAGE* unit, PAGE*next,  HWord ea, UInt size) { }
         virtual void read(PAGE* unit, PAGE* next, HWord ea, UInt size) { }
+        virtual ~mem_trace() {}
     };
 
     //memory base
@@ -574,7 +575,7 @@ namespace TR {
             inline sv::tval Iex_Load(const z3::expr& address, IRType ty) { if (address.get_sort().bv_size() == 32) { return Iex_Load(subval<32>(address), ty); } else { return Iex_Load(subval<64>(address), ty); }; }
                 inline sv::tval Iex_Load(Z3_ast address, IRType ty) { return Iex_Load(z3::expr(m_ctx, address), ty); }
                 sv::tval Iex_Load(const sv::tval& address, IRType ty);
-        sv::tval Iex_Load(const sv::tval& address, int nbytes);
+        sv::tval Iex_Load(const sv::tval& address, int nbits);
         template<int ea_nbits>
         inline sv::tval Iex_Load(const sv::rsval<false, ea_nbits>& address, IRType ty){
             if (address.real()) {

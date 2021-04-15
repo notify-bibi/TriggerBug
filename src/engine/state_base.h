@@ -200,10 +200,40 @@ namespace TR {
     };
 
 
+    class VMemBase {
+    public:
+        virtual void Ist_Store(sv::tval const& address, sv::tval const& data) {};
+        virtual sv::tval Iex_Load(const sv::tval& address, int nbits) { };
+        virtual sv::tval Iex_Load(const sv::tval& address, IRType ty) { };
+
+        virtual void Ist_Put(UInt offset, sv::tval const& ir) { }
+        virtual sv::tval Iex_Get(UInt offset, IRType ty) { }
+        virtual ~VMemBase(){}
+    };
+
+
+
+
     class State;
 
     __declspec(align(16))
     class StateBase {
+        template<int ea_nbits>
+        class StateData : public VMemBase {
+            friend class StateBase;
+            friend class State;
+            Mem& m_mem;
+            VRegs& m_regs;
+        public:
+            StateData(Mem& mem, VRegs& regs): m_mem(mem), m_regs(regs){};
+            void Ist_Store(sv::tval const& address, sv::tval const& data) override { m_mem.Ist_Store(address.tors<false, ea_nbits>(), data); };
+            sv::tval Iex_Load(const sv::tval& address, int nbits) override { return m_mem.Iex_Load(address.tors<false, ea_nbits>(), nbits); };
+            sv::tval Iex_Load(const sv::tval& address, IRType ty) override { return m_mem.Iex_Load(address.tors<false, ea_nbits>(), ty); };
+
+            void Ist_Put(UInt offset, sv::tval const& ir) override { m_regs.Ist_Put(offset, ir); }
+            sv::tval Iex_Get(UInt offset, IRType ty) override { return m_regs.Iex_Get(offset, ty); }
+            virtual ~StateData() {}
+        };
         friend class State;
         static_assert(offsetof(VRegs, regs_bytes) == offsetof(Register, m_bytes), "error align");
         std::atomic_uint32_t m_fork_deep_num;
@@ -241,6 +271,7 @@ namespace TR {
         //UChar    regs_bytes[REGISTER_LEN];
 
         //客户机内存 （多线程设置相同user，不同state设置不同user）
+        std::shared_ptr<VMemBase> mem_access;
         Mem      mem;
         BranchManager<StateBase> branch;
 
@@ -274,6 +305,18 @@ namespace TR {
         inline vex_info& vinfo() { return m_vinfo; }
         inline TRsolver& solver() { return solv; }
         std::string get_log_path();
+
+
+
+        inline void vIst_Store(sv::tval const& address, sv::tval const& data) { mem_access->Ist_Store(address, data); };
+        inline sv::tval vIex_Load(const sv::tval& address, IRType ty) { mem_access->Iex_Load(address, ty); };
+        inline sv::tval vIex_Load(const sv::tval& address, int nbits) { mem_access->Iex_Load(address, nbits); };
+
+        inline void vIst_Put(UInt offset, sv::tval const& ir) { mem_access->Ist_Put(offset, ir); }
+        inline sv::tval vIex_Get(UInt offset, IRType ty) { mem_access->Iex_Get(offset, ty); }
+
+        void set_mem_access(std::shared_ptr<VMemBase> m) { mem_access = m; };
+
     public:
     // interface 
         virtual StateBase* ForkState(HWord ges) { VPANIC("need to implement the method"); return nullptr; }

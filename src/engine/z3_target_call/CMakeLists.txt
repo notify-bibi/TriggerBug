@@ -1,4 +1,6 @@
-﻿TR_add_library(TARGET vexTargetCall 
+﻿
+add_compile_options(-Wno-unused-variable)
+TR_add_library(TARGET vexTargetCall 
                CONFIGURE_TYPE STATIC
                SOURCES 
                     "z3_target_call.cxx"

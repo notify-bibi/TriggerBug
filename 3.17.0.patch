@@ -1,0 +1,1973 @@
+Binary files /Users/notify/Downloads/valgrind-3.17.0/VEX/.DS_Store and ./valgrind-3.17.0/VEX/.DS_Store differ
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/CMakeLists.txt ./valgrind-3.17.0/VEX/CMakeLists.txt
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/CMakeLists.txt	1970-01-01 08:00:00.000000000 +0800
++++ ./valgrind-3.17.0/VEX/CMakeLists.txt	2021-01-29 13:42:23.000000000 +0800
+@@ -0,0 +1,19 @@
++project(libvalgrind CXX C)
++
++
++ADD_DEFINITIONS(-DVGA_x86     )
++ADD_DEFINITIONS(-DVGA_amd64   )
++ADD_DEFINITIONS(-DVGA_ppc32   )
++ADD_DEFINITIONS(-DVGA_ppc64be )
++ADD_DEFINITIONS(-DVGA_ppc64le )
++#ADD_DEFINITIONS(-DVGA_s390x   )
++ADD_DEFINITIONS(-DVGA_arm     )
++ADD_DEFINITIONS(-DVGA_arm64   )
++ADD_DEFINITIONS(-DVGA_mips32  )
++ADD_DEFINITIONS(-DVGA_mips64  )
++ADD_DEFINITIONS(-DVGA_nanomips)
++ADD_DEFINITIONS(-DVEXMULTIARCH)
++
++TR_add_library(TARGET libvalgrind CONFIGURE_TYPE SHARED SOURCESDIR priv)
++
++
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/gen_global_var_call.cxx ./valgrind-3.17.0/VEX/priv/gen_global_var_call.cxx
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/gen_global_var_call.cxx	1970-01-01 08:00:00.000000000 +0800
++++ ./valgrind-3.17.0/VEX/priv/gen_global_var_call.cxx	2021-02-23 17:03:37.000000000 +0800
+@@ -0,0 +1,241 @@
++/*clang-cl.exe -E MKG.c 1>> xx.txt*/
++extern "C" {
++    #include "libvex.h"
++    #include "main_util.h"
++    #include "main_globals.h"
++
++
++    /* debug paranoia level */
++    Int* get_vex_debuglevel() { return &vex_debuglevel; };
++
++    /* trace flags */
++    Int* get_vex_traceflags() { return &vex_traceflags; };
++
++    /* Max # guest insns per bb */
++    VexControl* get_vex_control() { return &vex_control; };
++
++}
++#include <deque>
++extern std::deque<void*> LibVEX_Alloc_transfer(void);
++
++#define GEN_MKG 
++
++#define MKG_AMD64
++#define MKG_X86
++#define MKG_ARM
++#define MKG_ARM64
++#define MKG_MIPS
++#define MKG_NANOMIPS
++#define MKG_PPC
++
++#define MKG_VAR_CALL(NAME_SPACE, TYPE, VAR) TYPE (*NAME_SPACE##_##VAR##_var_call());    
++
++extern "C" {
++#include "config.h"
++}
++
++#undef MKG_VAR_CALL
++#define MKG_VAR_CALL(NAME_SPACE, TYPE, VAR)             \
++TYPE* NAME_SPACE##_##VAR##_var_call(){ static thread_local TYPE VAR; return &VAR; }                  \
++
++
++
++extern "C" {
++#include "config.h"
++#include <corecrt_malloc.h>
++}
++
++#undef MKG_VAR_CALL
++
++#include "gen_global_var_call.hpp"
++
++static_assert(sizeof(IRExpr) == 32, "gggg");
++//static constexpr int sizeofARMInstr = sizeof(ARMInstr);
++//static_assert(sizeofARMInstr <= 28, "gggg");
++
++
++
++typedef struct {
++    void* instance;
++    const UChar* (*guest_insn_control_method)(void* instance, Addr guest_IP_sbstart, Long delta, const UChar* /*in guest_code*/ guest_code);
++}guest_insn_control_type;
++
++
++static thread_local guest_insn_control_type guest_insn_control = { nullptr, nullptr };
++
++void bb_insn_control_obj_set(void* instance, const UChar* (*guest_insn_control_method)(void*, Addr, Long, const UChar*)) {
++    guest_insn_control = { instance,  guest_insn_control_method };
++}
++
++const UChar* /*out guest_code*/ guest_generic_bb_insn_control(Addr guest_IP_sbstart, Long delta, const UChar* /*in guest_code*/ guest_code) {
++    guest_insn_control_type* local_guest_insn_control = &guest_insn_control;
++    const UChar* new_guest_code = local_guest_insn_control->guest_insn_control_method(local_guest_insn_control->instance, guest_IP_sbstart, delta, guest_code);
++    return new_guest_code;
++}
++
++
++
++// valgrind mem Alloc
++
++class __attribute__((aligned(16)))  LibVEX_Alloc_M {
++   static const int one_chunk_size = 0x400;
++   int m_curr_chunk_size = one_chunk_size;
++
++    HChar*  temporary ;
++    HChar* private_LibVEX_alloc_first;
++    HChar* private_LibVEX_alloc_curr;
++    HChar* private_LibVEX_alloc_last;
++    std::deque<void*> m_alloc_list;
++    VexAllocMode mode;
++public:
++    inline LibVEX_Alloc_M() :temporary(nullptr), private_LibVEX_alloc_first(nullptr), private_LibVEX_alloc_curr(nullptr), private_LibVEX_alloc_last(nullptr){
++        this->m_alloc_list.clear();
++        this->private_LibVEX_alloc_OOM();
++    }
++
++    inline void* LibVEX_Alloc_inline(SizeT nbytes) {
++
++        struct align {
++            char c;
++            union {
++                char c;
++                short s;
++                int i;
++                long l;
++                long long ll;
++                float f;
++                double d;
++                /* long double is currently not used and would increase alignment
++                   unnecessarily. */
++                   /* long double ld; */
++                void* pto;
++                void (*ptf)(void);
++            } x;
++        };
++
++        /* Make sure the compiler does no surprise us */
++        vassert(offsetof(struct align, x) <= REQ_ALIGN);
++
++        if (mode == VexAllocModePERM) {
++            HChar* perm = (HChar*)malloc(nbytes);
++            memset(perm, 0x23, nbytes);
++            /* Nasty debugging hack, do not use. */
++            return perm;
++        }
++#if 0
++        if (0x800 == nbytes) {
++            printf("??");
++        }
++        temporary = (HChar*)malloc(nbytes);
++        m_alloc_list.push_back(temporary);
++        memset(temporary, 0x23, nbytes);
++        /* Nasty debugging hack, do not use. */
++        return temporary;
++#else
++
++        HChar* curr;
++        HChar* next;
++        SizeT  ALIGN;
++        ALIGN = offsetof(struct align, x) - 1;
++        curr = private_LibVEX_alloc_curr;
++        next = curr + ((nbytes + ALIGN) & ~ALIGN);
++        INNER_REQUEST(next += 2 * VEX_REDZONE_SIZEB);
++        if (UNLIKELY(next >= private_LibVEX_alloc_last)) {
++            private_LibVEX_alloc_OOM();
++            return LibVEX_Alloc_inline(nbytes);
++        }
++        private_LibVEX_alloc_curr = next;
++        INNER_REQUEST(curr += VEX_REDZONE_SIZEB);
++        INNER_REQUEST(VALGRIND_MEMPOOL_ALLOC(private_LibVEX_alloc_first,
++            curr, nbytes));
++        vassert(curr + nbytes < private_LibVEX_alloc_last);
++        //memset(curr, 0x24, nbytes);
++        return curr;
++#endif
++    
++    }
++
++
++
++    inline void vexSetAllocMode(VexAllocMode mode) {
++        this->mode = mode;
++    }
++
++    inline VexAllocMode vexGetAllocMode(void) {
++        return this->mode;
++    }
++
++
++    inline void  vexAllocSanityCheck(void) {
++
++    }
++
++
++    inline void  vexSetAllocModeTEMP_and_clear(void) {
++    }
++
++
++    void  private_LibVEX_alloc_OOM(void)  {
++        if (UNLIKELY(temporary && private_LibVEX_alloc_curr == private_LibVEX_alloc_first)) {
++            free(m_alloc_list.back());
++            m_alloc_list.pop_back();
++            m_curr_chunk_size += one_chunk_size;
++        }
++        temporary = (HChar*)malloc(m_curr_chunk_size);
++        //memset(temporary, 0x11, m_curr_chunk_size);
++        private_LibVEX_alloc_first = temporary;
++        private_LibVEX_alloc_curr = temporary;
++        private_LibVEX_alloc_last = &temporary[m_curr_chunk_size];
++        m_alloc_list.push_back(temporary);
++    }
++    
++    std::deque<void*> transfer() {
++        //life_cycle_transfer = true;
++        std::deque<void*> res = m_alloc_list;
++        m_alloc_list.clear();
++        this->~LibVEX_Alloc_M();
++        new (this) LibVEX_Alloc_M;
++        return res;
++    }
++    
++    inline ~LibVEX_Alloc_M() {
++        /*if (life_cycle_transfer) { 
++            vassert(m_alloc_list.empty());
++            return;
++        }*/
++        for (auto alloc_tmp : m_alloc_list) {
++            free(alloc_tmp);
++        }
++    }
++};
++
++
++
++static thread_local LibVEX_Alloc_M gLibVEX_Alloc_M;
++
++
++
++void* LibVEX_Alloc_inline(SizeT nbytes)
++{
++    return gLibVEX_Alloc_M.LibVEX_Alloc_inline(nbytes);
++}
++
++void         vexSetAllocMode(VexAllocMode mode) {
++    gLibVEX_Alloc_M.vexSetAllocMode(mode);
++}
++
++VexAllocMode vexGetAllocMode(void) {
++    return gLibVEX_Alloc_M.vexGetAllocMode();
++}
++
++void         vexAllocSanityCheck(void) {
++    gLibVEX_Alloc_M.vexAllocSanityCheck();
++}
++
++void vexSetAllocModeTEMP_and_clear(void) {
++    gLibVEX_Alloc_M.vexSetAllocModeTEMP_and_clear();
++}
++
++std::deque<void*> LibVEX_IRSB_transfer(void) {
++    return gLibVEX_Alloc_M.transfer();
++}
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/guest_amd64_toIR.c ./valgrind-3.17.0/VEX/priv/guest_amd64_toIR.c
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/guest_amd64_toIR.c	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/priv/guest_amd64_toIR.c	2021-04-08 03:02:02.000000000 +0800
+@@ -1,4 +1,4 @@
+-
++#define MKG_AMD64
+ /*--------------------------------------------------------------------*/
+ /*--- begin                                     guest_amd64_toIR.c ---*/
+ /*--------------------------------------------------------------------*/
+@@ -183,21 +183,21 @@
+    that we don't have to pass them around endlessly. */
+ 
+ /* We need to know this to do sub-register accesses correctly. */
+-static VexEndness host_endness;
++//static VexEndness host_endness;
+ 
+ /* Pointer to the guest code area (points to start of BB, not to the
+    insn being processed). */
+-static const UChar* guest_code;
++//static const UChar* guest_code;
+ 
+ /* The guest address corresponding to guest_code[0]. */
+-static Addr64 guest_RIP_bbstart;
++//static Addr64 guest_RIP_bbstart;
+ 
+ /* The guest address for the instruction currently being
+    translated. */
+-static Addr64 guest_RIP_curr_instr;
++//static Addr64 guest_RIP_curr_instr;
+ 
+ /* The IRSB* into which we're generating code. */
+-static IRSB* irsb;
++//static IRSB* irsb;
+ 
+ /* For ensuring that %rip-relative addressing is done right.  A read
+    of %rip generates the address of the next instruction.  It may be
+@@ -211,9 +211,17 @@
+    After the decode, if _mustcheck is now True, _assumed is
+    checked. */
+ 
+-static Addr64 guest_RIP_next_assumed;
+-static Bool   guest_RIP_next_mustcheck;
++//static Addr64 guest_RIP_next_assumed;
++//static Bool   guest_RIP_next_mustcheck;
+ 
++#define host_endness (*amd64_host_endness_var_call())
++#define guest_code (*amd64_guest_code_var_call())
++#define guest_RIP_bbstart (*amd64_guest_RIP_bbstart_var_call())
++#define guest_RIP_curr_instr (*amd64_guest_RIP_curr_instr_var_call())
++#define irsb (*amd64_irsb_var_call())
++#define guest_RIP_next_assumed (*amd64_guest_RIP_next_assumed_var_call())
++#define guest_RIP_next_mustcheck (*amd64_guest_RIP_next_mustcheck_var_call())
++ 
+ 
+ /*------------------------------------------------------------*/
+ /*--- Helpers for constructing IR.                         ---*/
+@@ -908,6 +916,28 @@
+    }
+ }
+ 
++#define OFFB_CS        offsetof(VexGuestAMD64State,guest_CS)
++#define OFFB_DS        offsetof(VexGuestAMD64State,guest_DS)
++#define OFFB_ES        offsetof(VexGuestAMD64State,guest_ES)
++#define OFFB_FS        offsetof(VexGuestAMD64State,guest_FS)
++#define OFFB_GS        offsetof(VexGuestAMD64State,guest_GS)
++#define OFFB_SS        offsetof(VexGuestAMD64State,guest_SS)
++#define OFFB_LDT       offsetof(VexGuestAMD64State,guest_LDT)
++#define OFFB_GDT       offsetof(VexGuestAMD64State,guest_GDT)
++
++static Int segmentGuestRegOffset(UInt sreg)
++{
++    switch (sreg) {
++    case R_ES: return OFFB_ES;
++    case R_CS: return OFFB_CS;
++    case R_SS: return OFFB_SS;
++    case R_DS: return OFFB_DS;
++    case R_FS: return OFFB_FS;
++    case R_GS: return OFFB_GS;
++    default: vpanic("segmentGuestRegOffset(x86)");
++    }
++}
++
+ 
+ /* Produce the name of an integer register, for printing purposes.
+    reg is a number in the range 0 .. 15 that has been generated from a
+@@ -1335,7 +1365,6 @@
+ }
+ 
+ 
+-
+ /* Produce the guest state offset for a reference to the 'e' register
+    field in a modrm byte, taking into account REX (or its absence),
+    and the size of the access.  eregOfRexRM will assert if mod_reg_rm
+@@ -1383,6 +1412,20 @@
+ }
+ 
+ 
++static
++void putIRegG_S(Int sz, Prefix pfx, UChar mod_reg_rm, IRExpr* e)
++{
++    vassert(typeOfIRExpr(irsb->tyenv, e) == szToITy(sz));
++    UInt sreg = gregOfRexRM(pfx, mod_reg_rm);
++    stmt(IRStmt_Put(segmentGuestRegOffset(sreg), e));
++}
++
++
++static IRExpr* getIRegG_S(UInt sreg)
++{
++    return IRExpr_Get(segmentGuestRegOffset(sreg), Ity_I16);
++}
++
+ /*------------------------------------------------------------*/
+ /*--- For dealing with XMM registers                       ---*/
+ /*------------------------------------------------------------*/
+@@ -4539,6 +4582,21 @@
+             vassert(dres->whatNext == Dis_StopHere);
+             showSz = False;
+             break;
++         case 5:/* JMP fword ptr [Ev]*/
++             /* JMP Ev */
++            /* Ignore any sz value and operate as if sz==8. */
++             if (!(sz == 4 || sz == 8)) goto unhandledM;
++             if (haveF2(pfx)) DIP("bnd ; "); /* MPX bnd prefix. */
++             sz = 8;
++             t3 = newTemp(Ity_I64);
++             IRTemp t4 = newTemp(Ity_I16); // jmp next
++             assign(t3, unop(Iop_32Uto64, loadLE(Ity_I32, mkexpr(addr))));
++             assign(t4, loadLE(Ity_I16, binop(Iop_Add64, mkexpr(addr), mkU(Ity_I64, 4))));
++             stmt(IRStmt_Put(segmentGuestRegOffset(R_CS), mkexpr(t4)));
++             jmp_treg(dres, Ijk_Sys_int32, t3);
++             vassert(dres->whatNext == Dis_StopHere);
++             showSz = False;
++             break;
+          case 6: /* PUSH Ev */
+             /* There is no encoding for 32-bit operand size; hence ... */
+             if (sz == 4) sz = 8;
+@@ -8781,6 +8839,77 @@
+ //..    }
+ //.. }
+ 
++
++
++
++/* Move 16 bits from Ew (ireg or mem) to G (a segment register). */
++
++static
++UInt dis_mov_Ew_Sw (const VexAbiInfo* vbi, Prefix pfx, Int size, Long delta0 )
++{
++   Int    len;
++   IRTemp addr;
++   UChar  rm  = getUChar(delta0);
++   HChar  dis_buf[50];
++
++   if (epartIsReg(rm)) {
++      putIRegG_S(2, pfx, rm, unop(Iop_32to16, getIReg32(eregOfRexRM(pfx, rm))));
++      DIP("movw %s,%s\n", nameIReg16(eregOfRexRM(pfx, rm)), nameSReg(gregOfRexRM(pfx, rm)));
++      return 1+delta0;
++   } else {
++      addr = disAMode ( &len, vbi, pfx, delta0, dis_buf, 0);
++      putIRegG_S(2, gregOfRexRM(pfx, rm), rm, loadLE(Ity_I16, mkexpr(addr)));
++      DIP("movw %s,%s\n", dis_buf, nameSReg(gregOfRexRM(pfx, rm)));
++      return len+delta0;
++   }
++}
++
++/* Move 16 bits from G (a segment register) to Ew (ireg or mem).  If
++   dst is ireg and sz==4, zero out top half of it.  */
++
++static
++UInt dis_mov_Sw_Ew (const VexAbiInfo* vbi, Prefix pfx,
++                     Int   size,
++                     UInt  delta0 )
++{
++   Int    len;
++   IRTemp addr;
++   UChar  rm  = getUChar(delta0);
++   HChar  dis_buf[50];
++
++   vassert(size == 2 || size == 4);
++
++   if (epartIsReg(rm)) {
++       if (size == 4)
++        putIRegE(4, pfx, rm, unop(Iop_16Uto32, getIRegG_S(gregOfRexRM(pfx, rm))));
++       else
++        putIRegE(2, pfx, rm,getIRegG_S(gregOfRexRM(pfx, rm)));
++       DIP("mov %s,%s\n", nameSReg(gregOfRexRM(pfx, rm)),
++           nameIRegE(size, pfx, rm));
++      //if (sz == 4)
++         //putIReg(4, eregOfRM(rm), unop(Iop_16Uto32, getSReg(gregOfRM(rm))));
++      //else
++         //putIReg(2, eregOfRM(rm), getSReg(gregOfRM(rm)));
++
++      return 1+delta0;
++   } else { // memory
++      addr = disAMode ( &len, vbi, pfx, delta0, dis_buf, 0);
++      storeLE(mkexpr(addr), getIRegG_S(gregOfRexRM(pfx, rm)) );
++      DIP("mov %s,%s\n", nameSReg(gregOfRexRM(pfx, rm)), dis_buf);
++      return len+delta0;
++   }
++}
++
++
++
++
++
++
++
++
++
++
++
+ /* Handle move instructions of the form
+       mov S, E  meaning
+       mov sreg, reg-or-mem
+@@ -20389,7 +20518,8 @@
+ 
+    case 0x8C: /* MOV S,E -- MOV from a SEGMENT REGISTER */
+       if (haveF2orF3(pfx)) goto decode_failure;
+-      delta = dis_mov_S_E(vbi, pfx, sz, delta);
++      //delta = dis_mov_S_E(vbi, pfx, sz, delta);
++      delta = dis_mov_Sw_Ew(vbi, pfx, sz, delta);
+       return delta;
+ 
+    case 0x8D: /* LEA M,Gv */
+@@ -20416,6 +20546,12 @@
+                             nameIRegG(sz,pfx,modrm));
+       return delta;
+ 
++   case 0x8e: { /* MOV E,S -- MOV to a SEGMENT REGISTER */
++       if (haveF2orF3(pfx)) goto decode_failure;
++       delta = dis_mov_Ew_Sw(vbi, pfx, sz, delta);
++       return delta;
++   }
++
+    case 0x8F: { /* POPQ m64 / POPW m16 */
+       Int   len;
+       UChar rm;
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/guest_arm64_toIR.c ./valgrind-3.17.0/VEX/priv/guest_arm64_toIR.c
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/guest_arm64_toIR.c	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/priv/guest_arm64_toIR.c	2021-04-08 00:40:18.000000000 +0800
+@@ -1,3 +1,5 @@
++#define MKG_ARM64
++
+ /* -*- mode: C; c-basic-offset: 3; -*- */
+ 
+ /*--------------------------------------------------------------------*/
+@@ -101,14 +103,18 @@
+ /* CONST: what is the host's endianness?  We need to know this in
+    order to do sub-register accesses to the SIMD/FP registers
+    correctly. */
+-static VexEndness host_endness;
++//static VexEndness host_endness;
+ 
+ /* CONST: The guest address for the instruction currently being
+    translated.  */
+-static Addr64 guest_PC_curr_instr;
++//static Addr64 guest_PC_curr_instr;
+ 
+ /* MOD: The IRSB* into which we're generating code. */
+-static IRSB* irsb;
++//static IRSB* irsb;
++
++#define  host_endness (*arm64_host_endness_var_call())
++#define  guest_PC_curr_instr (*arm64_guest_PC_curr_instr_var_call())
++#define  irsb (*arm64_irsb_var_call())
+ 
+ 
+ /*------------------------------------------------------------*/
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/guest_arm_toIR.c ./valgrind-3.17.0/VEX/priv/guest_arm_toIR.c
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/guest_arm_toIR.c	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/priv/guest_arm_toIR.c	2021-04-08 00:41:32.000000000 +0800
+@@ -1,3 +1,4 @@
++#define MKG_ARM
+ 
+ /*--------------------------------------------------------------------*/
+ /*--- begin                                       guest_arm_toIR.c ---*/
+@@ -124,19 +125,19 @@
+ /* CONST: what is the host's endianness?  This has to do with float vs
+    double register accesses on VFP, but it's complex and not properly
+    thought out. */
+-static VexEndness host_endness;
++//static VexEndness host_endness;
+ 
+ /* CONST: The guest address for the instruction currently being
+    translated.  This is the real, "decoded" address (not subject
+    to the CPSR.T kludge). */
+-static Addr32 guest_R15_curr_instr_notENC;
++//static Addr32 guest_R15_curr_instr_notENC;
+ 
+ /* CONST, FOR ASSERTIONS ONLY.  Indicates whether currently processed
+    insn is Thumb (True) or ARM (False). */
+-static Bool __curr_is_Thumb;
++//static Bool __curr_is_Thumb;
+ 
+ /* MOD: The IRSB* into which we're generating code. */
+-static IRSB* irsb;
++//static IRSB* irsb;
+ 
+ /* These are to do with handling writes to r15.  They are initially
+    set at the start of disInstr_ARM_WRK to indicate no update,
+@@ -149,17 +150,25 @@
+ 
+ /* MOD.  Initially False; set to True iff abovementioned handling is
+    required. */
+-static Bool r15written;
++//static Bool r15written;
+ 
+ /* MOD.  Initially IRTemp_INVALID.  If the r15 branch to be generated
+    is conditional, this holds the gating IRTemp :: Ity_I32.  If the
+    branch to be generated is unconditional, this remains
+    IRTemp_INVALID. */
+-static IRTemp r15guard; /* :: Ity_I32, 0 or 1 */
++//static IRTemp r15guard; /* :: Ity_I32, 0 or 1 */
+ 
+ /* MOD.  Initially Ijk_Boring.  If an r15 branch is to be generated,
+    this holds the jump kind. */
+-static IRTemp r15kind;
++//static IRTemp r15kind;
++
++#define  host_endness (*arm_host_endness_var_call())
++#define  guest_R15_curr_instr_notENC (*arm_guest_R15_curr_instr_notENC_var_call())
++#define  __curr_is_Thumb (*arm___curr_is_Thumb_var_call())
++#define  irsb (*arm_irsb_var_call())
++#define  r15written (*arm_r15written_var_call())
++#define  r15guard (*arm_r15guard_var_call())
++#define  r15kind (*arm_r15kind_var_call())
+ 
+ 
+ /*------------------------------------------------------------*/
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/guest_generic_bb_to_IR.c ./valgrind-3.17.0/VEX/priv/guest_generic_bb_to_IR.c
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/guest_generic_bb_to_IR.c	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/priv/guest_generic_bb_to_IR.c	2021-04-08 00:43:09.000000000 +0800
+@@ -903,6 +903,7 @@
+    *extent_len      = 0;
+ 
+    while (True) {
++       guest_code = guest_generic_bb_insn_control(guest_IP_sbstart, delta, guest_code);
+       vassert(*n_instrs < n_instrs_allowed);
+ 
+       /* This is the IP of the instruction we're just about to deal
+@@ -1025,7 +1026,7 @@
+          each insn is at max 20 bytes long, this limit of 5000 then
+          seems reasonable since the max possible extent length will be
+          100 * 20 == 2000. */
+-      vassert(*extent_len < 5000);
++      //vassert(*extent_len < 5000);
+       (*extent_len) += dres.len;
+       (*n_instrs)++;
+ 
+@@ -1296,8 +1297,8 @@
+ 
+    /* check sanity .. */
+    vassert(sizeof(HWord) == sizeof(void*));
+-   vassert(vex_control.guest_max_insns >= 1);
+-   vassert(vex_control.guest_max_insns <= 100);
++   //vassert(vex_control.guest_max_insns >= 1);
++   //vassert(vex_control.guest_max_insns <= 100);
+    vassert(vex_control.guest_chase == False || vex_control.guest_chase == True);
+    vassert(guest_word_type == Ity_I32 || guest_word_type == Ity_I64);
+ 
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/guest_mips_toIR.c ./valgrind-3.17.0/VEX/priv/guest_mips_toIR.c
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/guest_mips_toIR.c	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/priv/guest_mips_toIR.c	2021-04-08 01:37:50.000000000 +0800
+@@ -1,3 +1,4 @@
++#define MKG_MIPS
+ 
+ /*--------------------------------------------------------------------*/
+ /*--- begin                                      guest_mips_toIR.c ---*/
+@@ -37,8 +38,10 @@
+ #include "main_globals.h"
+ #include "guest_generic_bb_to_IR.h"
+ #include "guest_mips_defs.h"
++#define  irsb (*mips_irsb_var_call())
+ #include "mips_defs.h"
+ 
++
+ /*------------------------------------------------------------*/
+ /*---                      Globals                         ---*/
+ /*------------------------------------------------------------*/
+@@ -50,39 +53,48 @@
+ /* CONST: what is the host's endianness?  This has to do with float vs
+    double register accesses on VFP, but it's complex and not properly
+    thought out. */
+-static VexEndness host_endness;
++//static VexEndness host_endness;
+ 
+ /* Pointer to the guest code area. */
+-const UChar *guest_code;
++//const UChar *guest_code;
+ 
+ /* CONST: The guest address for the instruction currently being
+    translated. */
+ #if defined(VGP_mips32_linux)
+-static Addr32 guest_PC_curr_instr;
++//static Addr32 guest_PC_curr_instr;
+ #else
+-static Addr64 guest_PC_curr_instr;
++//static Addr64 guest_PC_curr_instr;
+ #endif
+ 
+ /* MOD: The IRSB* into which we're generating code. */
+-IRSB *irsb;
++//IRSB *irsb;
+ 
+ /* Is our guest binary 32 or 64bit? Set at each call to
+    disInstr_MIPS below. */
+-Bool mode64 = False;
++//Bool mode64 = False;
+ 
+ /* CPU has FPU and 32 dbl. prec. FP registers. */
+- static Bool fp_mode64 = False;
++// static Bool fp_mode64 = False;
+ 
+ /* FPU works in FRE mode */
+-static Bool fp_mode64_fre = False;
++//static Bool fp_mode64_fre = False;
+ 
+ /* CPU has MSA unit */
+-static Bool has_msa = False;
++//static Bool has_msa = False;
+ 
+ /* Define 1.0 in single and double precision. */
+ #define ONE_SINGLE 0x3F800000
+ #define ONE_DOUBLE 0x3FF0000000000000ULL
+ 
++#define  host_endness (*mips_host_endness_var_call())
++#define  guest_code (*mips_guest_code_var_call())
++#define  guest_PC_curr_instr (*mips_guest_PC_curr_instr_var_call())
++#define  mode64 (*mips_mode64_var_call())
++#define  fp_mode64 (*mips_fp_mode64_var_call())
++#define  fp_mode64_fre (*mips_fp_mode64_fre_var_call())
++#define  has_msa (*mips_has_msa_var_call())
++
++
+ /*------------------------------------------------------------*/
+ /*--- Helper bits and pieces for deconstructing the        ---*/
+ /*--- mips insn stream.                                    ---*/
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/guest_mipsdsp_toIR.c ./valgrind-3.17.0/VEX/priv/guest_mipsdsp_toIR.c
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/guest_mipsdsp_toIR.c	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/priv/guest_mipsdsp_toIR.c	2021-04-08 00:50:30.000000000 +0800
+@@ -8,6 +8,10 @@
+ #include "main_globals.h"
+ #include "guest_generic_bb_to_IR.h"
+ #include "guest_mips_defs.h"
++MKG_VAR_CALL(mips, IRSB*, irsb)
++MKG_VAR_CALL(mips, Bool, mode64)
++#define  mode64 (*mips_mode64_var_call())
++#define  irsb (*mips_irsb_var_call())
+ #include "mips_defs.h"
+ 
+ 
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/guest_nanomips_toIR.c ./valgrind-3.17.0/VEX/priv/guest_nanomips_toIR.c
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/guest_nanomips_toIR.c	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/priv/guest_nanomips_toIR.c	2021-04-08 00:51:47.000000000 +0800
+@@ -1,4 +1,4 @@
+-
++#define MKG_NANOMIPS
+ /*--------------------------------------------------------------------*/
+ /*--- begin                                  guest_nanomips_toIR.c ---*/
+ /*--------------------------------------------------------------------*/
+@@ -39,6 +39,11 @@
+ #include "guest_generic_bb_to_IR.h"
+ #include "guest_nanomips_defs.h"
+ 
++#define  irsb (*nanomips_irsb_var_call())
++#define  guest_PC_curr_instr (*nanomips_guest_PC_curr_instr_var_call())
++
++
++
+ #define P16 0x4
+ 
+ #define DIP(format, args...)           \
+@@ -54,11 +59,11 @@
+ #define LLADDR_INVALID (mkU32(0xFFFFFFFF))
+ 
+ /* MOD: The IRSB* into which we're generating code. */
+-static IRSB *irsb;
++//static IRSB *irsb;
+ 
+ /* CONST: The guest address for the instruction currently being
+    translated. */
+-static Addr32 guest_PC_curr_instr;
++//static Addr32 guest_PC_curr_instr;
+ 
+ /* Do a endian load of a 16-bit word, regardless of the endianness of the
+    underlying host. */
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/guest_ppc_toIR.c ./valgrind-3.17.0/VEX/priv/guest_ppc_toIR.c
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/guest_ppc_toIR.c	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/priv/guest_ppc_toIR.c	2021-04-08 01:38:17.000000000 +0800
+@@ -1,4 +1,4 @@
+-
++#define MKG_PPC
+ /*--------------------------------------------------------------------*/
+ /*--- begin                                       guest_ppc_toIR.c ---*/
+ /*--------------------------------------------------------------------*/
+@@ -228,24 +228,35 @@
+    given insn. */
+ 
+ /* We need to know this to do sub-register accesses correctly. */
+-static VexEndness host_endness;
++//static VexEndness host_endness;
+ 
+ /* Pointer to the guest code area. */
+-static const UChar* guest_code;
++//static const UChar* guest_code;
+ 
+ /* The guest address corresponding to guest_code[0]. */
+-static Addr64 guest_CIA_bbstart;
++//static Addr64 guest_CIA_bbstart;
+ 
+ /* The guest address for the instruction currently being
+    translated. */
+-static Addr64 guest_CIA_curr_instr;
++//static Addr64 guest_CIA_curr_instr;
+ 
+ /* The IRSB* into which we're generating code. */
+-static IRSB* irsb;
++//static IRSB* irsb;
+ 
+ /* Is our guest binary 32 or 64bit?  Set at each call to
+    disInstr_PPC below. */
+-static Bool mode64 = False;
++//static Bool mode64 = False;
++
++
++
++
++#define  host_endness (*ppc_host_endness_var_call())
++#define  guest_code (*ppc_guest_code_var_call())
++#define  guest_CIA_bbstart (*ppc_guest_CIA_bbstart_var_call())
++#define  guest_CIA_curr_instr (*ppc_guest_CIA_curr_instr_var_call())
++#define  irsb (*ppc_irsb_var_call())
++#define  mode64 (*ppc_mode64_var_call())
++#define  OV32_CA32_supported (*ppc_OV32_CA32_supported_var_call())
+ 
+ // Given a pointer to a function as obtained by "& functionname" in C,
+ // produce a pointer to the actual entry point for the function.  For
+@@ -267,7 +278,7 @@
+ }
+ 
+ /* The OV32 and CA32 bits were added with ISA3.0 */
+-static Bool OV32_CA32_supported = False;
++//static Bool OV32_CA32_supported = False;
+ 
+ #define SIGN_BIT  0x8000000000000000ULL
+ #define SIGN_MASK 0x7fffffffffffffffULL
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/guest_x86_defs.h ./valgrind-3.17.0/VEX/priv/guest_x86_defs.h
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/guest_x86_defs.h	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/priv/guest_x86_defs.h	2021-04-08 00:56:54.000000000 +0800
+@@ -108,7 +108,7 @@
+ 
+ extern UInt x86g_calculate_daa_das_aaa_aas ( UInt AX_and_flags, UInt opcode );
+ 
+-extern UInt x86g_calculate_aad_aam ( UInt AX_and_flags, UInt opcode );
++extern UInt x86g_calculate_aad_aam ( UInt AX_and_flags, UInt opcode, Int imm8);
+ 
+ extern ULong x86g_check_fldcw ( UInt fpucw );
+ 
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/guest_x86_helpers.c ./valgrind-3.17.0/VEX/priv/guest_x86_helpers.c
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/guest_x86_helpers.c	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/priv/guest_x86_helpers.c	2021-04-08 00:58:32.000000000 +0800
+@@ -1556,7 +1556,8 @@
+ UInt x86g_create_fpucw ( UInt fpround )
+ {
+    fpround &= 3;
+-   return 0x037F | (fpround << 10);
++   //return 0x037F | (fpround << 10);
++   return 0x027F | (fpround << 10);
+ }
+ 
+ 
+@@ -2221,7 +2222,7 @@
+    return result;
+ }
+ 
+-UInt x86g_calculate_aad_aam ( UInt flags_and_AX, UInt opcode )
++UInt x86g_calculate_aad_aam ( UInt flags_and_AX, UInt opcode, Int imm8)
+ {
+    UInt r_AL = (flags_and_AX >> 0) & 0xFF;
+    UInt r_AH = (flags_and_AX >> 8) & 0xFF;
+@@ -2235,12 +2236,12 @@
+ 
+    switch (opcode) {
+       case 0xD4: { /* AAM */
+-         r_AH = r_AL / 10;
+-         r_AL = r_AL % 10;
++         r_AH = r_AL / imm8;
++         r_AL = r_AL % imm8;
+          break;
+       }
+       case 0xD5: { /* AAD */
+-         r_AL = ((r_AH * 10) + r_AL) & 0xff;
++         r_AL = ((r_AH * imm8) + r_AL) & 0xff;
+          r_AH = 0;
+          break;
+       }
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/guest_x86_toIR.c ./valgrind-3.17.0/VEX/priv/guest_x86_toIR.c
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/guest_x86_toIR.c	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/priv/guest_x86_toIR.c	2021-04-08 01:10:01.000000000 +0800
+@@ -1,4 +1,4 @@
+-
++#define MKG_X86
+ /*--------------------------------------------------------------------*/
+ /*--- begin                                       guest_x86_toIR.c ---*/
+ /*--------------------------------------------------------------------*/
+@@ -193,21 +193,27 @@
+    given insn. */
+ 
+ /* We need to know this to do sub-register accesses correctly. */
+-static VexEndness host_endness;
++//static VexEndness host_endness;
+ 
+ /* Pointer to the guest code area (points to start of BB, not to the
+    insn being processed). */
+-static const UChar* guest_code;
++//static const UChar* guest_code;
+ 
+ /* The guest address corresponding to guest_code[0]. */
+-static Addr32 guest_EIP_bbstart;
++//static Addr32 guest_EIP_bbstart;
+ 
+ /* The guest address for the instruction currently being
+    translated. */
+-static Addr32 guest_EIP_curr_instr;
++//static Addr32 guest_EIP_curr_instr;
+ 
+ /* The IRSB* into which we're generating code. */
+-static IRSB* irsb;
++//static IRSB* irsb;
++
++#define  host_endness (*x86_host_endness_var_call())
++#define  guest_code (*x86_guest_code_var_call())
++#define  guest_EIP_bbstart (*x86_guest_EIP_bbstart_var_call())
++#define  guest_EIP_curr_instr (*x86_guest_EIP_curr_instr_var_call())
++#define  irsb (*x86_irsb_var_call())
+ 
+ 
+ /*------------------------------------------------------------*/
+@@ -13068,6 +13074,7 @@
+    /* ---------------------------------------------------- */
+ 
+    /* Get the primary opcode. */
++decode_redo:
+    opc = getIByte(delta); delta++;
+ 
+    /* We get here if the current insn isn't SSE, or this CPU doesn't
+@@ -13237,7 +13244,8 @@
+    case 0xD4: /* AAM */
+    case 0xD5: /* AAD */
+       d32 = getIByte(delta); delta++;
+-      if (sz != 4 || d32 != 10) goto decode_failure;
++      //if (sz != 4 || d32 != 10) goto decode_failure;
++      if (sz != 4) goto decode_failure;
+       t1 = newTemp(Ity_I32);
+       t2 = newTemp(Ity_I32);
+       /* Make up a 32-bit value (t1), with the old value of AX in the
+@@ -13257,7 +13265,7 @@
+               mkIRExprCCall(
+                  Ity_I32, 0/*regparm*/, "x86g_calculate_aad_aam",
+                  &x86g_calculate_aad_aam,
+-                 mkIRExprVec_2( mkexpr(t1), mkU32( opc & 0xFF) )
++                 mkIRExprVec_3( mkexpr(t1), mkU32( opc & 0xFF), mkU32(d32 & 0xFF))
+             ));
+       putIReg(2, R_EAX, unop(Iop_32to16, mkexpr(t2) ));
+ 
+@@ -13461,6 +13469,19 @@
+       DIP("jmp 0x%x\n", d32);
+       break;
+ 
++   case 0xEA: /* ea096073773300  jmp 0033:77736009*/
++       vassert(sz == 4);
++       d32 = (((Addr32)guest_EIP_bbstart));
++       UInt d32 = getSDisp(sz, delta);
++       delta += sz;
++       UShort d16 = getSDisp(2, delta);
++       delta += 2;
++       putSReg(R_CS, mkU16(d16));
++       jmp_lit(&dres, Ijk_Sys_int32, d32);
++       vassert(dres.whatNext == Dis_StopHere);
++       DIP("jmp %x:0x%x\n", d16, d32);
++       break;
++
+    case 0x70:
+    case 0x71:
+    case 0x72: /* JBb/JNAEb (jump below) */
+@@ -14252,7 +14273,12 @@
+          break;
+ 
+       default:
+-         goto decode_failure;
++         // goto decode_failure;
++         // like bnd jnz short $esperror$4
++         //  /* REPNE prefix insn */
++         //  0xF2
++         delta--;
++         goto decode_redo;
+       }
+       break;
+    }
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/host_arm_isel.c ./valgrind-3.17.0/VEX/priv/host_arm_isel.c
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/host_arm_isel.c	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/priv/host_arm_isel.c	2021-04-08 01:13:00.000000000 +0800
+@@ -6560,7 +6560,7 @@
+    vassert(archinfo_host->endness == VexEndnessLE);
+ 
+    /* guard against unexpected space regressions */
+-   vassert(sizeof(ARMInstr) <= 28);
++   //vassert(sizeof(ARMInstr) <= 28);
+ 
+    /* hwcaps should not change from one ISEL call to another. */
+    arm_hwcaps = hwcaps_host; // JRS 2012 Mar 31: FIXME (RM)
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/host_x86_isel.c ./valgrind-3.17.0/VEX/priv/host_x86_isel.c
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/host_x86_isel.c	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/priv/host_x86_isel.c	2021-04-08 01:14:25.000000000 +0800
+@@ -383,7 +383,7 @@
+    /* Complication.  Need to decide which reg to use as the fn address
+       pointer, in a way that doesn't trash regparm-passed
+       parameters. */
+-   vassert(sizeof(void*) == 4);
++   //vassert(sizeof(void*) == 4);
+ 
+    addInstr(env, X86Instr_Call( cc, (Addr)cee->addr,
+                                 cee->regparms, rloc));
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/ir_defs.c ./valgrind-3.17.0/VEX/priv/ir_defs.c
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/ir_defs.c	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/priv/ir_defs.c	2021-04-08 01:15:17.000000000 +0800
+@@ -2100,7 +2100,7 @@
+          vex_printf("IR-NoOp");
+          break;
+       case Ist_IMark:
+-         vex_printf( "------ IMark(0x%lx, %u, %u) ------", 
++         vex_printf( "------ IMark(0x%llx, %u, %u) ------", 
+                      s->Ist.IMark.addr, s->Ist.IMark.len,
+                      (UInt)s->Ist.IMark.delta);
+          break;
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/main_main.c ./valgrind-3.17.0/VEX/priv/main_main.c
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/main_main.c	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/priv/main_main.c	2021-04-08 01:17:59.000000000 +0800
+@@ -216,7 +216,7 @@
+    vex_log_bytes    = log_bytes;
+ 
+    /* Now it's safe to check parameters for sanity. */
+-   vassert(!vex_initdone);
++   //vassert(!vex_initdone);
+    vassert(failure_exit);
+    vassert(log_bytes);
+    vassert(debuglevel >= 0);
+@@ -226,8 +226,8 @@
+    vassert(vcon->iropt_level <= 2);
+    vassert(vcon->iropt_unroll_thresh >= 0);
+    vassert(vcon->iropt_unroll_thresh <= 400);
+-   vassert(vcon->guest_max_insns >= 1);
+-   vassert(vcon->guest_max_insns <= 100);
++   //vassert(vcon->guest_max_insns >= 1);
++   //vassert(vcon->guest_max_insns <= 100);
+    vassert(vcon->guest_chase == False || vcon->guest_chase == True);
+    vassert(vcon->regalloc_version == 2 || vcon->regalloc_version == 3);
+ 
+@@ -614,9 +614,9 @@
+ 
+    vassert(vta->guest_extents->n_used >= 1 && vta->guest_extents->n_used <= 3);
+    vassert(vta->guest_extents->base[0] == vta->guest_bytes_addr);
+-   for (i = 0; i < vta->guest_extents->n_used; i++) {
+-      vassert(vta->guest_extents->len[i] < 10000); /* sanity */
+-   }
++   //for (i = 0; i < vta->guest_extents->n_used; i++) {
++   //   vassert(vta->guest_extents->len[i] < 10000); /* sanity */
++   //}
+ 
+    /* bb_to_IR() could have caused pxControl to change. */
+    vassert(*pxControl >= VexRegUpdSpAtMemAccess
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/main_util.c ./valgrind-3.17.0/VEX/priv/main_util.c
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/main_util.c	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/priv/main_util.c	2021-04-08 01:19:57.000000000 +0800
+@@ -50,187 +50,187 @@
+    into memory, the rate falls by about a factor of 3. 
+ */
+ 
+-#if defined(ENABLE_INNER)
+-/* 5 times more memory to be on the safe side:  consider each allocation is
+-   8 bytes, and we need 16 bytes redzone before and after. */
+-#define N_TEMPORARY_BYTES (5*5000000)
+-static Bool mempools_created = False;
+-#else
+-#define N_TEMPORARY_BYTES 5000000
+-#endif
+-
+-static HChar  temporary[N_TEMPORARY_BYTES] __attribute__((aligned(REQ_ALIGN)));
+-static HChar* temporary_first = &temporary[0];
+-static HChar* temporary_curr  = &temporary[0];
+-static HChar* temporary_last  = &temporary[N_TEMPORARY_BYTES-1];
+-
+-static ULong  temporary_bytes_allocd_TOT = 0;
+-
+-#if defined(ENABLE_INNER)
+-/* See N_TEMPORARY_BYTES */
+-#define N_PERMANENT_BYTES (5*10000)
+-#else
+-#define N_PERMANENT_BYTES 10000
+-#endif
+-
+-static HChar  permanent[N_PERMANENT_BYTES] __attribute__((aligned(REQ_ALIGN)));
+-static HChar* permanent_first = &permanent[0];
+-static HChar* permanent_curr  = &permanent[0];
+-static HChar* permanent_last  = &permanent[N_PERMANENT_BYTES-1];
+-
+-HChar* private_LibVEX_alloc_first = &temporary[0];
+-HChar* private_LibVEX_alloc_curr  = &temporary[0];
+-HChar* private_LibVEX_alloc_last  = &temporary[N_TEMPORARY_BYTES-1];
+-
+-
+-static VexAllocMode mode = VexAllocModeTEMP;
+-
+-void vexAllocSanityCheck ( void )
+-{
+-   vassert(temporary_first == &temporary[0]);
+-   vassert(temporary_last  == &temporary[N_TEMPORARY_BYTES-1]);
+-   vassert(permanent_first == &permanent[0]);
+-   vassert(permanent_last  == &permanent[N_PERMANENT_BYTES-1]);
+-   vassert(temporary_first <= temporary_curr);
+-   vassert(temporary_curr  <= temporary_last);
+-   vassert(permanent_first <= permanent_curr);
+-   vassert(permanent_curr  <= permanent_last);
+-   vassert(private_LibVEX_alloc_first <= private_LibVEX_alloc_curr);
+-   vassert(private_LibVEX_alloc_curr  <= private_LibVEX_alloc_last);
+-   if (mode == VexAllocModeTEMP){
+-      vassert(private_LibVEX_alloc_first == temporary_first);
+-      vassert(private_LibVEX_alloc_last  == temporary_last);
+-   } 
+-   else
+-   if (mode == VexAllocModePERM) {
+-      vassert(private_LibVEX_alloc_first == permanent_first);
+-      vassert(private_LibVEX_alloc_last  == permanent_last);
+-   }
+-   else 
+-      vassert(0);
+-
+-#  define IS_WORD_ALIGNED(p)   (0 == (((HWord)p) & (sizeof(HWord)-1)))
+-   vassert(sizeof(HWord) == 4 || sizeof(HWord) == 8);
+-   vassert(IS_WORD_ALIGNED(temporary_first));
+-   vassert(IS_WORD_ALIGNED(temporary_curr));
+-   vassert(IS_WORD_ALIGNED(temporary_last+1));
+-   vassert(IS_WORD_ALIGNED(permanent_first));
+-   vassert(IS_WORD_ALIGNED(permanent_curr));
+-   vassert(IS_WORD_ALIGNED(permanent_last+1));
+-   vassert(IS_WORD_ALIGNED(private_LibVEX_alloc_first));
+-   vassert(IS_WORD_ALIGNED(private_LibVEX_alloc_curr));
+-   vassert(IS_WORD_ALIGNED(private_LibVEX_alloc_last+1));
+-#  undef IS_WORD_ALIGNED
+-}
+-
+-/* The current allocation mode. */
+-
+-void vexSetAllocMode ( VexAllocMode m )
+-{
+-   vexAllocSanityCheck();
+-
+-   /* Save away the current allocation point .. */
+-   if (mode == VexAllocModeTEMP){
+-      temporary_curr = private_LibVEX_alloc_curr;
+-   } 
+-   else
+-   if (mode == VexAllocModePERM) {
+-      permanent_curr = private_LibVEX_alloc_curr;
+-   }
+-   else 
+-      vassert(0);
+-
+-   /* Did that screw anything up? */
+-   vexAllocSanityCheck();
+-
+-   if (m == VexAllocModeTEMP){
+-      private_LibVEX_alloc_first = temporary_first;
+-      private_LibVEX_alloc_curr  = temporary_curr;
+-      private_LibVEX_alloc_last  = temporary_last;
+-   } 
+-   else
+-   if (m == VexAllocModePERM) {
+-      private_LibVEX_alloc_first = permanent_first;
+-      private_LibVEX_alloc_curr  = permanent_curr;
+-      private_LibVEX_alloc_last  = permanent_last;
+-   }
+-   else 
+-      vassert(0);
+-
+-   mode = m;
+-}
+-
+-VexAllocMode vexGetAllocMode ( void )
+-{
+-   return mode;
+-}
+-
+-__attribute__((noreturn))
+-void private_LibVEX_alloc_OOM(void)
+-{
+-   const HChar* pool = "???";
+-   if (private_LibVEX_alloc_first == &temporary[0]) pool = "TEMP";
+-   if (private_LibVEX_alloc_first == &permanent[0]) pool = "PERM";
+-   vex_printf("VEX temporary storage exhausted.\n");
+-   vex_printf("Pool = %s,  start %p curr %p end %p (size %lld)\n",
+-              pool, 
+-              private_LibVEX_alloc_first,
+-              private_LibVEX_alloc_curr,
+-              private_LibVEX_alloc_last,
+-              (Long)(private_LibVEX_alloc_last + 1 - private_LibVEX_alloc_first));
+-   vpanic("VEX temporary storage exhausted.\n"
+-          "Increase N_{TEMPORARY,PERMANENT}_BYTES and recompile.");
+-}
+-
+-void vexSetAllocModeTEMP_and_clear ( void )
+-{
+-   /* vassert(vex_initdone); */ /* causes infinite assert loops */
+-   temporary_bytes_allocd_TOT 
+-      += (ULong)(private_LibVEX_alloc_curr - private_LibVEX_alloc_first);
+-
+-#if defined(ENABLE_INNER)
+-   if (mempools_created) {
+-      VALGRIND_MEMPOOL_TRIM(&temporary[0], &temporary[0], 0);
+-   } else {
+-      VALGRIND_CREATE_MEMPOOL(&temporary[0], VEX_REDZONE_SIZEB, 0);
+-      VALGRIND_CREATE_MEMPOOL(&permanent[0], VEX_REDZONE_SIZEB, 0);
+-      VALGRIND_MAKE_MEM_NOACCESS(&permanent[0], N_PERMANENT_BYTES);
+-      mempools_created = True;
+-   }
+-   VALGRIND_MAKE_MEM_NOACCESS(&temporary[0], N_TEMPORARY_BYTES);
+-#endif
+-
+-   mode = VexAllocModeTEMP;
+-   temporary_curr            = &temporary[0];
+-   private_LibVEX_alloc_curr = &temporary[0];
+-
+-   /* Set to (1) and change the fill byte to 0x00 or 0xFF to test for
+-      any potential bugs due to using uninitialised memory in the main
+-      VEX storage area. */
+-   if (0) {
+-      Int i;
+-      for (i = 0; i < N_TEMPORARY_BYTES; i++)
+-         temporary[i] = 0x00;
+-   }
+-
+-   vexAllocSanityCheck();
+-}
+-
+-
+-/* Exported to library client. */
+-
+-void LibVEX_ShowAllocStats ( void )
+-{
+-   vex_printf("vex storage: T total %lld bytes allocated\n",
+-              (Long)temporary_bytes_allocd_TOT );
+-   vex_printf("vex storage: P total %lld bytes allocated\n",
+-              (Long)(permanent_curr - permanent_first) );
+-}
+-
+-void *LibVEX_Alloc ( SizeT nbytes )
+-{
+-   return LibVEX_Alloc_inline(nbytes);
+-}
++//#if defined(ENABLE_INNER)
++///* 5 times more memory to be on the safe side:  consider each allocation is
++//   8 bytes, and we need 16 bytes redzone before and after. */
++//#define N_TEMPORARY_BYTES (5*5000000)
++//static Bool mempools_created = False;
++//#else
++//#define N_TEMPORARY_BYTES 5000000
++//#endif
++//
++//static HChar  temporary[N_TEMPORARY_BYTES] __attribute__((aligned(REQ_ALIGN)));
++//static HChar* temporary_first = &temporary[0];
++//static HChar* temporary_curr  = &temporary[0];
++//static HChar* temporary_last  = &temporary[N_TEMPORARY_BYTES-1];
++//
++//static ULong  temporary_bytes_allocd_TOT = 0;
++//
++//#if defined(ENABLE_INNER)
++///* See N_TEMPORARY_BYTES */
++//#define N_PERMANENT_BYTES (5*10000)
++//#else
++//#define N_PERMANENT_BYTES 10000
++//#endif
++//
++//static HChar  permanent[N_PERMANENT_BYTES] __attribute__((aligned(REQ_ALIGN)));
++//static HChar* permanent_first = &permanent[0];
++//static HChar* permanent_curr  = &permanent[0];
++//static HChar* permanent_last  = &permanent[N_PERMANENT_BYTES-1];
++//
++//HChar* private_LibVEX_alloc_first = &temporary[0];
++//HChar* private_LibVEX_alloc_curr  = &temporary[0];
++//HChar* private_LibVEX_alloc_last  = &temporary[N_TEMPORARY_BYTES-1];
++//
++//
++//static VexAllocMode mode = VexAllocModeTEMP;
++//
++//void vexAllocSanityCheck ( void )
++//{
++//   vassert(temporary_first == &temporary[0]);
++//   vassert(temporary_last  == &temporary[N_TEMPORARY_BYTES-1]);
++//   vassert(permanent_first == &permanent[0]);
++//   vassert(permanent_last  == &permanent[N_PERMANENT_BYTES-1]);
++//   vassert(temporary_first <= temporary_curr);
++//   vassert(temporary_curr  <= temporary_last);
++//   vassert(permanent_first <= permanent_curr);
++//   vassert(permanent_curr  <= permanent_last);
++//   vassert(private_LibVEX_alloc_first <= private_LibVEX_alloc_curr);
++//   vassert(private_LibVEX_alloc_curr  <= private_LibVEX_alloc_last);
++//   if (mode == VexAllocModeTEMP){
++//      vassert(private_LibVEX_alloc_first == temporary_first);
++//      vassert(private_LibVEX_alloc_last  == temporary_last);
++//   } 
++//   else
++//   if (mode == VexAllocModePERM) {
++//      vassert(private_LibVEX_alloc_first == permanent_first);
++//      vassert(private_LibVEX_alloc_last  == permanent_last);
++//   }
++//   else 
++//      vassert(0);
++//
++//#  define IS_WORD_ALIGNED(p)   (0 == (((HWord)p) & (sizeof(HWord)-1)))
++//   vassert(sizeof(HWord) == 4 || sizeof(HWord) == 8);
++//   vassert(IS_WORD_ALIGNED(temporary_first));
++//   vassert(IS_WORD_ALIGNED(temporary_curr));
++//   vassert(IS_WORD_ALIGNED(temporary_last+1));
++//   vassert(IS_WORD_ALIGNED(permanent_first));
++//   vassert(IS_WORD_ALIGNED(permanent_curr));
++//   vassert(IS_WORD_ALIGNED(permanent_last+1));
++//   vassert(IS_WORD_ALIGNED(private_LibVEX_alloc_first));
++//   vassert(IS_WORD_ALIGNED(private_LibVEX_alloc_curr));
++//   vassert(IS_WORD_ALIGNED(private_LibVEX_alloc_last+1));
++//#  undef IS_WORD_ALIGNED
++//}
++//
++///* The current allocation mode. */
++//
++//void vexSetAllocMode ( VexAllocMode m )
++//{
++//   vexAllocSanityCheck();
++//
++//   /* Save away the current allocation point .. */
++//   if (mode == VexAllocModeTEMP){
++//      temporary_curr = private_LibVEX_alloc_curr;
++//   } 
++//   else
++//   if (mode == VexAllocModePERM) {
++//      permanent_curr = private_LibVEX_alloc_curr;
++//   }
++//   else 
++//      vassert(0);
++//
++//   /* Did that screw anything up? */
++//   vexAllocSanityCheck();
++//
++//   if (m == VexAllocModeTEMP){
++//      private_LibVEX_alloc_first = temporary_first;
++//      private_LibVEX_alloc_curr  = temporary_curr;
++//      private_LibVEX_alloc_last  = temporary_last;
++//   } 
++//   else
++//   if (m == VexAllocModePERM) {
++//      private_LibVEX_alloc_first = permanent_first;
++//      private_LibVEX_alloc_curr  = permanent_curr;
++//      private_LibVEX_alloc_last  = permanent_last;
++//   }
++//   else 
++//      vassert(0);
++//
++//   mode = m;
++//}
++//
++//VexAllocMode vexGetAllocMode ( void )
++//{
++//   return mode;
++//}
++//
++//__attribute__((noreturn))
++//void private_LibVEX_alloc_OOM(void)
++//{
++//   const HChar* pool = "???";
++//   if (private_LibVEX_alloc_first == &temporary[0]) pool = "TEMP";
++//   if (private_LibVEX_alloc_first == &permanent[0]) pool = "PERM";
++//   vex_printf("VEX temporary storage exhausted.\n");
++//   vex_printf("Pool = %s,  start %p curr %p end %p (size %lld)\n",
++//              pool, 
++//              private_LibVEX_alloc_first,
++//              private_LibVEX_alloc_curr,
++//              private_LibVEX_alloc_last,
++//              (Long)(private_LibVEX_alloc_last + 1 - private_LibVEX_alloc_first));
++//   vpanic("VEX temporary storage exhausted.\n"
++//          "Increase N_{TEMPORARY,PERMANENT}_BYTES and recompile.");
++//}
++//
++//void vexSetAllocModeTEMP_and_clear ( void )
++//{
++//   /* vassert(vex_initdone); */ /* causes infinite assert loops */
++//   temporary_bytes_allocd_TOT 
++//      += (ULong)(private_LibVEX_alloc_curr - private_LibVEX_alloc_first);
++//
++//#if defined(ENABLE_INNER)
++//   if (mempools_created) {
++//      VALGRIND_MEMPOOL_TRIM(&temporary[0], &temporary[0], 0);
++//   } else {
++//      VALGRIND_CREATE_MEMPOOL(&temporary[0], VEX_REDZONE_SIZEB, 0);
++//      VALGRIND_CREATE_MEMPOOL(&permanent[0], VEX_REDZONE_SIZEB, 0);
++//      VALGRIND_MAKE_MEM_NOACCESS(&permanent[0], N_PERMANENT_BYTES);
++//      mempools_created = True;
++//   }
++//   VALGRIND_MAKE_MEM_NOACCESS(&temporary[0], N_TEMPORARY_BYTES);
++//#endif
++//
++//   mode = VexAllocModeTEMP;
++//   temporary_curr            = &temporary[0];
++//   private_LibVEX_alloc_curr = &temporary[0];
++//
++//   /* Set to (1) and change the fill byte to 0x00 or 0xFF to test for
++//      any potential bugs due to using uninitialised memory in the main
++//      VEX storage area. */
++//   if (0) {
++//      Int i;
++//      for (i = 0; i < N_TEMPORARY_BYTES; i++)
++//         temporary[i] = 0x00;
++//   }
++//
++//   vexAllocSanityCheck();
++//}
++//
++//
++///* Exported to library client. */
++//
++//void LibVEX_ShowAllocStats ( void )
++//{
++//   vex_printf("vex storage: T total %lld bytes allocated\n",
++//              (Long)temporary_bytes_allocd_TOT );
++//   vex_printf("vex storage: P total %lld bytes allocated\n",
++//              (Long)(permanent_curr - permanent_first) );
++//}
++//
++//void *LibVEX_Alloc ( SizeT nbytes )
++//{
++//   return LibVEX_Alloc_inline(nbytes);
++//}
+ 
+ /*---------------------------------------------------------*/
+ /*--- Bombing out                                       ---*/
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/main_util.h ./valgrind-3.17.0/VEX/priv/main_util.h
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/main_util.h	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/priv/main_util.h	2021-04-08 01:22:46.000000000 +0800
+@@ -48,7 +48,7 @@
+ 
+ #define NULL ((void*)0)
+ 
+-#if defined(_MSC_VER) // building with MSVC
++#if 0 // building with MSVC
+ # define LIKELY(x)          (x)
+ # define UNLIKELY(x)        (x)
+ # define CAST_TO_TYPEOF(x)  /**/
+@@ -125,9 +125,9 @@
+    LibVEX_Translate.  The storage allocated will only stay alive until
+    translation of the current basic block is complete.
+  */
+-extern HChar* private_LibVEX_alloc_first;
+-extern HChar* private_LibVEX_alloc_curr;
+-extern HChar* private_LibVEX_alloc_last;
++//extern HChar* private_LibVEX_alloc_first;
++//extern HChar* private_LibVEX_alloc_curr;
++//extern HChar* private_LibVEX_alloc_last;
+ extern void   private_LibVEX_alloc_OOM(void) __attribute__((noreturn));
+ 
+ /* Allocated memory as returned by LibVEX_Alloc will be aligned on this
+@@ -138,49 +138,50 @@
+ #define VEX_REDZONE_SIZEB (2*REQ_ALIGN)
+ #endif
+ 
+-static inline void* LibVEX_Alloc_inline ( SizeT nbytes )
+-{
+-   struct align {
+-      char c;
+-      union {
+-         char c;
+-         short s;
+-         int i;
+-         long l;
+-         long long ll;
+-         float f;
+-         double d;
+-         /* long double is currently not used and would increase alignment
+-            unnecessarily. */
+-         /* long double ld; */
+-         void *pto;
+-         void (*ptf)(void);
+-      } x;
+-   };
+-
+-   /* Make sure the compiler does no surprise us */
+-   vassert(offsetof(struct align,x) <= REQ_ALIGN);
+-
+-#if 0
+-  /* Nasty debugging hack, do not use. */
+-  return malloc(nbytes);
+-#else
+-   HChar* curr;
+-   HChar* next;
+-   SizeT  ALIGN;
+-   ALIGN  = offsetof(struct align,x) - 1;
+-   curr   = private_LibVEX_alloc_curr;
+-   next   = curr + ((nbytes + ALIGN) & ~ALIGN);
+-   INNER_REQUEST(next += 2 * VEX_REDZONE_SIZEB);
+-   if (next >= private_LibVEX_alloc_last)
+-      private_LibVEX_alloc_OOM();
+-   private_LibVEX_alloc_curr = next;
+-   INNER_REQUEST(curr += VEX_REDZONE_SIZEB);
+-   INNER_REQUEST(VALGRIND_MEMPOOL_ALLOC(private_LibVEX_alloc_first,
+-                                        curr, nbytes));
+-   return curr;
+-#endif
+-}
++//static inline void* LibVEX_Alloc_inline ( SizeT nbytes )
++//{
++//   struct align {
++//      char c;
++//      union {
++//         char c;
++//         short s;
++//         int i;
++//         long l;
++//         long long ll;
++//         float f;
++//         double d;
++//         /* long double is currently not used and would increase alignment
++//            unnecessarily. */
++//         /* long double ld; */
++//         void *pto;
++//         void (*ptf)(void);
++//      } x;
++//   };
++//
++//   /* Make sure the compiler does no surprise us */
++//   vassert(offsetof(struct align,x) <= REQ_ALIGN);
++//
++//#if 0
++//  /* Nasty debugging hack, do not use. */
++//  return malloc(nbytes);
++//#else
++//   HChar* curr;
++//   HChar* next;
++//   SizeT  ALIGN;
++//   ALIGN  = offsetof(struct align,x) - 1;
++//   curr   = private_LibVEX_alloc_curr;
++//   next   = curr + ((nbytes + ALIGN) & ~ALIGN);
++//   INNER_REQUEST(next += 2 * VEX_REDZONE_SIZEB);
++//   if (next >= private_LibVEX_alloc_last)
++//      private_LibVEX_alloc_OOM();
++//   private_LibVEX_alloc_curr = next;
++//   INNER_REQUEST(curr += VEX_REDZONE_SIZEB);
++//   INNER_REQUEST(VALGRIND_MEMPOOL_ALLOC(private_LibVEX_alloc_first,
++//                                        curr, nbytes));
++//   return curr;
++//#endif
++//}
++extern void* LibVEX_Alloc_inline(SizeT nbytes);
+ 
+ /* Misaligned memory access support. */
+ 
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/mips_defs.h ./valgrind-3.17.0/VEX/priv/mips_defs.h
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/mips_defs.h	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/priv/mips_defs.h	2021-04-08 01:24:17.000000000 +0800
+@@ -32,14 +32,14 @@
+ #include "libvex.h"
+ 
+ /* MOD: The IRSB* into which we're generating code. */
+-extern IRSB *irsb;
++//extern IRSB *irsb;
+ 
+ /* Is our guest binary 32 or 64bit? Set at each call to
+    disInstr_MIPS below. */
+-extern Bool mode64;
++//extern Bool mode64;
+ 
+ /* Pointer to the guest code area. */
+-extern const UChar *guest_code;
++//extern const UChar *guest_code;
+ 
+ /*------------------------------------------------------------*/
+ /*---              DSP to IR function                      ---*/
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/multiarch_main_main.c ./valgrind-3.17.0/VEX/priv/multiarch_main_main.c
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/priv/multiarch_main_main.c	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/priv/multiarch_main_main.c	2021-04-08 01:26:34.000000000 +0800
+@@ -64,7 +64,7 @@
+ */
+ 
+ #define VEXMULTIARCH 1
+-#include "main_main.c"
++//#include "main_main.c"
+ 
+ /*---------------------------------------------------------------*/
+ /*--- end                               multiarch_main_main.c ---*/
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/pub/gen_global_var_call.hpp ./valgrind-3.17.0/VEX/pub/gen_global_var_call.hpp
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/pub/gen_global_var_call.hpp	1970-01-01 08:00:00.000000000 +0800
++++ ./valgrind-3.17.0/VEX/pub/gen_global_var_call.hpp	2021-01-29 13:42:23.000000000 +0800
+@@ -0,0 +1,12 @@
++#ifndef GEN_GLOAL_VAR_CALL_DEF
++#define GEN_GLOAL_VAR_CALL_DEF
++extern "C" {
++#include "libvex.h"
++}
++#include <deque>
++
++std::deque<void*> LibVEX_IRSB_transfer(void);
++extern void bb_insn_control_obj_set(void* instance, const UChar* (*guest_insn_control_method)(void*, Addr, Long, const UChar*));
++extern const UChar* /*out guest_code*/ guest_generic_bb_insn_control(Addr guest_IP_sbstart, Long delta,  /*in guest_code*/ const UChar* guest_code);
++
++#endif
+\ No newline at end of file
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/pub/libvex_basictypes.h ./valgrind-3.17.0/VEX/pub/libvex_basictypes.h
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/pub/libvex_basictypes.h	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/pub/libvex_basictypes.h	2021-04-08 01:29:51.000000000 +0800
+@@ -34,6 +34,8 @@
+ #ifndef __LIBVEX_BASICTYPES_H
+ #define __LIBVEX_BASICTYPES_H
+ 
++#define LibVEX_GUEST_STATE_ALIGN 16
++
+ /* It is important that the sizes of the following data types (on the
+    host) are as stated.  LibVEX_Init therefore checks these at
+    startup. */
+@@ -131,14 +133,14 @@
+ typedef  ULong     Addr64;
+ 
+ /* An address: 32-bit or 64-bit wide depending on host architecture */
+-typedef unsigned long Addr;
++typedef ULong Addr;
+ 
+ 
+ /* Something which has the same size as void* on the host.  That is,
+    it is 32 bits on a 32-bit host and 64 bits on a 64-bit host, and so
+    it can safely be coerced to and from a pointer type on the host
+    machine. */
+-typedef  unsigned long HWord;
++typedef ULong HWord;
+ 
+ /* Size of GPRs */
+ #if defined(__mips__) && (__mips == 64) && (_MIPS_SIM == _ABIN32)
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/pub/libvex_guest_amd64.h ./valgrind-3.17.0/VEX/pub/libvex_guest_amd64.h
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/pub/libvex_guest_amd64.h	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/pub/libvex_guest_amd64.h	2021-04-08 01:31:24.000000000 +0800
+@@ -49,7 +49,7 @@
+ 
+ 
+ typedef
+-   struct {
++   struct __attribute__((__aligned__(LibVEX_GUEST_STATE_ALIGN))) {
+       /* Event check fail addr, counter, and padding to make RAX 16
+          aligned. */
+       /*   0 */ ULong  host_EvC_FAILADDR;
+@@ -167,7 +167,18 @@
+          been interrupted by a signal. */
+       ULong guest_IP_AT_SYSCALL;
+ 
++      ULong  guest_LDT; /* host addr, a VexGuestX86SegDescr* */
++      ULong  guest_GDT; /* host addr, a VexGuestX86SegDescr* */
++      /* Segment registers. */
++      UShort guest_CS;
++      UShort guest_DS;
++      UShort guest_ES;
++      UShort guest_FS;
++      UShort guest_GS;
++      UShort guest_SS;
++
+       /* Padding to make it have an 16-aligned size */
++      UInt   padding;
+       ULong pad3;
+    }
+    VexGuestAMD64State;
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/pub/libvex_guest_arm.h ./valgrind-3.17.0/VEX/pub/libvex_guest_arm.h
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/pub/libvex_guest_arm.h	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/pub/libvex_guest_arm.h	2021-04-08 01:31:21.000000000 +0800
+@@ -37,7 +37,7 @@
+ /*---------------------------------------------------------------*/
+ 
+ typedef
+-   struct {
++   struct  __attribute__((__aligned__(LibVEX_GUEST_STATE_ALIGN))) {
+       /* 0 */
+       /* Event check fail addr and counter. */
+       UInt host_EvC_FAILADDR; /* 0 */
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/pub/libvex_guest_arm64.h ./valgrind-3.17.0/VEX/pub/libvex_guest_arm64.h
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/pub/libvex_guest_arm64.h	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/pub/libvex_guest_arm64.h	2021-04-08 01:32:20.000000000 +0800
+@@ -37,7 +37,7 @@
+ /*---------------------------------------------------------------*/
+ 
+ typedef
+-   struct {
++   struct  __attribute__((__aligned__(LibVEX_GUEST_STATE_ALIGN))) {
+       /* Event check fail addr and counter. */
+       /* 0 */  ULong host_EvC_FAILADDR;
+       /* 8 */  UInt  host_EvC_COUNTER;
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/pub/libvex_guest_mips32.h ./valgrind-3.17.0/VEX/pub/libvex_guest_mips32.h
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/pub/libvex_guest_mips32.h	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/pub/libvex_guest_mips32.h	2021-04-08 01:32:16.000000000 +0800
+@@ -36,7 +36,7 @@
+ /*---------------------------------------------------------------*/
+ 
+ typedef
+-   struct {
++   struct  __attribute__((__aligned__(LibVEX_GUEST_STATE_ALIGN))) {
+       /*    0 */ UInt host_EvC_FAILADDR;
+       /*    4 */ UInt host_EvC_COUNTER;
+ 
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/pub/libvex_guest_mips64.h ./valgrind-3.17.0/VEX/pub/libvex_guest_mips64.h
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/pub/libvex_guest_mips64.h	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/pub/libvex_guest_mips64.h	2021-04-08 01:32:11.000000000 +0800
+@@ -42,7 +42,7 @@
+ /*---------------------------------------------------------------*/
+ 
+ typedef
+-   struct {
++   struct  __attribute__((__aligned__(LibVEX_GUEST_STATE_ALIGN))) {
+       /*    0 */ ULong host_EvC_FAILADDR;
+       /*    8 */ UInt host_EvC_COUNTER;
+       /*   12 */ UInt _padding1;
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/pub/libvex_guest_ppc32.h ./valgrind-3.17.0/VEX/pub/libvex_guest_ppc32.h
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/pub/libvex_guest_ppc32.h	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/pub/libvex_guest_ppc32.h	2021-04-08 01:32:02.000000000 +0800
+@@ -44,7 +44,7 @@
+ #define VEX_GUEST_PPC32_REDIR_STACK_SIZE (16/*entries*/ * 2/*words per entry*/)
+ 
+ typedef
+-   struct {
++   struct  __attribute__((__aligned__(LibVEX_GUEST_STATE_ALIGN))) {
+       /* Event check fail addr and counter. */
+       /*   0 */ UInt host_EvC_FAILADDR;
+       /*   4 */ UInt host_EvC_COUNTER;
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/pub/libvex_guest_ppc64.h ./valgrind-3.17.0/VEX/pub/libvex_guest_ppc64.h
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/pub/libvex_guest_ppc64.h	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/pub/libvex_guest_ppc64.h	2021-04-08 01:32:05.000000000 +0800
+@@ -82,7 +82,7 @@
+ #define VEX_GUEST_PPC64_REDIR_STACK_SIZE (16/*entries*/ * 2/*words per entry*/)
+ 
+ typedef
+-   struct {
++   struct  __attribute__((__aligned__(LibVEX_GUEST_STATE_ALIGN))) {
+      /* Event check fail addr, counter, and padding to make GPR0 16
+         aligned. */
+       /*   0 */ ULong  host_EvC_FAILADDR;
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/pub/libvex_guest_s390x.h ./valgrind-3.17.0/VEX/pub/libvex_guest_s390x.h
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/pub/libvex_guest_s390x.h	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/pub/libvex_guest_s390x.h	2021-04-08 01:32:33.000000000 +0800
+@@ -35,7 +35,7 @@
+ /*--- Vex's representation of the s390 CPU state.          ---*/
+ /*------------------------------------------------------------*/
+ 
+-typedef struct {
++typedef struct  __attribute__((__aligned__(LibVEX_GUEST_STATE_ALIGN))) {
+ 
+ /*------------------------------------------------------------*/
+ /*--- ar registers                                         ---*/
+diff -urN /Users/notify/Downloads/valgrind-3.17.0/VEX/pub/libvex_guest_x86.h ./valgrind-3.17.0/VEX/pub/libvex_guest_x86.h
+--- /Users/notify/Downloads/valgrind-3.17.0/VEX/pub/libvex_guest_x86.h	2021-03-14 03:02:55.000000000 +0800
++++ ./valgrind-3.17.0/VEX/pub/libvex_guest_x86.h	2021-04-08 01:34:34.000000000 +0800
+@@ -138,93 +138,157 @@
+    attempt to write entries beyond those limits.
+ */
+ typedef
+-   struct {
+-      /* Event check fail addr and counter. */
+-      UInt  host_EvC_FAILADDR; /* 0 */
+-      UInt  host_EvC_COUNTER;  /* 4 */
+-      UInt  guest_EAX;         /* 8 */
+-      UInt  guest_ECX;
+-      UInt  guest_EDX;
+-      UInt  guest_EBX;
+-      UInt  guest_ESP;
+-      UInt  guest_EBP;
+-      UInt  guest_ESI;
+-      UInt  guest_EDI;         /* 36 */
+-
+-      /* 4-word thunk used to calculate O S Z A C P flags. */
+-      UInt  guest_CC_OP;       /* 40 */
+-      UInt  guest_CC_DEP1;
+-      UInt  guest_CC_DEP2;
+-      UInt  guest_CC_NDEP;     /* 52 */
+-      /* The D flag is stored here, encoded as either -1 or +1 */
+-      UInt  guest_DFLAG;       /* 56 */
+-      /* Bit 21 (ID) of eflags stored here, as either 0 or 1. */
+-      UInt  guest_IDFLAG;      /* 60 */
+-      /* Bit 18 (AC) of eflags stored here, as either 0 or 1. */
+-      UInt  guest_ACFLAG;      /* 64 */
+-
+-      /* EIP */
+-      UInt  guest_EIP;         /* 68 */
+-
+-      /* FPU */
+-      ULong guest_FPREG[8];    /* 72 */
+-      UChar guest_FPTAG[8];   /* 136 */
+-      UInt  guest_FPROUND;    /* 144 */
+-      UInt  guest_FC3210;     /* 148 */
+-      UInt  guest_FTOP;       /* 152 */
+-
+-      /* SSE */
+-      UInt  guest_SSEROUND;   /* 156 */
+-      U128  guest_XMM0;       /* 160 */
+-      U128  guest_XMM1;
+-      U128  guest_XMM2;
+-      U128  guest_XMM3;
+-      U128  guest_XMM4;
+-      U128  guest_XMM5;
+-      U128  guest_XMM6;
+-      U128  guest_XMM7;
+-
+-      /* Segment registers. */
+-      UShort guest_CS;
+-      UShort guest_DS;
+-      UShort guest_ES;
+-      UShort guest_FS;
+-      UShort guest_GS;
+-      UShort guest_SS;
+-      /* LDT/GDT stuff. */
+-      ULong  guest_LDT; /* host addr, a VexGuestX86SegDescr* */
+-      ULong  guest_GDT; /* host addr, a VexGuestX86SegDescr* */
+-
+-      /* Emulation notes */
+-      UInt   guest_EMNOTE;
+-
+-      /* For clflush/clinval: record start and length of area */
+-      UInt guest_CMSTART;
+-      UInt guest_CMLEN;
+-
+-      /* Used to record the unredirected guest address at the start of
+-         a translation whose start has been redirected.  By reading
+-         this pseudo-register shortly afterwards, the translation can
+-         find out what the corresponding no-redirection address was.
+-         Note, this is only set for wrap-style redirects, not for
+-         replace-style ones. */
+-      UInt guest_NRADDR;
+-
+-      /* Used for Darwin syscall dispatching. */
+-      UInt guest_SC_CLASS;
+-
+-      /* Needed for Darwin (but mandated for all guest architectures):
+-         EIP at the last syscall insn (int 0x80/81/82, sysenter,
+-         syscall).  Used when backing up to restart a syscall that has
+-         been interrupted by a signal. */
+-      UInt guest_IP_AT_SYSCALL;
+-
+-      /* Padding to make it have an 16-aligned size */
+-      UInt padding1;
+-      UInt padding2;
+-      UInt padding3;
+-   }
+-   VexGuestX86State;
++struct __attribute__((__aligned__(LibVEX_GUEST_STATE_ALIGN))) {
++    /* Event check fail addr and counter. */
++
++    UInt  host_EvC_FAILADDR; /* 0 */
++    UInt  host_EvC_COUNTER;  /* 4 */
++    ULong pad0;
++    UInt  guest_EAX;         /* 16 */
++    UInt  pad1;
++    UInt  guest_ECX;
++    UInt  pad2;
++    UInt  guest_EDX;
++    UInt  pad3;
++    UInt  guest_EBX;
++    UInt  pad4;
++    UInt  guest_ESP;
++    UInt  pad5;
++    UInt  guest_EBP;
++    UInt  pad6;
++    UInt  guest_ESI;
++    UInt  pad7;
++    UInt  guest_EDI;         /* 72 */
++    UInt  pad8;
++
++
++    /*  80 */ ULong  pad8_R8;
++    /*  88 */ ULong  pad8_R9;
++    /*  96 */ ULong  pad8_R10;
++    /* 104 */ ULong  pad8_R11;
++    /* 112 */ ULong  pad8_R12;
++    /* 120 */ ULong  pad8_R13;
++    /* 128 */ ULong  pad8_R14;
++    /* 136 */ ULong  pad8_R15;
++
++    /* 4-word thunk used to calculate O S Z A C P flags. */
++    UInt  guest_CC_OP;       /* 144 */
++    UInt  pad9;
++    UInt  guest_CC_DEP1;
++    UInt  pad10;
++    UInt  guest_CC_DEP2;
++    UInt  pad11;
++    UInt  guest_CC_NDEP;     /* 168 */
++    UInt  pad12;
++    /* The D flag is stored here, encoded as either -1 or +1 */
++    UInt  guest_DFLAG;       /* 176 */
++    UInt  pad13;
++    /* EIP */
++    UInt  guest_EIP;         /* 184 */
++    UInt  pad14;
++    /* Bit 18 (AC) of eflags stored here, as either 0 or 1. */
++    UInt  guest_ACFLAG;
++    UInt  pad15;
++    /* Bit 21 (ID) of eflags stored here, as either 0 or 1. */
++    UInt  guest_IDFLAG;      /* 192 */
++    UInt  pad16;
++
++    ULong pad17; // guest_FS_CONST
++
++
++
++
++    /* SSE */
++    UInt  guest_SSEROUND;   /* 156 */
++    UInt  pad18;
++    U128  guest_XMM0;       /* 160 */
++    U128  pad19;
++    U128  guest_XMM1;
++    U128  pad20;
++    U128  guest_XMM2;
++    U128  pad21;
++    U128  guest_XMM3;
++    U128  pad22;
++    U128  guest_XMM4;
++    U128  pad23;
++    U128  guest_XMM5;
++    U128  pad24;
++    U128  guest_XMM6;
++    U128  pad25;
++    U128  guest_XMM7;
++    U128  pad26;
++
++
++    U256  pad_YMM8;
++    U256  pad_YMM9;
++    U256  pad_YMM10;
++    U256  pad_YMM11;
++    U256  pad_YMM12;
++    U256  pad_YMM13;
++    U256  pad_YMM14;
++    U256  pad_YMM15;
++    U256  pad_YMM16;
++
++    /* FPU */
++    UInt  guest_FTOP;
++    UInt  pad27;
++    ULong guest_FPREG[8];
++    UChar guest_FPTAG[8];
++    UInt  guest_FPROUND;
++    UInt  pad28;
++    UInt  guest_FC3210;
++    UInt  pad29;
++
++    /* Emulation notes */
++    UInt   guest_EMNOTE;
++    UInt  pad30;
++
++
++    /* For clflush/clinval: record start and length of area */
++    UInt guest_CMSTART;
++    UInt  pad31;
++    UInt guest_CMLEN;
++    UInt  pad32;
++
++    /* Used to record the unredirected guest address at the start of
++       a translation whose start has been redirected.  By reading
++       this pseudo-register shortly afterwards, the translation can
++       find out what the corresponding no-redirection address was.
++       Note, this is only set for wrap-style redirects, not for
++       replace-style ones. */
++    UInt guest_NRADDR;
++    UInt  pad33;
++
++    /* Used for Darwin syscall dispatching. */
++    UInt guest_SC_CLASS;
++    UInt  pad34;
++
++    ULong pad35; // guest_GS_CONST
++
++    /* Needed for Darwin (but mandated for all guest architectures):
++       EIP at the last syscall insn (int 0x80/81/82, sysenter,
++       syscall).  Used when backing up to restart a syscall that has
++       been interrupted by a signal. */
++    UInt guest_IP_AT_SYSCALL;
++    UInt  pad36;
++
++    /* LDT/GDT stuff. */
++    ULong  guest_LDT; /* host addr, a VexGuestX86SegDescr* */
++    ULong  guest_GDT; /* host addr, a VexGuestX86SegDescr* */
++    /* Segment registers. */
++    UShort guest_CS;
++    UShort guest_DS;
++    UShort guest_ES;
++    UShort guest_FS;
++    UShort guest_GS;
++    UShort guest_SS;
++
++    /* Padding to make it have an 16-aligned size */
++    UInt padding1;
++    UInt padding2;
++    UInt padding3;
++}
++VexGuestX86State;
+ 
+ #define VEX_GUEST_X86_LDT_NENT /*64*/ 8192 /* use complete LDT */
+ #define VEX_GUEST_X86_GDT_NENT /*16*/ 8192 /* use complete GDT */

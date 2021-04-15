@@ -753,12 +753,12 @@ int main() {
 #endif
 
     IR_TEST(test_creakme);
-    IR_TEST(test_basic_var_real);
-    IR_TEST(test_basic_var_sym);
-    //testz3();
-    IR_TEST(test_mem);
-    IR_TEST(test_code_no_linear);
-    IR_TEST(test_ir_dirty_rflags);
+    //IR_TEST(test_basic_var_real);
+    //IR_TEST(test_basic_var_sym);
+    ////testz3();
+    //IR_TEST(test_mem);
+    //IR_TEST(test_code_no_linear);
+    //IR_TEST(test_ir_dirty_rflags);
 }
 
 //int main() {

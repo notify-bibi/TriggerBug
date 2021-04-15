@@ -119,14 +119,14 @@ namespace TR {
         //free ir temp
         virtual void free_ir_buff() {};
         // translate
-        virtual irsb_chunk translate_front(HWord /*dirty/guest_addr*/) {};
+        virtual irsb_chunk translate_front(HWord /*dirty/guest_addr*/) { return irsb_chunk{}; };
         virtual sv::tval& operator[](UInt idx) {};
 
         // 模拟前调用
         void set_guest_bytes_addr(const UChar* bytes, Addr64 virtual_addr);
         void set_host_addr(Addr64 host_virtual_addr);
 
-        ~EmuEnvironment();
+        virtual ~EmuEnvironment();
     };
 
     class EmuEnvGuest : public EmuEnvironment {

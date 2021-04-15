@@ -55,7 +55,7 @@ namespace TR {
         EmuEnvHost(z3::vcontext& ctx) : EmuEnvironment(host, traceflags), m_ir_temp(static_dirty_ir_temp) {
             m_host_irsb_cache = host_get_IRSBCache();
         }
-        ~EmuEnvHost();
+        virtual ~EmuEnvHost();
 
         void set_guest_bb_insn_control_obj() override;
         //new ir temp

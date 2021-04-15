@@ -157,8 +157,8 @@ State::State(vex_context& vctx, VexArch guest_arch)
 State::State(State& father, HWord gse)
     : StateBase(father, gse),
     m_irvex(nullptr),
-    m_is_dirty_mode(father.m_is_dirty_mode),
-    m_trace(father.m_trace->mk_new_TraceInterface())
+    m_trace(father.m_trace->mk_new_TraceInterface()),
+    m_is_dirty_mode(father.m_is_dirty_mode)
 {
 
 }
@@ -470,13 +470,13 @@ sv::tval TR::State::tCCall(const IRCallee* cee,  IRExpr** const exp_args, IRType
 
 inline sv::tval State::ILGop(const IRLoadG *lg) {
     switch (lg->cvt) {
-    case ILGop_IdentV128:{ return mem.Iex_Load(tIRExpr(lg->addr), Ity_V128);            }
-    case ILGop_Ident64:  { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I64 );            }
-    case ILGop_Ident32:  { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I32 );            }
-    case ILGop_16Uto32:  { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I16 ).zext(16);   }
-    case ILGop_16Sto32:  { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I16 ).sext(16);   }
-    case ILGop_8Uto32:   { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I8  ).zext(8);    }
-    case ILGop_8Sto32:   { return mem.Iex_Load(tIRExpr(lg->addr), Ity_I8  ).sext(8);    }
+    case ILGop_IdentV128:{ return vIex_Load(tIRExpr(lg->addr), Ity_V128);            }
+    case ILGop_Ident64:  { return vIex_Load(tIRExpr(lg->addr), Ity_I64 );            }
+    case ILGop_Ident32:  { return vIex_Load(tIRExpr(lg->addr), Ity_I32 );            }
+    case ILGop_16Uto32:  { return vIex_Load(tIRExpr(lg->addr), Ity_I16 ).zext(16);   }
+    case ILGop_16Sto32:  { return vIex_Load(tIRExpr(lg->addr), Ity_I16 ).sext(16);   }
+    case ILGop_8Uto32:   { return vIex_Load(tIRExpr(lg->addr), Ity_I8  ).zext(8);    }
+    case ILGop_8Sto32:   { return vIex_Load(tIRExpr(lg->addr), Ity_I8  ).sext(8);    }
     case ILGop_INVALID:
     default: VPANIC("ppIRLoadGOp");
     }
@@ -532,13 +532,13 @@ void TR::State::dirty_call_run(IRTemp tmp, IRType tmpType, const IRDirty* dirty)
 sv::tval State::tIRExpr(const IRExpr* e)
 {
     switch (e->tag) {
-    case Iex_Get: { return regs.Iex_Get(e->Iex.Get.offset, e->Iex.Get.ty); }
+    case Iex_Get: { return vIex_Get(e->Iex.Get.offset, e->Iex.Get.ty); }
     case Iex_RdTmp: { return irvex().operator[](e->Iex.RdTmp.tmp); }
     case Iex_Unop: { return tUnop(e->Iex.Unop.op, tIRExpr(e->Iex.Unop.arg)); }
     case Iex_Binop: { return tBinop(e->Iex.Binop.op, tIRExpr(e->Iex.Binop.arg1), tIRExpr(e->Iex.Binop.arg2)); }
     case Iex_Triop: { return tTriop(e->Iex.Triop.details->op, tIRExpr(e->Iex.Triop.details->arg1), tIRExpr(e->Iex.Triop.details->arg2), tIRExpr(e->Iex.Triop.details->arg3)); }
     case Iex_Qop: { return tQop(e->Iex.Qop.details->op, tIRExpr(e->Iex.Qop.details->arg1), tIRExpr(e->Iex.Qop.details->arg2), tIRExpr(e->Iex.Qop.details->arg3), tIRExpr(e->Iex.Qop.details->arg4)); }
-    case Iex_Load: { return mem.Iex_Load(tIRExpr(e->Iex.Load.addr), e->Iex.Get.ty); }
+    case Iex_Load: { return vIex_Load(tIRExpr(e->Iex.Load.addr), e->Iex.Get.ty); }
     case Iex_Const: { return sv::tval(m_ctx, e->Iex.Const.con); }
     case Iex_ITE: {
         auto cond = tIRExpr(e->Iex.ITE.cond).tobool();
@@ -560,7 +560,7 @@ sv::tval State::tIRExpr(const IRExpr* e)
         if (ix.real()) {
             int re_ix = ix.tor<true, 32>();
             UInt regoff = e->Iex.GetI.descr->base + (((UInt)(e->Iex.GetI.bias + re_ix)) % e->Iex.GetI.descr->nElems) * ty2length(e->Iex.GetI.descr->elemTy);
-            return regs.Iex_Get(regoff, e->Iex.GetI.descr->elemTy);
+            return vIex_Get(regoff, e->Iex.GetI.descr->elemTy);
         }
     };
     case Iex_GSPTR: { return sv::tval(m_ctx, getGSPTR(), sizeof(HWord) << 3); };
@@ -582,8 +582,8 @@ void State::tIRStmt(const IRTypeEnv* tyenv, const IRStmt* s)
 
     switch (s->tag) {
     case Ist_WrTmp: { irvex()[s->Ist.WrTmp.tmp] = tIRExpr(s->Ist.WrTmp.data); break; };
-    case Ist_Put: { regs.Ist_Put(s->Ist.Put.offset, tIRExpr(s->Ist.Put.data)); break; }
-    case Ist_Store: { mem.Ist_Store(tIRExpr(s->Ist.Store.addr).tors<false, ea_nbits>(), tIRExpr(s->Ist.Store.data)); break; };
+    case Ist_Put: { vIst_Put(s->Ist.Put.offset, tIRExpr(s->Ist.Put.data)); break; }
+    case Ist_Store: { vIst_Store(tIRExpr(s->Ist.Store.addr).tors<false, ea_nbits>(), tIRExpr(s->Ist.Store.data)); break; };
     case Ist_PutI: {
         // PutI(840:8xI8)[t10,-1]
         // 840:arr->base
@@ -595,7 +595,7 @@ void State::tIRStmt(const IRTypeEnv* tyenv, const IRStmt* s)
         if (ix.real()) {
             int re_ix = ix.tor<true, 32>();
             UInt regoff = s->Ist.PutI.details->descr->base + (((UInt)((s->Ist.PutI.details->bias + re_ix))) % s->Ist.PutI.details->descr->nElems) * ty2length(s->Ist.PutI.details->descr->elemTy);
-            regs.Ist_Put(
+            vIst_Put(
                 regoff,
                 tIRExpr(s->Ist.PutI.details->data)
             );
@@ -623,11 +623,11 @@ void State::tIRStmt(const IRTypeEnv* tyenv, const IRStmt* s)
         auto data = tIRExpr(sg->data);
         if LIKELY(guard.real()) {
             if (guard.tor()) {
-                mem.Ist_Store(addr, data);
+                vIst_Store(addr, data);
             }
         }
         else {
-            mem.Ist_Store(addr, ite(guard.tos(), mem.Iex_Load(addr, data.nbits()), data));
+            vIst_Store(addr, ite(guard.tos(), vIex_Load(addr,  data.nbits()), data));
         }
         break;
     }
@@ -639,20 +639,20 @@ void State::tIRStmt(const IRTypeEnv* tyenv, const IRStmt* s)
         //  *addr = dataLo *t31 = t13
         std::unique_lock<std::mutex> lock(m_state_lock);
         IRCAS cas = *(s->Ist.CAS.details);
-            auto addr   = tIRExpr(cas.addr).tors<false, ea_nbits>();//r10.value
+        auto addr = tIRExpr(cas.addr).tors<false, ea_nbits>();//r10.value
         sv::tval expdLo = tIRExpr(cas.expdLo);
         sv::tval dataLo = tIRExpr(cas.dataLo);
         if ((cas.oldHi != IRTemp_INVALID) && (cas.expdHi)) {//double
             sv::tval expdHi = tIRExpr(cas.expdHi);
             sv::tval dataHi = tIRExpr(cas.dataHi);
-            irvex()[cas.oldHi] = mem.Iex_Load(addr, expdLo.nbits());
-            irvex()[cas.oldLo] = mem.Iex_Load(addr, expdLo.nbits());
-            mem.Ist_Store(addr, dataLo);
-            mem.Ist_Store(sv::tval(addr + (dataLo.nbits() >> 3)), dataHi);
+            irvex()[cas.oldHi] = vIex_Load(addr, expdLo.nbits());
+            irvex()[cas.oldLo] = vIex_Load(addr, expdLo.nbits());
+            vIst_Store(addr, dataLo);
+            vIst_Store(sv::tval(addr + (dataLo.nbits() >> 3)), dataHi);
         }
         else {//single
-            irvex()[cas.oldLo] = mem.Iex_Load(addr, expdLo.nbits());
-            mem.Ist_Store(addr, dataLo);
+            irvex()[cas.oldLo] = vIex_Load(addr, expdLo.nbits());
+            vIst_Store(addr, dataLo);
         }
         break;
     }
@@ -998,6 +998,7 @@ std::deque<TR::State::BtsRefType> TR::State::start() {
     }
     
     clean_dirty_mode();
+    set_mem_access(std::make_shared<TR::State::StateData<32>>(mem, regs));
     return start(guest_start, std::make_shared< EmuEnvGuest>(vctx(), vinfo(), mem), 0);
 }
 
@@ -1147,11 +1148,11 @@ public:
     }
 
     void get_write_map(HASH_MAP<Addr64, bool>& record) {
-        if (m_state.regs.getRecord()) {
+        /*if (m_state.regs.getRecord()) {
             for (auto offset : *m_state.regs.getRecord()) {
                 record[offset];
             }
-        }
+        }*/
         /*
         for (auto mcm : m_state.mem.change_map()) {
             vassert(mcm.second->getRecord() != NULL);
@@ -1264,7 +1265,7 @@ void TR::State::compress(cmpr::CmprsContext<State, State_Tag>& ctx)
 #ifdef  PPCMPR
                     std::cout << std::hex << addr << value << std::endl;
 #endif //  _DEBUG
-                    nbranch->mem.Ist_Store(addr, value);
+                    nbranch->vIst_Store(tval(m_ctx, addr), value);
                 }
                 else {
 #ifdef  PPCMPR
@@ -1296,7 +1297,7 @@ void TR::State::compress(cmpr::CmprsContext<State, State_Tag>& ctx)
 #ifdef  PPCMPR
                     std::cout << std::hex << addr << value << std::endl;
 #endif //  _DEBUG
-                    mem.Ist_Store(addr, value);
+                    vIst_Store(tval(m_ctx, addr), value);
                 }
                 else {
 #ifdef  PPCMPR

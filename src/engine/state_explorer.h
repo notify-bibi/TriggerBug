@@ -101,7 +101,7 @@ namespace TR {
 
         Addr64 get_oep() { return m_oep; }
         const sbool& get_guard() const { return m_guard; }
-        ~BTS(){}
+        virtual ~BTS(){}
 
         BTS(const BTS& a) : m_state(a.m_state), m_oep(a.m_oep), m_guard(a.m_guard), m_addr_eq(a.m_addr_eq), m_child_state(a.m_child_state) {};
         
@@ -243,8 +243,8 @@ namespace TR {
         virtual void  StateCompressMkSymbol(State const& newState) {  };
         //State::delta maybe changed by callback
         virtual State_Tag call_back_hook(Hook_struct const& hs) {
-            /*State_Tag(*CB) (State&) = (State_Tag(*) (StateBase&))hs.cb;
-            return (CB) ? (CB)(*this) : Running;*/
+            State_Tag(*CB) (StateBase&) = (State_Tag(*) (StateBase&))hs.cb;
+            return (CB) ? (CB)(*this) : Running;
         }
 
         State_Tag _call_back_hook(Hook_struct const& hs) {

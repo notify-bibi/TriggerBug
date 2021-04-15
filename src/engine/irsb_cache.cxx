@@ -148,7 +148,10 @@ public:
         }
 
         irsb_chunk ic = std::make_shared<bb::IRSB_CHUNK>(dst, src->get_arch(), src->get_checksum(), src->get_bb_base(), src->get_bb_size(), irsb_mem_alloc);
-        vassert(max_ga == src->get_bb_base() + src->get_bb_size() - 1);
+        if UNLIKELY(max_ga != src->get_bb_base() + src->get_bb_size() - 1) {
+            //may be ir  not decode success
+            spdlog::error("error size may be ir  not decode success {:x}", max_ga);
+        }
         return ic;
     }
 

@@ -19,6 +19,8 @@ Revision History:
 #define fastMaskB(n) fastMask(((n)<<3))
 #define fastMaskBI1(n) fastMask((((n)+1)<<3))
 class PAGE_DATA;
+
+namespace TR { class Register; };
 namespace re {
     //写入记录器，8字节记录为m_flag的一个bit
     
@@ -76,7 +78,7 @@ namespace re {
             UInt m_len;
             ULong* m_flag;
         public:
-            inline iterator(UChar* flag) :_pcur(0), m_flag((ULong*)flag), m_len(0) {
+            inline iterator(UChar* flag) :_pcur(0), m_len(0), m_flag((ULong*)flag){
                 Int N;
                 for (; ; _pcur += 64) {
                     if (ctzll(N, m_flag[_pcur >> 6])) {
@@ -126,9 +128,9 @@ namespace re {
 
 
     class reg_trace {
-        Register& m_reg;
+        TR::Register& m_reg;
     public:
-        reg_trace(Register& reg) :m_reg(reg) { }
+        reg_trace(TR::Register& reg) :m_reg(reg) { }
         virtual void write(UInt offset, UInt size) { }
         virtual void read(UInt offset, HWord ea, UInt size) { }
         virtual ~reg_trace() {}

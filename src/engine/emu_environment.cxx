@@ -110,7 +110,7 @@ namespace TR {
     irsb_chunk EmuEnvGuest::translate_front(HWord ea)
     {
         set_guest_bb_insn_control_obj();
-        /*if (ea == 0x77736009) {
+        /*if (ea == 0x00000000778d1657) {
             printf("xd");
         }*/
         
