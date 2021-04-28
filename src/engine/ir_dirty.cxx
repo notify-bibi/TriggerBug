@@ -258,6 +258,9 @@ public:
         vex_info saved_vinfo = m_state.vinfo();
         new(&m_state.vinfo()) vex_info(host_arch);
         std::shared_ptr<TraceInterface> saved_guest_trace = m_state.get_trace();
+
+
+
         std::shared_ptr<TraceInterface> dirty_trace = std::make_shared<TraceInterface>();
 #if 1
         m_state.set_trace(dirty_trace);
@@ -266,16 +269,21 @@ public:
         m_state.setFlags(CF_ppStmts);
 #endif
         std::shared_ptr<EmuEnvironment> saved_guest_irvex = m_state.get_irvex();
+        std::shared_ptr<VMemBase> saved_mem_access = std::move(m_state.mem_access);
         m_state.set_dirty_mode();
         std::shared_ptr<EmuEnvironment> ir = std::make_shared<EmuEnvHost>(m_state.ctx());
         ir->set_guest_bb_insn_control_obj();
         m_host_ip = m_host_OEP;
+
+        m_state.set_mem_access(std::make_shared<TR::State::StateData<64>>(m_state.mem, m_state.regs));
         m_state.start(m_host_ip , std::move(ir), vex_code_ret_addr);
+        m_state.set_mem_access(std::move(saved_mem_access));
         m_state.mem.set_emu_env(saved_guest_irvex);
         m_state.set_irvex(saved_guest_irvex);
         m_state.set_trace(saved_guest_trace);
         m_state.vinfo() = saved_vinfo;
         m_state.clean_dirty_mode();
+
         //m_state.vinfo()
     }
 

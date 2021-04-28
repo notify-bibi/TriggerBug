@@ -173,13 +173,18 @@ State::~State() {
 
 void TR::State::x86_set_mode(UChar cs)
 {
+    vassert(!is_dirty_mode());
     if (cs == 0x33 && vinfo().is_mode_32()) { // amd64
         vassert(vinfo().gguest() == VexArchX86);
         vinfo().enable_long_mode();
+        TR::State::StateData<32>& ma = (TR::State::StateData<32>&)(*mem_access);
+        set_mem_access(std::make_shared<TR::State::StateData<64>>(ma.mode_change<64>()));
     }
     else if(cs == 0x23 && !vinfo().is_mode_32()){ // 32
         vassert(vinfo().gguest() == VexArchAMD64);
         vinfo().disable_long_mode();
+        TR::State::StateData<64>& ma = (TR::State::StateData<64>&)(*mem_access);
+        set_mem_access(std::make_shared<TR::State::StateData<32>>(ma.mode_change<32>()));
     }
     else
     {

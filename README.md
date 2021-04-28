@@ -1,5 +1,10 @@
 <center> TriggerBug</center>
 
+<a href="https://scan.coverity.com/projects/triggerbug1">
+  <img alt="Coverity Scan Build Status"
+       src="https://scan.coverity.com/projects/21747/badge.svg"/>
+</a>
+
 ------
 
 **tips:**  

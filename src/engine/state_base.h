@@ -35,6 +35,7 @@ typedef struct {
 
 static constexpr int REGISTER_LEN = ALIGN(sizeof(VexGuestState), 0x100);
 
+class VexIRDirty;
 namespace TR {
 
 
@@ -202,12 +203,12 @@ namespace TR {
 
     class VMemBase {
     public:
-        virtual void Ist_Store(sv::tval const& address, sv::tval const& data) {};
-        virtual sv::tval Iex_Load(const sv::tval& address, int nbits) { };
-        virtual sv::tval Iex_Load(const sv::tval& address, IRType ty) { };
+        virtual void Ist_Store(sv::tval const& address, sv::tval const& data) = 0;
+        virtual sv::tval Iex_Load(const sv::tval& address, int nbits) = 0;
+        virtual sv::tval Iex_Load(const sv::tval& address, IRType ty) = 0;
 
-        virtual void Ist_Put(UInt offset, sv::tval const& ir) { }
-        virtual sv::tval Iex_Get(UInt offset, IRType ty) { }
+        virtual void Ist_Put(UInt offset, sv::tval const& ir) = 0;
+        virtual sv::tval Iex_Get(UInt offset, IRType ty) = 0;
         virtual ~VMemBase(){}
     };
 
@@ -218,6 +219,7 @@ namespace TR {
 
     __declspec(align(16))
     class StateBase {
+        friend class VexIRDirty;
         template<int ea_nbits>
         class StateData : public VMemBase {
             friend class StateBase;
@@ -232,6 +234,9 @@ namespace TR {
 
             void Ist_Put(UInt offset, sv::tval const& ir) override { m_regs.Ist_Put(offset, ir); }
             sv::tval Iex_Get(UInt offset, IRType ty) override { return m_regs.Iex_Get(offset, ty); }
+
+            template<int to_ea_nbits>
+            StateData<to_ea_nbits> mode_change() { return StateData<to_ea_nbits>(m_mem, m_regs); };
             virtual ~StateData() {}
         };
         friend class State;
@@ -309,13 +314,13 @@ namespace TR {
 
 
         inline void vIst_Store(sv::tval const& address, sv::tval const& data) { mem_access->Ist_Store(address, data); };
-        inline sv::tval vIex_Load(const sv::tval& address, IRType ty) { mem_access->Iex_Load(address, ty); };
-        inline sv::tval vIex_Load(const sv::tval& address, int nbits) { mem_access->Iex_Load(address, nbits); };
+        inline sv::tval vIex_Load(const sv::tval& address, IRType ty) { return mem_access->Iex_Load(address, ty); };
+        inline sv::tval vIex_Load(const sv::tval& address, int nbits) { return mem_access->Iex_Load(address, nbits); };
 
-        inline void vIst_Put(UInt offset, sv::tval const& ir) { mem_access->Ist_Put(offset, ir); }
-        inline sv::tval vIex_Get(UInt offset, IRType ty) { mem_access->Iex_Get(offset, ty); }
+        inline void vIst_Put(UInt offset, sv::tval const& ir) {  mem_access->Ist_Put(offset, ir); }
+        inline sv::tval vIex_Get(UInt offset, IRType ty) { return mem_access->Iex_Get(offset, ty); }
 
-        void set_mem_access(std::shared_ptr<VMemBase> m) { mem_access = m; };
+        void set_mem_access(std::shared_ptr<VMemBase> m) { mem_access = std::move(m); };
 
     public:
     // interface 

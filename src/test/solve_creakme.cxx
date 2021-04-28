@@ -1111,8 +1111,8 @@ bool test_creakme() {
     IROpt opt(state);
     irsb_chunk ic = opt.irvex().translate_front(0x428a45);
 
-    opt.emu_irsb(ic->get_irsb(), true);
-    //vmp_reback(state);
+    //opt.emu_irsb(ic->get_irsb(), true);
+    vmp_reback(state);
     return true;
 }
 
