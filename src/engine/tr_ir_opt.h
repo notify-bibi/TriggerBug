@@ -19,7 +19,7 @@ public:
     ppIR(std::shared_ptr<spdlog::logger> log, spdlog::level::level_enum leve) : m_logger(log), m_leve(leve) { }
     ppIR(std::shared_ptr<spdlog::logger> log) : ppIR(log, spdlog::level::debug) {}
     ~ppIR();
-
+    inline std::string str()const { return m_str; };
     UInt vex_printf(const HChar* format, ...);
 
     void ppIRType(IRType ty);

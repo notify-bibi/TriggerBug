@@ -65,6 +65,8 @@ rsval<Long> symbolic_read(StateBase &s, const rsval<ULong>& addr, const rsval<Lo
     s.solv.add_assert( (res_count < 12).tos() );
     return rsval<Long>(s.ctx(), 6);
 }
+
+
 namespace TIR {
     class IRStmt {
         IRStmtTag m_tag;
@@ -295,27 +297,71 @@ public:
     }
 };
 
+
+
+
+#include "GraphWriter.h"
+
+std::string llvm::DOT::EscapeString(const std::string& Label) {
+    std::string Str(Label);
+    for (unsigned i = 0; i != Str.length(); ++i)
+        switch (Str[i]) {
+        case '\n':
+            Str.insert(Str.begin() + i, '\\');  // Escape character... 
+            ++i;
+            Str[i] = 'n';
+            break;
+        case '\t':
+            Str.insert(Str.begin() + i, ' ');  // Convert to two spaces 
+            ++i;
+            Str[i] = ' ';
+            break;
+        case '\\':
+            if (i + 1 != Str.length())
+                switch (Str[i + 1]) {
+                case 'l': continue; // don't disturb \l 
+                case '|': case '{': case '}':
+                    Str.erase(Str.begin() + i); continue;
+                default: break;
+                }
+            ;
+        case '{': case '}':
+        case '<': case '>':
+        case '|': case '"':
+            Str.insert(Str.begin() + i, '\\');  // Escape character... 
+            ++i;  // don't infinite loop 
+            break;
+        }
+    return Str;
+}
+
+#include <set>
 class BlockView {
     irsb_chunk m_ic;
-    std::unordered_map<Addr, int> m_nexts;
-    std::vector<Addr> m_fork_ea;
+
 public:
-    BlockView(irsb_chunk& ic) :m_ic(ic) {
-        auto bb = ic->get_irsb();
-        if (bb->next->tag == Iex_Const) {
-            auto con = bb->next->Iex.Const.con;
-            Addr next = con->Ico.U64;
-            if (con->tag == Ico_U32) {
-                next &= 0xffffffff;
-            }
-            add_next(next);
+    class BlockViewKeyHash
+    {
+    public:
+        size_t operator()(const BlockView*& name) const
+        {
+            return std::hash<size_t>()(name->m_ic->get_bb_base() ^ name->m_ic->get_checksum());
         }
+    };
+private:
+    std::set< BlockView* > m_nexts;
+
+    std::vector<Addr> m_fork_ea;
+    BlockView(irsb_chunk& ic) :m_ic(ic) {}
+public:
+    BlockView(irsb_chunk& ic, BlockView* next) :m_ic(ic) { add_next(next); }
+    static BlockView mk_root(irsb_chunk& ic) { return BlockView(ic); }
+    irsb_chunk get_irsb_chunk() const { return m_ic; }
+    void add_next(BlockView* next) {
+        m_nexts.emplace(next);
     }
-    BlockView(irsb_chunk& ic, Addr next) :BlockView(ic) { m_nexts[next] = 0; }
-    irsb_chunk get_irsb_chunk() { return m_ic; }
-    void add_next(Addr next) {
-        m_nexts[next] = 0;
-    }
+    inline const  std::set< BlockView* >& get_nexts() {  return m_nexts; }
+
     void ppBlock(TR::vex_context&vctx, std::shared_ptr<spdlog::logger> log) {
         ppIR pp(log, spdlog::level::debug);
         irsb_chunk src = get_irsb_chunk();
@@ -333,25 +379,27 @@ public:
         pp.vex_printf("\tPUT(%d) = ", bb->offsIP);
         pp.ppIRExpr(bb->next);
         pp.vex_printf("; exit-");
-        pp.ppIRJumpKind(bb->jumpkind);
-        if (m_nexts.size() == 1) {
-            //vassert(bb->next->tag == Iex_Const);
-            Addr next = m_nexts.begin()->first;
-            pp.vex_printf("\n\tjmp sub_0x%llx \n", next);
-        }
-        else {
-            for (auto it = m_nexts.begin(); it != m_nexts.end(); it++) {
-                auto next = it->first;
-                pp.vex_printf("\n\tif (");
-                pp.ppIRExpr(ic->get_irsb()->next);
-                pp.vex_printf(")== 0x%x jmp sub_0x%x ;\n", next, next);
-            }
-            pp.vex_printf("\ttranslate(");
-            pp.ppIRExpr(bb->next);
-            pp.vex_printf(")");
-            pp.vex_printf("}\n");
-        }
+        //pp.ppIRJumpKind(bb->jumpkind);
+        //if (m_nexts.size() == 1) {
+        //    //vassert(bb->next->tag == Iex_Const);
+        //    Addr next = m_nexts.begin()->first;
+        //    pp.vex_printf("\n\tjmp sub_0x%llx \n", next);
+        //}
+        //else {
+        //    for (auto it = m_nexts.begin(); it != m_nexts.end(); it++) {
+        //        auto next = it->first;
+        //        pp.vex_printf("\n\tif (");
+        //        pp.ppIRExpr(ic->get_irsb()->next);
+        //        pp.vex_printf(")== 0x%x jmp sub_0x%x ;\n", next, next);
+        //    }
+        //    pp.vex_printf("\ttranslate(");
+        //    pp.ppIRExpr(bb->next);
+        //    pp.vex_printf(")");
+        //    pp.vex_printf("}\n");
+        //}
     }
+
+
 
     void makr_fork_ea(Addr ea){
         auto bb_ea = m_ic->get_bb_base();
@@ -364,6 +412,10 @@ public:
         return std::find(m_fork_ea.begin(), m_fork_ea.end(), ea) != m_fork_ea.end();
     }
 };
+
+
+
+
 class GraphView {
     using _jmps = std::forward_list<Addr>;
     template<typename Addr> friend class PathExplorer;
@@ -380,11 +432,36 @@ class GraphView {
             return std::hash<size_t>()(name.first ^ name.second);
         }
     };
-
-    std::unordered_map<BBKey, BlockView, BBKeyHash> m_blocks;
-    
-
 public:
+    using BlocksTy = typename std::unordered_map<BBKey, BlockView, BBKeyHash>;
+private:
+    BlocksTy m_blocks;
+    
+public:
+    class ExplodedGraph {
+    public:
+        GraphView& graph_view;
+
+        using nodes_iterator = GraphView::BlocksTy::iterator;
+        using NodeRef = BlockView*;
+
+        //std::vector<NodeRef> node;
+        std::vector<NodeRef> nodes;
+        ExplodedGraph(GraphView& GV) :graph_view(GV) {
+            auto& blocks = graph_view.get_blocks();
+            nodes.reserve(blocks.size());
+            auto it = blocks.begin();
+            for (; it != blocks.end(); it++) {
+                auto sub_ep = it->first.first;
+                auto check_sum = it->first.second;
+                BlockView& basic_irsb_chunk = it->second;
+                //basic_irsb_chunk.ppBlock(m_vctx, log);
+                nodes.emplace_back(&basic_irsb_chunk);
+            }
+        }
+
+    };
+
     std::shared_ptr<spdlog::logger> log;
     GraphView(TR::vex_context& vctx) :m_vctx(vctx) {
         log = spdlog::basic_logger_mt<spdlog::async_factory>("ircode", "ircode.txt");
@@ -394,7 +471,11 @@ public:
 
     ~GraphView() {
         ppGraphView();
+        creat_graph();
     }
+
+    BlocksTy& get_blocks() { return m_blocks; }
+
     void ppGraphView() {
         auto it = m_blocks.begin();
         for (; it != m_blocks.end(); it++) {
@@ -406,7 +487,10 @@ public:
             basic_irsb_chunk.ppBlock(m_vctx, log);
         }
     }
-    void add_block(irsb_chunk irsb_chunk, Addr next);
+
+    void creat_graph();
+
+    BlockView* add_block(irsb_chunk irsb_chunk, BlockView* next);
     void add_exit(irsb_chunk irsb_chunk, Addr code_ea, Addr next);
     void state_task(State& s);
     void explore_block(State* s);
@@ -421,7 +505,7 @@ public:
         auto it = m_blocks.find(key);
         if (it == m_blocks.end()) {
             vassert(0);
-            m_blocks.emplace(key, BlockView(irsb_chunk));
+            //m_blocks.emplace(key, BlockView(irsb_chunk));
         }
         else {
             it->second.makr_fork_ea(code_ea);
@@ -435,7 +519,7 @@ public:
 
         if (it == m_blocks.end()) {
             vassert(0);
-            m_blocks.emplace(key, BlockView(irsb_chunk));
+            //m_blocks.emplace(key, BlockView(irsb_chunk));
             return false;
         }
         else {
@@ -451,14 +535,24 @@ public:
 
 };
 
+#include "GraphFormatDecl.h"
 
 class explorer : public TraceInterface {
     GraphView& m_gv;
     UInt m_IMark_stmtn;
+    irsb_chunk bck_irsb;
 public:
     explorer(GraphView& gv) :m_gv(gv) {
     }
-    
+    void update_block_chain(irsb_chunk curr) {
+        if (bck_irsb) {
+            m_gv.add_block(bck_irsb, m_gv.add_block(curr, nullptr));
+        }
+        else {
+            m_gv.add_block(curr, nullptr);
+        }
+        bck_irsb = curr;
+    }
     virtual void traceStart(State& s, HWord ea) override;
         virtual void traceIRSB(State& s, HWord ea, irsb_chunk&) override;
             virtual void traceIRStmtStart(State& s, irsb_chunk&, UInt stmtn) override;
@@ -499,12 +593,15 @@ void explorer::traceIRStmtStart(State& s, irsb_chunk& bb, UInt stmtn)
         m_IMark_stmtn = stmtn;
     }
     if (st->tag == Ist_Exit) {
+
         Addr64 exitptr = st->Ist.Exit.dst->Ico.U64;
         if (st->Ist.Exit.dst->tag == Ico_U32) exitptr &= 0xffffffff;
-        m_gv.add_exit(bb, s.get_cpu_ip(), exitptr);
+        //m_gv.add_exit(bb, s.get_cpu_ip(), exitptr);
+        //update_block_chain(bb);
         rsbool guard = s.tIRExpr(st->Ist.Exit.guard).tobool();
         if LIKELY(guard.real()) {
             if LIKELY(guard.tor()) {
+                update_block_chain(bb);
             }
         }
         else {
@@ -555,28 +652,30 @@ void explorer::traceIRStmtEnd(State& s, irsb_chunk& irsb, UInt stmtn)
 void explorer::traceIRnext(State& s, irsb_chunk& irsb, const tval& next)
 {
     TraceInterface::traceIRnext(s, irsb, next);
-
+    update_block_chain(irsb);
     //ppIR pp(m_gv.log);
+    
 
-    std::deque<sv::tval> result;
-    if (next.real()) {
-        Addr64 ptr = next;
-        if (next.nbits() == 32)  ptr &= 0xffffffff;
-        m_gv.add_block(irsb, ptr);
-    }
-    else {
-        Int eval_size = eval_all(result, s.solv, next);
-        if (eval_size <= 0) {
-            throw Expt::SolverNoSolution("eval_size <= 0", s.solv);
-        }
-        else {
-            for (auto re : result) {
-                Addr64 ptr = re;
-                if (re.nbits() == 32)  ptr &= 0xffffffff;
-                m_gv.add_block(irsb, ptr);
-            }
-        }
-    }
+
+    //std::deque<sv::tval> result;
+    //if (next.real()) {
+    //    Addr64 ptr = next;
+    //    if (next.nbits() == 32)  ptr &= 0xffffffff;
+    //    //m_gv.add_block(bck_irsb, ptr);
+    //}
+    //else {
+    //    Int eval_size = eval_all(result, s.solv, next);
+    //    if (eval_size <= 0) {
+    //        throw Expt::SolverNoSolution("eval_size <= 0", s.solv);
+    //    }
+    //    else {
+    //        for (auto re : result) {
+    //            Addr64 ptr = re;
+    //            if (re.nbits() == 32)  ptr &= 0xffffffff;
+    //            //m_gv.add_block(bck_irsb, ptr);
+    //        }
+    //    }
+    //}
 }
 
 void explorer::traceIrsbEnd(State& s, irsb_chunk& irsb)
@@ -660,19 +759,38 @@ void gk(State&s, Addr ea, GraphView& gv) {
 
 }
 
-void GraphView::add_block(irsb_chunk irsb_chunk, Addr next)
+
+
+void GraphView::creat_graph()
 {
-    auto ea = irsb_chunk->get_bb_base();
-    auto checksum = irsb_chunk->get_checksum();
+
+    std::stringstream Dots;
+    ExplodedGraph E(*this);
+    ExplodedGraph* pE = &E;
+    llvm::GraphWriter<ExplodedGraph*> G(Dots, pE, false);
+    G.writeGraph("cao");
+
+    std::ofstream Dot;
+    Dot.open("examplex.dot");
+    Dot << Dots.str();
+    Dot.close();
+}
+
+BlockView* GraphView::add_block(irsb_chunk bck_irsb, BlockView* next)
+{
+    auto ea = bck_irsb->get_bb_base();
+    auto checksum = bck_irsb->get_checksum();
     auto key = BBKey(std::make_pair(ea, checksum));
     auto it = m_blocks.find(key);
     if (it == m_blocks.end()) {
-        m_blocks.emplace(key, BlockView(irsb_chunk, next));
+        return &m_blocks.emplace(key, BlockView(bck_irsb, next)).first->second;
     }
     else{
         it->second.add_next(next);
+        return &it->second;
     }
 }
+
 
 void GraphView::add_exit(irsb_chunk irsb_chunk, Addr code_ea, Addr next)
 {
@@ -681,7 +799,7 @@ void GraphView::add_exit(irsb_chunk irsb_chunk, Addr code_ea, Addr next)
     auto key = BBKey(std::make_pair(ea, checksum));
     auto it = m_blocks.find(key);
     if (it == m_blocks.end()) {
-        m_blocks.emplace(key, BlockView(irsb_chunk));
+        //m_blocks.emplace(key, BlockView(irsb_chunk));
     }
 }
 
@@ -1080,15 +1198,65 @@ void vmp_reback(State& s) {
 };
 
 
-bool test_creakme() {
+
+static State_Tag statistics(State& s) {
+    
+
+    std::cout << "run vmp insns count " << s.insn_count << std::endl;
+    return Running;
+}
+
+
+
+rsval<Long> symbolic_read_no_as(StateBase& s, const rsval<ULong>& addr, const rsval<Long>& count) {
+    int n = 0;
+    for (; n < 10; n++) {
+        auto FLAG = s.mk_int_const(8).tos<false, 8>();
+        s.mem.Ist_Store(addr + n, FLAG);
+    }
+    return rsval<Long>(s.ctx(), 6);
+}
+
+
+static State_Tag print_simplify(State& s) {
+    const char bf[] = { 7, 4, 4, 15, 53, 71, 81, 87, 122 };
+
+    auto enc = s.regs.get<Ity_I32>(AMD64_IR_OFFSET::RBP) - 0x50;
+    for (int i = 0; i < sizeof(bf); i++) {
+        auto e = s.mem.load<Ity_I8>(enc + i);
+        s.solv.add(e == (UChar)bf[i]);
+
+        std::cout << e.tos().simplify() << std::endl;
+    }
+    printf("checking\n\n");
+    auto dfdfs = s.solv.check();
+    if (dfdfs == z3::sat) {
+        printf("issat");
+        auto m = s.solv.get_model();
+        std::cout << m << std::endl;
+        std::cout << s.solv << std::endl;
+    }
+    else {
+        printf("unsat?????????? %d", dfdfs);
+        std::cout << s.solv << std::endl;
+    }
+
+    s.solv.pop();
+    return Death;
+    std::cout << "run vmp insns count " << s.insn_count << std::endl;
+    return Running;
+}
+
+
+bool test_creakme1() {
     vex_context v(4);
     v.param().set("ntdll_KiUserExceptionDispatcher", std::make_shared<TR::sys_params_value>((size_t)0x777B3BC0));
     v.param().set("Kernel", gen_kernel(Ke::OS_Kernel_Kd::OSK_Windows));
     TR::State state(v, VexArchX86);
-    state.read_bin_dump("Z:\\vmp\\Project1.vmp.exe.dump");
-    
+    state.read_bin_dump("Z:\\vmp\\vmpbackup\\creakme.vmp.exe.dump");
 
-    state.get_trace()->setFlag(CF_traceInvoke);
+#if 1
+    //state.get_trace()->setFlag(CF_traceInvoke);
     //v.hook_read(read);
     v.hook_read(symbolic_read);
     state.get_trace()->setFlag(CF_ppStmts);
@@ -1099,20 +1267,79 @@ bool test_creakme() {
     //005671c8 0f31            rdtsc
    // v.hook_add(0x76F91778, hook2);
     //v.hook_add(0x74c922fc, nullptr, CF_ppStmts);
-    
-    //v.hook_add(0x50dd56a7, hoo);
+
+    v.hook_add(0x411912, statistics);
 
     //state.regs.set()
 
-    z3::MemArray mem(state, "A");
+   /* z3::MemArray mem(state, "A");
     mem.store(subval<64>(state, 32), tval(subval<8>(state.ctx(), 32)));
     auto va = mem.load(subval<64>(state, 32), 32);
     std::cout << va.simplify() << std::endl;
     IROpt opt(state);
-    irsb_chunk ic = opt.irvex().translate_front(0x428a45);
+    irsb_chunk ic = opt.irvex().translate_front(0x428a45);*/
 
     //opt.emu_irsb(ic->get_irsb(), true);
-    vmp_reback(state);
+
+
+    state.solv.mk_tactic_solver_default(state);
+
+    /*for (int i = 0; i < 1000; i++) {
+        TR::State* cld = (TR::State*)state.ForkState(state.get_state_ep());
+        TESTCODE(
+        cld->start();
+        )
+            std::cout << "run guest insns count " << cld->insn_count << std::endl;
+        delete cld;
+    }*/
+
+    //TESTCODE(state.start(););
+
+    TESTCODE(
+        vmp_reback(state);
+    )
+        std::cout << "run guest insns count " << state.insn_count << std::endl;
+
+#else
+    state.get_trace()->setFlag(CF_ppStmts);
+    auto count = rcval<UInt>(state.ctx(), 1);
+    auto input_ea = state.vex_stack_get<UInt>(1);
+    symbolic_read(state, input_ea, count);
+
+    state.start();
+    /*TESTCODE(
+        vmp_reback(state);
+    )*/
+
+#endif
+    return 1;
+}
+
+bool test_creakme() {
+#if 0
+
+#else
+
+    vex_context v(4);
+    v.param().set("ntdll_KiUserExceptionDispatcher", std::make_shared<TR::sys_params_value>((size_t)0x777B3BC0));
+    v.param().set("Kernel", gen_kernel(Ke::OS_Kernel_Kd::OSK_Windows));
+    TR::State state(v, VexArchX86);
+    state.read_bin_dump("Z:\\vmp\\vmpbackup\\creakme.exe.dump");
+
+
+    state.get_trace()->setFlag(CF_ppStmts);
+    auto count = rcval<UInt>(state.ctx(), 9);
+    auto input_ea = state.vex_stack_get<UInt>(1);
+    symbolic_read_no_as(state, input_ea, count);
+    v.hook_add(0x411912, print_simplify);
+
+    state.start();
+    /*TESTCODE(
+        vmp_reback(state);
+    )*/
+
+#endif
+    test_creakme1();
     return true;
 }
 

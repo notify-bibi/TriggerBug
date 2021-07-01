@@ -170,7 +170,7 @@ void StateBase::read_mem_dump(const char* filename)
     spdlog::info("\\-------------------------------------------------------------------------------------/");
 
     clock_t closeCount = clock();
-    spdlog::info("Spend time in:   {:16d} s.", closeCount - beginCount);
+    spdlog::info("Spend time in:   {:16d} ms.", closeCount - beginCount);
     spdlog::info("Need to write    {} MByte.", ((double)need_write_size) / 0x100000);
     spdlog::info("Actually written {} MByte.", ((double)write_count) / 0x100000);
     free(name_buff);

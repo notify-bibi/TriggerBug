@@ -1842,6 +1842,7 @@ namespace sv {
 
         template<bool ts, int tn, z3sk tk>
         inline rsval(const rsval<ts, tn, tk>& s) {
+            static_assert(Tn >= tn, "larget to short val?");
             if (s.m_data_inuse) {
                 new(this) rclass(s.tor());
                 //this->rsval::ctype_val::ctype_val(s.tor());

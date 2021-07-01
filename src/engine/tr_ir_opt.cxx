@@ -5,7 +5,9 @@
 
 ppIR::~ppIR()
 {
-    m_logger->log(m_leve, m_str);
+    if (m_logger) {
+        m_logger->log(m_leve, m_str);
+    }
 }
 ;
 

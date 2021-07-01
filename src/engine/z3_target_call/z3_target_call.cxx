@@ -44,7 +44,8 @@ static const bool s_parity_table[256] = {
     0, true, true, 0, true, 0, 0, true,
 };
 
-rsbool parity_table(sv::rsval<true, 8, Z3_BV_SORT> const&d) {
+
+rsbool parity_table_8(sv::rsval<false, 8, Z3_BV_SORT> const&d) {
     if (d.real()) {
         return rsbool(d, (bool)s_parity_table[d.tor()]);
     }
@@ -54,7 +55,14 @@ rsbool parity_table(sv::rsval<true, 8, Z3_BV_SORT> const&d) {
         for (UChar i = 1; i <= 7; i++) {
             all = all + p.extract<1>(i);
         }
-        return all.extract<0, 0>() == 0;
+#if 1
+        auto ret = all.extract<0, 0>() == subval<1>(d, 0);
+        std::cout << ret.simplify() << std::endl;
+#else
+        auto ret = all.extract<0, 0>() == 0;
+        std::cout << ret.simplify() << std::endl;
+#endif
+        return ret;
     }
 };
 

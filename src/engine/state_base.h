@@ -279,6 +279,7 @@ namespace TR {
         std::shared_ptr<VMemBase> mem_access;
         Mem      mem;
         BranchManager<StateBase> branch;
+        ULong insn_count = 0;
 
         VexGuestState* get_regs_maps();
         inline HWord get_cpu_ip() { return guest_start; }

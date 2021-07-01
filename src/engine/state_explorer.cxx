@@ -817,6 +817,7 @@ TR::Vex_Kind State::emu_irsb(std::deque<BtsRefType>& tmp_branch, HWord& guest_st
         {
         case Ist_NoOp: break;
         case Ist_IMark: {
+            insn_count += 1;
             guest_start = (THWord)s->Ist.IMark.addr;
             IMark_stmtn = stmtn;
             // 虚拟断点
@@ -1487,12 +1488,12 @@ template<typename THword>
 void State::vex_push(const rsval<THword>& v)
 {
     if (vinfo().is_mode_32()) {
-        rsval<UInt> sp = regs.get<ULong>(m_vinfo.gRegsSpOffset()) - sizeof(UInt);
+        rsval<UInt> sp = regs.get<UInt>(m_vinfo.gRegsSpOffset()) - (UInt)sizeof(UInt);
         regs.set(m_vinfo.gRegsSpOffset(), sp);
         mem.store(sp, v);
     }
     else {
-        rsval<ULong> sp = regs.get<ULong>(m_vinfo.gRegsSpOffset()) - sizeof(ULong);
+        rsval<ULong> sp = regs.get<ULong>(m_vinfo.gRegsSpOffset()) - (ULong)sizeof(ULong);
         regs.set(m_vinfo.gRegsSpOffset(), sp);
         mem.store(sp, v);
     }
@@ -1503,12 +1504,12 @@ rsval<THword> State::vex_pop()
 {
     if (vinfo().is_mode_32()) {
         rsval<UInt> sp = regs.get<UInt>(m_vinfo.gRegsSpOffset());
-        regs.set(m_vinfo.gRegsSpOffset(), sp + sizeof(UInt));
+        regs.set(m_vinfo.gRegsSpOffset(), sp + (UInt)sizeof(UInt));
         return mem.load<THword>(sp);
     }
     else {
         rsval<ULong> sp = regs.get<ULong>(m_vinfo.gRegsSpOffset());
-        regs.set(m_vinfo.gRegsSpOffset(), sp + sizeof(ULong));
+        regs.set(m_vinfo.gRegsSpOffset(), sp + (ULong)sizeof(ULong));
         return mem.load<THword>(sp);
     }
     

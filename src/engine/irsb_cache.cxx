@@ -115,7 +115,9 @@ public:
     }
 
     irsb_chunk ado_treebuild(irsb_chunk src, VexRegisterUpdates pxControl) {
-        
+
+        IRSB* src_irsb = deepCopyIRSB(src->get_irsb());
+
         //ppIRSB(irsb);
         Bool(*preciseMemExnsFn) (Int, Int, VexRegisterUpdates);
         
@@ -129,7 +131,7 @@ public:
         default:
             VPANIC("LibVEX_Codegen: unsupported guest insn set");
         }
-        Addr max_ga = ado_treebuild_BB(src->get_irsb(), preciseMemExnsFn, pxControl);
+        Addr max_ga = ado_treebuild_BB(src_irsb, preciseMemExnsFn, pxControl);
         auto junk = LibVEX_IRSB_transfer();
         
             // -----------
@@ -138,7 +140,7 @@ public:
             dst->tyenv = deepCopyIRTypeEnv(src->get_irsb()->tyenv);
             dst->offsIP = src->get_irsb()->offsIP;
             concatenate_irsbs(dst, src->get_irsb());*/
-            dst = deepCopyIRSB(src->get_irsb());
+            dst = deepCopyIRSB(src_irsb);
 
             auto irsb_mem_alloc = LibVEX_IRSB_transfer();
             // ------------

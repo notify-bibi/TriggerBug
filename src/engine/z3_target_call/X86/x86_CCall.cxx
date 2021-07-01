@@ -618,6 +618,16 @@ rsval<uint32_t> z3_x86g_calculate_condition(
     const rsval<uint32_t>& cc_dep2,
     const rsval<uint32_t>& cc_ndep)
 {
+    if (cc_op.symb()) {
+        vassert(0);
+        std::cout <<"cc_op is "<< cc_op.tos().simplify() << std::endl;
+        rsval<uint32_t> ret = z3_x86g_calculate_condition(cond.tor(), rcval<uint32_t>(cond.ctx(), 0), cc_dep1, cc_dep2, cc_ndep);
+        for (int i = 0; i < 39; i++) {
+            rsval<uint32_t> one = z3_x86g_calculate_condition(cond.tor(), rcval<uint32_t>(cond.ctx(), i), cc_dep1, cc_dep2, cc_ndep);
+            ret = ite(cc_op == i, one, ret);
+        } 
+        return ret;
+    }
     auto flag = _z3_x86g_calculate_condition(cond.tor(), cc_op.tor(), cc_dep1, cc_dep2, cc_ndep);
     if (((int)cond.tor() & 1)) {
         flag = !flag;

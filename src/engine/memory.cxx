@@ -834,6 +834,7 @@ void TR::Mem::store(const subval<ea_nbits>& address, const sv::symbolic<sign, nb
     //                }
     //            }
     //            else {
+    std::cout << address << std::endl;
     Itaddress it = addr_begin(m_solver, address, ea_nbits);
     while (it.check()) {
         count++;
