@@ -173,8 +173,9 @@ ULong TR::MBase::find_block_reverse(ULong start, HWord size)
     return start += 0x1000;
 }
 
-const UChar* TR::MBase::get_vex_insn_linear(Addr guest_IP_sbstart)
+const UChar* TR::MBase::get_vex_insn_linear(Addr IP, Long delta)
 {
+    Addr guest_IP_sbstart = IP + delta;
     PAGE* p = get_mem_page(guest_IP_sbstart);
     MEM_ACCESS_ASSERT_R(p, guest_IP_sbstart);
     const UChar* guest_addr_in_page = (const UChar*)pto_data(p)->get_bytes(guest_IP_sbstart & 0xfff);
@@ -183,10 +184,10 @@ const UChar* TR::MBase::get_vex_insn_linear(Addr guest_IP_sbstart)
         .the_rest_n = 0x1000 - (UInt)(guest_IP_sbstart & 0xfff),
         .guest_addr_in_page = guest_addr_in_page,
         .guest_block_start = guest_IP_sbstart,
-        .insn_block_delta = -1
-
+        .insn_block_delta = 0,
+        .delta = delta
     };
-    const UChar* res = this->libvex_guest_insn_control(guest_IP_sbstart, 0, guest_addr_in_page);
+    const UChar* res = this->libvex_guest_insn_control(IP, delta, guest_addr_in_page - delta);
     p->set_code_flag();
     return res;
 }
@@ -194,13 +195,15 @@ const UChar* TR::MBase::get_vex_insn_linear(Addr guest_IP_sbstart)
 const UChar* TR::MBase::libvex_guest_insn_control(Addr guest_IP_sbstart, Long delta, const UChar* guest_code)
 {
     guest_IP_sbstart += delta;
-    if (0x756EEFC5 == guest_IP_sbstart) {
+    if (0x004531C7 == guest_IP_sbstart) {
         printf("bkp");
     }
     UInt the_rest_n = 0x1000 - (guest_IP_sbstart & 0xfff);
     Insn_linear& insn_linear = this->m_insn_linear;
-    vassert(insn_linear.insn_block_delta <= delta);
-    insn_linear.insn_block_delta = delta;
+    Long insn_block_delta = guest_IP_sbstart - insn_linear.guest_block_start;
+    vassert(insn_linear.insn_block_delta <= insn_block_delta);
+    insn_linear.insn_block_delta = insn_block_delta;
+
     static constexpr UInt size_swap = sizeof(Insn_linear::swap);
     static constexpr UInt Threshold = size_swap/2;
     if LIKELY(insn_linear.flag == enough) {
@@ -219,8 +222,8 @@ const UChar* TR::MBase::libvex_guest_insn_control(Addr guest_IP_sbstart, Long de
             
             memcpy(insn_linear.swap, align_address, Threshold);
             memcpy(insn_linear.swap + Threshold, pto_data(next_p)->get_bytes(0), Threshold);
-            const UChar* ret_guest_code = (unsigned char*)(insn_linear.swap + (Threshold - the_rest_n)) - delta;
-            return ret_guest_code;
+            const UChar* ret_guest_code = (unsigned char*)(insn_linear.swap + (Threshold - the_rest_n)) - insn_block_delta;
+            return ret_guest_code - insn_linear.delta;
         }
     }
     else if UNLIKELY(insn_linear.flag == swap_state) {
@@ -230,7 +233,8 @@ const UChar* TR::MBase::libvex_guest_insn_control(Addr guest_IP_sbstart, Long de
             PAGE* p = get_mem_page(guest_IP_sbstart);
             MEM_ACCESS_ASSERT_R(p, guest_IP_sbstart);
             p->set_code_flag();
-            return (const UChar*)pto_data(p)->get_bytes((offset - Threshold)) - delta;
+            const UChar* ret_guest_code = (const UChar*)pto_data(p)->get_bytes((offset - Threshold)) - insn_block_delta;
+            return ret_guest_code - insn_linear.delta;
         }
     }
     

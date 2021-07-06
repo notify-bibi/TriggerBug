@@ -61,6 +61,11 @@ namespace TR {
 
     // ------------------------EmuEnvGuest--------------------------
 
+    static const UChar* guest_get_vex_insn_linear_imp(void* instance, Addr guest_IP_sbstart, Long delta) {
+        Mem* mem = (Mem*)instance;
+        return mem->get_vex_insn_linear(guest_IP_sbstart, delta);
+    };
+
     static const UChar* guest_insn_control_method_imp(void* instance, Addr guest_IP_sbstart, Long delta, const UChar* /*in guest_code*/ guest_code) {
         Mem* mem = (Mem*)instance;
         return mem->libvex_guest_insn_control(guest_IP_sbstart, delta, guest_code);
@@ -94,7 +99,7 @@ namespace TR {
     void EmuEnvGuest::set_guest_bb_insn_control_obj()
     {
         //set guest code bytes unlinear addr
-        bb_insn_control_obj_set((void*)&m_mem, guest_insn_control_method_imp);
+        bb_insn_control_obj_set((void*)&m_mem, guest_get_vex_insn_linear_imp, guest_insn_control_method_imp);
     }
 
 

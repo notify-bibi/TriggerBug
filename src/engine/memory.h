@@ -279,6 +279,7 @@ namespace TR {
         const UChar* guest_addr_in_page;
         Addr guest_block_start;
         Int insn_block_delta;
+        Long delta;
     } Insn_linear;
 
 
@@ -326,7 +327,7 @@ namespace TR {
 
         //把两个不连续的页放到insn_linear里，以支持valgrind的跨页翻译
         //第一次调用
-        const UChar* get_vex_insn_linear(Addr guest_IP_sbstart);
+        const UChar* get_vex_insn_linear(Addr guest_IP_sbstart, Long delta = 0);
 
         //多次调用即返回线性地址
         //使用之必须调用 get_vex_insn_linear

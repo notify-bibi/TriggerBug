@@ -4,6 +4,7 @@ extern "C" {
 #endif 
 
 extern const UChar* /*out guest_code*/ guest_generic_bb_insn_control(Addr guest_IP_sbstart, Long delta,  /*in guest_code*/ const UChar* guest_code);
+extern const UChar* guest_get_vex_insn_linear(Addr guest_IP_sbstart, Long delta);
 
 #ifndef GEN_MKG
 

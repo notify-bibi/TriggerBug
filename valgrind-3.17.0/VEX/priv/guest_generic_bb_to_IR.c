@@ -145,7 +145,7 @@ static void create_self_checks_as_needed(
       if (host_word_szB == 8) host_word_type = Ity_I64;
       vassert(host_word_type != Ity_INVALID);
 
-      vassert(vge->n_used >= 1 && vge->n_used <= 3);
+      // vassert(vge->n_used >= 1 && vge->n_used <= 3);
 
       /* Caller shouldn't claim that nonexistent extents need a
          check. */
@@ -159,7 +159,7 @@ static void create_self_checks_as_needed(
                        : IRConst_U64(guest_IP_sbstart);
 
       const Int n_extent_slots = sizeof(vge->base) / sizeof(vge->base[0]);
-      vassert(n_extent_slots == 3);
+      //vassert(n_extent_slots == 3);
 
       vassert(selfcheck_idx + (n_extent_slots - 1) * 7 + 6 < irsb->stmts_used);
 
@@ -902,6 +902,7 @@ static IRSB* disassemble_basic_block_till_stop(
    *extent_base     = guest_IP_sbstart + delta;
    *extent_len      = 0;
 
+   guest_code = guest_get_vex_insn_linear(guest_IP_sbstart , delta);
    while (True) {
        guest_code = guest_generic_bb_insn_control(guest_IP_sbstart, delta, guest_code);
       vassert(*n_instrs < n_instrs_allowed);
@@ -1168,7 +1169,7 @@ static void update_instr_budget( /*MOD*/Int*  instrs_avail,
 static void add_extent ( /*MOD*/VexGuestExtents* vge, Addr base, UShort len )
 {
    const UInt limit = sizeof(vge->base) / sizeof(vge->base[0]);
-   vassert(limit == 3);
+   //vassert(limit == 3);
    const UInt i = vge->n_used;
    vassert(i < limit);
    vge->n_used++;
@@ -1294,6 +1295,8 @@ IRSB* bb_to_IR (
       )
 {
    Bool debug_print = toBool(vex_traceflags & VEX_TRACE_FE);
+   const Int n_extent_slots = sizeof(vge->base) / sizeof(vge->base[0]);
+   //vassert(n_extent_slots == 3);
 
    /* check sanity .. */
    vassert(sizeof(HWord) == sizeof(void*));
@@ -1326,7 +1329,7 @@ IRSB* bb_to_IR (
       the areas, if any, that need to be checked. */
    IRStmt* nop = IRStmt_NoOp();
    Int selfcheck_idx = irsb->stmts_used;
-   for (Int i = 0; i < 3 * 7; i++)
+   for (Int i = 0; i < n_extent_slots * 7; i++)
       addStmtToIRSB( irsb, nop );
 
    /* If the caller supplied a function to add its own preamble, use
@@ -1382,9 +1385,6 @@ IRSB* bb_to_IR (
 
    /* Now, see if we can extend the initial block. */
    while (True) {
-      const Int n_extent_slots = sizeof(vge->base) / sizeof(vge->base[0]);
-      vassert(n_extent_slots == 3);
-
       // Reasons to give up immediately:
       // User or tool asked us not to chase
       if (!vex_control.guest_chase)
@@ -1458,7 +1458,7 @@ IRSB* bb_to_IR (
                  debug_print, dis_instr_fn, guest_code, offB_GUEST_IP
               );
          vassert(bb_instrs_used <= instrs_avail);
-
+         // ppIRSB(bb);
          /* Now we have to append 'bb' to 'irsb'. */
          concatenate_irsbs(irsb, bb);
 
@@ -1667,7 +1667,9 @@ IRSB* bb_to_IR (
          }
          break;
       } // if (be.tag == Be_Cond)
-
+      else if(irsb_be.tag == Be_Uncond){
+        
+      }
       // We don't know any other way to extend the block.  Give up.
       else {
          break;
@@ -1685,8 +1687,411 @@ IRSB* bb_to_IR (
    );
 
    *n_guest_instrs = instrs_used;
+   // vex_printf("base: %p, vge->n_used:%d\n", guest_IP_sbstart, vge->n_used);
    return irsb;
 }
+
+
+
+
+
+
+
+
+
+IRSB* IR_concatenate_irsbs(
+    /*OUT*/VexGuestExtents* vge,
+    /*OUT*/UInt* n_sc_extents,
+    /*OUT*/UInt* n_guest_instrs, /* stats only */
+    /*OUT*/UShort* n_uncond_in_trace, /* stats only */
+    /*OUT*/UShort* n_cond_in_trace, /* stats only */
+    /*MOD*/VexRegisterUpdates* pxControl,
+    /*IN*/ void* callback_opaque,
+    /*IN*/ DisOneInstrFn    dis_instr_fn,
+    /*IN*/ const UChar* guest_code,
+    /*IN*/ Addr             guest_IP_sbstart,
+    /*IN*/ Bool(*chase_into_ok)(void*, Addr),
+    /*IN*/ VexEndness       host_endness,
+    /*IN*/ Bool             sigill_diag,
+    /*IN*/ VexArch          arch_guest,
+    /*IN*/ const VexArchInfo* archinfo_guest,
+    /*IN*/ const VexAbiInfo* abiinfo_both,
+    /*IN*/ IRType           guest_word_type,
+    /*IN*/ UInt(*needs_self_check)
+    (void*, /*MB_MOD*/VexRegisterUpdates*,
+        const VexGuestExtents*),
+    /*IN*/ Bool(*preamble_function)(void*, IRSB*),
+    /*IN*/ Int              offB_GUEST_CMSTART,
+    /*IN*/ Int              offB_GUEST_CMLEN,
+    /*IN*/ Int              offB_GUEST_IP,
+    /*IN*/ Int              szB_GUEST_IP,
+    /*IN*/ IRSB**           irsb_s
+)
+{
+    Bool debug_print = toBool(vex_traceflags & VEX_TRACE_FE);
+
+    /* check sanity .. */
+    vassert(sizeof(HWord) == sizeof(void*));
+    //vassert(vex_control.guest_max_insns >= 1);
+    //vassert(vex_control.guest_max_insns <= 100);
+    vassert(vex_control.guest_chase == False || vex_control.guest_chase == True);
+    vassert(guest_word_type == Ity_I32 || guest_word_type == Ity_I64);
+
+    if (guest_word_type == Ity_I32) {
+        vassert(szB_GUEST_IP == 4);
+        vassert((offB_GUEST_IP % 4) == 0);
+    }
+    else {
+        vassert(szB_GUEST_IP == 8);
+        vassert((offB_GUEST_IP % 8) == 0);
+    }
+
+    /* Initialise all return-by-ref state. */
+    vge->n_used = 0;
+    *n_sc_extents = 0;
+    *n_guest_instrs = 0;
+    *n_uncond_in_trace = 0;
+    *n_cond_in_trace = 0;
+
+    /* And a new IR superblock to dump the result into. */
+    IRSB* irsb = irsb_s[0];
+
+    /* Running state:
+          irsb          the SB we are incrementally constructing
+          vge           associated extents for irsb
+          instrs_used   instrs incorporated in irsb so far
+          instrs_avail  number of instrs we have space for
+          verbose_mode  did we see an 'is verbose' hint at some point?
+    */
+    Int  instrs_used = 0;
+    Int  instrs_avail = vex_control.guest_max_insns;
+    Bool verbose_mode = False;
+
+    /* Disassemble the initial block until we have to stop. */
+    {
+        Int    ib_instrs_used = 0;
+        Bool   ib_verbose_seen = False;
+        Addr   ib_base = 0;
+        UShort ib_len = 0;
+        
+
+        vassert(ib_instrs_used <= instrs_avail);
+
+        // Update instrs_used, extents, budget.
+        instrs_used += ib_instrs_used;
+        add_extent(vge, ib_base, ib_len);
+        update_instr_budget(&instrs_avail, &verbose_mode,
+            ib_instrs_used, ib_verbose_seen);
+    }
+
+    /* Now, see if we can extend the initial block. */
+    while (True) {
+        const Int n_extent_slots = sizeof(vge->base) / sizeof(vge->base[0]);
+        vassert(n_extent_slots == 3);
+
+        // Reasons to give up immediately:
+        // User or tool asked us not to chase
+        if (!vex_control.guest_chase)
+            break;
+
+        // Out of extent slots
+        vassert(vge->n_used <= n_extent_slots);
+        if (vge->n_used == n_extent_slots)
+            break;
+
+        // Almost out of available instructions
+        vassert(instrs_avail >= 0);
+        if (instrs_avail < 3)
+            break;
+
+        // Try for an extend.  What kind we do depends on how the current trace
+        // ends.
+        /* Regarding the use of |sigill_diag| in the extension logic below.  This
+           is a Bool which controls whether or not the individual insn
+           disassemblers print an error message in the case where they don't
+           recognise an instruction.  Generally speaking this is set to True, but
+           VEX's client can set it to False if it wants.
+
+           Now that we are speculatively chasing both arms of a conditional
+           branch, this can lead to the following problem: one of those arms
+           contains an undecodable instruction.  That insn is not reached at run
+           time, because the branch itself tests some CPU hwcaps info (or
+           whatever) and execution goes down the other path.  However, it has the
+           bad side effect that the speculative disassembly will nevertheless
+           produce an error message when |sigill_diag| is True.
+
+           To avoid this, in calls to |disassemble_basic_block_till_stop| for
+           speculative code, we pass False instead of |sigill_diag|.  Note that
+           any (unconditional-chase) call to |disassemble_basic_block_till_stop|
+           that happens after a conditional chase that results in recovery of an
+           &&-idiom, is still really non-speculative, because the &&-idiom
+           translation can only happen when both paths lead to the same
+           continuation point.  The result is that we know that the initial BB,
+           and BBs recovered via chasing an unconditional branch, are sure to be
+           executed, even if that unconditional branch follows a conditional
+           branch which got folded into an &&-idiom.  So we don't need to change
+           the |sigill_diag| value used for them.  It's only for the
+           conditional-branch SX and FT disassembly that it must be set to
+           |False|.
+        */
+        BlockEnd irsb_be;
+        analyse_block_end(&irsb_be, irsb, guest_IP_sbstart, guest_word_type,
+            chase_into_ok, callback_opaque,
+            offB_GUEST_IP, szB_GUEST_IP, debug_print);
+
+        // Try for an extend based on an unconditional branch or call to a known
+        // destination.
+        if (irsb_be.tag == Be_Uncond) {
+            if (debug_print) {
+                vex_printf("\n-+-+ Unconditional follow (ext# %d) to 0x%llx "
+                    "-+-+\n\n",
+                    (Int)vge->n_used,
+                    (ULong)((Long)guest_IP_sbstart + irsb_be.Be.Uncond.delta));
+            }
+            Int    bb_instrs_used = 0;
+            Bool   bb_verbose_seen = False;
+            Addr   bb_base = 0;
+            UShort bb_len = 0;
+            IRSB* bb
+                = disassemble_basic_block_till_stop(
+                    /*OUT*/ &bb_instrs_used, &bb_verbose_seen, &bb_base, &bb_len,
+                    /*MOD*/ emptyIRSB(),
+                    /*IN*/  irsb_be.Be.Uncond.delta,
+                    instrs_avail, guest_IP_sbstart, host_endness, sigill_diag,
+                    arch_guest, archinfo_guest, abiinfo_both, guest_word_type,
+                    debug_print, dis_instr_fn, guest_code, offB_GUEST_IP
+                );
+            vassert(bb_instrs_used <= instrs_avail);
+
+            /* Now we have to append 'bb' to 'irsb'. */
+            concatenate_irsbs(irsb, bb);
+
+            // Update instrs_used, extents, budget.
+            instrs_used += bb_instrs_used;
+            add_extent(vge, bb_base, bb_len);
+            update_instr_budget(&instrs_avail, &verbose_mode,
+                bb_instrs_used, bb_verbose_seen);
+            *n_uncond_in_trace += 1;
+        } // if (be.tag == Be_Uncond)
+
+        // Try for an extend based on a conditional branch, specifically in the
+        // hope of identifying and recovering, an "A && B" condition spread across
+        // two basic blocks.
+        if (irsb_be.tag == Be_Cond)
+        {
+            if (debug_print) {
+                vex_printf("\n-+-+ (ext# %d) Considering cbranch to"
+                    " SX=0x%llx FT=0x%llx -+-+\n\n",
+                    (Int)vge->n_used,
+                    (ULong)((Long)guest_IP_sbstart + irsb_be.Be.Cond.deltaSX),
+                    (ULong)((Long)guest_IP_sbstart + irsb_be.Be.Cond.deltaFT));
+            }
+            const Int instrs_avail_spec = 3;
+
+            if (debug_print) {
+                vex_printf("-+-+ SPEC side exit -+-+\n\n");
+            }
+            Int    sx_instrs_used = 0;
+            Bool   sx_verbose_seen = False;
+            Addr   sx_base = 0;
+            UShort sx_len = 0;
+            IRSB* sx_bb
+                = disassemble_basic_block_till_stop(
+                    /*OUT*/ &sx_instrs_used, &sx_verbose_seen, &sx_base, &sx_len,
+                    /*MOD*/ emptyIRSB(),
+                    /*IN*/  irsb_be.Be.Cond.deltaSX,
+                    instrs_avail_spec, guest_IP_sbstart, host_endness,
+                    /*sigill_diag=*/False, // See comment above
+                    arch_guest, archinfo_guest, abiinfo_both, guest_word_type,
+                    debug_print, dis_instr_fn, guest_code, offB_GUEST_IP
+                );
+            vassert(sx_instrs_used <= instrs_avail_spec);
+            BlockEnd sx_be;
+            analyse_block_end(&sx_be, sx_bb, guest_IP_sbstart, guest_word_type,
+                chase_into_ok, callback_opaque,
+                offB_GUEST_IP, szB_GUEST_IP, debug_print);
+
+            if (debug_print) {
+                vex_printf("\n-+-+ SPEC fall through -+-+\n\n");
+            }
+            Int    ft_instrs_used = 0;
+            Bool   ft_verbose_seen = False;
+            Addr   ft_base = 0;
+            UShort ft_len = 0;
+            IRSB* ft_bb
+                = disassemble_basic_block_till_stop(
+                    /*OUT*/ &ft_instrs_used, &ft_verbose_seen, &ft_base, &ft_len,
+                    /*MOD*/ emptyIRSB(),
+                    /*IN*/  irsb_be.Be.Cond.deltaFT,
+                    instrs_avail_spec, guest_IP_sbstart, host_endness,
+                    /*sigill_diag=*/False, // See comment above
+                    arch_guest, archinfo_guest, abiinfo_both, guest_word_type,
+                    debug_print, dis_instr_fn, guest_code, offB_GUEST_IP
+                );
+            vassert(ft_instrs_used <= instrs_avail_spec);
+            BlockEnd ft_be;
+            analyse_block_end(&ft_be, ft_bb, guest_IP_sbstart, guest_word_type,
+                chase_into_ok, callback_opaque,
+                offB_GUEST_IP, szB_GUEST_IP, debug_print);
+
+            /* In order for the transformation to be remotely valid, we need:
+               - At least one of the sx_bb or ft_bb to be have a Be_Cond end.
+               - sx_bb and ft_bb definitely don't form a loop.
+            */
+            Bool ok = sx_be.tag == Be_Cond || ft_be.tag == Be_Cond;
+            if (ok) {
+                ok = definitely_does_not_jump_to_delta(&sx_be,
+                    irsb_be.Be.Cond.deltaFT)
+                    || definitely_does_not_jump_to_delta(&ft_be,
+                        irsb_be.Be.Cond.deltaSX);
+            }
+
+            // Check for other mutancy:
+            // irsb ft == sx, or the same for ft itself or sx itself
+            if (ok) {
+                if (irsb_be.Be.Cond.deltaSX == irsb_be.Be.Cond.deltaFT
+                    || (sx_be.tag == Be_Cond
+                        && sx_be.Be.Cond.deltaSX == sx_be.Be.Cond.deltaFT)
+                    || (ft_be.tag == Be_Cond
+                        && ft_be.Be.Cond.deltaSX == ft_be.Be.Cond.deltaFT)) {
+                    ok = False;
+                }
+            }
+
+            /* Now let's see if any of our four cases actually holds (viz, is this
+               really an && idiom? */
+            UInt idiom = 4;
+            if (ok) {
+                vassert(irsb_be.tag == Be_Cond);
+                UInt iom1 = 4/*invalid*/;
+                if (sx_be.tag == Be_Cond) {
+                    /**/ if (sx_be.Be.Cond.deltaFT == irsb_be.Be.Cond.deltaFT)
+                        iom1 = 0;
+                    else if (sx_be.Be.Cond.deltaSX == irsb_be.Be.Cond.deltaFT)
+                        iom1 = 1;
+                }
+                UInt iom2 = 4/*invalid*/;
+                if (ft_be.tag == Be_Cond) {
+                    /**/ if (ft_be.Be.Cond.deltaFT == irsb_be.Be.Cond.deltaSX)
+                        iom2 = 2;
+                    else if (ft_be.Be.Cond.deltaSX == irsb_be.Be.Cond.deltaSX)
+                        iom2 = 3;
+                }
+
+                /* We should only have identified at most one of the four idioms. */
+                vassert(iom1 == 4 || iom2 == 4);
+                idiom = (iom1 < 4) ? iom1 : (iom2 < 4 ? iom2 : 4);
+                if (idiom == 4) {
+                    ok = False;
+                    if (debug_print) {
+                        vex_printf("\n-+-+ &&-idiom not recognised, "
+                            "giving up. -+-+\n\n");
+                    }
+                }
+            }
+
+            if (ok) {
+                vassert(idiom < 4);
+                // "Normalise" the data so as to ensure we only have one of the four
+                // idioms to transform.
+                if (idiom == 2 || idiom == 3) {
+                    swap_sx_and_ft(irsb, &irsb_be);
+#              define SWAP(_ty, _aa, _bb) \
+                  do { _ty _tmp = _aa; _aa = _bb; _bb = _tmp; } while (0)
+                    SWAP(Int, sx_instrs_used, ft_instrs_used);
+                    SWAP(Bool, sx_verbose_seen, ft_verbose_seen);
+                    SWAP(Addr, sx_base, ft_base);
+                    SWAP(UShort, sx_len, ft_len);
+                    SWAP(IRSB*, sx_bb, ft_bb);
+                    SWAP(BlockEnd, sx_be, ft_be);
+#              undef SWAP
+                }
+                if (idiom == 1 || idiom == 3) {
+                    swap_sx_and_ft(sx_bb, &sx_be);
+                }
+                vassert(sx_be.tag == Be_Cond);
+                vassert(sx_be.Be.Cond.deltaFT == irsb_be.Be.Cond.deltaFT);
+
+                if (debug_print) {
+                    vex_printf("\n-+-+ After normalisation (idiom=%u) -+-+\n", idiom);
+                    vex_printf("\n-+-+ IRSB -+-+\n");
+                    ppIRSB(irsb);
+                    ppBlockEnd(&irsb_be);
+                    vex_printf("\n\n-+-+ SX -+-+\n");
+                    ppIRSB(sx_bb);
+                    ppBlockEnd(&sx_be);
+                    vex_printf("\n");
+                }
+                // Finally, check the sx block actually is guardable.
+                ok = block_is_guardable(sx_bb);
+                if (!ok && debug_print) {
+                    vex_printf("\n-+-+ SX not guardable, giving up. -+-+\n\n");
+                }
+            }
+
+            if (ok) {
+                if (0 || debug_print) {
+                    vex_printf("\n-+-+ DOING &&-TRANSFORM -+-+\n");
+                }
+                // Finally really actually do the transformation.
+                // 0. remove the last Exit on irsb.
+                // 1. Add irsb->tyenv->types_used to all the tmps in sx_bb,
+                //    by calling deltaIRStmt on all stmts.
+                // 2. Guard all stmts in sx_bb on irsb_be.Be.Cond.condSX,
+                //    **including** the last stmt (which must be an Exit).  It's
+                //    here that the And1 is generated.
+                // 3. Copy all guarded stmts to the end of irsb.
+                vassert(irsb->stmts_used >= 2);
+                irsb->stmts_used--;
+                Int delta = irsb->tyenv->types_used;
+
+                // Append sx_bb's tyenv to irsb's
+                for (Int i = 0; i < sx_bb->tyenv->types_used; i++) {
+                    (void)newIRTemp(irsb->tyenv, sx_bb->tyenv->types[i]);
+                }
+
+                for (Int i = 0; i < sx_bb->stmts_used; i++) {
+                    IRStmt* st = deepCopyIRStmt(sx_bb->stmts[i]);
+                    deltaIRStmt(st, delta);
+                    add_guarded_stmt_to_end_of(irsb, st, irsb_be.Be.Cond.condSX);
+                }
+
+                if (debug_print) {
+                    vex_printf("\n-+-+ FINAL RESULT -+-+\n\n");
+                    ppIRSB(irsb);
+                    vex_printf("\n");
+                }
+
+                // Update instrs_used, extents, budget.
+                instrs_used += sx_instrs_used;
+                add_extent(vge, sx_base, sx_len);
+                update_instr_budget(&instrs_avail, &verbose_mode,
+                    sx_instrs_used, sx_verbose_seen);
+                *n_cond_in_trace += 1;
+            }
+            break;
+        } // if (be.tag == Be_Cond)
+
+        // We don't know any other way to extend the block.  Give up.
+        else {
+            break;
+        }
+
+    } // while (True)
+
+    /* We're almost done.  The only thing that might need attending to is that
+       a self-checking preamble may need to be created.  If so it gets placed
+       in the 21 slots reserved above. */
+    
+
+    *n_guest_instrs = instrs_used;
+    return irsb;
+}
+
+
+
+
+
 
 
 /*--------------------------------------------------------------*/

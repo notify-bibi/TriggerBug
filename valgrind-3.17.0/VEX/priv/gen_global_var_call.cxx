@@ -57,14 +57,21 @@ static_assert(sizeof(IRExpr) == 32, "gggg");
 
 typedef struct {
     void* instance;
+    const UChar* (*guest_get_vex_insn_linear)(void* instance, Addr guest_IP_sbstart, Long delta);
     const UChar* (*guest_insn_control_method)(void* instance, Addr guest_IP_sbstart, Long delta, const UChar* /*in guest_code*/ guest_code);
 }guest_insn_control_type;
 
 
 static thread_local guest_insn_control_type guest_insn_control = { nullptr, nullptr };
 
-void bb_insn_control_obj_set(void* instance, const UChar* (*guest_insn_control_method)(void*, Addr, Long, const UChar*)) {
-    guest_insn_control = { instance,  guest_insn_control_method };
+void bb_insn_control_obj_set(void* instance, const UChar* (*guest_get_vex_insn_linear)(void* instance, Addr guest_IP_sbstart, Long delta), const UChar* (*guest_insn_control_method)(void*, Addr, Long, const UChar*)) {
+    guest_insn_control = { instance, guest_get_vex_insn_linear, guest_insn_control_method };
+}
+
+const UChar* guest_get_vex_insn_linear(Addr guest_IP_sbstart, Long delta) {
+    guest_insn_control_type* local_guest_insn_control = &guest_insn_control;
+    const UChar* new_guest_code = local_guest_insn_control->guest_get_vex_insn_linear(local_guest_insn_control->instance, guest_IP_sbstart, delta);
+    return new_guest_code;
 }
 
 const UChar* /*out guest_code*/ guest_generic_bb_insn_control(Addr guest_IP_sbstart, Long delta, const UChar* /*in guest_code*/ guest_code) {

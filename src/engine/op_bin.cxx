@@ -76,7 +76,9 @@ sv::tval tBinop(IROp op, sv::tval const& a, sv::tval const& b){
             Z3caseIop_Arithmetic(Add, false, +);
             Z3caseIop_Arithmetic(Sub, false, -);
             Z3caseIop_Arithmetic(Mul, false, *);
+            Z3caseIop(And, false, 1, & )
             Z3caseIop_Arithmetic(And, false, &);
+            Z3caseIop(Or, false, 1, | )
             Z3caseIop_Arithmetic(Or , false, | );
             Z3caseIop_Arithmetic(Xor, false, ^);
 
@@ -251,7 +253,9 @@ sv::tval tBinop(IROp op, sv::tval const& a, sv::tval const& b){
 	    caseIop_Arithmetic(Sub, -);
 	    caseIop_Arithmetic(Mul, *);
         caseIop_Arithmetic(And, &);
+        case Iop_And1: {  return (sv::ctype_val<false, 1>&)a & (sv::ctype_val<false, 1>&)b;  }
         caseIop_Arithmetic(Or , |);
+        case Iop_Or1: {  return (sv::ctype_val<false, 1>&)a | (sv::ctype_val<false, 1>&)b;  }
         caseIop_Arithmetic(Xor, ^);
 
         caseIop(DivU, uint32_t,  32, / );

@@ -35,8 +35,10 @@ static constexpr Addr64 vex_host_reg_base = REGISTER_LEN / 2;
 using namespace TR;
 //注意地址位宽
 void tAMD64REGS(int offset, int length);
-
-extern void bb_insn_control_obj_set(void* instance, const UChar* (*guest_insn_control_method)(void*, Addr, Long, const UChar*));
+extern void bb_insn_control_obj_set(void* instance, const UChar* (*guest_get_vex_insn_linear)(void* instance, Addr guest_IP_sbstart, Long delta), const UChar* (*guest_insn_control_method)(void*, Addr, Long, const UChar*));
+static const UChar* host_guest_get_vex_insn_linear_method(void*, Addr guest_IP_sbstart, Long delta) {
+    return (const UChar*)(guest_IP_sbstart & fastMask(48));
+}
 static const UChar* host_insn_control_method(void*, Addr guest_IP_sbstart, Long delta, const UChar* host_code) {
     return host_code;
 }
@@ -78,7 +80,7 @@ namespace TR {
 
     void EmuEnvHost::set_guest_bb_insn_control_obj()
     {
-        bb_insn_control_obj_set(nullptr, host_insn_control_method);
+        bb_insn_control_obj_set(nullptr, host_guest_get_vex_insn_linear_method, host_insn_control_method);
     }
 
     void EmuEnvHost::malloc_ir_buff(Z3_context ctx)

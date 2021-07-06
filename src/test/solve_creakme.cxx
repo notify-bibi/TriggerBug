@@ -1,4 +1,4 @@
-#include "test.h"
+Ôªø#include "test.h"
 #include <forward_list>
 extern "C" {
     #include <ir_opt.h>
@@ -86,7 +86,7 @@ namespace TIR {
 }
 
 
-// ∏ﬂº∂∑¥±‡“Î »Àø¥
+// È´òÁ∫ßÂèçÁºñËØë ‰∫∫Áúã
 class AstBlock {
     typedef typename std::pair<Int, Int> key_value_pair_t;
     std::list<key_value_pair_t> m_param; // regOffset size
@@ -358,14 +358,19 @@ public:
     static BlockView mk_root(irsb_chunk& ic) { return BlockView(ic); }
     irsb_chunk get_irsb_chunk() const { return m_ic; }
     void add_next(BlockView* next) {
-        m_nexts.emplace(next);
+        if (next) {
+            m_nexts.emplace(next);
+        }
     }
     inline const  std::set< BlockView* >& get_nexts() {  return m_nexts; }
 
-    void ppBlock(TR::vex_context&vctx, std::shared_ptr<spdlog::logger> log) {
+    void ppBlock(TR::vex_context&vctx, std::shared_ptr<spdlog::logger> log, bool treebuild = false) {
         ppIR pp(log, spdlog::level::debug);
         irsb_chunk src = get_irsb_chunk();
-        irsb_chunk ic = ado_treebuild( vctx.get_irsb_cache(), src, VexRegUpdSpAtMemAccess);
+        irsb_chunk ic = src;
+        if (treebuild) {
+            ic = ado_treebuild(vctx.get_irsb_cache(), src, VexRegUpdSpAtMemAccess);
+        }
         auto bb_ea = ic->get_bb_base();
         auto bb_sz = ic->get_bb_size();
         pp.vex_printf("sub_0x%llx : \n\t/*\n\t* checksum:%16llx sz:%x\n\t*/{\n", bb_ea, ic->get_checksum(), bb_sz);
@@ -379,24 +384,27 @@ public:
         pp.vex_printf("\tPUT(%d) = ", bb->offsIP);
         pp.ppIRExpr(bb->next);
         pp.vex_printf("; exit-");
-        //pp.ppIRJumpKind(bb->jumpkind);
-        //if (m_nexts.size() == 1) {
-        //    //vassert(bb->next->tag == Iex_Const);
-        //    Addr next = m_nexts.begin()->first;
-        //    pp.vex_printf("\n\tjmp sub_0x%llx \n", next);
-        //}
-        //else {
-        //    for (auto it = m_nexts.begin(); it != m_nexts.end(); it++) {
-        //        auto next = it->first;
-        //        pp.vex_printf("\n\tif (");
-        //        pp.ppIRExpr(ic->get_irsb()->next);
-        //        pp.vex_printf(")== 0x%x jmp sub_0x%x ;\n", next, next);
-        //    }
-        //    pp.vex_printf("\ttranslate(");
-        //    pp.ppIRExpr(bb->next);
-        //    pp.vex_printf(")");
-        //    pp.vex_printf("}\n");
-        //}
+
+
+        pp.ppIRJumpKind(bb->jumpkind);
+        if (m_nexts.size() == 1) {
+            //vassert(bb->next->tag == Iex_Const);
+            auto next = *m_nexts.begin();
+            Addr next_ea = next->get_irsb_chunk()->get_bb_base();
+            pp.vex_printf("\n\tjmp sub_0x%llx \n", next_ea);
+        }
+        else {
+            for (std::set< BlockView* >::iterator it = m_nexts.begin(); it != m_nexts.end(); ++it) {
+                Addr next = (*it)->get_irsb_chunk()->get_bb_base();
+                pp.vex_printf("\n\tif (");
+                pp.ppIRExpr(ic->get_irsb()->next);
+                pp.vex_printf(")== 0x%x jmp sub_0x%x ;\n", next, next);
+            }
+            pp.vex_printf("\ttranslate(");
+            pp.ppIRExpr(bb->next);
+            pp.vex_printf(")");
+            pp.vex_printf("}\n");
+        }
     }
 
 
@@ -470,13 +478,11 @@ public:
     }
 
     ~GraphView() {
-        ppGraphView();
-        creat_graph();
     }
 
     BlocksTy& get_blocks() { return m_blocks; }
 
-    void ppGraphView() {
+    void ppGraphView(bool treebuild = false) {
         auto it = m_blocks.begin();
         for (; it != m_blocks.end(); it++) {
             auto sub_ep = it->first.first;
@@ -484,11 +490,12 @@ public:
             BlockView& basic_irsb_chunk = it->second;
             vassert(check_sum == basic_irsb_chunk.get_irsb_chunk()->get_checksum());
             vassert(sub_ep == basic_irsb_chunk.get_irsb_chunk()->get_bb_base());
-            basic_irsb_chunk.ppBlock(m_vctx, log);
+            basic_irsb_chunk.ppBlock(m_vctx, log, treebuild);
         }
     }
 
     void creat_graph();
+    void simplify();
 
     BlockView* add_block(irsb_chunk irsb_chunk, BlockView* next);
     void add_exit(irsb_chunk irsb_chunk, Addr code_ea, Addr next);
@@ -760,6 +767,38 @@ void gk(State&s, Addr ea, GraphView& gv) {
 }
 
 
+void GraphView::simplify() {
+    std::deque<std::pair<int, BlockView>> chain;
+    UInt ea = 0x44b26c;
+    size_t checksum = 0x6bf1af95973564c5;
+
+    IRSB* dst = emptyIRSB();
+
+    for (;;) {
+        auto key = BBKey(std::make_pair(ea, checksum));
+        auto it = m_blocks.find(key);
+        if (it == m_blocks.end()) 
+            break;
+        
+        BlockView& BLK = it->second;
+
+        //concatenate_irsbs(dst, BLK.get_irsb_chunk()->get_irsb());
+        
+    }
+
+
+
+    auto it = m_blocks.begin();
+    for (; it != m_blocks.end(); it++) {
+        auto sub_ep = it->first.first;
+        auto check_sum = it->first.second;
+        BlockView& basic_irsb_chunk = it->second;
+
+
+
+
+    }
+}
 
 void GraphView::creat_graph()
 {
@@ -1041,10 +1080,10 @@ public:
             }
             break;
         }
-        case Ist_CAS /*±»Ωœ∫ÕΩªªª*/: {//xchg    rax, [r10]
+        case Ist_CAS /*ÊØîËæÉÂíå‰∫§Êç¢*/: {//xchg    rax, [r10]
             //  t15   = CASle(t31 ::t12   ->t13)
             //  oldLo = CASle(addr::expdLo->dataLo)
-            //  Ω‚ Õ
+            //  Ëß£Èáä
             //  oldLo = *addr  t15 = *t31
             //  *addr = dataLo *t31 = t13
             IRCAS cas = *(s->Ist.CAS.details);
@@ -1081,7 +1120,7 @@ public:
             }
             break;// fresh changed block
         }
-        case Ist_MBE:  /*ƒ⁄¥Ê◊‹œﬂ ¬º˛£¨fence/«Î«Û/ Õ∑≈◊‹œﬂÀ¯*/ {
+        case Ist_MBE:  /*ÂÜÖÂ≠òÊÄªÁ∫ø‰∫ã‰ª∂Ôºåfence/ËØ∑Ê±Ç/ÈáäÊîæÊÄªÁ∫øÈîÅ*/ {
             ppIRMBusEvent(s->Ist.MBE.event);
             break;
         }
@@ -1126,7 +1165,7 @@ public:
                             guest_start = s->Ist.Exit.dst->Ico.U64 & EAmask;
                         }
                         else {
-                            if UNLIKELY(s->Ist.Exit.dst->Ico.U64 & EAmask == guest_start) { // “Ï≥£—≠ª∑
+                            if UNLIKELY(s->Ist.Exit.dst->Ico.U64 & EAmask == guest_start) { // ÂºÇÂ∏∏Âæ™ÁéØ
                                 ppIRSB(irsb);
                             }
                         }
@@ -1194,6 +1233,11 @@ void vmp_reback(State& s) {
     GraphView gv(s.vctx());
     gv.explore_block(&s);
     s.vctx().pool().wait();
+
+    gv.ppGraphView(true);
+    gv.creat_graph();
+    gv.simplify();
+
     spdlog::info("state:{}", (std::string)s);
 };
 
@@ -1316,7 +1360,7 @@ bool test_creakme1() {
 }
 
 bool test_creakme() {
-#if 0
+#if 1
 
 #else
 

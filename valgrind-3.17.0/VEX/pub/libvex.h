@@ -691,8 +691,8 @@ typedef
 */
 typedef
    struct {
-      Addr   base[3];
-      UShort len[3];
+      Addr   base[30];
+      UShort len[30];
       UShort n_used;
    }
    VexGuestExtents;

@@ -6,7 +6,7 @@ extern "C" {
 #include <deque>
 
 std::deque<void*> LibVEX_IRSB_transfer(void);
-extern void bb_insn_control_obj_set(void* instance, const UChar* (*guest_insn_control_method)(void*, Addr, Long, const UChar*));
+extern void bb_insn_control_obj_set(void* instance, const UChar* (*guest_get_vex_insn_linear)(void* instance, Addr guest_IP_sbstart, Long delta), const UChar* (*guest_insn_control_method)(void*, Addr, Long, const UChar*));
 extern const UChar* /*out guest_code*/ guest_generic_bb_insn_control(Addr guest_IP_sbstart, Long delta,  /*in guest_code*/ const UChar* guest_code);
-
+extern const UChar* guest_get_vex_insn_linear(Addr guest_IP_sbstart, Long delta);
 #endif
