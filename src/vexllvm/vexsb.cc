@@ -11,20 +11,46 @@
 #include "vexsb.h"
 #include "vexstmt.h"
 #include "vexexpr.h"
-#include "guest.h"
-#include "guestabi.h"
+//#include "guest.h"
+//#include "guestabi.h"
 #include "vexcpustate.h"
 
 using namespace llvm;
 
-VexSB::VexSB(guest_ptr in_guest_addr, const IRSB* irsb)
-:	guest_addr(in_guest_addr),
+//VexSB::VexSB(guest_ptr in_guest_addr, const IRSB* irsb)
+//:	guest_addr(in_guest_addr),
+//	reg_c(irsb->tyenv->types_used),
+//	stmt_c(irsb->stmts_used),
+//	last_imark(0)
+//{
+//	values = new Value*[reg_c];
+//	memset(values, 0, sizeof(Value*)*getNumRegs());
+//	types = new IRType[reg_c];
+//	memcpy(types, irsb->tyenv->types, reg_c * sizeof(IRType));
+//
+//	loadInstructions(irsb);
+//	loadJump(irsb->jumpkind, VexExpr::create(stmts.back().get(), irsb->next));
+//}
+//
+//VexSB::VexSB(guest_ptr in_guest_addr, unsigned int num_regs, IRType* in_types)
+//	: guest_addr(in_guest_addr),
+//	reg_c(num_regs),
+//	stmt_c(0),
+//	last_imark(0)
+//{
+//	values = new Value * [reg_c];
+//	memset(values, 0, sizeof(Value*) * getNumRegs());
+//	types = new IRType[reg_c];
+//	memcpy(types, in_types, reg_c * sizeof(IRType));
+//}
+VexSB::VexSB(guest_ptr in_guest_addr, const IRSB* irsb):
+	guest_addr(in_guest_addr),
 	reg_c(irsb->tyenv->types_used),
 	stmt_c(irsb->stmts_used),
 	last_imark(0)
 {
-	values = new Value*[reg_c];
-	memset(values, 0, sizeof(Value*)*getNumRegs());
+	values = new Value * [reg_c];
+	memset(values, 0, sizeof(Value*) * getNumRegs());
 	types = new IRType[reg_c];
 	memcpy(types, irsb->tyenv->types, reg_c * sizeof(IRType));
 
@@ -32,6 +58,17 @@ VexSB::VexSB(guest_ptr in_guest_addr, const IRSB* irsb)
 	loadJump(irsb->jumpkind, VexExpr::create(stmts.back().get(), irsb->next));
 }
 
+VexSB::VexSB(guest_ptr in_guest_addr, unsigned int num_regs, IRType* in_types) :
+	guest_addr(in_guest_addr),
+	reg_c(num_regs),
+	stmt_c(0),
+	last_imark(0)
+{
+	values = new Value * [reg_c];
+	memset(values, 0, sizeof(Value*) * getNumRegs());
+	types = new IRType[reg_c];
+	memcpy(types, in_types, reg_c * sizeof(IRType));
+}
 VexSB* VexSB::create(guest_ptr guest_addr, const IRSB* in_irsb)
 {
 	if (in_irsb == NULL) return NULL;
@@ -50,17 +87,6 @@ VexSB::~VexSB(void)
 	delete [] types;
 }
 
-VexSB::VexSB(guest_ptr in_guest_addr, unsigned int num_regs, IRType* in_types)
-: 	guest_addr(in_guest_addr),
-	reg_c(num_regs),
-	stmt_c(0),
-	last_imark(0)
-{
-	values = new Value*[reg_c];
-	memset(values, 0, sizeof(Value*)*getNumRegs());
-	types = new IRType[reg_c];
-	memcpy(types, in_types, reg_c * sizeof(IRType));
-}
 
 void VexSB::load(
 	std::vector<VexStmt*>& in_stmts,
@@ -162,6 +188,7 @@ llvm::Function* VexSB::emit(const char* fname)
 
 	/* compute goto */
 	ret_v = jump_expr->emit();
+	
 
 	/* record exit type */
 	switch(jump_kind) {
@@ -192,7 +219,7 @@ llvm::Function* VexSB::emit(const char* fname)
 		break;
 	default:
 		fprintf(stderr, "UNKNOWN JUMP TYPE %x\n", jump_kind);
-		assert(0 == 1 && "BAD JUMP");
+		//assert(0 == 1 && "BAD JUMP");
 	}
 
 	/* return goto */
@@ -229,27 +256,27 @@ VexStmt* VexSB::loadNextInstruction(const IRStmt* stmt)
 	}
 	return vs;
 }
-
-std::vector<InstExtent>	VexSB::getInstExtents(void) const
-{
-	std::vector<InstExtent>	ret;
-
-	for (auto &stmt : stmts) {
-		VexStmtIMark	*im;
-
-		im = dynamic_cast<VexStmtIMark*>(stmt.get());
-		if (im == nullptr) continue;
-
-		ret.push_back(
-			InstExtent(im->getAddr(), (uint8_t)im->getLen()));
-	}
-
-	return ret;
-}
+//
+//std::vector<InstExtent>	VexSB::getInstExtents(void) const
+//{
+//	std::vector<InstExtent>	ret;
+//
+//	for (auto &stmt : stmts) {
+//		VexStmtIMark	*im;
+//
+//		im = dynamic_cast<VexStmtIMark*>(stmt.get());
+//		if (im == nullptr) continue;
+//
+//		ret.push_back(
+//			InstExtent(im->getAddr(), (uint8_t)im->getLen()));
+//	}
+//
+//	return ret;
+//}
 
 void VexSB::loadInstructions(const IRSB* irsb)
 {
-	ppIRSB(const_cast<IRSB*>(irsb));
+	// ppIRSB(const_cast<IRSB*>(irsb));
 	for (unsigned int i = 0; i < getNumStmts(); i++) {
 		VexStmt		*stmt;
 		VexStmtIMark	*imark;
@@ -288,9 +315,13 @@ void VexSB::loadJump(IRJumpKind jk, VexExpr* blk_next)
 	case Ijk_Sys_sysenter:
 		delete blk_next;
 		/* stupid linuxism-- fake out the vsyscall page */
-		jump_expr = new VexExprConstU32(
+		/*jump_expr = new VexExprConstU32(
 			stmts.back().get(),
 			getEndAddr().o+LINUX_SYSENTER_TRAMPOLINE_OFFSET);
+		jump_expr->emit*/
+		break;
+	case Ijk_Sys_int32:
+		jump_expr = blk_next;
 		break;
 	case Ijk_Yield:
 	case Ijk_Call:
@@ -313,14 +344,14 @@ guest_ptr VexSB::getJmp(void) const
 {
 	VexExprConst	*cexpr;
 
-	cexpr = dynamic_cast<VexExprConst*>(jump_expr);
+	/*cexpr = dynamic_cast<VexExprConst*>(jump_expr);
 	if (cexpr == NULL) return guest_ptr(0);
 
-	return guest_ptr(cexpr->toValue());
+	return guest_ptr(cexpr->toValue());*/
 }
 
 guest_ptr VexSB::getEndAddr(void) const
 {
 	assert (last_imark != NULL);
-	return last_imark->getAddr() + last_imark->getLen();
+	//return last_imark->getAddr() + last_imark->getLen();
 }

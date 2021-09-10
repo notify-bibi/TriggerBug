@@ -375,9 +375,10 @@ void VexStmtDirty::emit(void) const
 
 	for (auto &v : args)
 		args_v.push_back(v->emit());
-	args_v[0] = builder->CreatePointerCast(
-		args_v[0],
-		func->arg_begin()->getType());
+	// w add this
+	if (!args_v.empty()){
+		args_v[0] = builder->CreatePointerCast( args_v[0], func->arg_begin()->getType() );
+	}
 	v_call = builder->CreateCall(func, args_v);
 
 	/* sometimes dirty calls don't set temporaries */
@@ -452,15 +453,16 @@ VexStmtExit::VexStmtExit(VexSB* in_parent, const IRStmt* in_stmt)
 	}
 
 	switch(in_stmt->Ist.Exit.dst->tag) {
-	#define CONST_TAGOP(x) case Ico_##x :			\
-	dst = guest_ptr(in_stmt->Ist.Exit.dst->Ico.x); return;	\
+	#define CONST_TAGOP(n, x) case Ico_##x :			\
+	dst = guest_ptr(in_stmt->Ist.Exit.dst->Ico.x); \
+    nbits = n; return;	
 
-	CONST_TAGOP(U1);
-	CONST_TAGOP(U8);
-	CONST_TAGOP(U16);
-	CONST_TAGOP(U32);
-	CONST_TAGOP(U64);
-	CONST_TAGOP(F64i);
+	CONST_TAGOP(1, U1);
+	CONST_TAGOP(8, U8);
+	CONST_TAGOP(16, U16);
+	CONST_TAGOP(32, U32);
+	CONST_TAGOP(64, U64);
+	CONST_TAGOP(64, F64i);
 	default: fprintf(stderr, "UNSUPPORTED CONSTANT TYPE\n");
 	}
 }
@@ -501,7 +503,7 @@ void VexStmtExit::emit(void) const
 	builder->CreateRet(
 		ConstantInt::get(
 			getGlobalContext(),
-			APInt(64, dst)));
+			APInt(nbits, dst)));
 
 	/* continue on */
 	builder->SetInsertPoint(bb_else);

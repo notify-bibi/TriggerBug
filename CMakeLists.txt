@@ -1,28 +1,43 @@
 # CMakeList.txt: 顶层 CMake 项目文件，在此处执行全局配置
 # 并包含子项目。
-# λ cmake.exe -G "Visual Studio 16 2019" -T ClangCL Y:\TriggerBug
+
+
+# VMWIN
+# λ wget https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.1/llvm-12.0.1.src.tar.xz
+# λ cmake -G "Visual Studio 16 2019" -A x64 -T ClangCL -DCMAKE_BUILD_TYPE=Release -DLLVM_BUILD_TOOLS=OFF -DLLVM_TEMPORARILY_ALLOW_OLD_TOOLCHAIN=OFF -DLLVM_TARGETS_TO_BUILD="X86" -DLLVM_LINK_LLVM_DYLIB=ON -DCOMPILER_RT_INCLUDE_TESTS:BOOL=OFF -DLLVM_ENABLE_ASSERTIONS:BOOL=OFF ..\llvm-12.0.1.src\
+# λ cmake --build . --target LLVMSupport LLVMCore LLVMIRReader LLVMVisualizers LLVMMC -j7
+# λ C:\Users\notify\Desktop\vcpkg-2021.05.12\vcpkg.exe install gflags:x64-windows glog:x64-windows spdlog:x64-windows
+
+# λ cmake.exe -G "Visual Studio 16 2019" -T ClangCL -DCMAKE_PREFIX_PATH="C:\Users\notify\Desktop\llvm-build" -DCMAKE_TOOLCHAIN_FILE=C:\Users\notify\Desktop\vcpkg-2021.05.12\scripts\buildsystems\vcpkg.cmake Z:\reTR
 # λ -DDEBUG_GABLE=ON -DZ3_BUILD_LIBZ3_SHARED=ON -DZ3_USE_LIB_GMP=OFF -DZ3_SINGLE_THREADED=OFF
 #  rm -rf CMakeCache.txt CMakeFiles\
+# λ cd valgrind-3.17.0 && clang -emit-llvm -I valgrind-3.17.0\VEX -I valgrind-3.17.0\VEX\priv\ -I valgrind-3.17.0\VEX\pub -c ..\support\vexops.c  ..\valgrind-3.17.0\VEX\priv\guest_amd64_helpers.c
+
+
+
+# WINDESKTOP
+
+
+
+
+
 
 cmake_minimum_required (VERSION 3.8)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-project (TriggerBug
-        VERSION 1.4.0
+project (VMP
+        VERSION 1.5.0
         DESCRIPTION "engine"
         LANGUAGES CXX
         )
 
 		
-set(Z3_PROJ_DIR "z3-z3-4.8.10")
 set(VALGRIND_PROJ_DIR "valgrind-3.17.0")
-set(SPDLOG_PROJ_DIR "spdlog-1.8.2")
 
+message(STATUS "CMAKE_TOOLCHAIN_FILE is ${CMAKE_TOOLCHAIN_FILE}")
 
 option(DEBUG_GABLE "print cmake info" OFF)
-option(BUILD_Z3 "BUILD Z3" OFF)
-option(BUILD_SPDLOG "BUILD SPDLOG" ON)
 option(BUILD_VALGRIND "BUILD VALGRIND" OFF)
 option(BUILD_TRIGGERBUG "BUILD TRIGGERBUG" OFF)
 option(BUILD_CRYPTO_ANALYZER "BUILD CRYPTO_ANALYZER" OFF)
@@ -50,7 +65,8 @@ endif()
 # /Ob2  展开标记为 inline 或 __inline 的函数和编译器选择的任何其他函数（由编译器自行进行展开，通常称作自动内联）
 # set(EXTINSN -mmmx -msse -msse2 -msse3 -msse4.1 -msse4.2 -mssse3 -mavx -mavx2)
 
-
+add_definitions(-D_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS)
+add_definitions(-D_ENABLE_EXTENDED_ALIGNED_STORAGE)
 IF (WIN32)
 	MESSAGE(STATUS "Now is windows")
 	SET(CMAKE_C_FLAGS_RELEASE   "${CMAKE_C_FLAGS_RELEASE}   /utf-8 /Ob2 /Gr /Ot /Oi /O3 /GS- ")
@@ -80,6 +96,8 @@ add_compile_options(
 					-Wno-switch
 					-Wno-unused-variable
 					)
+
+add_compile_options(-fdelayed-template-parsing)
 
 set(TR_COMPONENT_CXX_FLAGS "")			
 if (("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU") OR ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang") OR ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel"))
@@ -120,6 +138,7 @@ unset(AVX_FLAGS)
 
 
 
+
 include(cmake/tr_add_project.cmake)
 
 #install
@@ -134,40 +153,39 @@ link_directories(${CMAKE_BINARY_DIR}/lib)
 SET(CMAKE_INCLUDE_PATH ${CMAKE_SOURCE_DIR}/include/)
 
 # add include path
-TR_add_include(libz3 ${Z3_PROJ_DIR}/ src src/api src/api/c++)
 TR_add_include(libvalgrind ${VALGRIND_PROJ_DIR}/VEX/ priv/ pub/)
-TR_add_include(spdlog ${SPDLOG_PROJ_DIR}/include/)
-TR_add_include(libtriggerBug src/engine/)
-TR_add_include(threadPool src/thread_pool)
 
 
-set(CMAKE_BINARY_DIR_tmp ${CMAKE_BINARY_DIR})
-set(CMAKE_SOURCE_DIR_tmp ${CMAKE_SOURCE_DIR})
-
-# ----------add lib z3----------
-set(CMAKE_BINARY_DIR "${CMAKE_BINARY_DIR}/${Z3_PROJ_DIR}")
-set(CMAKE_SOURCE_DIR "${CMAKE_SOURCE_DIR}/${Z3_PROJ_DIR}")
-TR_lib_add(libz3 ${Z3_PROJ_DIR} BUILD_Z3 PATH ${CMAKE_INSTALL_LIBDIR})
-#IF (TARGET libz3)
-#    set_target_properties(libz3 PROPERTIES COMPILE_FLAGS "/openmp" )#yes
-#    set_target_properties(libz3 PROPERTIES COMPILE_FLAGS "/Qopenmp" )#yes
-#ENDIF()
-# ----------! lib z3 ----------
-
-# ---------- add lib spdlog ----------
-set(CMAKE_BINARY_DIR "${CMAKE_BINARY_DIR}/${SPDLOG_PROJ_DIR}")
-set(CMAKE_SOURCE_DIR "${CMAKE_SOURCE_DIR}/${SPDLOG_PROJ_DIR}")
-TR_lib_add(spdlog ${SPDLOG_PROJ_DIR} BUILD_SPDLOG PATH ${CMAKE_INSTALL_LIBDIR})
-# ----------! lib spdlog ----------
 
 
-set(CMAKE_BINARY_DIR ${CMAKE_BINARY_DIR_tmp})
-set(CMAKE_SOURCE_DIR ${CMAKE_SOURCE_DIR_tmp})
-unset(CMAKE_BINARY_DIR_tmp)
-unset(CMAKE_SOURCE_DIR_tmp)
+# The package gflags:x64-windows provides CMake targets:
+find_package(LLVM CONFIG REQUIRED)
+
+SET(LLVMVISUALIZERS_PATH support/LLVMVisualizers/)
+SET(LLVM_ADD_NATIVE_VISUALIZERS_TO_SOLUTION TRUE)
+add_subdirectory(${LLVMVISUALIZERS_PATH})
+
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+message(STATUS "Using LLVMVisualizers in: ${LLVMVISUALIZERS_PATH}")
 
 
-add_compile_options(-fdelayed-template-parsing)
+# The package gflags:x64-windows provides CMake targets:
+find_package(gflags CONFIG REQUIRED)
+# target_link_libraries(main PRIVATE gflags_shared gflags::gflags_shared)
+
+# The package glog:x64-windows provides CMake targets:
+find_package(glog CONFIG REQUIRED)
+# target_link_libraries(main PRIVATE glog::glog)
+
+# The package spdlog:x64-windows provides CMake targets:
+find_package(spdlog CONFIG REQUIRED)
+# target_link_libraries(main PRIVATE spdlog::spdlog spdlog::spdlog_header_only)
+
+# The package z3:x64-windows provides CMake targets:
+find_package(Z3 CONFIG REQUIRED)
+# target_link_libraries(main PRIVATE z3::libz3)
+
 
 
 TR_lib_add(threadPool "src/thread_pool" ON)
@@ -178,7 +196,6 @@ TR_lib_add(libvexllvm "src/vexllvm" BUILD_VEXLLVM)
 
 TR_lib_add(TRtest "src/test" BUILD_TRTEST)
 #TR_lib_add(libcfg "src/CFG" BUILD_CFG)
-
 
 IF (${BUILD_PYTHON_FRONTEND})
 	find_library(TR_PYTHON3_LIB_PATH python3)

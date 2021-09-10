@@ -1465,7 +1465,12 @@ for arch in archs:
     print('printf("{}\\n", {});'.format(fmt[:-2].replace("\"", r'\"').lower(), param[:-2]))
 
 
-
+    for r in regnames:
+        pf_off = "{}_IR_OFFSET::{}".format(arch, r)
+        pf_sz = "{}_IR_SIZE::{}".format(arch, r)
+        fmt += "\"{}\": (%d, %d), ".format(r)
+        print('{}RegNames[{}] = "{}";'.format(arch, pf_off, r))
+        
 
 
 

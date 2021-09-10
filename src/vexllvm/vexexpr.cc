@@ -13,8 +13,8 @@
 
 using namespace llvm;
 
-unsigned int VexExpr::vex_expr_op_count[VEX_MAX_OP];
-unsigned VexExpr::unhandled_expr_c = 0;
+unsigned int vex_expr_op_count[VEX_MAX_OP];
+unsigned unhandled_expr_c = 0;
 
 static IROp getNaryOp(const IRExpr* expr)
 {
@@ -45,6 +45,8 @@ static const IRExpr** getNaryArgs(const IRExpr* expr)
 	}
 	return NULL;
 }
+
+
 
 VexExpr* VexExpr::create(VexStmt* in_parent, const IRExpr* expr)
 {
@@ -94,7 +96,7 @@ VexExpr* VexExprNaryOp::createOp(VexStmt* in_parent, const IRExpr* expr)
 	op_idx = op - Iop_INVALID;
 
 	assert (op_idx < VEX_MAX_OP && "Op is larger than VEX_MAX_OP - OFLOW");
-	VexExpr::vex_expr_op_count[op_idx]++;
+	vex_expr_op_count[op_idx]++;
 
 	/* known ops */
 	switch (op) {
@@ -154,6 +156,7 @@ return new VexExprUnop##x(in_parent, expr)
 	BINOP_TAGOP(Add32);
 	BINOP_TAGOP(Add64);
 
+	BINOP_TAGOP(And1);
 	BINOP_TAGOP(And8);
 	BINOP_TAGOP(And16);
 	BINOP_TAGOP(And32);
@@ -252,6 +255,7 @@ return new VexExprUnop##x(in_parent, expr)
 	UNOP_TAGOP(RecipEst32Fx4);
 //	UNOP_TAGOP(RecipEst64Fx2);
 
+	BINOP_TAGOP(Or1);
 	BINOP_TAGOP(Or8);
 	BINOP_TAGOP(Or16);
 	BINOP_TAGOP(Or32);
@@ -892,12 +896,12 @@ inline Value* flattenType(IRBuilder<> *builder, Value* v)
 {
 	if (isa<VectorType>(v->getType())) {
 		auto vt = static_cast<const VectorType*>(v->getType());
-		if (vt->getBitWidth() > 64) {
+		if (vt->getIntegerBitWidth() > 64) {
 			return v;
 		}
 		return builder->CreateBitCast(v, IntegerType::get(
 			getGlobalContext(),
-			vt->getBitWidth()));
+			vt->getIntegerBitWidth()));
 	}
 
 	return v;

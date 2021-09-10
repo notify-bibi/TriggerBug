@@ -124,7 +124,7 @@ VexControl vex_info::init_VexControl() {
         vc.iropt_unroll_thresh = 0;
     vc.guest_max_insns = gmax_insns();
     // vc.guest_chase_thresh = 0;   
-#if 0
+#if 1
     vc.guest_chase = False; //²»Ðí×·¸Ï
 #else
     vc.guest_chase = True; // chain

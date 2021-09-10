@@ -1,19 +1,18 @@
-﻿if(0)
-	find_package(LLVM REQUIRED CONFIG)
+﻿
+include_directories(${LLVM_INCLUDE_DIRS})
+add_definitions(${LLVM_DEFINITIONS})
 
-	message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-	message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+add_definitions(-DVEXLLVM_HELPER_PATH="${CMAKE_SOURCE_DIR}/bitcode")
 
-	# Set your project compile flags.
-	# E.g. if using the C++ header files
-	# you will need to enable C++11 support
-	# for your compiler.
+# Set your project compile flags.
+# E.g. if using the C++ header files
+# you will need to enable C++11 support
+# for your compiler.
+llvm_map_components_to_libnames(llvm_libs support core irreader bitwriter)
 
-	include_directories(${LLVM_INCLUDE_DIRS})
-	add_definitions(${LLVM_DEFINITIONS})
-endif()
 
 TR_add_library( TARGET libvexllvm 
                 CONFIGURE_TYPE SHARED
-				REQUIRE libvalgrind
+				REQUIRE libvalgrind libtriggerbug ${llvm_libs} gflags glog
               )
+			  

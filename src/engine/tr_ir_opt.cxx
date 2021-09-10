@@ -1731,5 +1731,84 @@ UInt ppIR::vex_printf(const HChar* format, ...)
     vex_printf("\n}\n");
 }
 
-
+ const char* regOff2name(UInt off);
+ 
+ const char* regOff2name(UInt off) {
+     class RegOff2Name {
+     public:
+         const char* AMD64RegNames[AMD64_IR_OFFSET::SS + 8];
+         RegOff2Name() {
+             memset(AMD64RegNames, 0, sizeof(AMD64RegNames));
+             AMD64RegNames[AMD64_IR_OFFSET::RAX] = "RAX";
+             AMD64RegNames[AMD64_IR_OFFSET::RCX] = "RCX";
+             AMD64RegNames[AMD64_IR_OFFSET::RDX] = "RDX";
+             AMD64RegNames[AMD64_IR_OFFSET::RBX] = "RBX";
+             AMD64RegNames[AMD64_IR_OFFSET::RSP] = "RSP";
+             AMD64RegNames[AMD64_IR_OFFSET::RBP] = "RBP";
+             AMD64RegNames[AMD64_IR_OFFSET::RSI] = "RSI";
+             AMD64RegNames[AMD64_IR_OFFSET::RDI] = "RDI";
+             AMD64RegNames[AMD64_IR_OFFSET::R8] = "R8";
+             AMD64RegNames[AMD64_IR_OFFSET::R9] = "R9";
+             AMD64RegNames[AMD64_IR_OFFSET::R10] = "R10";
+             AMD64RegNames[AMD64_IR_OFFSET::R11] = "R11";
+             AMD64RegNames[AMD64_IR_OFFSET::R12] = "R12";
+             AMD64RegNames[AMD64_IR_OFFSET::R13] = "R13";
+             AMD64RegNames[AMD64_IR_OFFSET::R14] = "R14";
+             AMD64RegNames[AMD64_IR_OFFSET::R15] = "R15";
+             AMD64RegNames[AMD64_IR_OFFSET::CC_OP] = "CC_OP";
+             AMD64RegNames[AMD64_IR_OFFSET::CC_DEP1] = "CC_DEP1";
+             AMD64RegNames[AMD64_IR_OFFSET::CC_DEP2] = "CC_DEP2";
+             AMD64RegNames[AMD64_IR_OFFSET::CC_NDEP] = "CC_NDEP";
+             AMD64RegNames[AMD64_IR_OFFSET::DFLAG] = "DFLAG";
+             AMD64RegNames[AMD64_IR_OFFSET::RIP] = "RIP";
+             AMD64RegNames[AMD64_IR_OFFSET::ACFLAG] = "ACFLAG";
+             AMD64RegNames[AMD64_IR_OFFSET::IDFLAG] = "IDFLAG";
+             AMD64RegNames[AMD64_IR_OFFSET::FS_CONST] = "FS_CONST";
+             AMD64RegNames[AMD64_IR_OFFSET::SSEROUND] = "SSEROUND";
+             AMD64RegNames[AMD64_IR_OFFSET::YMM0] = "YMM0";
+             AMD64RegNames[AMD64_IR_OFFSET::YMM1] = "YMM1";
+             AMD64RegNames[AMD64_IR_OFFSET::YMM2] = "YMM2";
+             AMD64RegNames[AMD64_IR_OFFSET::YMM3] = "YMM3";
+             AMD64RegNames[AMD64_IR_OFFSET::YMM4] = "YMM4";
+             AMD64RegNames[AMD64_IR_OFFSET::YMM5] = "YMM5";
+             AMD64RegNames[AMD64_IR_OFFSET::YMM6] = "YMM6";
+             AMD64RegNames[AMD64_IR_OFFSET::YMM7] = "YMM7";
+             AMD64RegNames[AMD64_IR_OFFSET::YMM8] = "YMM8";
+             AMD64RegNames[AMD64_IR_OFFSET::YMM9] = "YMM9";
+             AMD64RegNames[AMD64_IR_OFFSET::YMM10] = "YMM10";
+             AMD64RegNames[AMD64_IR_OFFSET::YMM11] = "YMM11";
+             AMD64RegNames[AMD64_IR_OFFSET::YMM12] = "YMM12";
+             AMD64RegNames[AMD64_IR_OFFSET::YMM13] = "YMM13";
+             AMD64RegNames[AMD64_IR_OFFSET::YMM14] = "YMM14";
+             AMD64RegNames[AMD64_IR_OFFSET::YMM15] = "YMM15";
+             AMD64RegNames[AMD64_IR_OFFSET::YMM16] = "YMM16";
+             AMD64RegNames[AMD64_IR_OFFSET::FTOP] = "FTOP";
+             AMD64RegNames[AMD64_IR_OFFSET::FPREG] = "FPREG";
+             AMD64RegNames[AMD64_IR_OFFSET::FPTAG] = "FPTAG";
+             AMD64RegNames[AMD64_IR_OFFSET::FPROUND] = "FPROUND";
+             AMD64RegNames[AMD64_IR_OFFSET::FC3210] = "FC3210";
+             AMD64RegNames[AMD64_IR_OFFSET::EMNOTE] = "EMNOTE";
+             AMD64RegNames[AMD64_IR_OFFSET::CMSTART] = "CMSTART";
+             AMD64RegNames[AMD64_IR_OFFSET::CMLEN] = "CMLEN";
+             AMD64RegNames[AMD64_IR_OFFSET::NRADDR] = "NRADDR";
+             AMD64RegNames[AMD64_IR_OFFSET::SC_CLASS] = "SC_CLASS";
+             AMD64RegNames[AMD64_IR_OFFSET::GS_CONST] = "GS_CONST";
+             AMD64RegNames[AMD64_IR_OFFSET::IP_AT_SYSCALL] = "IP_AT_SYSCALL";
+             AMD64RegNames[AMD64_IR_OFFSET::LDT] = "LDT";
+             AMD64RegNames[AMD64_IR_OFFSET::GDT] = "GDT";
+             AMD64RegNames[AMD64_IR_OFFSET::CS] = "CS";
+             AMD64RegNames[AMD64_IR_OFFSET::DS] = "DS";
+             AMD64RegNames[AMD64_IR_OFFSET::ES] = "ES";
+             AMD64RegNames[AMD64_IR_OFFSET::FS] = "FS";
+             AMD64RegNames[AMD64_IR_OFFSET::GS] = "GS";
+             AMD64RegNames[AMD64_IR_OFFSET::SS] = "SS";
+         }
+     };
+     static RegOff2Name Reg;
+     for (int curr = off; curr; curr--) {
+         const char* R = Reg.AMD64RegNames[curr];
+         if (R) return R;
+     }
+     assert(0 && "error offset");
+ };
 

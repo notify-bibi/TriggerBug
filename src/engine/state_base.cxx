@@ -11,6 +11,12 @@ VexGuestState* TR::StateBase::get_regs_maps()
     return reinterpret_cast<VexGuestState*>(&regs.regs_bytes);
 }
 
+ULong TR::StateBase::get_cpu_sp() {
+    ULong r = regs.get<ULong>(vinfo().gRegsSpOffset()).tor();
+    if (vinfo().is_mode_32()) r &= 0xffffffff;
+    return r;
+}
+
 sv::tval StateBase::mk_int_const(UShort nbit) {
     auto res = m_z3_bv_const_n++;
     char buff[20];
@@ -40,11 +46,11 @@ std::string replace(const char* pszSrc, const char* pszOld, const char* pszNew)
     while (true)
     {
         nPos = strContent.find(pszOld, nPos);
-        strTemp = strContent.substr(nPos + strlen(pszOld), strContent.length());
         if (nPos == std::string::npos)
         {
             break;
         }
+        strTemp = strContent.substr(nPos + strlen(pszOld), strContent.length());
         strContent.replace(nPos, strContent.length(), pszNew);
         strContent.append(strTemp);
         nPos += strlen(pszNew) - strlen(pszOld) + 1;
@@ -124,6 +130,7 @@ void StateBase::read_mem_dump(const char* filename)
     if (!infile.is_open()) {
         if (filename[0] == 0) { return; }
         spdlog::critical("{} not exit/n", filename);
+        throw Expt::IRfailureExit("not exist");
     }
     unsigned long long length, err, name_start_offset, name_end_offset, need_write_size = 0, write_count = 0;
     infile.seekg(0, std::ios::beg);

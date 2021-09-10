@@ -1,4 +1,4 @@
-#include <unistd.h>
+//#include <unistd.h>
 #include <llvm/IR/Intrinsics.h>
 #include "genllvm.h"
 #include "vexop.h"
@@ -7,6 +7,7 @@
 
 using namespace llvm;
 
+#if 0
 void vexop_setup_fp(VexHelpers* vh)
 {
 	const char*	lib_fname;
@@ -203,3 +204,5 @@ UNOP_UNIMPL(RecipEst32Fx4)
 UNOP_UNIMPL(Sqrt32Fx4)
 UNOP_UNIMPL(Sqrt64Fx2)
 QOP_UNIMPL(MAddF64)
+
+#endif

@@ -45,6 +45,8 @@ const char* getVexOpName(IROp op)
 	OP_FULLRANGE(Mul)
 	OP_FULLRANGE(Or)
 	OP_FULLRANGE(And)
+	case Iop_And1: return "Iop_And1";
+	case Iop_Or1: return "Iop_Or1";
 	OP_FULLRANGE(Xor)
 	OP_FULLRANGE(Shl)
 	OP_FULLRANGE(Shr)
@@ -929,6 +931,7 @@ BINOP_EMIT(Add16, Add)
 BINOP_EMIT(Add32, Add)
 BINOP_EMIT(Add64, Add)
 
+BINOP_EMIT(And1, And)
 BINOP_EMIT(And8, And)
 BINOP_EMIT(And16, And)
 BINOP_EMIT(And32, And)
@@ -969,6 +972,7 @@ BINCMP_EMIT(Min8Ux16, get_vt(16, 8 ), ICmpULT);
 BINCMP_EMIT(Min16Sx4, get_vt(4 , 16), ICmpSLT);
 BINCMP_EMIT(Min16Sx8, get_vt(8 , 16), ICmpSLT);
 
+BINOP_EMIT(Or1, Or)
 BINOP_EMIT(Or8, Or)
 BINOP_EMIT(Or16, Or)
 BINOP_EMIT(Or32, Or)
@@ -1101,7 +1105,7 @@ Value* VexExprUnop##x::emit(void) const			\
 	IRBuilder<>     *builder(theGenLLVM->getBuilder());	\
 	llvm::Function	*f;	\
 	llvm::Value	*v;	\
-	Value *res(builder->CreateBitCast(get_c(y->getBitWidth(), 0), y)); \
+	Value *res(builder->CreateBitCast(get_c(y->getIntegerBitWidth(), 0), y)); \
 	v = builder->CreateBitCast(args[0]->emit(), y); 	\
 	f = theVexHelpers->getCallHelper(fn);			\
 	assert (f != NULL);		\
@@ -1282,7 +1286,7 @@ Value* VexExprBinop##x::emit(void) const			\
 	Value *shift = get_c(s * 2, s);				\
 	assert(y->getNumElements() <= 8);			\
 	shift = builder->CreateZExt(shift,			\
-		get_i(w->getBitWidth()));			\
+		get_i(w->getIntegerBitWidth()));			\
 	shift = builder->CreateBitCast(shift, w);		\
 	Constant *shuffle_v[] = {   				\
 		get_32i(0), get_32i(0),				\
@@ -1341,7 +1345,7 @@ Value* VexExprBinop##x::emit(void) const			\
 	v1 = builder->CreateBitCast(v1, y);			\
 	v2 = builder->CreateBitCast(v2, y);			\
 	Value* result = builder->CreateBitCast(			\
-		get_c(w->getBitWidth(), 0), w);			\
+		get_c(w->getIntegerBitWidth(), 0), w);			\
 	for(unsigned i = 0; i < y->getNumElements(); ++i) {	\
 		Value* elem = builder->CreateExtractElement(	\
 			v2, get_32i(i));			\
@@ -1430,7 +1434,7 @@ Value* VexExprBinop##x::emit(void) const			\
 	v1 = builder->Create##ext(v1, w);			\
 	v2 = builder->Create##ext(v2, w);			\
 	Value* result = builder->CreateBitCast(			\
-		get_c(y->getBitWidth(), 0), y);			\
+		get_c(y->getIntegerBitWidth(), 0), y);			\
 	Value* partial = builder->Create##op(v1, v2);		\
 	for(unsigned i = 0; i < y->getNumElements(); ++i) {	\
 		Value* elem = builder->CreateExtractElement(	\
@@ -1487,7 +1491,7 @@ Value* VexExprBinop##x::emit(void) const			\
 	v1 = builder->Create##ext(v1, w);			\
 	v2 = builder->Create##ext(v2, w);			\
 	Value* result = builder->CreateBitCast(			\
-		get_c(y->getBitWidth(), 0), y);			\
+		get_c(y->getIntegerBitWidth(), 0), y);			\
 	Value* partial = builder->CreateAdd(v1, v2);		\
 	for(unsigned i = 0; i < y->getNumElements(); ++i) {	\
 		Value* e = builder->CreateExtractElement(	\
@@ -1522,11 +1526,11 @@ OPAVG_EMIT(Avg32Sx4, get_vt(4 , 32), SExt, get_vt(4 , 64));
 Value* VexExprBinop##x::emit(void) const			\
 {								\
 	BINOP_SETUP						\
-	int	prim_sz = vt->getBitWidth() / vt->getNumElements(); \
+	int	prim_sz = vt->getIntegerBitWidth() / vt->getNumElements(); \
 	v1 = builder->CreateBitCast(v1, vt);			\
 	v2 = builder->CreateBitCast(v2, vt);			\
 	Value* ret;						\
-	ret = builder->CreateBitCast(get_c(vt->getBitWidth(), 0), vt); \
+	ret = builder->CreateBitCast(get_c(vt->getIntegerBitWidth(), 0), vt); \
 	for(unsigned i = 0; i < vt->getNumElements(); ++i) {	\
 		Value	*e, *lhs, *rhs;	\
 		lhs = builder->CreateExtractElement(v1, get_32i(i));	\
@@ -1538,7 +1542,7 @@ Value* VexExprBinop##x::emit(void) const			\
 		e = builder->CreateTrunc(e, vt->getScalarType()); \
 		ret = builder->CreateInsertElement(ret, e, get_32i(i)); \
 	} \
-	return builder->CreateBitCast(ret, get_i(vt->getBitWidth())); \
+	return builder->CreateBitCast(ret, get_i(vt->getIntegerBitWidth())); \
 }
 
 OPHOP_EMIT(HAdd16Ux2, get_vt(2, 16), Add, ZExt);
@@ -1582,7 +1586,7 @@ Value* VexExprBinop##x::emit(void) const		\
 	assert(y->getNumElements() <= 16);		\
 	v1 = builder->CreateBitCast(v1, y);		\
 	v2 = builder->CreateZExt(v2, 			\
-		get_i(y->getBitWidth()));		\
+		get_i(y->getIntegerBitWidth()));		\
 	if (!isa<Constant>(v2)) {			\
 		v2 = builder->CreateBitCast(v2, y);		\
 		Constant *shuffle_v[] = {   			\
@@ -1601,9 +1605,9 @@ Value* VexExprBinop##x::emit(void) const		\
 	} else { \
 		std::vector<Constant*>	c_v(			\
 			y->getNumElements(), 			\
-			builder->getFolder().CreateTruncOrBitCast(	\
+			dyn_cast<Constant>(builder->CreateTruncOrBitCast(	\
 				dyn_cast<Constant>(v2),		\
-				get_i(y->getBitWidth()/y->getNumElements())));	\
+				get_i(y->getIntegerBitWidth()/y->getNumElements()))));	\
 		v2 = ConstantVector::get(c_v);			\
 	} \
 	ret = builder->Create##z(v1, v2);		\
@@ -1648,7 +1652,7 @@ Value* VexExprBinop##x::emit(void) const				\
 	BINOP_SETUP							\
 	v1 = builder->CreateBitCast(v1, y);				\
 	v2 = builder->CreateBitCast(v2, y);				\
-	Value* result = get_c(y->getBitWidth(), 0);			\
+	Value* result = get_c(y->getIntegerBitWidth(), 0);			\
 	result = builder->CreateBitCast(result, y);			\
 	for(unsigned i = 0; i < y->getNumElements(); ++i) {		\
 		Value	*perm_idx;					\
@@ -1675,3 +1679,5 @@ Value* VexExprBinop##x::emit(void) const				\
 OPSHUF_EMIT(Perm8x8, get_vt(8, 8), get_vt(8, 8))
 OPSHUF_EMIT(Perm8x16, get_vt(16, 8), get_vt(16, 8))
 
+
+	std::unique_ptr<llvm::IRBuilder<>> builder;

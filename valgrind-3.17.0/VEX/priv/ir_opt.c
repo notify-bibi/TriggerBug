@@ -212,25 +212,6 @@ static Bool lookupHHW ( HashHW* h, /*OUT*/HWord* val, HWord key )
    return False;
 }
 
-static Bool lookupHHW_between(HashHW* h, /*OUT*/HWord* val, HWord key)
-{
-    Int i;
-    /* vex_printf("lookupHHW(%llx)\n", key ); */
-    UInt lo = key >> 16;
-    UInt hi = key & 0xff;
-    for (i = 0; i < h->used; i++) {
-        UInt lo2 = h->key[i] >> 16;
-        UInt hi2 = h->key[i] & 0xff;
-        UInt is_include = (lo >= lo2 && hi <= hi2);
-        //if (h->inuse[i] && h->key[i] == key) {
-        if (h->inuse[i] && is_include) {
-            if (val)
-                *val = h->val[i];
-            return True;
-        }
-    }
-    return False;
-}
 
 /* Add key->val to the map.  Replaces any existing binding for key. */
 
