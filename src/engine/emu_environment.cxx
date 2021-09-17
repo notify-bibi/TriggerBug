@@ -1,9 +1,9 @@
-#include "engine/emu_environment.h"
-#include "engine/register.h"
-#include "engine/state_base.h"
-#include "engine/memory.h"
+#include "instopt/engine/emu_environment.h"
+#include "instopt/engine/register.h"
+#include "instopt/engine/state_base.h"
+#include "instopt/engine/memory.h"
 #include "gen_global_var_call.hpp"
-#include "engine/irsb_cache.h"
+#include "instopt/engine/irsb_cache.h"
 
 
 IRSB* irsb_cache_find(HWord ea);

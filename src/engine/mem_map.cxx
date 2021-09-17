@@ -9,8 +9,8 @@
  */
 
 #define UNDEFMEM
-#include "engine/mem_map.h"
-#include "engine/memory.h"
+#include "instopt/engine/mem_map.h"
+#include "instopt/engine/memory.h"
 using namespace TR;
 template<class ST>
 

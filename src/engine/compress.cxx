@@ -1,4 +1,4 @@
-#include "compress.h"
+#include "instopt/engine/compress.h"
 
 using namespace cmpr;
 

@@ -12,7 +12,7 @@ Author:
 Revision History:
 --*/
 
-#include "engine/memory.h"
+#include "instopt/engine/memory.h"
 using namespace TR;
 
 mem_trace Mem::default_trace;

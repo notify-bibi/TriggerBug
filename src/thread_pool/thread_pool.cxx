@@ -1,5 +1,5 @@
 
-#include "thread_pool.h"
+#include "instopt/thread_pool/thread_pool.h"
 
 // the constructor just launches some amount of workers
 ThreadPool::ThreadPool(size_t threads) : stop(false), runner(0)

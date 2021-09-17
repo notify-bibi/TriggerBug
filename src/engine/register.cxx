@@ -10,7 +10,7 @@
  */
 
 #define UNDEFREG
-#include "register.h"
+#include "instopt/engine/register.h"
 
 class Translate {
     z3::vcontext& m_toctx;

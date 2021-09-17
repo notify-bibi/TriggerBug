@@ -1,6 +1,6 @@
 
-#include "state_base.h"
-#include "engine/z3_target_call/z3_target_call.h"
+#include "instopt/engine/state_base.h"
+#include "instopt/helper/z3_target_call.h"
 
 using namespace TR;
 

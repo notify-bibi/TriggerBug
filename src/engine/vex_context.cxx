@@ -1,9 +1,9 @@
 
-#include "engine/vex_context.h"
-#include "engine/memory.h"
-#include "engine/state_base.h"
-#include "engine/z3_target_call/z3_target_call.h"
-#include "engine/irsb_cache.h"
+#include "instopt/engine/vex_context.h"
+#include "instopt/engine/memory.h"
+#include "instopt/engine/state_base.h"
+#include "instopt/helper/z3_target_call.h"
+#include "instopt/engine/irsb_cache.h"
 
 
 using namespace TR;
@@ -120,8 +120,8 @@ VexControl vex_info::init_VexControl() {
     LibVEX_default_VexControl(&vc);
     vc.iropt_verbosity = 0;
     vc.iropt_level = giropt_level();
-    #warning "whate is iropt_unroll_thresh"
-        vc.iropt_unroll_thresh = 0;
+    #warning "what is iropt_unroll_thresh"
+    vc.iropt_unroll_thresh = 0;
     vc.guest_max_insns = gmax_insns();
     // vc.guest_chase_thresh = 0;   
 #if 1
@@ -324,29 +324,29 @@ Int vex_info::gRegsIpOffset(VexArch guest) {
      return NULL;
  }
 
- static IRSB* finaltidy (IRSB* bb) {
- 
- 
- }
+ //static IRSB* finaltidy (IRSB* bb) {
+ //
+ //
+ //}
 
- static IRSB* instrument1( /*callback_opaque*/void*,
-     IRSB*,
-     const VexGuestLayout*,
-     const VexGuestExtents*,
-     const VexArchInfo*,
-     IRType gWordTy, IRType hWordTy) {
- 
- }
+ //static IRSB* instrument1( /*callback_opaque*/void*,
+ //    IRSB*,
+ //    const VexGuestLayout*,
+ //    const VexGuestExtents*,
+ //    const VexArchInfo*,
+ //    IRType gWordTy, IRType hWordTy) {
+ //
+ //}
 
 
- static IRSB* instrument2( /*callback_opaque*/void*,
-     IRSB*,
-     const VexGuestLayout*,
-     const VexGuestExtents*,
-     const VexArchInfo*,
-     IRType gWordTy, IRType hWordTy) {
+ //static IRSB* instrument2( /*callback_opaque*/void*,
+ //    IRSB*,
+ //    const VexGuestLayout*,
+ //    const VexGuestExtents*,
+ //    const VexArchInfo*,
+ //    IRType gWordTy, IRType hWordTy) {
 
- }
+ //}
 
  Bool chase_into_ok(void* value, Addr addr) {
      //std::cout << value << addr << std::endl;
@@ -572,7 +572,7 @@ Int vex_info::gRegsIpOffset(VexArch guest) {
     }
     /* returns whatever kind of hwcaps needed to make
    the host and/or guest VexArch happy. */
-    static UInt arch_hwcaps(VexArch va) {
+    /*static UInt arch_hwcaps(VexArch va) {
         switch (va) {
         case VexArch_INVALID: vassert(0);
         case VexArchX86:    return 0;
@@ -593,7 +593,7 @@ Int vex_info::gRegsIpOffset(VexArch guest) {
 #endif
         default: vassert(0);
         }
-    }
+    }*/
 
     void vex_info::init_vta_chunk(VexTranslateArgs& vta_chunk, VexGuestExtents& vge_chunk, VexArch guest_arch, ULong traceflags) {
         //HOSTARCH

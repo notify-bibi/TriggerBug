@@ -1,19 +1,19 @@
 
-#include "engine/irsb_cache.h"
-#include "engine/memory.h"
+#include "instopt/engine/irsb_cache.h"
+#include "instopt/engine/memory.h"
 #include <list>
 #include <cstddef>
 #include <stdexcept>
 
 extern "C" {
-    #include "guest_x86_defs.h"
-    #include "guest_amd64_defs.h"
-    #include "guest_arm_defs.h"
-    #include "guest_arm64_defs.h"
-    #include "guest_ppc_defs.h"
-    #include "guest_mips_defs.h"
-    #include "guest_nanomips_defs.h"
-    #include <ir_opt.h>
+    #include "../valgrind-3.17.0/VEX/priv/guest_x86_defs.h"
+    #include "../valgrind-3.17.0/VEX/priv/guest_amd64_defs.h"
+    #include "../valgrind-3.17.0/VEX/priv/guest_arm_defs.h"
+    #include "../valgrind-3.17.0/VEX/priv/guest_arm64_defs.h"
+    #include "../valgrind-3.17.0/VEX/priv/guest_ppc_defs.h"
+    #include "../valgrind-3.17.0/VEX/priv/guest_mips_defs.h"
+    #include "../valgrind-3.17.0/VEX/priv/guest_nanomips_defs.h"
+    #include "../valgrind-3.17.0/VEX/priv/ir_opt.h"
 };
 
 #define GUEST_CACHE_CAPACITY 200

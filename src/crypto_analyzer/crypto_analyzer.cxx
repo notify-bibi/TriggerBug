@@ -1,8 +1,8 @@
 
-#include "engine/tr_kernel.h"
-#include "crypto_analyzer/crypto_analyzer.h"
-#include "crypto_analyzer/analyzer.h"
-#include "crypto_analyzer/ana_des.h"
+#include "instopt/engine/tr_kernel.h"
+#include "instopt/crypto_analyzer/crypto_analyzer.h"
+#include "instopt/crypto_analyzer/analyzer.h"
+#include "instopt/crypto_analyzer/ana_des.h"
 using namespace z3;
 
 

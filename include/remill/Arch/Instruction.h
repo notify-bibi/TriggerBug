@@ -88,7 +88,6 @@ class Operand {
     uint64_t shift_size;
     uint64_t extract_size;
     bool shift_first;
-    bool can_shift_op_size{false};
 
     enum Shift : uint8_t {
       kShiftInvalid,

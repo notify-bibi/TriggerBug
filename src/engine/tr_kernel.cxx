@@ -2,10 +2,21 @@
 //#undef _DEBUG
 
 
-#include "engine/tr_kernel.h"
+#include "instopt/engine/tr_kernel.h"
+#include "instopt/helper/z3_target_call.h"
 
 #include <Windows.h>
 #include <winternl.h>
+extern "C" {
+#include "../valgrind-3.17.0/VEX/priv/guest_amd64_defs.h"
+#include "../valgrind-3.17.0/VEX/priv/guest_arm64_defs.h"
+#include "../valgrind-3.17.0/VEX/priv/guest_arm_defs.h"
+#include "../valgrind-3.17.0/VEX/priv/guest_mips_defs.h"
+#include "../valgrind-3.17.0/VEX/priv/guest_nanomips_defs.h"
+#include "../valgrind-3.17.0/VEX/priv/guest_ppc_defs.h"
+#include "../valgrind-3.17.0/VEX/priv/guest_x86_defs.h"
+#include "../valgrind-3.17.0/VEX/priv/ir_opt.h"
+};
 
 
 #define KE_WINDOWS_ENABLE
@@ -457,7 +468,7 @@ namespace Ke {
 
         PWOW64_CONTEXT ContextRecord = (PWOW64_CONTEXT)(esp - sizeof(WOW64_CONTEXT));
         PEXCEPTION_RECORD32 ExceptionRecord = (PEXCEPTION_RECORD32)(esp - sizeof(WOW64_CONTEXT) - sizeof(EXCEPTION_RECORD32));
-        Addr64 gst;
+        Addr64 gst = st.getGSPTR();
         DWORD ExceptionCode, ExceptionAddress, ExceptionFlags, NumberParameters, nextExceptionRecord;
         DWORD info0, info1, info2;
 

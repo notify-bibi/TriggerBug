@@ -13,11 +13,11 @@
 
 
 
-#include "engine/ir_dirty.h"
-#include "engine/state_explorer.h"
-#include "engine/z3_target_call/z3_target_call.h"
-#include "pub/gen_global_var_call.hpp"
-#include "engine/irsb_cache.h"
+#include "instopt/engine/ir_dirty.h"
+#include "instopt/engine/state_explorer.h"
+#include "instopt/helper/z3_target_call.h"
+#include "gen_global_var_call.hpp"
+#include "instopt/engine/irsb_cache.h"
 
 static constexpr VexArch host_arch = VexArchAMD64;
 static constexpr Addr64 vex_code_addr_mask = (ULong)0xff << 56;

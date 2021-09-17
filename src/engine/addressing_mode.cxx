@@ -1,5 +1,5 @@
-#include "engine/addressing_mode.h"
-#include "engine/engine.h"
+#include "instopt/engine/addressing_mode.h"
+#include "instopt/engine/engine.h"
 
 using namespace z3;
 

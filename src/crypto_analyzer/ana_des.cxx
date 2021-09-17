@@ -1,5 +1,5 @@
 #define _ENABLE_EXTENDED_ALIGNED_STORAGE
-#include "crypto_analyzer/ana_des.h"
+#include "instopt/crypto_analyzer/ana_des.h"
 
 
 using namespace z3;

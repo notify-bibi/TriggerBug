@@ -19,23 +19,75 @@
 
 
 
-
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+set_property(GLOBAL PROPERTY PREDEFINED_TARGETS_FOLDER "CMakePredefinedTargets")
 
 
 cmake_minimum_required (VERSION 3.8)
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-project (VMP
+project(InstOpt
         VERSION 1.5.0
         DESCRIPTION "engine"
         LANGUAGES CXX
         )
 
-		
-set(VALGRIND_PROJ_DIR "valgrind-3.17.0")
+include(CheckCXXCompilerFlag)
+include(GNUInstallDirs)
+include(cmake/tr_add_project.cmake)
+
+INCLUDE_DIRECTORIES(.)
 
 message(STATUS "CMAKE_TOOLCHAIN_FILE is ${CMAKE_TOOLCHAIN_FILE}")
+message(STATUS "CMAKE_INSTALL_INCLUDEDIR is ${CMAKE_INSTALL_INCLUDEDIR}")
+message(STATUS "CMAKE_CURRENT_LIST_DIR is ${CMAKE_CURRENT_LIST_DIR}")
+
+# ---------------------------------------------------------------------------------------
+# Compiler config
+# ---------------------------------------------------------------------------------------
+if(NOT CMAKE_CXX_STANDARD)
+    set(CMAKE_CXX_STANDARD 17)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+endif()
+
+set(VALGRIND_PROJ_DIR "src/valgrind-3.17.0")
+
+
+option(INSTOPT_BUILD_ALL "Build all artifacts" OFF)
+
+# build shared option
+option(INSTOPT_BUILD_SHARED "Build shared library" OFF)
+
+# precompiled headers option
+option(INSTOPT_ENABLE_PCH "Build static or shared library using precompiled header to speed up compilation time" OFF)
+
+# example options
+option(INSTOPT_BUILD_EXAMPLE "Build example" ${INSTOPT_MASTER_PROJECT})
+option(INSTOPT_BUILD_EXAMPLE_HO "Build header only example" OFF)
+
+# testing options
+option(INSTOPT_BUILD_TESTS "Build tests" OFF)
+option(INSTOPT_BUILD_TESTS_HO "Build tests using the header only version" OFF)
+
+# bench options
+option(INSTOPT_BUILD_BENCH "Build benchmarks (Requires https://github.com/google/benchmark.git to be installed)" OFF)
+
+# sanitizer options
+option(INSTOPT_SANITIZE_ADDRESS "Enable address sanitizer in tests" OFF)
+
+# warning options
+option(INSTOPT_BUILD_WARNINGS "Enable compiler warnings" OFF)
+
+# install options
+option(INSTOPT_INSTALL "Generate the install target" ${INSTOPT_MASTER_PROJECT})
+option(INSTOPT_FMT_EXTERNAL "Use external fmt library instead of bundled" OFF)
+option(INSTOPT_FMT_EXTERNAL_HO "Use external fmt header-only library instead of bundled" OFF)
+option(INSTOPT_NO_EXCEPTIONS "Compile with -fno-exceptions. Call abort() on any spdlog exceptions" OFF)
+
+if(INSTOPT_FMT_EXTERNAL AND INSTOPT_FMT_EXTERNAL_HO)
+    message(FATAL_ERROR "INSTOPT_FMT_EXTERNAL and INSTOPT_FMT_EXTERNAL_HO are mutually exclusive")
+endif()
+
+
+
 
 option(DEBUG_GABLE "print cmake info" OFF)
 option(BUILD_VALGRIND "BUILD VALGRIND" OFF)
@@ -101,10 +153,10 @@ add_compile_options(-fdelayed-template-parsing)
 
 set(TR_COMPONENT_CXX_FLAGS "")			
 if (("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU") OR ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang") OR ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel"))
-	set(SSE_FLAGS "-mfpmath=sse" "-msse" "-msse2")
+	set(SSE_FLAGS "-msse" "-msse2")
 	set(AVX_FLAGS "-mavx" "-mavx2")
 elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
-	set(SSE_FLAGS "-mfpmath=sse" "-msse" "-msse2" )
+	set(SSE_FLAGS "-msse" "-msse2" )
 	set(AVX_FLAGS "-mavx" "-mavx2")
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 	set(SSE_FLAGS "/arch:SSE2")
@@ -112,7 +164,6 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 else()
 	message(FATAL_ERROR "Unknown compiler ${CMAKE_CXX_COMPILER_ID}")
 endif()
-include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-msse2" HAS_SSE2)
 if (${HAS_SSE2})
 	add_definitions(${SSE_FLAGS})
@@ -139,21 +190,6 @@ unset(AVX_FLAGS)
 
 
 
-include(cmake/tr_add_project.cmake)
-
-#install
-set(CMAKE_INSTALL_DIR ${CMAKE_BINARY_DIR})
-set(CMAKE_INSTALL_INCLUDEDIR "include")
-set(CMAKE_C_COMPILE_OBJECT "")
-
-
-#lib search path
-link_directories(${CMAKE_BINARY_DIR}/lib)
-
-SET(CMAKE_INCLUDE_PATH ${CMAKE_SOURCE_DIR}/include/)
-
-# add include path
-TR_add_include(libvalgrind ${VALGRIND_PROJ_DIR}/VEX/ priv/ pub/)
 
 
 
@@ -171,31 +207,44 @@ message(STATUS "Using LLVMVisualizers in: ${LLVMVISUALIZERS_PATH}")
 
 
 # The package gflags:x64-windows provides CMake targets:
-find_package(gflags CONFIG REQUIRED)
+find_package(gflags REQUIRED)
 # target_link_libraries(main PRIVATE gflags_shared gflags::gflags_shared)
 
 # The package glog:x64-windows provides CMake targets:
-find_package(glog CONFIG REQUIRED)
+find_package(glog REQUIRED)
 # target_link_libraries(main PRIVATE glog::glog)
 
 # The package spdlog:x64-windows provides CMake targets:
-find_package(spdlog CONFIG REQUIRED)
-# target_link_libraries(main PRIVATE spdlog::spdlog spdlog::spdlog_header_only)
+find_package(spdlog REQUIRED)
+# target_link_libraries(main PRIVATE spdlog::spdlog spdlog::INSTOPT_header_only)
 
 # The package z3:x64-windows provides CMake targets:
-find_package(Z3 CONFIG REQUIRED)
+find_package(Z3 REQUIRED)
 # target_link_libraries(main PRIVATE z3::libz3)
+message(STATUS "Z3_FOUND: ${Z3_FOUND}")
+message(STATUS "Found Z3 ${Z3_VERSION_STRING}")
+message(STATUS "Z3_DIR: ${Z3_DIR}")
 
+include(FindPackageHandleStandardArgs)
+find_package_handle_standard_args(glog DEFAULT_MSG GLOG_INCLUDE_DIR GLOG_LIBRARY)
+target_include_directories(z3::libz3 INTERFACE ${Z3_CXX_INCLUDE_DIRS})
+target_include_directories(LLVMCore INTERFACE ${LLVM_INCLUDE_DIRS})
+target_compile_definitions(LLVMCore INTERFACE ${LLVM_DEFINITIONS})
+#target_include_directories(glog::glog INTERFACE ${GLOG_INCLUDE_DIR})
+#target_include_directories(gflags_shared INTERFACE ${GFLAGS_INCLUDE_DIR})
+#if(NOT GLOG_INCLUDE_DIR)
+#  message(FATAL_ERROR "no ${GLOG_INCLUDE_DIR}")
+#endif()
 
-
-TR_lib_add(threadPool "src/thread_pool" ON)
-TR_lib_add(libvalgrind ${VALGRIND_PROJ_DIR}/VEX/ BUILD_VALGRIND)
-TR_lib_add(libtriggerBug "src/engine" BUILD_TRIGGERBUG)
-TR_lib_add(libcryptoAnalyzer "src/crypto_analyzer" BUILD_CRYPTO_ANALYZER)
-TR_lib_add(libvexllvm "src/vexllvm" BUILD_VEXLLVM)
-
-TR_lib_add(TRtest "src/test" BUILD_TRTEST)
-#TR_lib_add(libcfg "src/CFG" BUILD_CFG)
+TR_add_subdir(threadPool "src/thread_pool" ON)
+TR_add_subdir(helper "src/helper" ON)
+TR_add_subdir(remill_bc "src/remill" ON)
+TR_add_subdir(libvalgrind ${VALGRIND_PROJ_DIR}/VEX/ BUILD_VALGRIND)
+TR_add_subdir(libtriggerBug "src/engine" BUILD_TRIGGERBUG)
+TR_add_subdir(libcryptoAnalyzer "src/crypto_analyzer" BUILD_CRYPTO_ANALYZER)
+TR_add_subdir(libvexllvm "src/vexllvm" BUILD_VEXLLVM)
+TR_add_subdir(TRtest "tests" BUILD_TRTEST)
+#TR_add_subdir(libcfg "src/CFG" BUILD_CFG)
 
 IF (${BUILD_PYTHON_FRONTEND})
 	find_library(TR_PYTHON3_LIB_PATH python3)
@@ -203,6 +252,89 @@ IF (${BUILD_PYTHON_FRONTEND})
 		MESSAGE(FATAL_ERROR "TriggerBug: python3.x dir not found")
 	ENDIF(NOT TR_PYTHON3_LIB_PATH) 
 	MESSAGE(STATUS ${TR_PYTHON3_LIB_PATH} " found")
-	TR_lib_add(libpythonfront "src/python" BUILD_PYTHON_FRONTEND)
+	TR_add_subdir(libpythonfront "src/python" BUILD_PYTHON_FRONTEND)
 ENDIF()
 
+# ---------------------------------------------------------------------------------------
+# Build binaries
+# ---------------------------------------------------------------------------------------
+if(INSTOPT_BUILD_EXAMPLE OR INSTOPT_BUILD_EXAMPLE_HO OR INSTOPT_BUILD_ALL)
+    message(STATUS "Generating example(s)")
+    add_subdirectory(example)
+    INSTOPT_enable_warnings(example)
+    if(INSTOPT_BUILD_EXAMPLE_HO)
+        INSTOPT_enable_warnings(example_header_only)
+    endif()
+endif()
+
+if(INSTOPT_BUILD_TESTS OR INSTOPT_BUILD_TESTS_HO OR INSTOPT_BUILD_ALL)
+    message(STATUS "Generating tests")
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
+if(INSTOPT_BUILD_BENCH OR INSTOPT_BUILD_ALL)
+    message(STATUS "Generating benchmarks")
+    add_subdirectory(bench)
+endif()
+
+
+# ---------------------------------------------------------------------------------------
+# Install
+# ---------------------------------------------------------------------------------------
+if(INSTOPT_INSTALL)
+    message(STATUS "Generating install")
+    set(project_config_in "${CMAKE_CURRENT_LIST_DIR}/cmake/spdlogConfig.cmake.in")
+    set(project_config_out "${CMAKE_CURRENT_BINARY_DIR}/spdlogConfig.cmake")
+    set(config_targets_file "spdlogConfigTargets.cmake")
+    set(version_config_file "${CMAKE_CURRENT_BINARY_DIR}/spdlogConfigVersion.cmake")
+    set(export_dest_dir "${CMAKE_INSTALL_LIBDIR}/cmake/spdlog")
+    set(pkgconfig_install_dir "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
+    set(pkg_config "${CMAKE_BINARY_DIR}/${PROJECT_NAME}.pc")
+
+    # ---------------------------------------------------------------------------------------
+    # Include files
+    # ---------------------------------------------------------------------------------------
+    install(DIRECTORY include/ DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}" PATTERN "fmt/bundled" EXCLUDE)
+    install(
+        TARGETS spdlog INSTOPT_header_only
+        EXPORT spdlog
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+    if(NOT INSTOPT_FMT_EXTERNAL AND NOT INSTOPT_FMT_EXTERNAL_HO)
+        install(DIRECTORY include/${PROJECT_NAME}/fmt/bundled/
+                DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}/fmt/bundled/")
+    endif()
+
+    # ---------------------------------------------------------------------------------------
+    # Install pkg-config file
+    # ---------------------------------------------------------------------------------------
+    get_target_property(PKG_CONFIG_DEFINES spdlog INTERFACE_COMPILE_DEFINITIONS)
+    string(REPLACE ";" " -D" PKG_CONFIG_DEFINES "${PKG_CONFIG_DEFINES}")
+    string(CONCAT PKG_CONFIG_DEFINES "-D" "${PKG_CONFIG_DEFINES}")
+    configure_file("cmake/${PROJECT_NAME}.pc.in" "${pkg_config}" @ONLY)
+    install(FILES "${pkg_config}" DESTINATION "${pkgconfig_install_dir}")
+
+    # ---------------------------------------------------------------------------------------
+    # Install CMake config files
+    # ---------------------------------------------------------------------------------------
+    install(EXPORT spdlog DESTINATION ${export_dest_dir} NAMESPACE spdlog:: FILE ${config_targets_file})
+
+    include(CMakePackageConfigHelpers)
+    configure_file("${project_config_in}" "${project_config_out}" @ONLY)
+
+    write_basic_package_version_file("${version_config_file}" COMPATIBILITY SameMajorVersion)
+    install(FILES "${project_config_out}" "${version_config_file}" DESTINATION "${export_dest_dir}")
+
+    # ---------------------------------------------------------------------------------------
+    # Support creation of installable packages
+    # ---------------------------------------------------------------------------------------
+    include(cmake/spdlogCPack.cmake)
+endif()
+
+
+set_target_properties(acc_gen PROPERTIES FOLDER "Utils")
+set_target_properties(intrinsics_gen PROPERTIES FOLDER "Utils")
+set_target_properties(omp_gen PROPERTIES FOLDER "Utils")

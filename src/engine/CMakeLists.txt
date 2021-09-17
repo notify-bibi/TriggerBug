@@ -1,7 +1,14 @@
-TR_add_include(vexTargetCall src/engine/z3_target_call/ )
-add_subdirectory(z3_target_call)
+
 TR_add_library(TARGET libtriggerBug
                CONFIGURE_TYPE SHARED
                REQUIRE libz3 libvalgrind vexTargetCall threadPool spdlog
                )
-TR_ADD_INCLUDE_DIRECTORIES(libtriggerBug vexTargetCall)
+			   
+			   
+#target_include_directories(libtriggerBug PUBLIC ${Z3_CXX_INCLUDE_DIRS})
+target_link_libraries(libtriggerBug PUBLIC libvalgrind z3::libz3 spdlog::spdlog )
+target_link_libraries(libtriggerBug PRIVATE helper threadPool)
+# TR_ADD_INCLUDE_DIRECTORIES(libtriggerBug vexTargetCall)
+
+
+set_target_properties(libtriggerBug PROPERTIES FOLDER "Core")
