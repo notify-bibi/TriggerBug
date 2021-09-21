@@ -1,5 +1,5 @@
 #include "test.h"
-#include "engine/guest_layout_helper.h"
+#include "instopt/engine/guest_layout_helper.h"
 
 
 using namespace TR;

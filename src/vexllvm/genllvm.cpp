@@ -31,7 +31,6 @@ llvm::LLVMContext GenLLVM::llvm_ctx;
 std::unique_ptr<GenLLVM> theGenLLVM;
 
 
-extern const char* regOff2name(UInt off);
 #define GET_VEXSTATE	((VexCPUState*)guest.getCPUState())
 
 using namespace llvm;
@@ -42,8 +41,9 @@ llvm::LLVMContext& getGlobalContext() {
 	return GenLLVM::getContext();
 }
 
-GenLLVM::GenLLVM(const Guest& gs, const char* name)
-: guest(gs)
+GenLLVM::GenLLVM(const Guest& gs, StateHelper &sh, const char* name)
+: statehelper(sh)
+, guest(gs)
 , guestCtxTy(NULL)
 , funcTy(NULL)
 , cur_guest_ctx(NULL)
@@ -266,7 +266,7 @@ Value* GenLLVM::getCtxByteGEP(unsigned int byteOff, Type* accessTy)
 {
 	unsigned int	tyBytes;
 	Value		*gep;
-	std::pair<unsigned, unsigned> key;
+	std::pair<unsigned, unsigned> key = std::make_pair<unsigned, unsigned>(0,0);
 	gepbyte_map_t::const_iterator it;
 	bool		found;
 

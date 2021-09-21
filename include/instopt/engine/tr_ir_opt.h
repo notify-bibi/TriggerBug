@@ -1,6 +1,7 @@
 #ifndef TR_IR_OPT_HEADER
 #define TR_IR_OPT_HEADER
-
+class StateHelper;
+StateHelper* getStateHelper();
 extern "C" {
     #include <libvex_ir.h>
 };

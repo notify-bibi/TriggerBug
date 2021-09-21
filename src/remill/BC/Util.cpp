@@ -321,16 +321,17 @@ llvm::GlobalVariable *FindGlobaVariable(llvm::Module *module,
 // Loads the semantics for the `arch`-specific machine, i.e. the machine of the
 // code that we want to lift.
 std::unique_ptr<llvm::Module> LoadArchSemantics(const Arch *arch) {
-  auto arch_name = GetArchName(arch->arch_name);
-  auto path = FindSemanticsBitcodeFile(arch_name);
-  LOG(INFO) << "Loading " << arch_name << " semantics from file " << path;
-  auto module = LoadModuleFromFile(arch->context, path);
-  arch->PrepareModule(module);
-  arch->InitFromSemanticsModule(module.get());
-  for (auto &func : *module) {
-    Annotate<remill::Semantics>(&func);
-  }
-  return module;
+  //// auto arch_name = GetArchName(arch->arch_name);
+  //std::string_view arch_name = "ddddddddddddddddddd";
+  //auto path = FindSemanticsBitcodeFile(arch_name);
+  //LOG(INFO) << "Loading " << arch_name << " semantics from file " << path;
+  //auto module = LoadModuleFromFile(arch->context, path);
+  //arch->PrepareModule(module);
+  //arch->InitFromSemanticsModule(module.get());
+  //for (auto &func : *module) {
+  //  Annotate<remill::Semantics>(&func);
+  //}
+  //return module;
 }
 
 // Try to verify a module.
@@ -512,7 +513,7 @@ static const char *gSemanticsSearchPaths[] = {
 
 // Find the path to the semantics bitcode file associated with `FLAGS_arch`.
 std::string FindTargetSemanticsBitcodeFile(void) {
-  return FindSemanticsBitcodeFile(FLAGS_arch);
+  //return FindSemanticsBitcodeFile(FLAGS_arch);
 }
 
 // Find the path to the semantics bitcode file associated with `REMILL_ARCH`,

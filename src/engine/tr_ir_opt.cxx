@@ -1731,8 +1731,25 @@ UInt ppIR::vex_printf(const HChar* format, ...)
     vex_printf("\n}\n");
 }
 
+
+
+#include "vexllvm/vexStateHelper.h"
  const char* regOff2name(UInt off);
+
+ class TRStateHelper : public StateHelper {
+ public:
+     TRStateHelper() {}
+     virtual const char* regOff2name(UInt off) {
+         return ::regOff2name(off);
+     }
+ };
+
  
+ StateHelper* getStateHelper() {
+     return new TRStateHelper;
+ }
+
+
  const char* regOff2name(UInt off) {
      class RegOff2Name {
      public:

@@ -19,10 +19,12 @@ class Guest;
 #define SCALABLE false
 struct guest_ctx_field;
 
+#include "vexStateHelper.h"
+
 class GenLLVM
 {
 public:
-	GenLLVM(const Guest& gs, const char* modname = "vexllvm");
+	GenLLVM(const Guest& gs, StateHelper& sh, const char* modname = "vexllvm");
 	virtual ~GenLLVM(void) {}
 
 	llvm::IRBuilder<>* getBuilder(void) { return builder.get(); }
@@ -31,6 +33,7 @@ public:
 
 	static llvm::Type* vexTy2LLVM(IRType ty);
 	static std::unique_ptr<GenLLVM>& getGenLLVM();
+    inline const char *regOff2name(UInt off) { return statehelper.regOff2name(off); }
 	
 	llvm::Value* readCtx(unsigned int byteOff, IRType ty);
 	llvm::Value* readCtx(
@@ -65,6 +68,7 @@ public:
 private:
 	llvm::Type* getGuestTy(void);
 
+	StateHelper     &statehelper;
 	const Guest		&guest;
 	llvm::Type		*guestCtxTy;
 
@@ -100,10 +104,6 @@ private:
 
 llvm::LLVMContext& getGlobalContext();
 
-// Store an LLVM module into a file.
-bool StoreModuleToFile(llvm::Module* module, std::string_view file_name, bool allow_failure);
-// Store a module, serialized to LLVM IR, into a file.
-bool StoreModuleIRToFile(llvm::Module* module, std::string_view file_name_, bool allow_failure);
 extern std::unique_ptr<GenLLVM> theGenLLVM;
 
 #endif

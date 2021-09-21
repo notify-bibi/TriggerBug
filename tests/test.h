@@ -3,5 +3,5 @@
 #define PROJECT_DIR "Y:\\TriggerBug\\"
 
 #include "instopt/engine/tr_kernel.h"
-#include "instopt/engine/z3_target_call/z3_target_call.h"
+#include "instopt/helper/z3_target_call.h"
 

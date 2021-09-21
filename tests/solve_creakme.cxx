@@ -1,7 +1,7 @@
 ﻿#include "test.h"
 #include <forward_list>
 
-#include "engine/irsb_cache.h"
+#include "instopt/engine/irsb_cache.h"
 #include <spdlog/async.h>
 using namespace TR;
 
@@ -100,7 +100,7 @@ public:
         Int i;
         for (i = 0; i < irsb->stmts_used; i++) {
             IRStmt* st = irsb->stmts[i];
-            Int i;
+            //Int i;
             IRDirty* d, * d2;
             IRCAS* cas, * cas2;
             IRPutI* puti, * puti2;

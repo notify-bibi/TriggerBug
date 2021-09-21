@@ -31,3 +31,9 @@ install(
   TARGETS remill_os
   EXPORT remillTargets
 )
+
+target_include_directories(remill_os PUBLIC  "$<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>" "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>")
+llvm_map_components_to_libnames(llvm_libs support core irreader bitwriter)
+target_link_libraries(remill_os PUBLIC ${llvm_libs})
+target_link_libraries(remill_os PRIVATE glog::glog gflags_shared)
+set_target_properties(remill_os PROPERTIES FOLDER "Utils")

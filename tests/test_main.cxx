@@ -1,6 +1,6 @@
 
 #include "test.h"
-#include "engine/state_base.h"
+#include "instopt/engine/state_base.h"
 #include <Windows.h>
 #include <type_traits>
 
@@ -411,8 +411,8 @@ bool check(TRsolver &solver, sbool &&s) {
 }
 
 extern "C" {
-#include "priv/guest_amd64_defs.h"
-#include "priv/guest_x86_defs.h"
+#include "src/valgrind-3.17.0/VEX/priv/guest_amd64_defs.h"
+#include "src/valgrind-3.17.0/VEX/priv/guest_x86_defs.h"
 }
 bool test_ir_dirty_rflags() {
     z3::context c;

@@ -257,12 +257,15 @@ static unsigned arch_word_size_bits(VexArch arch) {
     }
 }
 
-#include "instopt/vexllvm/genllvm.h"
-#include "instopt/vexllvm/Sugar.h"
-#include "instopt/vexllvm/vexsb.h"
-#include "instopt/vexllvm/vexstmt.h"
-#include "instopt/vexllvm/vexexpr.h"
-#include "instopt/vexllvm/vexcpustate.h"
+#include "vexllvm/genllvm.h"
+#include "vexllvm/Sugar.h"
+#include "vexllvm/vexsb.h"
+#include "vexllvm/vexstmt.h"
+#include "vexllvm/vexexpr.h"
+#include "vexllvm/vexcpustate.h"
+
+#include "remill/BC/Util.h"
+
 using namespace llvm;
 
 class TRVexStmtExit : public VexStmtExit
@@ -489,7 +492,6 @@ public:
 };
 
 
-
 void GraphView::simplify() {
     std::deque<std::pair<int, BlockView>> chain;
     UInt ea = 0x44b26c;
@@ -516,8 +518,9 @@ void GraphView::simplify() {
 
 
     Guest& gs = (Guest&)(*(Guest*)(nullptr));
+    StateHelper* sh = getStateHelper();
     //theGenLLVM =
-    GenLLVM::getGenLLVM() = std::make_unique<GenLLVM>(gs);
+    GenLLVM::getGenLLVM() = std::make_unique<GenLLVM>(gs, *sh);
     VexHelpers::getVexHelpers() = VexHelpers::create(VexArchX86);
 #if 1
 
@@ -568,9 +571,9 @@ void GraphView::simplify() {
     }
 #endif
     // GenLLVM::getGenLLVM()->getBuilder()
-    StoreModuleIRToFile(&GenLLVM::getGenLLVM()->getModule(), "vmp.ll", false);
+    remill::StoreModuleIRToFile(&GenLLVM::getGenLLVM()->getModule(), "vmp.ll", false);
     // clang -emit-llvm -S vmp.bc -o vmp.ll
-    StoreModuleToFile(&GenLLVM::getGenLLVM()->getModule(), "vmp.bc", false);
+    remill::StoreModuleToFile(&GenLLVM::getGenLLVM()->getModule(), "vmp.bc", false);
     // llc.exe -filetype=obj -O3 ./vmp.bc -o vmp3.o
 
     
