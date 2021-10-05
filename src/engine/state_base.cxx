@@ -283,7 +283,7 @@ void TR::StateBase::read_bin_dump(const char* binDump)
 UInt TR::StateBase::getStr(std::stringstream& st, HWord addr)
 {
     UInt p = 0;
-    while (True) {
+    while (1) {
         auto b = mem.template load<Ity_I8>(addr++);
         if (b.real()) {
             p++;

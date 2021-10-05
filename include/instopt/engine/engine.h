@@ -360,3 +360,6 @@ typedef union __declspec(align(16)) _m128 {
 
 
 #endif // _TR_head
+
+#undef True
+#undef False

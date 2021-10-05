@@ -390,7 +390,13 @@ public:
 
 
 
-#define CDFCHECK(arg0) if (arg0.symb()) { z3_mode = True; if (!cptr) { return dirty_call(cee, exp_args, ty); }; }
+#define CDFCHECK(arg0)                                                         \
+  if (arg0.symb()) {                                                           \
+    z3_mode = true;                                                            \
+    if (!cptr) {                                                               \
+      return dirty_call(cee, exp_args, ty);                                    \
+    };                                                                         \
+  }
 
 
 template<class T>
@@ -412,7 +418,7 @@ sv::tval TR::State::tIRCallee<32>(const IRCallee* cee, IRExpr** const exp_args, 
     Int regparms = cee->regparms;
     UInt mcx_mask = cee->mcx_mask;
     UShort bitn = ty2bit(ty);
-    Bool z3_mode = False;
+    Bool z3_mode = false;
     if (!exp_args[0]) return sv::tval(ctx(), ((DCF::Function_0)(cee->addr))(), bitn);
     void* cptr = funcDict(cee->addr);
     if (cptr == DIRTY_CALL_MAGIC) {
@@ -439,7 +445,7 @@ sv::tval TR::State::tIRCallee<64>(const IRCallee* cee, IRExpr** const exp_args, 
     Int regparms = cee->regparms;
     UInt mcx_mask = cee->mcx_mask;
     UShort bitn = ty2bit(ty);
-    Bool z3_mode = False;
+    Bool z3_mode = false;
     if (!exp_args[0]) return sv::tval(ctx(), ((DCF::Function_0)(cee->addr))(), bitn);
     void* cptr = funcDict(cee->addr);
     if (cptr == DIRTY_CALL_MAGIC) {

@@ -15,6 +15,8 @@ TR_add_library( TARGET libvexllvm
 # target_include_directories(libvexllvm PRIVATE ${LLVM_INCLUDE_DIRS} ${Z3_CXX_INCLUDE_DIRS})
 target_include_directories(libvexllvm PRIVATE "$<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include/vexllvm>")
 target_compile_definitions(libvexllvm PRIVATE -DVEXLLVM_HELPER_PATH="${CMAKE_SOURCE_DIR}/bitcode")
+target_include_directories(libvexllvm PUBLIC ${LLVM_INCLUDE_DIRS})
+target_compile_definitions(libvexllvm PUBLIC ${LLVM_DEFINITIONS})
 target_link_libraries(libvexllvm PUBLIC ${llvm_libs} libvalgrind)
 target_link_libraries(libvexllvm PRIVATE glog::glog  gflags_shared)
 set_target_properties(libvexllvm PROPERTIES FOLDER "Core")

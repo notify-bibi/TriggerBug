@@ -63,7 +63,7 @@ public:
 
 	void setUseReloc(bool v) { use_reloc = v; }
 
-	static llvm::LLVMContext& getContext() { return llvm_ctx; }
+	static llvm::LLVMContext &getContext();
 	void mkFuncTy(unsigned N);
 private:
 	llvm::Type* getGuestTy(void);

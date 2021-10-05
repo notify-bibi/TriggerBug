@@ -1,11 +1,11 @@
 
-#include "test.h"
+#include "../test.h"
 #include "instopt/engine/state_base.h"
 #include <Windows.h>
 #include <type_traits>
 
 using namespace TR;
-
+#define TESTZ3
 
 //using Vns = sv::tval;
 
@@ -566,8 +566,10 @@ bool test_code_no_linear() {
 //#define TESTZ3
 
 #ifdef TESTZ3
-#include "test/example.hpp"
 
+
+#include "example.hpp"
+using namespace z3;
 void z3_lean() {
 
     std::cout << "consequence example\n";
@@ -747,66 +749,18 @@ int main() {
     //    }
     //    p.wait();
     //};
+
 #ifdef TESTZ3
     recfun_example_2();
     testz3();
 #endif
 
-    IR_TEST(test_creakme);
 
     
-    //IR_TEST(test_basic_var_real);
-    //IR_TEST(test_basic_var_sym);
+    IR_TEST(test_basic_var_real);
+    IR_TEST(test_basic_var_sym);
     ////testz3();
-    //IR_TEST(test_mem);
-    //IR_TEST(test_code_no_linear);
-    //IR_TEST(test_ir_dirty_rflags);
+    IR_TEST(test_mem);
+    IR_TEST(test_code_no_linear);
+    IR_TEST(test_ir_dirty_rflags);
 }
-
-//int main() {
-//    {
-//        flag_max_count = 38+6;
-//        flag_count = 0;
-//
-//        StatePrinter<StateAMD64> state(INIFILENAME, 0, True);
-//        state.hook_add(0x400CC0, success_ret3);
-//        StateAnalyzer gv(state);
-//        gv.Run();
-//    };
-//    return 0;
-//}
-
-//
-//int main() {
-//    flag_max_count = 1;
-//    flag_count = 0;
-//
-//    StatePrinter<StateX86> state(INIFILENAME, 0, True);
-//
-//    context& c = state;
-//
-//    for (int i = 0; i < 32; i++) {
-//        auto flag = state.get_int_const(8);
-//        auto ao1 = flag >= 'a' && flag <= 'f';
-//        auto ao3 = flag >= '0' && flag <= '9';
-//        state.mem.Ist_Store(i + 0x0019F554, flag);
-//        state.add_assert(ao1 || ao3, 1);
-//        if (i == 31) {
-//            _VexGuestX86State reg(state);
-//            state.mem.Ist_Store(reg.guest_EBP-0x24, flag);
-//        }
-//    }
-//
-//
-//    state.hook_add(0x4050B0, Dea);
-//    state.hook_add(0x4050D0, success_ret2);
-//
-//    State::pushState(state);
-//    State::pool->wait();
-//
-//    return 0;
-//}
-
-
-//
-

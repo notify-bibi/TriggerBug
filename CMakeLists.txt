@@ -8,7 +8,7 @@
 # λ cmake --build . --target LLVMSupport LLVMCore LLVMIRReader LLVMVisualizers LLVMMC -j7
 # λ C:\Users\notify\Desktop\vcpkg-2021.05.12\vcpkg.exe install gflags:x64-windows glog:x64-windows spdlog:x64-windows
 
-# λ cmake.exe -G "Visual Studio 16 2019" -T ClangCL -DCMAKE_PREFIX_PATH="C:\Users\notify\Desktop\llvm-build" -DCMAKE_TOOLCHAIN_FILE=C:\Users\notify\Desktop\vcpkg-2021.05.12\scripts\buildsystems\vcpkg.cmake Z:\reTR
+# λ cmake.exe -G "Visual Studio 16 2019" -T ClangCL -DCMAKE_PREFIX_PATH=C:\Users\24964\Desktop\build-llvm -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake Y:\TriggerBug
 # λ -DDEBUG_GABLE=ON -DZ3_BUILD_LIBZ3_SHARED=ON -DZ3_USE_LIB_GMP=OFF -DZ3_SINGLE_THREADED=OFF
 #  rm -rf CMakeCache.txt CMakeFiles\
 # λ cd valgrind-3.17.0 && clang -emit-llvm -I valgrind-3.17.0\VEX -I valgrind-3.17.0\VEX\priv\ -I valgrind-3.17.0\VEX\pub -c ..\support\vexops.c  ..\valgrind-3.17.0\VEX\priv\guest_amd64_helpers.c
@@ -32,7 +32,7 @@ project(InstOpt
 
 include(CheckCXXCompilerFlag)
 include(GNUInstallDirs)
-include(cmake/tr_add_project.cmake)
+include("${CMAKE_SOURCE_DIR}/cmake/tr_add_project.cmake")
 
 INCLUDE_DIRECTORIES(.)
 
@@ -197,13 +197,20 @@ unset(AVX_FLAGS)
 # The package gflags:x64-windows provides CMake targets:
 find_package(LLVM CONFIG REQUIRED)
 
-SET(LLVMVISUALIZERS_PATH support/LLVMVisualizers/)
-SET(LLVM_ADD_NATIVE_VISUALIZERS_TO_SOLUTION TRUE)
-add_subdirectory(${LLVMVISUALIZERS_PATH})
-
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+message(STATUS "Using LLVM_BINARY_DIR in: ${LLVM_BINARY_DIR}")
+
+# LLVM_INSTALL_PREFIX
+include("${CMAKE_SOURCE_DIR}/cmake/BCCompiler.cmake")
+
+
+# LLVM VISUALIZERS
+SET(LLVMVISUALIZERS_PATH support/LLVMVisualizers/)
+SET(LLVM_ADD_NATIVE_VISUALIZERS_TO_SOLUTION TRUE)
 message(STATUS "Using LLVMVisualizers in: ${LLVMVISUALIZERS_PATH}")
+add_subdirectory(${LLVMVISUALIZERS_PATH})
+
 
 
 # The package gflags:x64-windows provides CMake targets:
@@ -230,12 +237,13 @@ find_package_handle_standard_args(glog DEFAULT_MSG GLOG_INCLUDE_DIR GLOG_LIBRARY
 target_include_directories(z3::libz3 INTERFACE ${Z3_CXX_INCLUDE_DIRS})
 target_include_directories(LLVMCore INTERFACE ${LLVM_INCLUDE_DIRS})
 target_compile_definitions(LLVMCore INTERFACE ${LLVM_DEFINITIONS})
+target_include_directories(gflags_shared INTERFACE ${GFLAGS_INCLUDE_DIR})
 #target_include_directories(glog::glog INTERFACE ${GLOG_INCLUDE_DIR})
-#target_include_directories(gflags_shared INTERFACE ${GFLAGS_INCLUDE_DIR})
 #if(NOT GLOG_INCLUDE_DIR)
 #  message(FATAL_ERROR "no ${GLOG_INCLUDE_DIR}")
 #endif()
 
+add_subdirectory("src/tracer")
 TR_add_subdir(threadPool "src/thread_pool" ON)
 TR_add_subdir(helper "src/helper" ON)
 TR_add_subdir(remill_bc "src/remill" ON)
@@ -243,8 +251,15 @@ TR_add_subdir(libvalgrind ${VALGRIND_PROJ_DIR}/VEX/ BUILD_VALGRIND)
 TR_add_subdir(libtriggerBug "src/engine" BUILD_TRIGGERBUG)
 TR_add_subdir(libcryptoAnalyzer "src/crypto_analyzer" BUILD_CRYPTO_ANALYZER)
 TR_add_subdir(libvexllvm "src/vexllvm" BUILD_VEXLLVM)
-TR_add_subdir(TRtest "tests" BUILD_TRTEST)
+#TR_add_subdir(TRtest "tests" BUILD_TRTEST)
 #TR_add_subdir(libcfg "src/CFG" BUILD_CFG)
+
+
+IF (${BUILD_TRTEST})
+	add_subdirectory("tests")
+ENDIF()
+
+
 
 IF (${BUILD_PYTHON_FRONTEND})
 	find_library(TR_PYTHON3_LIB_PATH python3)
@@ -335,6 +350,6 @@ if(INSTOPT_INSTALL)
 endif()
 
 
-set_target_properties(acc_gen PROPERTIES FOLDER "Utils")
-set_target_properties(intrinsics_gen PROPERTIES FOLDER "Utils")
-set_target_properties(omp_gen PROPERTIES FOLDER "Utils")
+# set_target_properties(acc_gen PROPERTIES FOLDER "Utils")
+# set_target_properties(intrinsics_gen PROPERTIES FOLDER "Utils")
+# set_target_properties(omp_gen PROPERTIES FOLDER "Utils")

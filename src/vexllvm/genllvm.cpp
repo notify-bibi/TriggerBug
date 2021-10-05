@@ -41,6 +41,8 @@ llvm::LLVMContext& getGlobalContext() {
 	return GenLLVM::getContext();
 }
 
+llvm::LLVMContext &GenLLVM::getContext() { return llvm_ctx; }
+
 GenLLVM::GenLLVM(const Guest& gs, StateHelper &sh, const char* name)
 : statehelper(sh)
 , guest(gs)
@@ -140,6 +142,14 @@ Function* GenLLVM::endBB(Value* retVal)
 	Function	*ret_f;
 
 	assert (entry_bb != NULL && "ending missing bb");
+
+#if 1
+    // arg->addAttr(Attributes(Attributes::NoAlias));
+    Function::arg_iterator arg = cur_f->arg_begin();
+    llvm::Value *guest_ctx = &(*arg);
+    Value *ctxData = builder->CreateLoad(cur_guest_ctx);
+    builder->CreateStore(ctxData, guest_ctx);
+#endif
 
 	/* FIXME. Should return next addr to jump to */
 	builder->CreateRet(retVal);

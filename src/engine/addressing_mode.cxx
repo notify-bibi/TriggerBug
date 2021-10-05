@@ -494,7 +494,7 @@ typename TR::addressingMode<HWord>::sbit_struct TR::addressingMode<HWord>::_chec
     UInt idx = _idx;
     expr e = _e;
     //std::cout << e;
-    while (True) {
+    while (1) {
         sort so = e.get_sort();
         UInt size = so.bv_size();
         if (e.kind() == Z3_APP_AST) {

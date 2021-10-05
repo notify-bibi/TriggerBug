@@ -114,7 +114,7 @@ static void _vex_log_bytes(const HChar* bytes, SizeT nbytes) {
 
 
 clock_t tr_begin_run = clock();
-static bool is_LibVEX_Init = False;
+static bool is_LibVEX_Init = false;
 VexControl vex_info::init_VexControl() {
     VexControl vc;
     LibVEX_default_VexControl(&vc);
@@ -125,9 +125,9 @@ VexControl vex_info::init_VexControl() {
     vc.guest_max_insns = gmax_insns();
     // vc.guest_chase_thresh = 0;   
 #if 1
-    vc.guest_chase = False; //不许追赶
+    vc.guest_chase = false; //不许追赶
 #else
-    vc.guest_chase = True; // chain
+    vc.guest_chase = true; // chain
 #endif
     vc.iropt_register_updates_default = gRegisterUpdates();
 
@@ -170,11 +170,11 @@ Bool vex_info::gis_mode_32(VexArch guest)
     case VexArchARM:
     case VexArchS390X:
     case VexArchMIPS32:
-    case VexArchPPC32: return True;
+    case VexArchPPC32: return true;
     case VexArchPPC64:
     case VexArchAMD64:
     case VexArchMIPS64:
-    case VexArchARM64: return False;
+    case VexArchARM64: return false;
     default:
         vassert(0);
     }
@@ -350,7 +350,7 @@ Int vex_info::gRegsIpOffset(VexArch guest) {
 
  Bool chase_into_ok(void* value, Addr addr) {
      //std::cout << value << addr << std::endl;
-     return True;
+     return true;
  }
 
  namespace TR {
@@ -612,8 +612,8 @@ Int vex_info::gRegsIpOffset(VexArch guest) {
 
         /*vbi*/
         LibVEX_default_VexAbiInfo(&vta_chunk.abiinfo_both);
-        vta_chunk.abiinfo_both.guest_amd64_assume_gs_is_const = True;
-        vta_chunk.abiinfo_both.guest_amd64_assume_fs_is_const = True;
+        vta_chunk.abiinfo_both.guest_amd64_assume_gs_is_const = true;
+        vta_chunk.abiinfo_both.guest_amd64_assume_fs_is_const = true;
 
         // Use some values that makes ARM64 happy.
         vta_chunk.archinfo_guest.arm64_dMinLine_lg2_szB = 6;
