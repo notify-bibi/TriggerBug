@@ -1,6 +1,7 @@
 
 #include "../test.h"
 #include "instopt/tracer/CFGTracer.h"
+#include "instopt/utils/BitCodeUtil.h"
 
 using namespace TR;
 
@@ -31,7 +32,6 @@ static State_Tag statistics(State &s) {
   return Running;
 }
 
-#include "remill/BC/Optimizer.h"
 #include "vexllvm/genllvm.h"
 #include "vexllvm/Sugar.h"
 #include "vexllvm/vexsb.h"
@@ -39,11 +39,8 @@ static State_Tag statistics(State &s) {
 #include "vexllvm/vexexpr.h"
 #include "vexllvm/vexcpustate.h"
 #include "vexllvm/vexhelpers.h"
-#include "remill/BC/Util.h"
-#include "remill/BC/Optimizer.h"
 
-#include "remill/Arch/Arch.h"
-#include "remill/OS/OS.h"
+
 void vmp_reback(State &s) {
   GraphView gv(s.vctx());
   gv.explore_block(&s);
@@ -72,12 +69,7 @@ void vmp_reback(State &s) {
      << "_" << std::dec << basic_irsb_chunk.get_irsb_chunk()->get_bb_base();
   vsb.emit(st.str().c_str());
   // ---------------------------------------
-  auto remill_arch =
-      remill::Arch::Get(GenLLVM::getGenLLVM()->getContext(),
-                        remill::OSName::kOSWindows, (enum remill::ArchName)0);
-  const std::set<llvm::Function *> traces;
-  remill::OptimizeModule(remill_arch.get(), &(GenLLVM::getGenLLVM()->getModule()),
-                         traces);
+
   // ---------------------------------------
   // GenLLVM::getGenLLVM()->getBuilder()
   remill::StoreModuleIRToFile(&GenLLVM::getGenLLVM()->getModule(), "vmp.ll",

@@ -1,7 +1,7 @@
 #include "instopt/helper/x86/x86CCall.h"
 #include "../z3_target_defs.h"
 extern "C" {
-    #include "src/valgrind-3.17.0/VEX/priv/guest_x86_defs.h"
+    #include "../../valgrind-3.17.0/VEX/priv/guest_x86_defs.h"
     UInt vex_printf(const HChar* format, ...);
     __attribute__((noreturn))  void vpanic(const HChar* str);
 }

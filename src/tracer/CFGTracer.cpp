@@ -13,7 +13,7 @@
 #include "vexllvm/vexcpustate.h"
 #include "vexllvm/vexhelpers.h"
 extern "C" {
-#include <src/valgrind-3.17.0/VEX/priv/ir_opt.h>
+#include "../valgrind-3.17.0/VEX/priv/ir_opt.h"
 };
 
 // ===============================================================================================================================

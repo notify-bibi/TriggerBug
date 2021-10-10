@@ -2,7 +2,7 @@
 #ifndef _VEX_CONTEXT_
 #define  _VEX_CONTEXT_
 #include "instopt/engine/engine.h"
-#include "instopt/thread_pool/thread_pool.h"
+#include "instopt/utils/thread_pool.h"
 #include "instopt/engine/basic_var.hpp"
 #include <functional>
 

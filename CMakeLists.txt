@@ -34,7 +34,6 @@ include(CheckCXXCompilerFlag)
 include(GNUInstallDirs)
 include("${CMAKE_SOURCE_DIR}/cmake/tr_add_project.cmake")
 
-INCLUDE_DIRECTORIES(.)
 
 message(STATUS "CMAKE_TOOLCHAIN_FILE is ${CMAKE_TOOLCHAIN_FILE}")
 message(STATUS "CMAKE_INSTALL_INCLUDEDIR is ${CMAKE_INSTALL_INCLUDEDIR}")
@@ -244,9 +243,8 @@ target_include_directories(gflags_shared INTERFACE ${GFLAGS_INCLUDE_DIR})
 #endif()
 
 add_subdirectory("src/tracer")
-TR_add_subdir(threadPool "src/thread_pool" ON)
+add_subdirectory("src/utils")
 TR_add_subdir(helper "src/helper" ON)
-TR_add_subdir(remill_bc "src/remill" ON)
 TR_add_subdir(libvalgrind ${VALGRIND_PROJ_DIR}/VEX/ BUILD_VALGRIND)
 TR_add_subdir(libtriggerBug "src/engine" BUILD_TRIGGERBUG)
 TR_add_subdir(libcryptoAnalyzer "src/crypto_analyzer" BUILD_CRYPTO_ANALYZER)

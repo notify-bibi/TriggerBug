@@ -23,6 +23,7 @@ set(DEFAULT_BC_COMPILER_FLAGS
 )
 
 
+find_package(LLVM CONFIG REQUIRED)
 set(CLANG_CXX_EXECUTABLE_NAME "clang++")
 set(LLVMLINK_EXECUTABLE_NAME "llvm-link")
 
@@ -52,12 +53,12 @@ if (DEFINED LLVM_INSTALL_PREFIX)
     NO_DEFAULT_PATH
   )
 else()
-  set(LLVM_HINTS "/usr/bin" "/usr/local/bin" "${LLVM_INSTALL_PREFIX}/bin" "${LLVM_TOOLS_BINARY_DIR}" "C:/Program Files/LLVM/bin" "C:/Program Files (x86)/LLVM/bin" "C:/Program Files (x86)/Microsoft Visual Studio/2019/Professional/VC/Tools/Llvm/bin")
+  set(LLVM_HINTS "/usr/bin" "/usr/local/bin" "${LLVM_INSTALL_PREFIX}/bin" "${LLVM_TOOLS_BINARY_DIR}" "C:/Program Files/LLVM/bin" "C:/Program Files (x86)/LLVM/bin" "C:/Program Files (x86)/Microsoft Visual Studio/2019/Professional/VC/Tools/Llvm/x64/bin/" )
   if(DEFINED LLVM_BINARY_DIR)
      list(APPEND LLVM_HINTS "${LLVM_BINARY_DIR}/bin" "${LLVM_BINARY_DIR}/Debug/bin" "${LLVM_BINARY_DIR}/Release/bin")
   endif()
   
-  # message(STATUS "XXXX ${LLVM_HINTS}")
+  # message(STATUS "XXXX ${CMAKE_CXX_COMPILER_ID}")
   
   # clang path
   if("${CMAKE_CXX_COMPILER}" STREQUAL "${CLANG_CXX_EXECUTABLE_NAME}")
@@ -80,6 +81,7 @@ endif()
 if(( "${CLANG_PATH}" MATCHES "CLANG_PATH-NOTFOUND") OR ( "${LLVMLINK_PATH}" MATCHES "LLVMLINK_PATH-NOTFOUND"))
 	message(FATAL_ERROR " NotFound CLANG_PATH:${CLANG_PATH} LLVMLINK_PATH:${LLVMLINK_PATH}. Pls set LLVM_INSTALL_PREFIX ")
 endif()
+
 
   
 
