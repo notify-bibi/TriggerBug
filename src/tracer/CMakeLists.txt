@@ -3,5 +3,5 @@ TR_add_library(TARGET libGraphWriter
                )
 			   
 			   
-target_link_libraries(libGraphWriter PUBLIC libtriggerBug libvexllvm)
+target_link_libraries(libGraphWriter PUBLIC libengine libvexllvm)
 set_target_properties(libGraphWriter PROPERTIES FOLDER "Tracer")

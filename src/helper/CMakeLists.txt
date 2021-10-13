@@ -1,6 +1,6 @@
 ﻿
 add_compile_options(-Wno-unused-variable)
-TR_add_library(TARGET helper 
+TR_add_library(TARGET vexcallhelper 
                CONFIGURE_TYPE STATIC
                SOURCES 
                     "z3_target_call.cxx"
@@ -9,6 +9,6 @@ TR_add_library(TARGET helper
                     )
 
 
-target_link_libraries(helper PRIVATE libvalgrind z3::libz3)
+target_link_libraries(vexcallhelper PUBLIC libvalgrind z3::libz3)
 
-set_target_properties(helper PROPERTIES FOLDER "Core")
+set_target_properties(vexcallhelper PROPERTIES FOLDER "Core")
