@@ -1,7 +1,7 @@
-TR_add_library(TARGET libGraphWriter
+TR_add_library(TARGET obj.instoptGraphWriter
                CONFIGURE_TYPE STATIC
                )
 			   
 			   
-target_link_libraries(libGraphWriter PUBLIC libtriggerBug libvexllvm)
-set_target_properties(libGraphWriter PROPERTIES FOLDER "Tracer")
+target_link_libraries(obj.instoptGraphWriter PUBLIC libengine libvexllvm)
+set_target_properties(obj.instoptGraphWriter PROPERTIES FOLDER "Object Libraries")

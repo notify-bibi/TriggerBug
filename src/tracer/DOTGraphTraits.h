@@ -50,6 +50,13 @@ public:
     return false;
   }
 
+
+  /// isNodeHidden - If the function returns true, the given node is not
+  /// displayed in the graph.
+  static bool isNodeHidden(const void*) {
+      return false;
+  }
+
   /// getNodeLabel - Given a node and a pointer to the top level graph, return
   /// the label to print in the node.
   template <typename GraphType>
@@ -175,6 +182,9 @@ public:
   static ChildIteratorType child_end(NodeRef nr) {
     return nr->get_nexts().end();
   }
+
+
+
   /*static NodeRef child_it_get(ChildIteratorType&) {
 
   }

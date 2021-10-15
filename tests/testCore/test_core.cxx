@@ -411,8 +411,8 @@ bool check(TRsolver &solver, sbool &&s) {
 }
 
 extern "C" {
-#include "src/valgrind-3.17.0/VEX/priv/guest_amd64_defs.h"
-#include "src/valgrind-3.17.0/VEX/priv/guest_x86_defs.h"
+#include "../../src/valgrind-3.17.0/VEX/priv/guest_amd64_defs.h"
+#include "../../src/valgrind-3.17.0/VEX/priv/guest_x86_defs.h"
 }
 bool test_ir_dirty_rflags() {
     z3::context c;
@@ -567,9 +567,22 @@ bool test_code_no_linear() {
 
 #ifdef TESTZ3
 
-
-#include "example.hpp"
 using namespace z3;
+
+void prove(expr conjecture) {
+    context& c = conjecture.ctx();
+    solver s(c);
+    s.add(!conjecture);
+    std::cout << "conjecture:\n" << conjecture << "\n";
+    if (s.check() == unsat) {
+        std::cout << "proved" << "\n";
+    }
+    else {
+        std::cout << "failed to prove" << "\n";
+        std::cout << "counterexample:\n" << s.get_model() << "\n";
+    }
+}
+
 void z3_lean() {
 
     std::cout << "consequence example\n";
@@ -752,7 +765,6 @@ int main() {
 
 #ifdef TESTZ3
     recfun_example_2();
-    testz3();
 #endif
 
 

@@ -1,5 +1,4 @@
 
-#include "DOTGraphTraits.h"
 #include "instopt/engine/tr_ir_opt.h"
 #include "instopt/engine/state_explorer.h"
 #include <spdlog/async.h>
@@ -15,6 +14,8 @@
 extern "C" {
 #include "../valgrind-3.17.0/VEX/priv/ir_opt.h"
 };
+
+#include "DOTGraphTraits.h"
 
 // ===============================================================================================================================
 

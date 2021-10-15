@@ -187,11 +187,11 @@ public:
 
 
     bool destoryIRSB(IRSB* irsb) {
-
+        return true;
     }
 
     bool refresh() {
-
+        return true;
     }
 
     void clean_all() {
