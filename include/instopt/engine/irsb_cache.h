@@ -45,6 +45,7 @@ namespace bb {
         }
         auto get_transfer() const { return m_transfer; }
         auto get_arch() const { return m_arch; };
+        unsigned get_numBits() const;
         void clean_call() {
             for (auto alloc_tmp : m_transfer) {
                 free(alloc_tmp);

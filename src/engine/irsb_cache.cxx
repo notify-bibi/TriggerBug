@@ -81,7 +81,9 @@ namespace cache {
 
 // namespace cache
 
-
+unsigned bb::IRSB_CHUNK::get_numBits() const {
+  return TR::vex_info::gis_mode_32(m_arch) ? 32 : 64;
+}
 
 class IRSBCache {
 public:

@@ -15,7 +15,7 @@ extern "C" {
 #include <map>
 #include <stdint.h>
 
-class Guest;
+// class Guest;
 #define SCALABLE false
 struct guest_ctx_field;
 
@@ -24,7 +24,7 @@ struct guest_ctx_field;
 class GenLLVM
 {
 public:
-	GenLLVM(const Guest& gs, StateHelper& sh, const char* modname = "vexllvm");
+	GenLLVM(StateHelper& sh, const char* modname = "vexllvm");
 	virtual ~GenLLVM(void) {}
 
 	llvm::IRBuilder<>* getBuilder(void) { return builder.get(); }
@@ -65,11 +65,11 @@ public:
 
 	static llvm::LLVMContext &getContext();
 	void mkFuncTy(unsigned N);
-private:
 	llvm::Type* getGuestTy(void);
+private:
 
 	StateHelper     &statehelper;
-	const Guest		&guest;
+	//const Guest		&guest;
 	llvm::Type		*guestCtxTy;
 
 	std::unique_ptr<llvm::IRBuilder<>> builder;

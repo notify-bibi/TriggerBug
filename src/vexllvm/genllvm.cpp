@@ -43,9 +43,9 @@ llvm::LLVMContext& getGlobalContext() {
 
 llvm::LLVMContext &GenLLVM::getContext() { return llvm_ctx; }
 
-GenLLVM::GenLLVM(const Guest& gs, StateHelper &sh, const char* name)
+GenLLVM::GenLLVM(StateHelper &sh, const char* name)
 : statehelper(sh)
-, guest(gs)
+//, guest(gs)
 , guestCtxTy(NULL)
 , funcTy(NULL)
 , cur_guest_ctx(NULL)
@@ -120,7 +120,7 @@ void GenLLVM::beginBB(const char* name)
 	cur_guest_ctx = &(*arg);
 
 
-#if 1
+#if 0
 	Value* Lctx = builder->CreateAlloca(getGuestTy(), nullptr);
 	Value* Tmp = builder->CreateLoad(cur_guest_ctx);
 	 builder->CreateStore(Tmp, Lctx);
@@ -143,7 +143,7 @@ Function* GenLLVM::endBB(Value* retVal)
 
 	assert (entry_bb != NULL && "ending missing bb");
 
-#if 1
+#if 0
     // arg->addAttr(Attributes(Attributes::NoAlias));
     Function::arg_iterator arg = cur_f->arg_begin();
     llvm::Value *guest_ctx = &(*arg);
