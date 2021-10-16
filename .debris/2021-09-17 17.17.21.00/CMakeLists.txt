@@ -1,6 +1,0 @@
-set(REMILL_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/include")
-add_subdirectory(BC)
-target_include_directories(remill_bc PUBLIC  "$<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>" "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>")
-target_link_libraries(remill_bc PUBLIC ${llvm_libs})
-target_link_libraries(remill_bc PRIVATE glog::glog  gflags_shared gflags::gflags_shared)
-set_target_properties(remill_bc PROPERTIES FOLDER "Utils")

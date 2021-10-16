@@ -1,5 +1,0 @@
-
-REMILL_BUILD_SEMANTICS_DIR_X86
-
-set(REMILL_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/include")
-add_subdirectory(BC)
