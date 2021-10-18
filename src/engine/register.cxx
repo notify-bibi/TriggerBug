@@ -214,6 +214,9 @@ namespace TR {
             }
         }
         else if ((__nbytes) <= 16) {
+            if ((uint32_t)fast_ptr & (0x10 - 1)) {
+                goto noaligned;
+            }
             _mm_store_si128(
                 (__m128i*)(fast_ptr),
                 _mm_or_si128(
@@ -225,7 +228,10 @@ namespace TR {
                 )
             );
         }
-        else {
+        else if ((__nbytes) <= 32) {
+            if ((uint32_t)fast_ptr & (0x20 - 1)) {
+                goto noaligned;
+            }
             _mm256_store_si256(
                 (__m256i*)(fast_ptr),
                 _mm256_or_si256(
@@ -236,6 +242,10 @@ namespace TR {
                     table.mask_ptr()[__nbytes]
                 )
             );
+        }
+        else {
+noaligned:
+            for (UInt i = 0; i < __nbytes; i++) { ((unsigned char*)fast_ptr)[i] = i + 1; }
         }
     }
 
@@ -326,6 +336,8 @@ namespace TR {
 
     void Register::Ist_Put(UInt offset, Z3_ast _ast, UInt nbytes)
     {
+        auto sort_size = Z3_get_bv_sort_size(m_ctx, Z3_get_sort(m_ctx, _ast));
+        assert(sort_size == (nbytes << 3));
         mk_Symbolic();
         clear(offset, nbytes);
         auto fastindex = m_fastindex + offset;

@@ -2438,7 +2438,7 @@ namespace sv{
         Z3_ast mk_bool_ast() const;
         Z3_ast mk_fpa_ast(unsigned ebits, unsigned sbits) const;
 
-        std::string str() const;
+        std::string str(bool z3str = false) const;
         friend std::ostream& operator<<(std::ostream& out, const sv::tval& n) { return out << n.str(); }
     private:
         friend tval ite(const sbool& cond, const tval& iftrue, const tval& iffalse);

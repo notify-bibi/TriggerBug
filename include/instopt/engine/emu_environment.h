@@ -66,7 +66,7 @@ namespace TR {
         friend class EmuEnvironment;
         friend class EmuEnvGuest;
         friend class EmuEnvHost;
-
+    public:
         using tval_thunk = ir_temp_vector<MAX_IRTEMP>;
         Z3_context m_ctx;
         std::vector<tval_thunk*> m_ir_unit;
@@ -94,13 +94,13 @@ namespace TR {
 
         Addr64 m_guest_start_of_block = 0;
         UInt m_base_block_sz = 0;
-        bool   m_is_dynamic_block = false;//Need to refresh IRSB memory?
+        bool   m_is_dynamic_block = false;// Need to refresh IRSB memory?
         bool   m_is_dirty_mode = false;   // is dirty call mode
 
+    public:
         EmuEnvironment(VexArch arch, ULong traceflags) {
             set_vta_chunk(arch, traceflags);
         }
-    public:
         void set_vta_chunk(VexArch arch, ULong traceflags);
         inline void set_dirty_mode() { m_is_dirty_mode = true; }
         inline void clean_dirty_mode() { m_is_dirty_mode = false; }

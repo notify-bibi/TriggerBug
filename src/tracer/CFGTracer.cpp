@@ -106,10 +106,14 @@ void explorer::traceIRStmtStart(State &s, irsb_chunk &bb, UInt stmtn) {
 void explorer::traceIRStmtEnd(State &s, irsb_chunk &irsb, UInt stmtn) {
   TraceInterface::traceIRStmtEnd(s, irsb, stmtn);
 }
-
+int m_count = 0;
 void explorer::traceIRnext(State &s, irsb_chunk &irsb, const tval &next) {
   TraceInterface::traceIRnext(s, irsb, next);
   update_block_chain(irsb);
+  m_count++;
+  if (m_count > 200) {
+    s.set_status(Death);
+  }
   // ppIR pp(m_gv.log);
 
   // std::deque<sv::tval> result;

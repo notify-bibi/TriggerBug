@@ -103,7 +103,7 @@ namespace sv {
         default: VPANIC("NOT SUPPPORT"); return sort(ctx, (Z3_ast)nullptr);
         }
     }
-    std::string tval::str() const
+    std::string tval::str(bool z3str) const
     {
         if (real()) {
             std::string str;
@@ -125,22 +125,31 @@ namespace sv {
         }
         else {
             std::string str;
-            char buff[0x80];
+            if (z3str) {
+                str.append(" BVS %d < \\");
+                str.append(Z3_ast_to_string((Z3_context)m_ctx, (Z3_ast)m_ast));
+                str.append("/ >");
+                return str;
+            }
+            else {
+
+                char buff[0x80];
 #if 0
-            std::string strContent;
-            snprintf(buff, sizeof(buff), " BS%d < ", m_bits);
-            strContent.assign(buff);
-            str.append(strContent);
-            strContent.assign(Z3_ast_to_string((Z3_context)m_ctx, m_ast));
-            str.append(strContent);
-            strContent.assign(" >");
-            str.append(strContent);
-            return str;
+                std::string strContent;
+                snprintf(buff, sizeof(buff), " BS%d < ", m_bits);
+                strContent.assign(buff);
+                str.append(strContent);
+                strContent.assign(Z3_ast_to_string((Z3_context)m_ctx, m_ast));
+                str.append(strContent);
+                strContent.assign(" >");
+                str.append(strContent);
+                return str;
 #else
-            snprintf(buff, sizeof(buff), " BVS %d < \\%zx/ >  ", m_bits, m_ast);
-            str.assign(buff);
-            return str;
+                snprintf(buff, sizeof(buff), " BVS %d < \\%zx/ >  ", m_bits, m_ast);
+                str.assign(buff);
+                return str;
 #endif
+            };
         }
     }
     tval::tval(Z3_context ctx, const IRConst* con)

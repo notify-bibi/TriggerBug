@@ -1733,20 +1733,22 @@ UInt ppIR::vex_printf(const HChar* format, ...)
 
 
 
-#include "vexllvm/vexStateHelper.h"
+#include "instopt/engine/vexStateHelper.h"
  const char* regOff2name(UInt off);
 
- class TRStateHelper : public StateHelper {
+ class TRStateHelperAMD64 : public StateHelper {
  public:
-     TRStateHelper() {}
+     TRStateHelperAMD64() {}
      virtual const char* regOff2name(UInt off) {
          return ::regOff2name(off);
      }
  };
 
  
- StateHelper* getStateHelper() {
-     return new TRStateHelper;
+ std::shared_ptr<StateHelper> StateHelper::get(VexArch A) {
+     if (A == VexArchX86 || A == VexArchAMD64) {
+         return std::make_shared<TRStateHelperAMD64>();
+     }
  }
 
 
@@ -1822,10 +1824,14 @@ UInt ppIR::vex_printf(const HChar* format, ...)
          }
      };
      static RegOff2Name Reg;
+     if (off >= AMD64_IR_OFFSET::SS + 8) {
+         return "invalid_reg";
+     }
      for (int curr = off; curr; curr--) {
          const char* R = Reg.AMD64RegNames[curr];
          if (R) return R;
      }
-     assert(0 && "error offset");
+     return "invalid_reg";
+     //assert(0 && "error offset");
  };
 

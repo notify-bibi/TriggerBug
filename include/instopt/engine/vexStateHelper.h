@@ -7,4 +7,5 @@ extern "C" {
 class StateHelper {
 public:
   virtual const char *regOff2name(UInt off) = 0;
+  static std::shared_ptr<StateHelper> get(VexArch);
 };

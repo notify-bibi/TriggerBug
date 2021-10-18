@@ -19,7 +19,7 @@ extern "C" {
 #define SCALABLE false
 struct guest_ctx_field;
 
-#include "vexStateHelper.h"
+#include "instopt/engine/vexStateHelper.h"
 
 class GenLLVM
 {

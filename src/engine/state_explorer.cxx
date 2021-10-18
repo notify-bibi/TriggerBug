@@ -815,7 +815,6 @@ TR::Vex_Kind State::emu_irsb(std::deque<BtsRefType>& tmp_branch, HWord& guest_st
     UInt IMark_stmtn = 0;
     HWord block_start = guest_start;
     vassert(irsb->stmts[0]->tag == Ist_IMark);
-    vassert(vinfo().gguest()==irvex().get_ir_vex_translate_args()->arch_guest);
     m_last_bb = bb;
     for (UInt stmtn = 0; stmtn < irsb->stmts_used; s = irsb->stmts[++stmtn])
     {
@@ -832,7 +831,7 @@ TR::Vex_Kind State::emu_irsb(std::deque<BtsRefType>& tmp_branch, HWord& guest_st
                 get_trace()->setFlags(hs.cflag);
                 if (!hs.cb) break;
                 set_status(hs.cb(*this));
-                if (this->status() != Running) {
+                if (status != Running) {
                     return vStop;
                 }
                 if (get_delta()) {
@@ -840,6 +839,9 @@ TR::Vex_Kind State::emu_irsb(std::deque<BtsRefType>& tmp_branch, HWord& guest_st
                     set_delta(0);
                     return vUpdate;
                 }
+            }
+            if (status != Running) {
+              return vStop;
             }
             /*fresh changed block 检测执行base block时恶意修改该块指令*/
             if UNLIKELY(irvex().check()) { 
@@ -979,6 +981,7 @@ bool State::vex_main_loop(std::deque<BtsRefType>& tmp_branch, irsb_chunk& irsb_c
         IRSB* irsb = irsb_chunk->get_irsb();
         //ppIRSB(irsb);
         get_trace()->traceIRSB(*this, guest_start, irsb_chunk);
+        vassert(vinfo().gguest() == irvex().get_ir_vex_translate_args()->arch_guest);
         if (vinfo().is_mode_32()) {
             vkd = emu_irsb<32>(tmp_branch, guest_start, m_status, irsb_chunk);
         }
