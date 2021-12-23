@@ -5,6 +5,7 @@
 #define VEXOP_MACROS_H
 
 #include <assert.h>
+#include "instopt/utils/Version.h"
 
 
 #define NONE
@@ -13,10 +14,16 @@
 #define get_d()		Type::getDoubleTy(getGlobalContext())
 #define get_c(b, v)	ConstantInt::get(getGlobalContext(), APInt(b, v))
 #define get_32i(v)	get_c(32, v)
-#warning "VectorType::get(get_i(b), w, true or false)?"
+//#warning "VectorType::get(get_i(b), w, true or false)?"
+#if LLVM_VERSION_NUMBER > LLVM_VERSION(12, 0)
+#define get_vt(w, b)	FixedVectorType::get(get_i(b), w)
+#define get_vtf(w)	FixedVectorType::get(builder->getFloatTy(), w)
+#define get_vtd(w)	FixedVectorType::get(builder->getDoubleTy(), w)
+#else
 #define get_vt(w, b)	VectorType::get(get_i(b), w, false)
 #define get_vtf(w)	VectorType::get(builder->getFloatTy(), w, false)
 #define get_vtd(w)	VectorType::get(builder->getDoubleTy(), w, false)
+#endif
 #define get_cvl(var, l) 						\
 	ConstantVector::get(std::vector<Constant*>(			\
 		var, var + l))

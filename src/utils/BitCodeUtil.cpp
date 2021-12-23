@@ -433,7 +433,11 @@ bool StoreModuleIRToFile(llvm::Module *module, std::string_view file_name_,
   std::string file_name(file_name_.data(), file_name_.size());
 #if LLVM_VERSION_NUMBER > LLVM_VERSION(3, 5)
   std::error_code ec;
+#if LLVM_VERSION_NUMBER > LLVM_VERSION(12, 0)
+  llvm::raw_fd_ostream dest(file_name.c_str(), ec, llvm::sys::fs::OpenFlags::OF_Text);
+#else
   llvm::raw_fd_ostream dest(file_name.c_str(), ec, llvm::sys::fs::F_Text);
+#endif
   auto good = !ec;
   auto error = ec.message();
 #else

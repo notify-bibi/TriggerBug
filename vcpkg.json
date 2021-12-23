@@ -1,0 +1,11 @@
+{
+  "name": "instopt",
+  "version-string": "1.0.0",
+  "builtin-baseline": "5ddd7f02689b7c5aab78711d77f61db5d2e5e79c",
+  "dependencies": [
+        {"name": "gflags", "version>=": "2.2.2" },
+        {"name": "glog", "version>=": "0.4.0" },
+        {"name": "spdlog", "version>=": "1.8.5" },
+		{"name": "z3", "version>=": "4.8.12#1" }
+    ]
+}

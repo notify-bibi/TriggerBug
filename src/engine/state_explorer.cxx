@@ -981,7 +981,7 @@ bool State::vex_main_loop(std::deque<BtsRefType>& tmp_branch, irsb_chunk& irsb_c
         IRSB* irsb = irsb_chunk->get_irsb();
         //ppIRSB(irsb);
         get_trace()->traceIRSB(*this, guest_start, irsb_chunk);
-        vassert(vinfo().gguest() == irvex().get_ir_vex_translate_args()->arch_guest);
+        // vassert(vinfo().gguest() == irvex().get_ir_vex_translate_args()->arch_guest);
         if (vinfo().is_mode_32()) {
             vkd = emu_irsb<32>(tmp_branch, guest_start, m_status, irsb_chunk);
         }

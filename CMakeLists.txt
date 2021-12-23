@@ -1,20 +1,3 @@
-# CMakeList.txt: 顶层 CMake 项目文件，在此处执行全局配置
-# 并包含子项目。
-
-
-# VMWIN
-# λ wget https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.1/llvm-12.0.1.src.tar.xz
-# λ cmake -G "Visual Studio 16 2019" -A x64 -T ClangCL -DCMAKE_BUILD_TYPE=Release -DLLVM_BUILD_TOOLS=OFF -DLLVM_TEMPORARILY_ALLOW_OLD_TOOLCHAIN=OFF -DLLVM_TARGETS_TO_BUILD="X86" -DLLVM_LINK_LLVM_DYLIB=ON -DCOMPILER_RT_INCLUDE_TESTS:BOOL=OFF -DLLVM_ENABLE_ASSERTIONS:BOOL=OFF ..\llvm-12.0.1.src\
-# λ cmake --build . --target LLVMSupport LLVMCore LLVMIRReader LLVMVisualizers LLVMMC -j7
-# λ C:\Users\notify\Desktop\vcpkg-2021.05.12\vcpkg.exe install gflags:x64-windows glog:x64-windows spdlog:x64-windows
-
-# λ cmake.exe -G "Visual Studio 16 2019" -T ClangCL -DCMAKE_PREFIX_PATH=C:\Users\24964\Desktop\build-llvm -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake Y:\TriggerBug
-# λ -DDEBUG_GABLE=ON -DZ3_BUILD_LIBZ3_SHARED=ON -DZ3_USE_LIB_GMP=OFF -DZ3_SINGLE_THREADED=OFF
-#  rm -rf CMakeCache.txt CMakeFiles\
-# λ cd valgrind-3.17.0 && clang -emit-llvm -I valgrind-3.17.0\VEX -I valgrind-3.17.0\VEX\priv\ -I valgrind-3.17.0\VEX\pub -c ..\support\vexops.c  ..\valgrind-3.17.0\VEX\priv\guest_amd64_helpers.c
-
-
-
 # WINDESKTOP
 
 

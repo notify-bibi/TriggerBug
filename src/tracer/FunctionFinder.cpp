@@ -5,6 +5,7 @@
 #include "gen_global_var_call.hpp"
 #include "instopt/engine/irsb_cache.h"
 #include "llvm/ADT/SparseBitVector.h"
+#include "llvm/ADT/ImmutableMap.h"
 #include "instopt/engine/vexStateHelper.h"
 #include "instopt/tracer/BlockView.h"
 #include <instopt/tracer/CFGTracer.h>
@@ -12,7 +13,433 @@
 
 using namespace TR;
 
+
+namespace TIR {
+class IRStmt {
+  IRStmtTag m_tag;
+
+public:
+  IRStmt(IRStmtTag tag) {}
+};
+class WrTmp : public IRStmt {
+  UInt m_tmp;
+  sv::tval m_value;
+
+public:
+  WrTmp(UInt tmp) : IRStmt(Ist_WrTmp) {}
+};
+
+} // namespace TIR
+
+
+class VisitIRSB {
+  VisitIRSB() {}
+  void visit(IRSB *irsb) {
+    Int i;
+    for (i = 0; i < irsb->stmts_used; i++) {
+      IRStmt *st = irsb->stmts[i];
+      // Int i;
+      IRDirty *d, *d2;
+      IRCAS *cas, *cas2;
+      IRPutI *puti, *puti2;
+      IRLoadG *lg;
+      IRStoreG *sg;
+      switch (st->tag) {
+      case Ist_Put: {
+        update_interval(
+            m_result, st->Ist.Put.offset,
+            sizeofIRType(typeOfIRExpr(irsb->tyenv, st->Ist.Put.data)));
+        setHints_Expr(st->Ist.Put.data);
+        break;
+      }
+      case Ist_PutI: {
+        puti = st->Ist.PutI.details;
+        IRRegArray *descr = puti->descr;
+        update_interval(m_result, descr->base,
+                        descr->nElems * sizeofIRType(descr->elemTy));
+        setHints_Expr(puti->ix);
+        setHints_Expr(puti->data);
+        break;
+      }
+      case Ist_WrTmp:
+        setHints_Expr(st->Ist.WrTmp.data);
+        break;
+      case Ist_Store:
+        setHints_Expr(st->Ist.Store.addr);
+        setHints_Expr(st->Ist.Store.data);
+        break;
+      case Ist_StoreG:
+        sg = st->Ist.StoreG.details;
+        setHints_Expr(sg->addr);
+        setHints_Expr(sg->data);
+        setHints_Expr(sg->guard);
+        break;
+      case Ist_LoadG:
+        lg = st->Ist.LoadG.details;
+        setHints_Expr(lg->addr);
+        setHints_Expr(lg->alt);
+        setHints_Expr(lg->guard);
+        break;
+      case Ist_CAS:
+        cas = st->Ist.CAS.details;
+        setHints_Expr(cas->addr);
+        if (cas->expdHi)
+          setHints_Expr(cas->expdHi);
+        setHints_Expr(cas->expdLo);
+        if (cas->dataHi)
+          setHints_Expr(cas->dataHi);
+        setHints_Expr(cas->dataLo);
+        break;
+      case Ist_LLSC:
+        setHints_Expr(st->Ist.LLSC.addr);
+        setHints_Expr(st->Ist.LLSC.storedata);
+        break;
+      case Ist_Dirty:
+        d = st->Ist.Dirty.details;
+
+        Int j;
+        for (j = 0; j < d->nFxState; j++) {
+          if (d->fxState[j].fx == Ifx_Modify || d->fxState[j].fx == Ifx_Write) {
+            Int offset = d->fxState[i].offset;
+            Int size = d->fxState[i].size;
+            Int nRepeats = d->fxState[i].nRepeats;
+            Int repeatLen = d->fxState[i].repeatLen;
+            update_interval(m_result, offset, nRepeats * repeatLen + size);
+          }
+        }
+
+        d2 = emptyIRDirty();
+        *d2 = *d;
+        d2->args = shallowCopyIRExprVec(d2->args);
+        if (d2->mFx != Ifx_None) {
+          setHints_Expr(d2->mAddr);
+        } else {
+          vassert(d2->mAddr == NULL);
+        }
+        setHints_Expr(d2->guard);
+        for (i = 0; d2->args[i]; i++) {
+          IRExpr *arg = d2->args[i];
+          if (LIKELY(!is_IRExpr_VECRET_or_GSPTR(arg)))
+            setHints_Expr(arg);
+        }
+        break;
+      case Ist_NoOp:
+      case Ist_MBE:
+      case Ist_IMark:
+        break;
+      case Ist_AbiHint:
+        setHints_Expr(st->Ist.AbiHint.base);
+        setHints_Expr(st->Ist.AbiHint.nia);
+        break;
+      case Ist_Exit:
+        setHints_Expr(st->Ist.Exit.guard);
+
+        if (st->Ist.Exit.jk == Ijk_Boring) {
+          Addr next = st->Ist.Exit.dst->Ico.U64;
+          if (st->Ist.Exit.dst->tag == Ico_U32)
+            next = (UInt)next;
+        }
+
+        break;
+      default:
+        VPANIC("flatten_Stmt");
+      };
+    }
+  }
+};
+
+// 高级反编译 人看
+class AstBlock {
+  typedef typename std::pair<Int, Int> key_value_pair_t;
+  std::list<key_value_pair_t> m_param;  // regOffset size
+  std::list<key_value_pair_t> m_result; // regOffset size
+
+  typedef typename std::list<key_value_pair_t>::iterator list_iterator_t;
+  irsb_chunk m_block;
+  IRJumpKind m_jmpkind;
+
+public:
+  AstBlock(irsb_chunk irsb_chunk) : m_block(irsb_chunk) {
+    IRSB *irsb = m_block->get_irsb();
+    m_jmpkind = irsb->jumpkind;
+    // Z3_mk_string
+    Int i;
+    for (i = 0; i < irsb->stmts_used; i++) {
+      IRStmt *st = irsb->stmts[i];
+      // Int i;
+      IRDirty *d, *d2;
+      IRCAS *cas, *cas2;
+      IRPutI *puti, *puti2;
+      IRLoadG *lg;
+      IRStoreG *sg;
+      switch (st->tag) {
+      case Ist_Put: {
+        update_interval(
+            m_result, st->Ist.Put.offset,
+            sizeofIRType(typeOfIRExpr(irsb->tyenv, st->Ist.Put.data)));
+        setHints_Expr(st->Ist.Put.data);
+        break;
+      }
+      case Ist_PutI: {
+        puti = st->Ist.PutI.details;
+        IRRegArray *descr = puti->descr;
+        update_interval(m_result, descr->base,
+                        descr->nElems * sizeofIRType(descr->elemTy));
+        setHints_Expr(puti->ix);
+        setHints_Expr(puti->data);
+        break;
+      }
+      case Ist_WrTmp:
+        setHints_Expr(st->Ist.WrTmp.data);
+        break;
+      case Ist_Store:
+        setHints_Expr(st->Ist.Store.addr);
+        setHints_Expr(st->Ist.Store.data);
+        break;
+      case Ist_StoreG:
+        sg = st->Ist.StoreG.details;
+        setHints_Expr(sg->addr);
+        setHints_Expr(sg->data);
+        setHints_Expr(sg->guard);
+        break;
+      case Ist_LoadG:
+        lg = st->Ist.LoadG.details;
+        setHints_Expr(lg->addr);
+        setHints_Expr(lg->alt);
+        setHints_Expr(lg->guard);
+        break;
+      case Ist_CAS:
+        cas = st->Ist.CAS.details;
+        setHints_Expr(cas->addr);
+        if (cas->expdHi)
+          setHints_Expr(cas->expdHi);
+        setHints_Expr(cas->expdLo);
+        if (cas->dataHi)
+          setHints_Expr(cas->dataHi);
+        setHints_Expr(cas->dataLo);
+        break;
+      case Ist_LLSC:
+        setHints_Expr(st->Ist.LLSC.addr);
+        setHints_Expr(st->Ist.LLSC.storedata);
+        break;
+      case Ist_Dirty:
+        d = st->Ist.Dirty.details;
+
+        Int j;
+        for (j = 0; j < d->nFxState; j++) {
+          if (d->fxState[j].fx == Ifx_Modify || d->fxState[j].fx == Ifx_Write) {
+            Int offset = d->fxState[i].offset;
+            Int size = d->fxState[i].size;
+            Int nRepeats = d->fxState[i].nRepeats;
+            Int repeatLen = d->fxState[i].repeatLen;
+            update_interval(m_result, offset, nRepeats * repeatLen + size);
+          }
+        }
+
+        d2 = emptyIRDirty();
+        *d2 = *d;
+        d2->args = shallowCopyIRExprVec(d2->args);
+        if (d2->mFx != Ifx_None) {
+          setHints_Expr(d2->mAddr);
+        } else {
+          vassert(d2->mAddr == NULL);
+        }
+        setHints_Expr(d2->guard);
+        for (i = 0; d2->args[i]; i++) {
+          IRExpr *arg = d2->args[i];
+          if (LIKELY(!is_IRExpr_VECRET_or_GSPTR(arg)))
+            setHints_Expr(arg);
+        }
+        break;
+      case Ist_NoOp:
+      case Ist_MBE:
+      case Ist_IMark:
+        break;
+      case Ist_AbiHint:
+        setHints_Expr(st->Ist.AbiHint.base);
+        setHints_Expr(st->Ist.AbiHint.nia);
+        break;
+      case Ist_Exit:
+        setHints_Expr(st->Ist.Exit.guard);
+
+        if (st->Ist.Exit.jk == Ijk_Boring) {
+          Addr next = st->Ist.Exit.dst->Ico.U64;
+          if (st->Ist.Exit.dst->tag == Ico_U32)
+            next = (UInt)next;
+        }
+
+        break;
+      default:
+        VPANIC("flatten_Stmt");
+      };
+    }
+  }
+  typedef struct {
+    Bool present;
+    Int low;
+    Int high;
+  } Interval;
+
+  inline void update_interval(std::list<key_value_pair_t> &i, Int offset,
+                              Int size) {
+    vassert(size > 0);
+    Int lo2 = offset;
+    Int hi2 = offset + size - 1;
+    list_iterator_t it = i.begin();
+    for (; it != i.end();) {
+      Int lo = it->first;
+      Int hi = it->second;
+      // over
+      if ((lo >= lo2 && lo <= hi2) || (lo2 >= lo && lo2 <= hi)) {
+        if (lo > lo2)
+          lo = lo2;
+        if (hi < hi2)
+          hi = hi2;
+        it = i.erase(it);
+        update_interval(i, lo, hi - lo + 1);
+        return;
+      }
+      it++;
+    }
+    i.push_back(key_value_pair_t(lo2, hi2));
+  }
+
+  void setHints_Expr(IRExpr *e) {
+    Int i;
+    switch (e->tag) {
+    case Iex_CCall:
+      for (i = 0; e->Iex.CCall.args[i]; i++)
+        setHints_Expr(e->Iex.CCall.args[i]);
+      return;
+    case Iex_ITE:
+      setHints_Expr(e->Iex.ITE.cond);
+      setHints_Expr(e->Iex.ITE.iftrue);
+      setHints_Expr(e->Iex.ITE.iffalse);
+      return;
+    case Iex_Qop:
+      setHints_Expr(e->Iex.Qop.details->arg1);
+      setHints_Expr(e->Iex.Qop.details->arg2);
+      setHints_Expr(e->Iex.Qop.details->arg3);
+      setHints_Expr(e->Iex.Qop.details->arg4);
+      return;
+    case Iex_Triop:
+      setHints_Expr(e->Iex.Triop.details->arg1);
+      setHints_Expr(e->Iex.Triop.details->arg2);
+      setHints_Expr(e->Iex.Triop.details->arg3);
+      return;
+    case Iex_Binop:
+      setHints_Expr(e->Iex.Binop.arg1);
+      setHints_Expr(e->Iex.Binop.arg2);
+      return;
+    case Iex_Unop:
+      setHints_Expr(e->Iex.Unop.arg);
+      return;
+    case Iex_Load:
+      setHints_Expr(e->Iex.Load.addr);
+      return;
+    case Iex_Get: {
+      update_interval(m_param, e->Iex.Get.offset, sizeofIRType(e->Iex.Get.ty));
+      return;
+    }
+    case Iex_GetI: {
+      IRRegArray *descr = e->Iex.GetI.descr;
+      Int size = sizeofIRType(descr->elemTy);
+      update_interval(m_param, descr->base, descr->nElems * size);
+      setHints_Expr(e->Iex.GetI.ix);
+      return;
+    }
+    case Iex_RdTmp:
+    case Iex_Const:
+      return;
+    default:
+      VPANIC("setHints_Expr");
+    }
+  }
+  virtual ~AstBlock() {}
+};
+
+
+
+class BindingKey {
+public:
+  enum Kind { Default = 0x0, Direct = 0x1 };
+
+private:
+  enum { Symbolic = 0x2 };
+
+  llvm::PointerIntPair<const MemRegion *, 2> P;
+  uint64_t Data;
+
+  /// Create a key for a binding to region \p r, which has a symbolic offset
+  /// from region \p Base.
+  explicit BindingKey(const SubRegion *r, const SubRegion *Base, Kind k)
+      : P(r, k | Symbolic), Data(reinterpret_cast<uintptr_t>(Base)) {
+    assert(r && Base && "Must have known regions.");
+    assert(getConcreteOffsetRegion() == Base && "Failed to store base region");
+  }
+
+  /// Create a key for a binding at \p offset from base region \p r.
+  explicit BindingKey(const MemRegion *r, uint64_t offset, Kind k)
+      : P(r, k), Data(offset) {
+    assert(r && "Must have known regions.");
+    assert(getOffset() == offset && "Failed to store offset");
+    assert((r == r->getBaseRegion() || isa<ObjCIvarRegion>(r) ||
+            isa<CXXDerivedObjectRegion>(r)) &&
+           "Not a base");
+  }
+
+public:
+  bool isDirect() const { return P.getInt() & Direct; }
+  bool hasSymbolicOffset() const { return P.getInt() & Symbolic; }
+
+  const MemRegion *getRegion() const { return P.getPointer(); }
+  uint64_t getOffset() const {
+    assert(!hasSymbolicOffset());
+    return Data;
+  }
+
+  const SubRegion *getConcreteOffsetRegion() const {
+    assert(hasSymbolicOffset());
+    return reinterpret_cast<const SubRegion *>(static_cast<uintptr_t>(Data));
+  }
+
+  const MemRegion *getBaseRegion() const {
+    if (hasSymbolicOffset())
+      return getConcreteOffsetRegion()->getBaseRegion();
+    return getRegion()->getBaseRegion();
+  }
+
+  void Profile(llvm::FoldingSetNodeID &ID) const {
+    ID.AddPointer(P.getOpaqueValue());
+    ID.AddInteger(Data);
+  }
+
+  static BindingKey Make(const MemRegion *R, Kind k);
+
+  bool operator<(const BindingKey &X) const {
+    if (P.getOpaqueValue() < X.P.getOpaqueValue())
+      return true;
+    if (P.getOpaqueValue() > X.P.getOpaqueValue())
+      return false;
+    return Data < X.Data;
+  }
+
+  bool operator==(const BindingKey &X) const {
+    return P.getOpaqueValue() == X.P.getOpaqueValue() && Data == X.Data;
+  }
+
+  LLVM_DUMP_METHOD void dump() const;
+};
+
+typedef llvm::ImmutableMap<BindingKey, sv::tval> ClusterBindings;
+typedef llvm::ImmutableMapRef<BindingKey, sv::tval> ClusterBindingsRef;
+class RegionBindingsRef
+    : public llvm::ImmutableMapRef<sv::tval, ClusterBindings> {
+  ClusterBindings::Factory *CBFactory;
+};
+
 namespace {
+
 
     class SimpleMem {
         // AST : SVal
@@ -33,8 +460,9 @@ namespace {
         };
 
         sv::tval Iex_Load(const sv::tval& address, IRType ty) { 
-            
-            llvm::errs() << address.str(true) << "\n";
+            sv::tval ea = address.zext(64 - address.nbits());
+            llvm::errs() << ea.str(true) << "\n";
+
         };
 
     };
@@ -129,51 +557,34 @@ namespace {
         virtual sv::tval& operator[](UInt idx) override { return m_ir_temp[idx]; }
     };
 
-    class StateModeling : State {
+    class StateModeling {
     public:
-        StateModeling(vex_context& vctx, VexArch guest_arch, StateHelper& statehelper) :State(vctx, guest_arch) {
-            auto m = std::make_shared<MemoryModeling>(ctx(), 4096, statehelper);
-            set_mem_access(m);
-        };
-        void explore(GraphView& gv, const BlockView& entry) {
-            irsb_chunk irsb_chunk = entry.get_irsb_chunk();
-            std::deque<BtsRefType> tmp_branch;
-            Addr guest_start = irsb_chunk->get_bb_base();
-            State_Tag    status = Running;
+      VMemBase mem_access;
+      SimpleEnvGuest IrEnv;
+      StateModeling(vex_context &vctx, VexArch guest_arch,
+                    StateHelper &statehelper)
+          : mem_access(ctx(), 4096, statehelper),
+            irvex(gv, ctx(), VexArchAMD64){};
+      SimpleEnvGuest &irvex() { return IrEnv; }
+      void explore(GraphView &gv, const BlockView &entry) {
+        irsb_chunk irsb_chunk = entry.get_irsb_chunk();
+        std::deque<BtsRefType> tmp_branch;
+        Addr guest_start = irsb_chunk->get_bb_base();
+        State_Tag status = Running;
 
-            auto iv = std::make_shared<SimpleEnvGuest>(gv, ctx(), VexArchAMD64);
-            set_irvex(iv);
+        Vex_Kind vkd;
+
+        do {
+          irsb_chunk = IrEnv.translate_front(guest_start);
+          IRSB *irsb = irsb_chunk->get_irsb();
+          ppIRSB(irsb);
+          
 
 
+        } while (vkd == TR::Vex_Kind::vUpdate);
+      }
 
-            if UNLIKELY(get_delta()) {
-                guest_start = guest_start + get_delta();
-                set_delta(0);
-            }
-
-            Vex_Kind vkd;
-
-            do {
-                irsb_chunk = irvex().translate_front(guest_start);
-                IRSB* irsb = irsb_chunk->get_irsb();
-                ppIRSB(irsb);
-                get_trace()->traceIRSB(*this, guest_start, irsb_chunk);
-                if (vinfo().is_mode_32()) {
-                    vkd = emu_irsb<32>(tmp_branch, guest_start, status, irsb_chunk);
-                }
-                else {
-                    vkd = emu_irsb<64>(tmp_branch, guest_start, status, irsb_chunk);
-                }
-                get_trace()->traceIrsbEnd(*this, irsb_chunk);
-                
-
-            } while (vkd == TR::Vex_Kind::vUpdate);
-
-        }
-
-        ~StateModeling(){
-
-        }
+      ~StateModeling() {}
     };
 
 

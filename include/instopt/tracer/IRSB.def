@@ -1,0 +1,34 @@
+#ifdef IST
+IST(Put)
+IST(PutI);
+IST(WrTmp);
+IST(Store);
+IST(StoreG);
+IST(LoadG);
+IST(CAS);
+IST(LLSC);
+IST(Dirty);
+IST(NoOp);
+IST(MBE);
+IST(IMark);
+IST(AbiHint);
+IST(Exit);
+#undef IST
+#endif
+
+#ifdef IEX
+IEX(CCall)
+IEX(ITE)
+IEX(Qop)
+IEX(Triop)
+IEX(Binop)
+IEX(Unop)
+IEX(Load)
+IEX(Get)
+IEX(GetI)
+IEX(RdTmp)
+IEX(Const)
+IEX(VECRET)
+IEX(GSPTR)
+#undef IEX
+#endif

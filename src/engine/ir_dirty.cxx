@@ -46,7 +46,7 @@ static const UChar* host_insn_control_method(void*, Addr guest_IP_sbstart, Long 
 namespace TR {
 
     // dirty
-    class EmuEnvHost : public EmuEnvironment {
+    class EmuEnvHost : public IRSBTranslateEnv {
         static constexpr VexArch host = VexArchAMD64;
         static constexpr ULong traceflags = 0;
         static thread_local IR_Manager static_dirty_ir_temp;
@@ -54,7 +54,9 @@ namespace TR {
         IRSBCache* m_host_irsb_cache;
 
     public:
-        EmuEnvHost(z3::vcontext& ctx) : EmuEnvironment(host, traceflags), m_ir_temp(static_dirty_ir_temp) {
+        EmuEnvHost(z3::vcontext &ctx)
+            : IRSBTranslateEnv(host, traceflags),
+              m_ir_temp(static_dirty_ir_temp) {
             m_host_irsb_cache = host_get_IRSBCache();
         }
         virtual ~EmuEnvHost();

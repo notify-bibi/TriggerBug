@@ -72,7 +72,7 @@ namespace TR {
     };
 
     EmuEnvGuest::EmuEnvGuest(vex_context& vctx, vex_info const& info, MBase& mem_obj)
-        : EmuEnvironment(info.gguest(), info.gtraceflags()),
+        : IRSBTranslateEnv(info.gguest(), info.gtraceflags()),
         m_vctx(vctx),
         m_ir_temp(mem_obj.ctx()),
         m_mem(mem_obj)
@@ -145,19 +145,14 @@ namespace TR {
     }
 
 
-    void EmuEnvironment::block_integrity(Addr ea, UInt sz) {
-        return;
-    }
-
-
-    
-    void EmuEnvironment::set_guest_bytes_addr(const UChar* bytes, Addr64 virtual_addr)
+    void IRSBTranslateEnv::set_guest_bytes_addr(const UChar *bytes,
+                                                Addr64 virtual_addr)
     {
         m_vta_chunk.guest_bytes = bytes;
         m_vta_chunk.guest_bytes_addr = virtual_addr;
     }
 
-    void EmuEnvironment::set_host_addr(Addr64 host_virtual_addr)
+    void IRSBTranslateEnv::set_host_addr(Addr64 host_virtual_addr)
     {
         m_vta_chunk.guest_bytes = (UChar*)(host_virtual_addr);
         m_vta_chunk.guest_bytes_addr = host_virtual_addr;
@@ -165,15 +160,12 @@ namespace TR {
     
 
 
-    void EmuEnvironment::set_vta_chunk(VexArch arch, ULong traceflags)
+    void IRSBTranslateEnv::set_vta_chunk(VexArch arch, ULong traceflags)
     {
         vex_info::init_vta_chunk(m_vta_chunk, m_vge_chunk, arch, traceflags);
     }
 
 
-    EmuEnvironment::~EmuEnvironment()
-    {
-    };
     
 };
 

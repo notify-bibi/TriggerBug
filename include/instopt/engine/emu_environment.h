@@ -80,38 +80,13 @@ namespace TR {
 
 
 
-    // __declspec(align(32))
      
     class EmuEnvironment {
-        friend class EmuEnvGuest;
-        friend class EmuEnvHost;
-
-        VexTranslateArgs    m_vta_chunk;
-        VexGuestExtents     m_vge_chunk;
-
-        VexRegisterUpdates m_pxControl;
-        VexTranslateResult m_res;
-
-        Addr64 m_guest_start_of_block = 0;
-        UInt m_base_block_sz = 0;
-        bool   m_is_dynamic_block = false;// Need to refresh IRSB memory?
-        bool   m_is_dirty_mode = false;   // is dirty call mode
-
     public:
-        EmuEnvironment(VexArch arch, ULong traceflags) {
-            set_vta_chunk(arch, traceflags);
-        }
-        void set_vta_chunk(VexArch arch, ULong traceflags);
-        inline void set_dirty_mode() { m_is_dirty_mode = true; }
-        inline void clean_dirty_mode() { m_is_dirty_mode = false; }
-        inline VexTranslateArgs* get_ir_vex_translate_args() { return &m_vta_chunk; }
-        inline VexGuestExtents* get_ir_vex_guest_extents() { return &m_vge_chunk; }
-        inline VexRegisterUpdates* get_pxControl() { return &m_pxControl; }
-        inline VexTranslateResult* get_res(){ return &m_res; }
+        EmuEnvironment() = default;
 
-        inline bool check() { return m_is_dynamic_block; };
         //emu process write method will call back
-        virtual void block_integrity(Addr ea, UInt sz);
+        virtual void block_integrity(Addr ea, UInt sz) {};
 
         virtual void set_guest_bb_insn_control_obj() {};
         //new ir temp
@@ -119,17 +94,69 @@ namespace TR {
         //free ir temp
         virtual void free_ir_buff() {};
         // translate
-        virtual irsb_chunk translate_front(HWord /*dirty/guest_addr*/) { return irsb_chunk{}; };
+        virtual irsb_chunk translate_front(HWord /*dirty/guest_addr*/) = 0;
         virtual sv::tval &operator[](UInt idx) = 0;
 
-        // 模拟前调用
-        void set_guest_bytes_addr(const UChar* bytes, Addr64 virtual_addr);
-        void set_host_addr(Addr64 host_virtual_addr);
-
-        virtual ~EmuEnvironment();
+        virtual void set_vta_chunk(VexArch arch, ULong traceflags) {};
+        // need stop
+        virtual bool check() { return false; };
+        virtual ~EmuEnvironment(){};
     };
 
-    class EmuEnvGuest : public EmuEnvironment {
+    // __declspec(align(32))
+    class IRSBTranslateEnv : public EmuEnvironment {
+      friend class EmuEnvGuest;
+      friend class EmuEnvHost;
+
+      VexTranslateArgs m_vta_chunk;
+      VexGuestExtents m_vge_chunk;
+
+      VexRegisterUpdates m_pxControl;
+      VexTranslateResult m_res;
+
+      Addr64 m_guest_start_of_block = 0;
+      UInt m_base_block_sz = 0;
+      bool m_is_dynamic_block = false; // Need to refresh IRSB memory?
+      bool m_is_dirty_mode = false;    // is dirty call mode
+
+    public:
+      IRSBTranslateEnv(VexArch arch, ULong traceflags) {
+        set_vta_chunk(arch, traceflags);
+      }
+      void set_vta_chunk(VexArch arch, ULong traceflags) override;
+      inline void set_dirty_mode() { m_is_dirty_mode = true; }
+      inline void clean_dirty_mode() { m_is_dirty_mode = false; }
+      inline VexTranslateArgs *get_ir_vex_translate_args() {
+        return &m_vta_chunk;
+      }
+      inline VexGuestExtents *get_ir_vex_guest_extents() {
+        return &m_vge_chunk;
+      }
+      inline VexRegisterUpdates *get_pxControl() { return &m_pxControl; }
+      inline VexTranslateResult *get_res() { return &m_res; }
+
+      inline bool check() override { return m_is_dynamic_block; };
+      // emu process write method will call back
+      virtual void block_integrity(Addr ea, UInt sz) override {};
+
+      virtual void set_guest_bb_insn_control_obj() override {};
+      // new ir temp
+      virtual void malloc_ir_buff(Z3_context ctx) override {};
+      // free ir temp
+      virtual void free_ir_buff() override {};
+      // translate
+      virtual irsb_chunk translate_front(HWord /*dirty/guest_addr*/) override = 0;
+      virtual sv::tval &operator[](UInt idx) override = 0;
+
+      // 模拟前调用
+      void set_guest_bytes_addr(const UChar *bytes, Addr64 virtual_addr);
+      void set_host_addr(Addr64 host_virtual_addr);
+
+      virtual ~IRSBTranslateEnv(){};
+    };
+
+
+    class EmuEnvGuest : public IRSBTranslateEnv {
         vex_context& m_vctx;
         IR_Manager m_ir_temp;
         MBase& m_mem;
@@ -142,7 +169,7 @@ namespace TR {
 
         //void block_integrity(Addr address, UInt insn_block_delta) override;
 
-        inline bool check() { return m_is_dynamic_block; };
+        inline bool check() override { return m_is_dynamic_block; };
         //new ir temp
         virtual void malloc_ir_buff(Z3_context ctx) override;
         //free ir temp
