@@ -6,48 +6,35 @@
 </a>
 
 ------
+##  **项目介绍：**
 
-**tips:**  
+​        本科期间编写的用于CTF二进制竞赛的自动化求解引擎，使用本工具，逆向题目可以更容易拿一血。
 
-You can save time. It is not recommended that you understand the tool at present, the front end is not updated. But you can experiment with the c++ back end as a developer. Under construction.....
+​	由C&C++、CMake、Python编写的二进制程序**Concolic分析框架**（符号执行和Concrete执行结合），实现依赖了[Z3-Prover](https://github.com/Z3Prover/z3)、[Valgrind](https://valgrind.org/)（实现指令翻译）、LLVM等项目。包含自实现的进程镜像导出的IDA插件、易用的Python接口前端和C++分析引擎后端。
 
-The C++ Dynamic symbolic executor like Angr.
-The engine was developed to solve some of Angr's more intractable problems.
+​        核心原理：实现了内存、指令处理器、小型内核等几个核心功能的软模拟，且可以混合地存储和处理符号和具体值。本工具通过自实现的IDA插件存储导出任意时刻的进程镜像内存空间和cpu寄存器数据，支持ELF和PE程序，由引擎读取加载进程数据，再解释执行来自 Valgring 动态翻译机器指令后的Vex IR中间指令，可以高效地遍历和收集程序状态实现程序分析。
 
-进展：
+​        设计和实现上，本引擎完成了内存页写时复制、进程状态搜索树合并、虚拟内存段映射、32&64位实时切换(兼容windows的32位程序)、反反调试、LLVM BitCode转换输出 等功能，并实现了可一定程度缓解符号执行技术中的路径爆炸的优化算法，较大提高了本工具等可用性。
 
-- [x] 解决了并提供求解AES等一些列现代加密算法的方案。（原理层方案，非实现Aes decrypto。demo example有实例）。某些隐式加密在原理上是解不开的，只能爆破，故准备写一个常见现代加密算法的crypto ANAlyzer, 方便构建exp，不需要hook table_base进行显式转换。crypto_finder(目前仅添加支持aes)
-- [x] 采用模拟host code实现guest code的方法去支持所有ir dirty code（guest code 的微操作）和ir dirty call, dirty call regs合并到客户机regs末尾，并挂载到guest memory map 上，以此实现dirty call支持完整性， 将host dirty call分解为target_ir_call和标准ir指令来支持执行。host dirty call stack使用客户机未分配区，IRDirty class 管理生命周期，设计原理限制，无法递归。
-- [x] 符号地址读写策略变更，之前是求解子集再读写，速度极慢，现在实现了超集求解算法，快速极快。再根据求得的超集读写。
-- [x] 自动合并路径的算法已经构造完毕. 路径爆炸缓解方案详见文末
-- [x] 移植，计划将代码部署在linux、darwin、windows(clang)
-- [x] 反反调试功能（vmp检测通过）
-- [x] 代码重构，所有基础符号变量全部使用basic_var.hpp中的sv::模版类，涵盖所有操作，编译时期确定并计算参数（提速），编译时检查所有AST误操作等问题。
-- [x] windows ntdll_KiUserExceptionDispatcher 异常支持（Eha/ EHsc）vmp喜欢异常检测.
-- [x] 支持模拟windows wow64嵌套子系统，支持cpu长模式和32位模式动态切换， 需要配合windbg, 内核全部使用64位
-- [ ] Python前端重写（结构太复杂、项目重构不易同步）推迟。
-- [x] 代码控制流目标路径探索算法完成，计划写主动式路径合并分析器，正在完善 (目前只有被动式的可以自动合并分支，某些子状态回收不是很好) 
-- [ ] 设计分析器，使用valgrind优化block，日志型模拟基本块，记录执行指令分析，分析循环条件等手段来解决问题。在原理上，对于很多大型程序，符号执行并不能构建出程序的所有的执行状态，时间复杂度O(k^n)，加入各种预测约束、快速解析符号地址遍历读写技术、状态合并技术、Cr3用户页复制等也仅仅是一种缓解手段，但不是说没有用，其在无环路分支上表现非常好。挖坑 ...
-- [ ] VMP等强壳的随机地址解密释放代码再执行会干扰分析器，地址不再具有意义，irsb和hash进行绑定，有待解决
-- [x] 添加IRU cache模块，加快翻译速度，已完成
-- [ ] 设计将分析指令流的寄存器读写，对未读后写的寄存器操作进行分析剔除，用于反指令混淆，但是表现不佳，考虑将IR tree经过准换为z3 ast,使用z3优化器反混淆，但是需要z3 ast 2 ir tree, 构建ing
-- [ ] 设计basic block分析模块，将不再操作任何客户机寄存器，使用中间变量ir进行表达内存操作与交换.基本块树构建完整性由符号执行探索，未命中返回使用后端继续探索。可以以此设计IR层的反编译调试器，设计中
+​        无论是设计还是实现方面，本工具在模拟执行速度、指令支持完整性、系统调用支持完整性、可执行程序装载完整性等方面上均**远优于知名二进制分析框架**-[Angr](https://github.com/angr/angr)，可以方便高效地求解可达性问题的可满足性解或拓展其他程序分析功能，如**路径探索、加密求解、漏洞触发条件求解、指令反混淆(TODO)、定位反调试检测**等。
 
-坚持✊
+- **指令执行速度：** Concrete执行：0.22MIPS (Intel80386速度为2.5MIPS) ，symbolic执行：比Angr快上一个数量级
+- **代码规模：23.6**KLOC  (不含空行和文档资源)
 
-## advantage
+
+
+## Feature
 
 |         |  Angr  | TriggerBug |
 | :---------:  | ------ | ------ |
-| the code |-----------------\|   \|-------------------|------------------------------------------|
-| model   | -unicorn(fast)--\|  \|--angr engine-| 【real&symbol】Completely mixed|
-|language | -----c/c++ ----\|  \| -python(slowly)-| c++/c(Fast) |
-|translator| ----- qemu ----\|  \| -valgrind(Single)-|  valgrind(Multi) |
-|solve thread|Single thread|Multi-threaded|
+| exec model | unicorn(concrete) -> angr engine(symbolic)- | 【concrete&symbol】completely mixed |
+|language | c/c++ & python | c++/c (Fast) |
+|translator| qemu & valgrind(single thread)- | valgrind(Multi threads) |
+|solve thread|single thread|multi-threaded|
 |compress State|support(Is not very good)|support(automatically)|
 |vex(dirtycall)|Incomplete support<br />Implementation by developers|fully supported<br />emu all host code|
-|binary load|[py module:cle(Incomplete loading)<br />Parsing is not complete<br />slowly][CLE]|[py dump mem from  IDA <br/>1:1 Fully symbolic loading<br/>200MB/1s][MDB]|
-|speed| Orz  🙏 |like qemu|
+|binary load|[py module:cle<br />incomplete symbol loading<br />slowly][CLE]|[IDA-python proc-image dump tool <br/>complete process of symbol loading<br/>200MB/s][MDB]|
+|     speed      | Extremely slow |An order of magnitude faster than angr.|
 
 
 
@@ -331,13 +318,38 @@ Warmly welcome to join us in the development. Study together.
 
 
 
-
-
 ## Release
 
 ------
 
   ​        [Dlls & python module][Plre]   *need build by yourself*
+
+
+
+
+
+## TODO list：
+
+- [x] 解决了并提供求解AES等一些列现代加密算法的方案。（原理层方案，非实现Aes decrypto。demo example有实例）。某些隐式加密在原理上是解不开的，只能爆破，故准备写一个常见现代加密算法的crypto ANAlyzer, 方便构建exp，不需要hook table_base进行显式转换。crypto_finder(目前仅添加支持aes)
+- [x] 采用模拟host code实现guest code的方法去支持所有ir dirty code（guest code 的微操作）和ir dirty call, dirty call regs合并到客户机regs末尾，并挂载到guest memory map 上，以此实现dirty call支持完整性， 将host dirty call分解为target_ir_call和标准ir指令来支持执行。host dirty call stack使用客户机未分配区，IRDirty class 管理生命周期，设计原理限制，无法递归。
+- [x] 符号地址读写策略变更，之前是求解子集再读写，速度极慢，现在实现了超集求解算法，快速极快。再根据求得的超集读写。
+- [x] 自动合并路径的算法已经构造完毕. 路径爆炸缓解方案详见文末
+- [x] 移植，计划将代码部署在linux、darwin、windows(clang)
+- [x] 反反调试功能（vmp检测通过）
+- [x] 代码重构，所有基础符号变量全部使用basic_var.hpp中的sv::模版类，涵盖所有操作，编译时期确定并计算参数（提速），编译时检查所有AST误操作等问题。
+- [x] windows ntdll_KiUserExceptionDispatcher 异常支持（Eha/ EHsc）vmp喜欢异常检测.
+- [x] 支持模拟windows wow64嵌套子系统，支持cpu长模式和32位模式动态切换， 需要配合windbg, 内核全部使用64位
+- [ ] Python前端重写（结构太复杂、项目重构不易同步）推迟。
+- [x] 代码控制流目标路径探索算法完成，计划写主动式路径合并分析器，正在完善 (目前只有被动式的可以自动合并分支，某些子状态回收不是很好) 
+- [ ] 设计分析器，使用valgrind优化block，日志型模拟基本块，记录执行指令分析，分析循环条件等手段来解决问题。在原理上，对于很多大型程序，符号执行并不能构建出程序的所有的执行状态，时间复杂度O(k^n)，加入各种预测约束、快速解析符号地址遍历读写技术、状态合并技术、Cr3用户页复制等也仅仅是一种缓解手段，但不是说没有用，其在无环路分支上表现非常好。挖坑 ...
+- [ ] VMP等强壳的随机地址解密释放代码再执行会干扰分析器，地址不再具有意义，irsb和hash进行绑定，有待解决
+- [x] 添加IRU cache模块，加快翻译速度，已完成
+- [ ] 设计将分析指令流的寄存器读写，对未读后写的寄存器操作进行分析剔除，用于反指令混淆，但是表现不佳，考虑将IR tree经过准换为z3 ast,使用z3优化器反混淆，但是需要z3 ast 2 ir tree, 构建ing
+- [ ] 设计basic block分析模块，将不再操作任何客户机寄存器，使用中间变量ir进行表达内存操作与交换.基本块树构建完整性由符号执行探索，未命中返回使用后端继续探索。可以以此设计IR层的反编译调试器，设计中
+
+坚持✊
+
+
 
 ## Salute to you
 
@@ -361,6 +373,4 @@ Thanks to the developers of the  [Z3][Plz3] , [Valgrind][Plvgrd], [Spdloger][Spd
 
 [trTest]: <https://github.com/notify-bibi/TriggerBug/blob/master/src/test/test_main.cxx>
 
-另外值得高兴的是, vs终终终于支持clang了，早点放弃自家编译器该多好啊，有些时候还是不要那么执着的好 :)
-
-cmake里已经做了ms编译兼容
+另外值得高兴的是, vs终终终于支持clang了, cmake里已经做了ms编译兼容
